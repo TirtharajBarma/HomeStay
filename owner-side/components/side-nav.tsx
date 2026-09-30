@@ -3,7 +3,7 @@
 import Image from "next/image";
 import type { ReactNode } from "react";
 import { hostPortraits } from "@/components/top-nav";
-import { primaryNav, secondaryNav, type NavKey } from "@/lib/navigation";
+import { primaryNav, type NavKey } from "@/lib/navigation";
 import { Icon } from "./icon";
 import { Popover } from "./ui/popover";
 import { useToast } from "./ui/toast";
@@ -12,8 +12,6 @@ type SideNavProps = {
   active: NavKey;
   brandIcon?: string;
   footer?: ReactNode;
-  /** Shows the "2 pending" housekeeping badge from the source designs. */
-  housekeepingBadge?: string;
   /**
    * `fixed` is the desktop rail pinned to the viewport edge.
    * `drawer` is the off-canvas mobile panel, positioned by its container.
@@ -28,7 +26,6 @@ export function SideNav({
   active,
   brandIcon = "nature",
   footer,
-  housekeepingBadge,
   variant = "fixed",
   onNavigate,
   onNewBooking,
@@ -49,7 +46,7 @@ export function SideNav({
           </div>
           <div className="flex min-w-0 flex-col overflow-hidden">
             <span className="truncate text-title-md text-title-md font-semibold tracking-tight text-primary">
-              Meadowfall Homestay
+              Gumtree Valley Estate
             </span>
             <span className="truncate text-label-sm text-label-sm text-outline">
               Estate &amp; Retreat Operations
@@ -95,50 +92,6 @@ export function SideNav({
       </div>
 
       <div className="mt-6 flex flex-col gap-2 border-t border-outline-variant/30 pt-4">
-        {secondaryNav.map((item, index) => {
-          const isActive = item.href === `/${active}`;
-          const row =
-            "flex items-center gap-3 rounded-lg px-3.5 py-2 text-label-md text-label-md transition-colors";
-
-          return (
-          <a
-            key={item.label}
-            href={item.href}
-            onClick={onNavigate}
-            aria-current={isActive ? "page" : undefined}
-            className={
-              isActive
-                ? `${row} bg-primary text-on-primary`
-                : housekeepingBadge && index === 0
-                  ? `${row} justify-between text-on-surface-variant hover:bg-surface-container hover:text-on-surface`
-                  : `${row} text-on-surface-variant hover:bg-surface-container hover:text-on-surface`
-            }
-          >
-            {housekeepingBadge && index === 0 ? (
-              <>
-                <div className="flex items-center gap-3">
-                  <Icon name={item.icon} className="text-[20px]" />
-                  <span>{item.label}</span>
-                </div>
-                <span
-                  className={`rounded-full px-2 py-0.5 text-label-sm text-label-sm font-semibold ${
-                    isActive
-                      ? "bg-on-primary/20 text-on-primary"
-                      : "bg-secondary-fixed text-on-secondary-fixed"
-                  }`}
-                >
-                  {housekeepingBadge}
-                </span>
-              </>
-            ) : (
-              <>
-                <Icon name={item.icon} className="text-[20px]" />
-                <span>{item.label}</span>
-              </>
-            )}
-          </a>
-          );
-        })}
         {footer}
       </div>
     </aside>
@@ -169,7 +122,7 @@ export function SideNavHostCard({
         <div className="flex min-w-0 items-center gap-2.5 overflow-hidden">
           <div className="relative h-9 w-9 flex-shrink-0 overflow-hidden rounded-full border border-outline-variant/30">
             <Image
-              src={hostPortraits.eleanorThomas}
+              src={hostPortraits.ananyaArjun}
               alt={`${name}, ${role}`}
               fill
               sizes="36px"
@@ -229,10 +182,8 @@ export function SideNavHostCard({
               <AccountLink
                 icon="person"
                 label="Host profile"
-                onSelect={() => {
-                  notify("Host profile is up to date.");
-                  close();
-                }}
+                href="/profile"
+                onSelect={close}
               />
               <AccountLink
                 icon="switch_account"
@@ -277,16 +228,30 @@ export function SideNavHostCard({
 function AccountLink({
   icon,
   label,
+  href,
   onSelect,
 }: {
   icon: string;
   label: string;
+  href?: string;
   onSelect: () => void;
 }) {
+  const className =
+    "flex w-full items-center gap-3 px-3 py-2.5 text-left text-body-md text-body-md text-on-surface transition-colors hover:bg-surface-container";
+
+  if (href) {
+    return (
+      <a href={href} onClick={onSelect} className={className}>
+        <Icon name={icon} className="flex-shrink-0 text-[18px] text-primary" />
+        {label}
+      </a>
+    );
+  }
+
   return (
     <button
       onClick={onSelect}
-      className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-body-md text-body-md text-on-surface transition-colors hover:bg-surface-container"
+      className={className}
     >
       <Icon name={icon} className="flex-shrink-0 text-[18px] text-primary" />
       {label}

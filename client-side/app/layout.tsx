@@ -15,11 +15,11 @@ const jakarta = Plus_Jakarta_Sans({
 
 export const metadata: Metadata = {
   title: {
-    default: "Meadowfall Homestay | Boutique Countryside Sanctuaries",
+    default: "Meadowfall Homestay | Boutique Tea Estate Stays",
     template: "%s | Meadowfall Homestay",
   },
   description:
-    "Six handcrafted hillside cottages, lofts and cabins in West Meadows Valley, Vermont — hosted by Eleanor & Thomas.",
+    "Six handcrafted hillside cottages, lofts and cabins above the Ging tea terraces in Darjeeling, West Bengal — hosted by Anuradha & Tenzin.",
   openGraph: {
     siteName: "Meadowfall Homestay",
     locale: "en_US",

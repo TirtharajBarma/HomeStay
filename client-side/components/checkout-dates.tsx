@@ -58,7 +58,7 @@ export function CheckoutDates({
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
         aria-controls="checkout-dates"
-        className="flex min-h-9 items-center gap-1.5 rounded-lg px-2 text-label-md text-primary transition-colors hover:bg-surface-container"
+        className="flex min-h-11 items-center gap-1.5 rounded-lg px-2 text-label-md text-primary transition-colors hover:bg-surface-container"
       >
         <Icon name={open ? "close" : "refresh"} className="text-base" />
         {open ? "Cancel" : "Change dates"}

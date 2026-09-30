@@ -25,7 +25,7 @@ import { estateImages, kindFilters, stays } from "@/lib/stays";
 
 export const metadata: Metadata = {
   description:
-    "Handcrafted hillside cottages, cider orchard and hearth retreats in West Meadows Valley, Vermont — hosted by Eleanor & Thomas.",
+    "Handcrafted hillside cottages, tea terraces and hearth retreats above Darjeeling, West Bengal — hosted by Anuradha & Tenzin.",
 };
 
 const MAX_GUESTS = 4;
@@ -52,13 +52,13 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
           <div className="mx-auto mb-10 max-w-3xl text-center md:mb-12">
             <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-outline-variant/40 bg-surface-container-high px-3 py-1 text-label-sm uppercase tracking-wider text-primary">
               <Icon name="cottage" className="text-[14px]" />
-              <span>West Meadows Valley, Vermont</span>
+              <span>Darjeeling, West Bengal</span>
             </div>
             <h1 className="mb-4 font-display text-display-mobile font-semibold tracking-tight text-primary md:text-display">
-              Restful Sanctuaries in West Meadows Valley
+              Restful Stays in Darjeeling
             </h1>
             <p className="mx-auto max-w-2xl text-body-lg text-on-surface-variant">
-              Handcrafted hillside cottages, cider orchard &amp; hearth retreats hosted by
+              Handcrafted hillside cottages, working tea terraces &amp; hearth retreats hosted by
               Eleanor &amp; Thomas.
             </p>
           </div>
@@ -97,7 +97,7 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
               Valley Accommodations
             </div>
             <h2 className="font-display text-headline-lg-mobile font-semibold text-primary md:text-headline-lg">
-              Distinctive Homestay Sanctuaries
+              Distinctive Homestay Rooms
             </h2>
             <p className="mt-1 text-body-md text-on-surface-variant">
               Each room thoughtfully styled with raw timber, natural linen sheets, and artisan
@@ -135,7 +135,7 @@ function EmptyResults({ booking, filters }: { booking: Booking; filters: Filters
     <div className="rounded-xl border border-dashed border-outline-variant bg-surface-container-low p-12 text-center">
       <Icon name="search_off" className="mb-3 text-[32px] text-outline" />
       <h3 className="mb-1 font-display text-headline-sm text-primary">
-        No sanctuaries match those filters
+        No stays match those filters
       </h3>
       <p className="mb-5 text-body-sm text-on-surface-variant">
         {active.length > 0 ? (
@@ -270,7 +270,7 @@ function EstateStory({ booking }: { booking: Booking }) {
             <div className="relative aspect-[4/5] overflow-hidden rounded-2xl border border-outline-variant/50 sunlit-card-shadow">
               <Image
                 src={estateImages.hostsInOrchard}
-                alt={`${hosts.names} standing in the cider orchard with a basket of heirloom apples.`}
+                alt={`${hosts.names} on the terrace above the Ging tea terraces.`}
                 fill
                 sizes="(min-width: 1024px) 40vw, 100vw"
                 className="object-cover"
@@ -289,7 +289,7 @@ function EstateStory({ booking }: { booking: Booking }) {
               Estate Story
             </span>
             <h2 className="mt-2 mb-6 font-display text-headline-lg-mobile font-semibold text-primary md:text-headline-lg">
-              A quiet sanctuary built with patience and honest craft.
+              A quiet hill station built with patience and honest craft.
             </h2>
             <div className="space-y-4 text-body-md leading-relaxed text-on-surface-variant">
               {estateStory.map((paragraph) => (
@@ -304,7 +304,7 @@ function EstateStory({ booking }: { booking: Booking }) {
                 <div className="text-label-sm uppercase text-outline">Estate Inquiries</div>
                 <a
                   href={`mailto:${hosts.email}`}
-                  className="inline-flex min-h-9 items-center text-title-md font-semibold text-primary hover:underline"
+                  className="inline-flex min-h-11 items-center text-title-md font-semibold text-primary hover:underline"
                 >
                   {hosts.email}
                 </a>

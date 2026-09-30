@@ -23,6 +23,7 @@ import {
 import type { Stay } from "@/lib/stays";
 import { confirmReservation, type CheckoutState } from "@/app/checkout/actions";
 
+import { FieldError } from "./field-error";
 import { Icon } from "./icon";
 
 const initialState: CheckoutState = { status: "idle" };
@@ -34,23 +35,13 @@ const label = "text-body-sm font-medium text-on-surface";
 
 const CARD_FIELD_NAMES: (keyof CardFields)[] = ["cardName", "cardNumber", "expiry", "cvc"];
 
-function FieldError({ id, message }: { id?: string; message?: string }) {
-  if (!message) return null;
-
-  return (
-    <p id={id} className="mt-1.5 text-label-sm text-error">
-      {message}
-    </p>
-  );
-}
-
 const submitClass =
   "group flex items-center justify-center gap-2.5 rounded-xl bg-primary-container text-title-md font-semibold text-on-primary shadow-lg shadow-primary-container/20 transition-all duration-200 hover:bg-primary hover:shadow-xl active:scale-[0.99] disabled:cursor-wait disabled:opacity-80";
 
 function SubmitButton({ pending, label }: { pending: boolean; label?: string }) {
   return (
     <button type="submit" disabled={pending} className={`${submitClass} w-full py-4`}>
-      <span>{pending ? "Confirming your sanctuary…" : (label ?? "Confirm Reservation & Pay Securely")}</span>
+      <span>{pending ? "Confirming your stay…" : (label ?? "Confirm Reservation & Pay Securely")}</span>
       <Icon
         name={pending ? "progress_activity" : "lock"}
         className={`text-base ${pending ? "animate-spin" : ""} transition-transform group-hover:translate-x-0.5`}
@@ -77,7 +68,7 @@ function Confirmation({
           <Icon name="check" className="text-4xl" />
         </div>
         <h2 className="font-display text-headline-md text-primary">
-          Your sanctuary awaits, {reservation.guestName.split(" ")[0]}.
+          Your stay awaits, {reservation.guestName.split(" ")[0]}.
         </h2>
         <p className="mx-auto mt-2 max-w-md text-body-md text-on-surface-variant">
           A confirmation and your pre-arrival valley guide are on their way to{" "}
@@ -101,13 +92,13 @@ function Confirmation({
 
         <dl className="divide-y divide-outline-variant/20">
           {[
-            { label: "Sanctuary", value: reservation.stayName },
+            { label: "Stay", value: reservation.stayName },
             { label: "Guests", value: reservation.guests },
             { label: "Dates", value: `${reservation.dates} • ${formatNights(reservation.nights)}` },
             { label: "Arrival", value: reservation.arrivalWindow },
             {
-              label: "Farmstead Breakfast",
-              value: reservation.breakfasts.length > 0 ? reservation.breakfasts.join(" • ") : "Standard farmstead morning",
+              label: "Hill Breakfast",
+              value: reservation.breakfasts.length > 0 ? reservation.breakfasts.join(" • ") : "Standard hill breakfast",
             },
             { label: "Total Stay", value: reservation.total },
             {
@@ -141,7 +132,7 @@ function Confirmation({
           {
             icon: "key",
             title: "Arrival Ritual",
-            body: `Expect a lit hearth, warm cider, and a fire-split birch stack inside ${reservation.stayName.replace("The ", "")} during your ${reservation.arrivalWindow} arrival window.`,
+            body: `Expect a lit bukhari stove, hot chai, and a split stack of khadi wood inside ${reservation.stayName.replace("The ", "")} during your ${reservation.arrivalWindow} arrival window.`,
           },
           {
             icon: "event_available",
@@ -171,7 +162,7 @@ function Confirmation({
           href={`/?checkIn=${booking.checkIn}&checkOut=${booking.checkOut}&guests=${booking.guests}#accommodations`}
           className="flex-1 rounded-xl bg-primary-container px-5 py-3.5 text-center text-title-md text-on-primary transition-colors hover:bg-primary"
         >
-          Browse Other Sanctuaries
+          Browse Other Stays
         </Link>
       </div>
     </div>
@@ -347,7 +338,7 @@ export function CheckoutForm({ stay, booking }: { stay: Stay; booking: Booking }
           <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-label-sm font-bold text-on-primary">
             3
           </span>
-          <h2 className="text-title-lg text-primary">Farmstead Breakfast Preferences</h2>
+          <h2 className="text-title-lg text-primary">Hill Breakfast Preferences</h2>
         </div>
         <div className="space-y-3">
           {breakfastChoices.map((choice, index) => (
@@ -389,13 +380,13 @@ export function CheckoutForm({ stay, booking }: { stay: Stay; booking: Booking }
           {[
             {
               value: "card_full" as const,
-              title: `Pay in full — ${formatMoney(quote.total, true)}`,
+              title: `Pay in full — ${formatMoney(quote.total)}`,
               note: "Settle the entire stay today, completely hassle-free.",
             },
             {
               value: "deposit" as const,
-              title: `Pay 50% deposit — ${formatMoney(quote.deposit, true)}`,
-              note: `Balance of ${formatMoney(quote.total - quote.deposit, true)} due seven days before arrival.`,
+              title: `Pay 50% deposit — ${formatMoney(quote.deposit)}`,
+              note: `Balance of ${formatMoney(quote.total - quote.deposit)} due seven days before arrival.`,
             },
           ].map((option) => (
             <label
@@ -501,7 +492,7 @@ export function CheckoutForm({ stay, booking }: { stay: Stay; booking: Booking }
           <button
             type="button"
             onClick={() => setCardState(TEST_CARD)}
-            className="inline-flex min-h-9 items-center gap-1.5 text-label-md text-primary hover:underline"
+            className="inline-flex min-h-11 items-center gap-1.5 text-label-md text-primary hover:underline"
           >
             <Icon name="auto_fix_high" className="text-base" />
             Fill test card
@@ -565,7 +556,7 @@ export function CheckoutForm({ stay, booking }: { stay: Stay; booking: Booking }
         <div className="flex items-center gap-3">
           <div className="min-w-0">
             <p className="truncate text-title-md font-semibold text-primary">
-              {formatMoney(dueToday, true)}
+              {formatMoney(dueToday)}
             </p>
             <p className="truncate text-label-sm text-outline">
               {plan === "deposit" ? "50% deposit" : "Paid in full"} • {formatNights(quote.nights)}

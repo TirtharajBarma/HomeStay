@@ -7,6 +7,7 @@ import {
   formatDateRange,
   formatMoney,
   formatNights,
+  TAX_LABEL,
   quoteFor,
   type Booking,
 } from "@/lib/booking";
@@ -23,7 +24,7 @@ export function BookingCard({ stay, booking }: { stay: Stay; booking: Booking })
   return (
     <aside className="order-first lg:order-last lg:col-span-4 lg:sticky lg:top-24">
       <div className="rounded-2xl border border-outline-variant/50 bg-surface-container-lowest p-6 sticky-card-elevation">
-        <div className="mb-5 flex items-baseline justify-between border-b border-outline-variant/30 pb-4">
+        <div className="mb-5 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b border-outline-variant/30 pb-4">
           <div>
             <span className="font-display text-headline-lg font-bold text-primary">
               {formatMoney(stay.price)}
@@ -40,27 +41,27 @@ export function BookingCard({ stay, booking }: { stay: Stay; booking: Booking })
             <span>
               {formatMoney(stay.price)} × {formatNights(quote.nights).toLowerCase()}
             </span>
-            <span className="font-medium text-on-surface">{formatMoney(quote.roomTotal, true)}</span>
+            <span className="font-medium text-on-surface">{formatMoney(quote.roomTotal)}</span>
           </div>
           <div className="flex items-center justify-between text-on-surface-variant">
             <span className="flex items-center gap-1.5">
-              Farmstead Breakfast &amp; Firewood
+              Hill Breakfast &amp; Firewood
               <Icon name="eco" className="text-xs text-primary" />
             </span>
             <span className="font-medium text-primary">Included (Free)</span>
           </div>
           <div className="flex justify-between text-on-surface-variant">
             <span>Estate Cleaning &amp; Linens</span>
-            <span className="font-medium text-on-surface">{formatMoney(quote.cleaning, true)}</span>
+            <span className="font-medium text-on-surface">{formatMoney(quote.cleaning)}</span>
           </div>
           <div className="flex justify-between text-on-surface-variant">
-            <span>Valley Hospitality Tax (4%)</span>
-            <span className="font-medium text-on-surface">{formatMoney(quote.tax, true)}</span>
+            <span>{TAX_LABEL}</span>
+            <span className="font-medium text-on-surface">{formatMoney(quote.tax)}</span>
           </div>
           <div className="flex items-baseline justify-between border-t border-outline-variant/40 pt-3 text-title-md font-semibold text-primary">
             <span>Total</span>
             <span className="font-display text-headline-sm">
-              {formatMoney(quote.total, true)}
+              {formatMoney(quote.total)}
             </span>
           </div>
           <p className="text-label-sm text-outline">
@@ -98,7 +99,7 @@ export function BookingCard({ stay, booking }: { stay: Stay; booking: Booking })
             <span className="text-on-surface">Have questions for the hosts?</span>
             <a
               href={`mailto:${hosts.email}`}
-              className="mt-0.5 inline-flex min-h-9 items-center text-label-sm text-primary hover:underline"
+              className="mt-0.5 inline-flex min-h-11 items-center text-label-sm text-primary hover:underline"
             >
               Message {hosts.names}
             </a>

@@ -72,7 +72,7 @@ export function StayFilters({
       </div>
 
       <p aria-live="polite" className="px-1 text-label-sm text-outline md:text-right">
-        {matching} of {stays.length} sanctuaries shown
+        {matching} of {stays.length} stays shown
       </p>
     </div>
   );

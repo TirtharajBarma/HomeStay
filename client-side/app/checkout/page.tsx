@@ -13,6 +13,7 @@ import {
   formatMoney,
   formatNights,
   homeHref,
+  TAX_LABEL,
   quoteFor,
   resolveBooking,
   stayHref,
@@ -46,14 +47,14 @@ export default async function CheckoutPage({
       >
         <Link
           href={homeHref(booking)}
-          className="-mx-1 inline-flex min-h-9 items-center rounded px-1 hover:text-primary"
+          className="-mx-1 inline-flex min-h-11 items-center rounded px-1 hover:text-primary"
         >
           Accommodations
         </Link>
         <span className="text-outline-variant">/</span>
         <Link
           href={stayHref(stay.slug, booking)}
-          className="-mx-1 inline-flex min-h-9 items-center rounded px-1 hover:text-primary"
+          className="-mx-1 inline-flex min-h-11 items-center rounded px-1 hover:text-primary"
         >
           {stay.name}
         </Link>
@@ -108,7 +109,7 @@ export default async function CheckoutPage({
               <Stars rating={stay.rating} count={stay.reviewCount} />
               <Link
                 href={stayHref(stay.slug, booking)}
-                className="inline-flex min-h-9 items-center text-label-sm text-primary hover:underline"
+                className="inline-flex min-h-11 items-center text-label-sm text-primary hover:underline"
               >
                 View stay details
               </Link>
@@ -142,7 +143,7 @@ export default async function CheckoutPage({
                   {formatMoney(stay.price)} × {formatNights(quote.nights).toLowerCase()}
                 </span>
                 <span className="font-medium text-on-surface">
-                  {formatMoney(quote.roomTotal, true)}
+                  {formatMoney(quote.roomTotal)}
                 </span>
               </div>
               <div className="flex justify-between text-on-surface-variant">
@@ -151,16 +152,16 @@ export default async function CheckoutPage({
               </div>
               <div className="flex justify-between text-on-surface-variant">
                 <span>Estate Cleaning &amp; Linens</span>
-                <span className="font-medium text-on-surface">{formatMoney(quote.cleaning, true)}</span>
+                <span className="font-medium text-on-surface">{formatMoney(quote.cleaning)}</span>
               </div>
               <div className="flex justify-between text-on-surface-variant">
-                <span>Valley Hospitality Tax (4%)</span>
-                <span className="font-medium text-on-surface">{formatMoney(quote.tax, true)}</span>
+                <span>{TAX_LABEL}</span>
+                <span className="font-medium text-on-surface">{formatMoney(quote.tax)}</span>
               </div>
               <div className="flex items-baseline justify-between border-t border-outline-variant/40 pt-3">
                 <span className="text-title-md font-semibold text-primary">Total</span>
                 <span className="font-display text-headline-md text-primary">
-                  {formatMoney(quote.total, true)}
+                  {formatMoney(quote.total)}
                 </span>
               </div>
             </div>
@@ -182,7 +183,7 @@ export default async function CheckoutPage({
                 Questions before you book?{" "}
                 <a
                   href={`mailto:${hosts.email}`}
-                  className="inline-flex min-h-9 items-center text-primary hover:underline"
+                  className="inline-flex min-h-11 items-center text-primary hover:underline"
                 >
                   {hosts.email}
                 </a>

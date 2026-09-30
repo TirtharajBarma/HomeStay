@@ -1,0 +1,48 @@
+import type { GalleryShot } from "./stays";
+
+/** Shared demo photography. Kept apart from the stay records so the content
+ *  layer can be rewritten without touching image URLs. */
+
+export const estate = {
+  hostsInOrchard:
+    "https://lh3.googleusercontent.com/aida-public/AB6AXuCCHi6UFkrFm-BsrJDUHIEY5SNJPVVygbs-JabWIWVjlaKTUgXWiEIYlunIjFg0rSmBPboOHlgMj39T2eSSOT7EkLlLlotMt3Ml0VQ-H4uuZd795YgqNT0JrfGFn32tvocCMFZUUzXCaf6p4B5A_FeaKCjp1OMaAKS2YVeTXHIE6G_VkP4bnO6AxL_hJYbG1_w1qeTMPYbUr2QSlis82P6eTTJuADaP8KF2XHb65SbJCZP0B6NdRjYU",
+  hostsPortrait:
+    "https://lh3.googleusercontent.com/aida-public/AB6AXuBMgV16m5Vg-n38ORIaQe_IidYACn8d2DwL2kunbcSOa08FLttNGrorX-WOWHQJ8yjZFT1pH_w84gdIaq_Swv4-Q7sRXVK6BAzMMa6_HcEmiPMagk3w-O76urOSLbSSQi_x1BOpfd72336jO6l4mzPFKU5CcSLcVgifz1Rsq0SY8I9ir79bk5KWjEmTbh5_IY9TwSD3dis_q1zeHlcM0R2IRoCZql-6zpUbLIgXCJgHqQ3rvsGYxjZg",
+  orchardPatio:
+    "https://lh3.googleusercontent.com/aida-public/AB6AXuBPbo-ppKvLPABVngySmWovKSGVio5EvMRRDu2pb8tn062eOlVXEzm62w-zu1LI_NF4YqY8Yl_g7vOZ5plQHCoWQemlrDVhFlIwJxeIA_wZgvD6QoP0jNIzVaikRNCxiFIRmkXsCbHdIJRKcq7TkUmP3EGmQ2ox0ImPOrY_NkmPpdw7l7Jgg3iCdZajC-i0l_nGm-XY91PCau_I_G0uobbTfwhqPmcdnVFGC5W1UJnucZHUw9V2uAEP",
+  farmsteadBreakfast:
+    "https://lh3.googleusercontent.com/aida-public/AB6AXuDx5qrECwuU10zbmofVV1D-DPWAblVUwkdaYkFomHfZpsNcUnz-GNq4zwfiZEg_he2KyuPHovGLXvy06q32as1loRO3cRAzGrNlw9F6eregBAHiTy36fzcdXtG2Cv2wt_5D_wacdOmnJvKG6SimJLuNdTSzskHO1378TV5HzDINdqaWfKFyBgE3lt3ULXEIop3T7DlNIzgw4UyYD1HgsTW-DwJH9_8BMd7wCMlWaC32EXZkm6FJLs-5",
+  cedarJoinery:
+    "https://lh3.googleusercontent.com/aida-public/AB6AXuDkkNzhbvlU8E_aJ4oUrndjSjlB0Ga8NyCGWxUrHIpaiveRbb-zOTnyzaCjOTfGm1zqVUpeQn-BArJybguyCnnB3mdnMi9XOhnLgdZ0_OUDQPw300oamTh-6DxPJ58keDCirYFqUt4R45gDPkbgxF_fuI0cMqrjSvPT7mT9rv-vJAltWOfmm-qsoB_pKes8n5EINCXe1nHic5OrEjo9usIhLaimGVaH_3BlQmwyU790UPkiqBi_wGYI",
+  solarium:
+    "https://lh3.googleusercontent.com/aida-public/AB6AXuC257E05UXqlGZPoOvZNwCtDYk5VtQesH8blN30eogwlB3g9ekrW4W42VazJyr7Lq8xUEfVG9RdTNILO8DyFvb7P4Vc6jW2MPPQXu7EYtixH-lnz5s9wD5p2DtI5uKC9yrFRn3i9QGYGDPP491RKxbmFsdN0wt0QjKFqC8OENDBeTiYIiIHzTX0KHqoFlT6HPVcP2_E1GB1prwA3P93qzzv9aWIv7ZM9_f0IPSdZo9ja0d2IlLYRW9E",
+  clawfootTub:
+    "https://lh3.googleusercontent.com/aida-public/AB6AXuAQqR86iPdNVpd6ywlguUiiHJ5fZ7wybil7znUG4U1GVxwkCbQuaFEcqy7cqtqwWGPD-f4gWZyh8GqdXdvTVyotOeg60QqEnwWHnNapBVcUTAWySqnMH4bChOnXHbzkWPIyh0BdkT8OsyeVaqioVmKL234EsGo5CDf7Ug22gEW1TglIlNUeqt2yS3HVIfrjqJVNvw0O7NkQxAOUN-PlzLhIsGEMteKOj6xswYZWms39YwGcyiAz_QNm",
+  oakHearthAlt:
+    "The Oak Hearth Suite: king bed with oatmeal linen, exposed stone fireplace and lace curtains in morning light.",
+};
+
+export const card = {
+  oakHearth:
+    "https://lh3.googleusercontent.com/aida-public/AB6AXuDhevMSJ8jcLv6V72NY3iIZ51nkiD7w9G6-wl0akdHXPKnsjgiyQeKyvzNMz9DdhaqzMrtuQOUN7mAaXsxcrMMhrgn0wPrOzmeEZm_2xJDhGp6PU3VtbnLwL5267C9IGr7xH9-X69z17q5sW_oGxG6-PSUco5LG4vCqeZNbujLc4O0AtdgR5S9b4i5sA0yH1oiCMsIle5HBm8fZtEC704hHjmy2xQV1Vszg6-0jdTnIoV5ggRkBes2o",
+  timberLoft:
+    "https://lh3.googleusercontent.com/aida-public/AB6AXuAzMTDC3NwT48_J_LOVuHXiwGKrJKmOrUu_aaxRgQ8Ipl-hkJZOnFUQHlX6BlW4wqfsb3me0y16oEkWh7ACTU6AQxj6q3TLB_-Db3vmMAU130aLKcb1v3NMWeOrHKPoMikR0-k0cbIX0wS3X1P3XGuvN3dzcxohQAlGIyNY_I2T7X3BbyscNihYTS25W6SjcRDwPdtUq1WyP7ODI_X9qB6UkU_dL8o8evjn498C_0op4mKDkVk3ubZl",
+  gardenStone:
+    "https://lh3.googleusercontent.com/aida-public/AB6AXuAR5QBCt_FngLzPy_7tfAtCAlJ554XzvlMYT7kp5kWSuS3ME_2vUfZSp568KqvPDWrFWLK_vg1SlROOW-4Q_D8NFqVqOAAcpyar7jVaoQJ5u02A_7ptSj7YlTO3unLjVF0hV82w-KomqvQNkiDvW6LLbtAgEyNF-tDdedyoN8rQdKJdD9eVRob1dHQvqId34dTJFmQwNPvTN0gxwHkKKXE9td1vqUmSkVhGWWSmdmnvlu66dq_Noypt",
+  pineMeadow:
+    "https://lh3.googleusercontent.com/aida-public/AB6AXuDxTjO6qBFZSPJyNG0A48aa1z4xyt5NRwWzM24IAeC9WkPZzaCk_ZxB0Bs3Ojp286sLcrhQTQSAtg5rVGf7Kv2VlGvLgmGk0ZrVAyE8qxZXJKa-KDdNF4jP7umPXz8bPwWtdSaSeuEunHx6vUQ6tA27NFcdh-KedhbrAgByaM3sUNUbgkgc_RNneHcADcKUW1d3evtjqeRa2OoOh55Jg4mHgGyGDZcXScOAI7rQ0XZOeHoEzOAw3ce_",
+  atticStudio:
+    "https://lh3.googleusercontent.com/aida-public/AB6AXuDdgQpd8CsHDJFkCLfk4GPjApsAqTwVWmLTHio3LS4_tW_EN6ajwrZa6DJZ4HBt1nIAhQUXRGItdWwEsrI3mir_oIhXr4OtCRT1AHyp5i0q1foXWUoyW5GEGacNZEQXtzlnUd6Vsg1bvs0rAeWJGmARwu7Xgq6Ph8U8AtuGBpWPk15yJCjKDOf_IA2lw27OnjIRv989jUzHpddmQYSKjLxFW9uTdY0tbjj_5UBnvy2Yxxxf2IZVh5cO",
+  willowBrook:
+    "https://lh3.googleusercontent.com/aida-public/AB6AXuAT7LzyrzlHpK-wp49RC0BDKDv40JNloG4pFEo6oRZf7G26_Hm5EEyT2R61bf95CsUi_IWb2IPOUwUMpv27vkuChFA6x8XSLIlrsNl_YWxQMhru0C9mXHo9wluNiLefnORpsLLBFCknexsaYV_bek-M8-e00WrG5SwsiW6P5GgtFsbjU7VJwc-3FT2qg6XbPU6NgXa6jrpXuFrry5nwsG5b-w68cgHqSslqGLvP_CAT6XPhKbt9gfQe",
+};
+
+export const oakHero =
+  "https://lh3.googleusercontent.com/aida-public/AB6AXuDcfzIQmrIltYDJhAxlcR86qZT7j2IaI_7SuxyZASGs4Y8yruKVNhyn0y7yjgpfAUr7Jmj4pk3rFp0GGi_DAAffa1YpycHnPBYPe5vVgBvgX-XrjneGe_N4GI38JRyfEL2WO_dWxjnlhIYFmpwP5BngP1_BwnCrX403yefAwuWf-_Iyup-CrRrMQpXCbkOqhHSAvD3XeEWYEPn2-UX9ouKqKVYI41re1dohSRLfNKL7zUSDHSgNnUcv";
+
+export const estateShot = (alt: string, caption: string, src: string): GalleryShot => ({
+  src,
+  alt,
+  caption,
+});
+

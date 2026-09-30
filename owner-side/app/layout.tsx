@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Playfair_Display, Plus_Jakarta_Sans } from "next/font/google";
+import { CurrencyProvider } from "@/components/currency-provider";
+import { EstateProvider } from "@/components/estate-provider";
 import "./globals.css";
 
 const playfair = Playfair_Display({
@@ -16,11 +18,11 @@ const jakarta = Plus_Jakarta_Sans({
 
 export const metadata: Metadata = {
   title: {
-    default: "Meadowfall Homestay",
-    template: "%s | Meadowfall Homestay",
+    default: "Gumtree Valley",
+    template: "%s | Gumtree Valley",
   },
   description:
-    "Estate & retreat operations for Meadowfall Homestay, West Meadows Valley.",
+    "Estate & retreat operations for Gumtree Valley, Gumtree Valley, Darjeeling.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -45,7 +47,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         />
       </head>
       <body className="min-h-full bg-surface font-body-md text-on-surface selection:bg-primary selection:text-on-primary">
-        {children}
+        <CurrencyProvider>
+          <EstateProvider>{children}</EstateProvider>
+        </CurrencyProvider>
       </body>
     </html>
   );

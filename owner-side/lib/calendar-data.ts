@@ -75,16 +75,16 @@ export const roomGroups: RoomGroup[] = [
     rooms: [
       {
         code: "Room 101",
-        name: "Oak Hearth Suite",
+        name: "Tiger Hill View Suite",
         note: "King Bed • Fireplace",
         reservations: [
           {
-            guest: "Lucas & Mia Vance",
+            guest: "Rahul & Meera Nair",
             start: 0,
             nights: 3,
             channel: "airbnb",
             tag: "Airbnb",
-            detail: "3 nts • Paid $490",
+            detail: "3 nts • Paid ₹14,700",
           },
           {
             guest: "David & Claire Miller",
@@ -92,7 +92,7 @@ export const roomGroups: RoomGroup[] = [
             nights: 3,
             channel: "direct",
             tag: "Direct",
-            detail: "3 nights • Paid $540",
+            detail: "3 nights • Paid ₹16,200",
             emphasis: true,
             trailing: { icon: "check_circle", tone: "text-amber-200" },
           },
@@ -102,22 +102,22 @@ export const roomGroups: RoomGroup[] = [
             nights: 4,
             channel: "ota",
             tag: "Booking",
-            detail: "4 nts • $720 • Late Arrival",
+            detail: "4 nts • ₹21,600 • Late Arrival",
           },
         ],
       },
       {
         code: "Room 102",
-        name: "Garden Stone Suite",
+        name: "Gumtree Garden Suite",
         note: "Queen Bed • Patio",
         reservations: [
           {
-            guest: "Simon & Nora Chen",
+            guest: "Arjun & Neha Shetty",
             start: 0,
             nights: 4,
             channel: "direct",
             tag: "Direct",
-            detail: "4 nts • Paid $620",
+            detail: "4 nts • Paid ₹18,600",
           },
           {
             guest: "Elena Rostova",
@@ -125,12 +125,12 @@ export const roomGroups: RoomGroup[] = [
             nights: 4,
             channel: "airbnb",
             tag: "Airbnb",
-            detail: "4 nights • Balance $0",
+            detail: "4 nights • Balance ₹0",
             emphasis: true,
             trailing: { icon: "key", tone: "text-emerald-200" },
           },
           {
-            guest: "Arthur Pendelton",
+            guest: "Aarav Mehta",
             start: 10,
             nights: 3,
             channel: "ota",
@@ -149,11 +149,11 @@ export const roomGroups: RoomGroup[] = [
     rooms: [
       {
         code: "Room 201",
-        name: "The Timber Loft",
+        name: "Chiyabari Timber Loft",
         note: "King + Trundle • Mountain View",
         reservations: [
           {
-            guest: "Dr. Julian Scott & Party",
+            guest: "Dr. Priyanka Sen & Party",
             start: 1,
             nights: 5,
             channel: "direct",
@@ -181,11 +181,11 @@ export const roomGroups: RoomGroup[] = [
       },
       {
         code: "Room 202",
-        name: "Orchard Attic Studio",
+        name: "Second Flush Studio",
         note: "Queen Bed • Skylight",
         reservations: [
           {
-            guest: "Rebecca Thorne",
+            guest: "Ritika Choudhury",
             start: 0,
             nights: 3,
             channel: "ota",
@@ -211,11 +211,11 @@ export const roomGroups: RoomGroup[] = [
     rooms: [
       {
         code: "Room 301",
-        name: "Pine Meadow Cabin",
+        name: "Silver Oak Cottage",
         note: "King Bed • Private Hot Tub",
         reservations: [
           {
-            guest: "The Harrison Family",
+            guest: "The Deshpande Family",
             start: 2,
             nights: 5,
             channel: "direct",
@@ -236,11 +236,11 @@ export const roomGroups: RoomGroup[] = [
       },
       {
         code: "Room 302",
-        name: "Willow Brook Hideaway",
+        name: "Cardamom Hills Hideaway",
         note: "Queen Bed • Creek View",
         reservations: [
           {
-            guest: "Isla Sterling",
+            guest: "Ishaan Kapoor",
             start: 0,
             nights: 5,
             channel: "direct",
@@ -248,7 +248,7 @@ export const roomGroups: RoomGroup[] = [
             detail: "5 nts • Creek View Suite",
           },
           {
-            guest: "Garrett Ross",
+            guest: "Debashish Roy",
             start: 7,
             nights: 5,
             channel: "airbnb",
@@ -267,13 +267,13 @@ export const selectedReservation = {
   guest: "David & Claire Miller",
   reservationId: "#MF-2024-8841",
   source: "Booked via Direct Guest Portal",
-  room: "Room 101 - Oak Hearth Suite",
+  room: "Room 101 - Tiger Hill View Suite",
   bed: "King Bed • Stone Fireplace",
   checkIn: "Tue, Oct 22 (3:00 PM)",
   checkOut: "Fri, Oct 25 (11:00 AM)",
   duration: "3 Nights",
   phone: "+1 (555) 732-9014",
-  email: "david.c.miller@vermontcraft.net",
+  email: "david.miller@overlandhotels.co.uk",
   keycode: "#4819*",
   notes: [
     {
@@ -290,9 +290,9 @@ export const selectedReservation = {
     },
   ],
   charges: [
-    { label: "Nightly Rate ($160 × 3)", value: "$480.00" },
-    { label: "Estate Cleaning Fee", value: "$40.00" },
-    { label: "Lodging Tax (4%)", value: "$20.00" },
+    { label: "Nightly Rate (₹3,900 × 3)", value: "₹11,700" },
+    { label: "Estate Cleaning Fee", value: "₹1,200" },
+    { label: "GST (12%)", value: "₹1,548" },
   ],
-  total: "$540.00",
+  total: "₹14,448",
 };

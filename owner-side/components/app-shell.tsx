@@ -8,8 +8,8 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
+import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icon";
-import { NewBookingDialog } from "@/components/new-booking-dialog";
 import { NotificationsBell } from "@/components/notifications";
 import { SideNav } from "@/components/side-nav";
 import { ToastProvider } from "@/components/ui/toast";
@@ -18,7 +18,6 @@ import type { NavKey } from "@/lib/navigation";
 type AppShellProps = {
   active: NavKey;
   brandIcon?: string;
-  housekeepingBadge?: string;
   footer?: ReactNode;
   /** Desktop top bar; hidden below `lg` in favour of the compact mobile bar. */
   topNav: ReactNode;
@@ -55,14 +54,13 @@ function writeRail(value: "open" | "collapsed") {
 export function AppShell({
   active,
   brandIcon,
-  housekeepingBadge,
   footer,
   topNav,
-  mobileTitle = "Meadowfall Homestay",
+  mobileTitle = "Gumtree Valley Estate",
   children,
 }: AppShellProps) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [booking, setBooking] = useState(false);
 
   const openButton = useRef<HTMLButtonElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
@@ -159,7 +157,7 @@ export function AppShell({
             dotClassName="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-secondary"
           />
           <button
-            onClick={() => setBooking(true)}
+            onClick={() => router.push("/book")}
             aria-label="New booking"
             className="flex items-center rounded-lg bg-primary p-2 text-on-primary transition-colors hover:bg-primary-container active:scale-[0.98]"
           >
@@ -193,13 +191,12 @@ export function AppShell({
           <SideNav
             active={active}
             brandIcon={brandIcon}
-            housekeepingBadge={housekeepingBadge}
             footer={footer}
             variant="drawer"
             onNavigate={close}
             onNewBooking={() => {
               close();
-              setBooking(true);
+              router.push("/book");
             }}
           />
           <button
@@ -221,10 +218,9 @@ export function AppShell({
         <SideNav
           active={active}
           brandIcon={brandIcon}
-          housekeepingBadge={housekeepingBadge}
           footer={footer}
           variant="fixed"
-          onNewBooking={() => setBooking(true)}
+          onNewBooking={() => router.push("/book")}
         />
       </div>
 
@@ -248,7 +244,6 @@ export function AppShell({
 
       {children}
 
-      <NewBookingDialog open={booking} onClose={() => setBooking(false)} />
     </ToastProvider>
   );
 }

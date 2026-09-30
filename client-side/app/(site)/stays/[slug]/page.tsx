@@ -3,15 +3,14 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { BookingCard } from "@/components/booking-card";
+import { StayTransferSection } from "@/components/cab/stay-transfer-section";
 import { Icon } from "@/components/icon";
 import { MobileReserveBar } from "@/components/mobile-reserve-bar";
 import { StayGallery } from "@/components/stay-gallery";
 import { Stars } from "@/components/stars";
-import { homeHref, resolveBooking, stayHref } from "@/lib/booking";
+import { formatMoney, homeHref, resolveBooking, stayHref } from "@/lib/booking";
 import {
-  amenityGroups,
   breakfast,
-  grounds,
   houseRules,
   hosts,
 } from "@/lib/content";
@@ -27,19 +26,13 @@ export async function generateMetadata({
   const { slug } = await params;
   const stay = getStay(slug);
 
-  if (!stay) return { title: "Sanctuary not found" };
+  if (!stay) return { title: "Stay not found" };
 
   return {
     title: stay.name,
     description: stay.intro,
   };
 }
-
-const reviewTones = {
-  clay: "bg-secondary-fixed text-on-secondary-container",
-  sage: "bg-primary-fixed text-on-primary-fixed",
-  sand: "bg-tertiary-fixed text-on-tertiary-fixed",
-} as const;
 
 export default async function StayPage({ params, searchParams }: PageProps<"/stays/[slug]">) {
   const { slug } = await params;
@@ -61,7 +54,7 @@ export default async function StayPage({ params, searchParams }: PageProps<"/sta
         >
           <Link
             href={homeHref(booking)}
-            className="-mx-1 inline-flex min-h-9 items-center rounded px-1 hover:text-primary"
+            className="-mx-1 inline-flex min-h-11 items-center rounded px-1 hover:text-primary"
           >
             Accommodations
           </Link>
@@ -84,12 +77,12 @@ export default async function StayPage({ params, searchParams }: PageProps<"/sta
             </h1>
             <p className="text-body-lg leading-relaxed text-on-surface-variant">{stay.intro}</p>
           </div>
-          <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center lg:text-right">
-            <div className="inline-flex items-center gap-2 rounded-full border border-outline-variant/30 bg-surface-container px-3.5 py-1.5 text-label-md text-on-surface">
+          <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center lg:text-right">
+            <div className="inline-flex max-w-full flex-wrap items-center gap-2 rounded-full border border-outline-variant/30 bg-surface-container px-3.5 py-1.5 text-label-md text-on-surface">
               <Icon name="shield_person" className="text-base text-secondary" />
-              Hosted with care by {hosts.names} • Superhost Estate
+              Hosted by {hosts.names}
             </div>
-            <div className="inline-flex items-center gap-2 rounded-full bg-primary-fixed/30 px-3 py-1.5 text-label-md text-primary">
+            <div className="inline-flex max-w-full flex-wrap items-center gap-2 rounded-full bg-primary-fixed/30 px-3 py-1.5 text-label-md text-primary">
               <Stars rating={stay.rating} count={stay.reviewCount} />
               <span className="mx-1 text-outline-variant">•</span>
               <span className="font-medium text-on-surface">{hosts.location}</span>
@@ -157,67 +150,8 @@ export default async function StayPage({ params, searchParams }: PageProps<"/sta
             </div>
           </section>
 
-          {/* Amenities */}
-          <section className="space-y-6">
-            <div className={sectionClass}>
-              <span className="text-label-md uppercase tracking-widest text-secondary">
-                Thoughtful Details
-              </span>
-              <h2 className="mt-1 font-display text-headline-md text-primary">
-                Amenities for Mindful Living
-              </h2>
-            </div>
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-              {amenityGroups.map((group) => (
-                <div
-                  key={group.title}
-                  className="sunlit-card-shadow rounded-xl border border-outline-variant/40 bg-surface-container-lowest p-5"
-                >
-                  <div className="mb-3 flex items-center gap-2 text-primary">
-                    <Icon name={group.icon} className="text-xl" />
-                    <h3 className="text-title-md text-on-surface">{group.title}</h3>
-                  </div>
-                  <ul className="space-y-2.5 text-body-sm text-on-surface-variant">
-                    {group.items.map((item) => (
-                      <li key={item} className="flex items-start gap-2">
-                        <Icon
-                          name="check_circle"
-                          className="mt-0.5 shrink-0 text-base text-primary"
-                        />
-                        <span>{item}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          {/* Grounds */}
-          <section className="space-y-6">
-            <div className={sectionClass}>
-              <span className="text-label-md uppercase tracking-widest text-secondary">
-                The Grounds
-              </span>
-              <h2 className="mt-1 font-display text-headline-md text-primary">
-                Estate Grounds &amp; Access
-              </h2>
-            </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {grounds.map((ground) => (
-                <div
-                  key={ground.title}
-                  className="flex items-start gap-3.5 rounded-xl border border-outline-variant/30 bg-surface-container-low p-4"
-                >
-                  <Icon name={ground.icon} className="shrink-0 text-2xl text-primary" />
-                  <div>
-                    <h3 className="mb-1 text-title-md text-on-surface">{ground.title}</h3>
-                    <p className="text-body-sm text-on-surface-variant">{ground.body}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
+          {/* Estate transfers */}
+          <StayTransferSection checkIn={booking.checkIn} />
 
           {/* House rules */}
           <section className="space-y-4" id="house-rules">
@@ -239,58 +173,15 @@ export default async function StayPage({ params, searchParams }: PageProps<"/sta
             </div>
           </section>
 
-          {/* Reviews */}
-          <section className="space-y-6 border-t border-outline-variant/40 pt-4">
-            <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
-              <div>
-                <span className="text-label-md uppercase tracking-widest text-secondary">
-                  Guest Notes
-                </span>
-                <h2 className="mt-0.5 font-display text-headline-md text-primary">
-                  Reflections From {stay.name.replace("The ", "")}
-                </h2>
-              </div>
-              <div className="flex items-center gap-2">
-                <Stars rating={stay.rating} size="md" />
-                <span className="text-body-sm text-on-surface-variant">
-                  based on {stay.reviewCount} verified stays
-                </span>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 gap-4">
-              {stay.reviews.map((review) => (
-                <article
-                  key={review.name}
-                  className="sunlit-card-shadow space-y-3 rounded-xl border border-outline-variant/40 bg-surface-container-lowest p-5"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`flex h-10 w-10 items-center justify-center rounded-full font-display text-sm font-bold ${reviewTones[review.tone]}`}
-                      >
-                        {review.initials}
-                      </div>
-                      <div>
-                        <h4 className="text-title-md text-on-surface">{review.name}</h4>
-                        <p className="text-label-sm text-on-surface-variant">{review.stayed}</p>
-                      </div>
-                    </div>
-                    <Stars rating={stay.rating} className="hidden sm:inline-flex" />
-                  </div>
-                  <p className="text-body-md italic text-on-surface-variant">“{review.quote}”</p>
-                </article>
-              ))}
-            </div>
-          </section>
         </div>
 
         <BookingCard stay={stay} booking={booking} />
       </div>
 
-      {/* More sanctuaries */}
+      {/* More stays on the estate */}
       <section className="mt-12 border-t border-outline-variant/30 pt-8 lg:mt-16">
         <h2 className="mb-6 font-display text-headline-md text-primary">
-          More sanctuaries in the valley
+          More stays on the estate
         </h2>
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
           {stays
@@ -312,7 +203,7 @@ export default async function StayPage({ params, searchParams }: PageProps<"/sta
                   </span>
                   <span className="text-body-sm text-on-surface-variant">{other.occupancy}</span>
                 </span>
-                <span className="text-title-md font-bold text-primary">${other.price}</span>
+                <span className="text-title-md font-bold text-primary">{formatMoney(other.price)}</span>
               </Link>
             ))}
         </div>

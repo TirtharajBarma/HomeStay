@@ -21,8 +21,9 @@ export const DEFAULT_CHECK_IN = defaultWindow().checkIn;
 export const DEFAULT_CHECK_OUT = defaultWindow().checkOut;
 export const DEFAULT_GUESTS = 2;
 
-export const CLEANING_FEE = 40;
-export const LODGING_TAX_RATE = 0.04;
+export const CLEANING_FEE = 900;
+export const LODGING_TAX_RATE = 0.12;
+export const TAX_LABEL = "GST (12%)";
 export const MAX_NIGHTS = 30;
 export const FREE_CANCELLATION_DAYS = 7;
 
@@ -66,11 +67,6 @@ const longDateFormat = new Intl.DateTimeFormat("en-US", {
   day: "numeric",
   year: "numeric",
   timeZone: "UTC",
-});
-
-const moneyFormat = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
 });
 
 function first(value: string | string[] | undefined): string | undefined {
@@ -243,9 +239,17 @@ export function formatGuests(guests: number): string {
   return `${guests} Adult${guests === 1 ? "" : "s"}`;
 }
 
-export function formatMoney(amount: number, cents = false): string {
-  return cents ? moneyFormat.format(amount) : `$${amount.toLocaleString("en-US")}`;
+const rupeeFormat = new Intl.NumberFormat("en-IN", {
+  style: "currency",
+  currency: "INR",
+  maximumFractionDigits: 0,
+});
+
+/** Whole rupees with Indian digit grouping (₹2,42,000). No paise — nobody quotes them. */
+export function formatMoney(amount: number): string {
+  return rupeeFormat.format(Math.round(amount)).replace(/\u00a0/g, "");
 }
+
 
 export function cancellationDeadline(checkIn: string): string {
   return formatDate(addDays(checkIn, -FREE_CANCELLATION_DAYS));

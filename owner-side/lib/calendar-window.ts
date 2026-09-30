@@ -139,7 +139,7 @@ const channelPool: { channel: Reservation["channel"]; tag: string }[] = [
 
 const extras = [
   "Paid in full",
-  "Balance $0",
+  "Balance ₹0",
   "Late arrival",
   "Anniversary stay",
   "Early check-in requested",

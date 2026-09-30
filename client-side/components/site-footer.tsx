@@ -6,7 +6,7 @@ import { Icon } from "./icon";
 import { NewsletterForm } from "./newsletter-form";
 
 const linkClass =
-  "inline-flex min-h-9 items-center text-body-sm text-on-surface-variant transition-colors duration-150 hover:text-primary";
+  "inline-flex min-h-11 items-center text-body-sm text-on-surface-variant transition-colors duration-150 hover:text-primary";
 
 const columns = [
   {
@@ -20,7 +20,7 @@ const columns = [
   {
     title: "Homestay Guide",
     links: [
-      { href: "/stays/oak-hearth-suite#house-rules", label: "House Rules & Policies" },
+      { href: "/stays/ging-tea-cottage#house-rules", label: "House Rules & Policies" },
       { href: "/#story", label: "Host Eleanor & Thomas" },
       { href: "/#contact", label: "Directions & Arrival" },
     ],
@@ -49,7 +49,7 @@ export function SiteFooter() {
             </span>
           </div>
           <p className="mb-4 text-body-sm text-on-surface-variant">
-            An intimate countryside retreat in the heart of West Meadows Valley. Quiet sanctuaries,
+            An intimate tea-estate retreat above Darjeeling. Quiet hillside stays,
             sourdough breakfasts, and open hearth fires.
           </p>
           <NewsletterForm />

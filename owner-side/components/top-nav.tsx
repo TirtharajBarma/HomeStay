@@ -1,17 +1,18 @@
 "use client";
 
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { Icon } from "@/components/icon";
-import { NewBookingDialog } from "@/components/new-booking-dialog";
 import { NotificationsBell } from "@/components/notifications";
+import { CurrencySelect } from "@/components/currency-select";
 import { MenuRow, Popover } from "@/components/ui/popover";
 import { useToast } from "@/components/ui/toast";
 import { Modal } from "@/components/ui/modal";
 import { estates, todayLabel } from "@/lib/navigation";
 
 export const hostPortraits = {
-  eleanorThomas:
+  ananyaArjun:
     "https://lh3.googleusercontent.com/aida-public/AB6AXuDGFBU8MV8vsk4iJ6V2FMdHXlfVhBIKfw-QO3omtcppx3ELJ3WFLYdyFuPEO0hahn9HOlK-WIH1nrKLDPjCC-P0ZONQS1E0vWjRaNk2IK8cPWLClzF2p8K4RqpbbYVICHdEjvTUHaguYXzpsw7lw-xJaCv-RfxMiC6OdSg6OMpTD0cL5YWchbs3XbvBhsJSBwlEi0LghlBzjosxAEoDwncgeWiLxqyperFcP1U2hJSxeq949gfMTA2C",
 };
 
@@ -36,6 +37,8 @@ type TopNavProps = {
   estateLinksClass?: string;
   dateIcon?: string;
   datePillTone?: "container" | "container-low" | "plain";
+  /** Pages that own a real period control turn the decorative pill off. */
+  showDatePill?: boolean;
   notifyDot?: boolean;
   showActionDivider?: boolean;
   actionIcon?: string;
@@ -49,17 +52,19 @@ export function TopNav({
   showTitleDivider = false,
   propertyPill,
   status,
-  estateLinks = estates,
+  estateLinks = [],
   estateActiveIndex,
   estateLinksClass = "",
   dateIcon = "today",
   datePillTone = "container-low",
+  showDatePill = true,
   notifyDot = false,
   showActionDivider = true,
   actionIcon = "add",
   actionLabel = "New Booking",
   showAvatar = false,
 }: TopNavProps) {
+  const router = useRouter();
   const [activeEstate, setActiveEstate] = useState(estateActiveIndex ?? 0);
   // null keeps the caller's own pill wording until a property is picked.
   const [activeProperty, setActiveProperty] = useState<number | null>(null);
@@ -67,7 +72,6 @@ export function TopNav({
   const propertyLabel =
     activeProperty === null ? propertyPill : propertyOptions[activeProperty];
   const [range, setRange] = useState(todayLabel);
-  const [booking, setBooking] = useState(false);
   const [params, setParams] = useState(false);
   const [compact, setCompact] = useState(true);
   const { notify } = useToast();
@@ -151,29 +155,33 @@ export function TopNav({
           ) : null}
 
           <div className="flex items-center gap-5">
-            <nav
-              className={`${estateLinksClass || "flex"} items-center gap-5 text-label-md text-label-md`}
-            >
-              {estateLinks.map((estate, index) => (
-                <button
-                  key={estate}
-                  onClick={() => pickEstate(index)}
-                  aria-current={index === activeEstate ? "page" : undefined}
-                  className={
-                    index === activeEstate
-                      ? "border-b-2 border-primary pb-0.5 font-semibold text-primary"
-                      : "pb-0.5 text-on-surface-variant transition-colors hover:text-on-surface"
-                  }
-                >
-                  {estate}
-                </button>
-              ))}
-            </nav>
+            {estateLinks.length ? (
+              <nav
+                className={`${estateLinksClass || "flex"} items-center gap-5 text-label-md text-label-md`}
+              >
+                {estateLinks.map((estate, index) => (
+                  <button
+                    key={estate}
+                    onClick={() => pickEstate(index)}
+                    aria-current={index === activeEstate ? "page" : undefined}
+                    className={
+                      index === activeEstate
+                        ? "border-b-2 border-primary pb-0.5 font-semibold text-primary"
+                        : "pb-0.5 text-on-surface-variant transition-colors hover:text-on-surface"
+                    }
+                  >
+                    {estate}
+                  </button>
+                ))}
+              </nav>
+            ) : null}
             {status ? (
               <>
-                <div className="hidden items-center text-label-sm text-label-sm text-outline-variant xl:flex">
-                  |
-                </div>
+                {estateLinks.length ? (
+                  <div className="hidden items-center text-label-sm text-label-sm text-outline-variant xl:flex">
+                    |
+                  </div>
+                ) : null}
                 <div className="hidden items-center gap-2 text-body-sm text-body-sm text-outline xl:flex">
                   {status}
                 </div>
@@ -183,49 +191,52 @@ export function TopNav({
         </div>
 
         <div className="flex shrink-0 items-center gap-2.5 sm:gap-4">
-          <Popover
-            label="Date range"
-            align="end"
-            panelClassName="w-[min(18rem,calc(100vw-2rem))]"
-            trigger={({ toggle, open, ...aria }) => (
-              <button
-                {...aria}
-                onClick={toggle}
-                className={`${datePill} ${
-                  open ? "border-primary/40 bg-primary-tint" : "hover:bg-surface-container-high"
-                }`}
-              >
-                <Icon name={dateIcon} className="flex-shrink-0 text-[16px] text-outline" />
-                <span className="truncate">{range}</span>
-                <Icon
-                  name="keyboard_arrow_down"
-                  className="flex-shrink-0 text-[16px] text-outline"
-                />
-              </button>
-            )}
-          >
-            {(close) => (
-              <div className="py-1">
-                <p className="px-3 py-2 text-label-sm text-label-sm font-semibold uppercase text-outline">
-                  Reporting period
-                </p>
-                {dateRanges.map((entry) => (
-                  <MenuRow
-                    key={entry.label}
-                    icon="event"
-                    label={entry.label}
-                    hint={entry.hint}
-                    selected={entry.label === range}
-                    onSelect={() => {
-                      setRange(entry.label);
-                      notify(`Reporting period set to ${entry.label}.`);
-                      close();
-                    }}
+          <CurrencySelect />
+          {showDatePill ? (
+            <Popover
+              label="Date range"
+              align="end"
+              panelClassName="w-[min(18rem,calc(100vw-2rem))]"
+              trigger={({ toggle, open, ...aria }) => (
+                <button
+                  {...aria}
+                  onClick={toggle}
+                  className={`${datePill} ${
+                    open ? "border-primary/40 bg-primary-tint" : "hover:bg-surface-container-high"
+                  }`}
+                >
+                  <Icon name={dateIcon} className="flex-shrink-0 text-[16px] text-outline" />
+                  <span className="truncate">{range}</span>
+                  <Icon
+                    name="keyboard_arrow_down"
+                    className="flex-shrink-0 text-[16px] text-outline"
                   />
-                ))}
-              </div>
-            )}
-          </Popover>
+                </button>
+              )}
+            >
+              {(close) => (
+                <div className="py-1">
+                  <p className="px-3 py-2 text-label-sm text-label-sm font-semibold uppercase text-outline">
+                    Reporting period
+                  </p>
+                  {dateRanges.map((entry) => (
+                    <MenuRow
+                      key={entry.label}
+                      icon="event"
+                      label={entry.label}
+                      hint={entry.hint}
+                      selected={entry.label === range}
+                      onSelect={() => {
+                        setRange(entry.label);
+                        notify(`Reporting period set to ${entry.label}.`);
+                        close();
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+            </Popover>
+          ) : null}
 
           <div className="flex items-center gap-1 text-on-surface-variant">
             <NotificationsBell
@@ -250,7 +261,7 @@ export function TopNav({
           ) : null}
 
           <button
-            onClick={() => setBooking(true)}
+            onClick={() => router.push("/book")}
             className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-label-md text-label-md text-on-primary shadow-sm transition-all hover:bg-primary-container active:scale-[0.98]"
           >
             <Icon name={actionIcon} className="text-[18px]" />
@@ -260,8 +271,8 @@ export function TopNav({
           {showAvatar ? (
             <div className="relative h-9 w-9 flex-shrink-0 overflow-hidden rounded-full ring-2 ring-primary/20">
               <Image
-                src={hostPortraits.eleanorThomas}
-                alt="Eleanor and Thomas, estate hosts"
+                src={hostPortraits.ananyaArjun}
+                alt="Ananya and Arjun Rai, estate hosts"
                 fill
                 sizes="36px"
                 className="object-cover"
@@ -270,8 +281,6 @@ export function TopNav({
           ) : null}
         </div>
       </header>
-
-      <NewBookingDialog open={booking} onClose={() => setBooking(false)} />
 
       <Modal
         open={params}
