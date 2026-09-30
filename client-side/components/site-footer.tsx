@@ -13,15 +13,15 @@ const columns = [
     title: "Stay & Rest",
     links: [
       { href: "/#accommodations", label: "The Accommodations" },
-      { href: "/#experiences", label: "Retreat Experiences" },
-      { href: "/#story", label: "Estate Story" },
+      { href: "/#experiences", label: "Things To Do" },
+      { href: "/#story", label: "The Hill Homestay Story" },
     ],
   },
   {
     title: "Homestay Guide",
     links: [
-      { href: "/stays/oak-hearth-suite#house-rules", label: "House Rules & Policies" },
-      { href: "/#story", label: "Host Eleanor & Thomas" },
+      { href: "/stays/takdah-heritage-bungalow#house-rules", label: "House Rules & Policies" },
+      { href: "/#story", label: "Booking Through The Collective" },
       { href: "/#contact", label: "Directions & Arrival" },
     ],
   },
@@ -45,17 +45,17 @@ export function SiteFooter() {
               <Icon name="forest" className="text-[18px]" />
             </span>
             <span className="font-display text-headline-md font-semibold text-primary">
-              Meadowfall Homestay
+              Darjeeling HomeStay
             </span>
           </div>
           <p className="mb-4 text-body-sm text-on-surface-variant">
-            An intimate countryside retreat in the heart of West Meadows Valley. Quiet sanctuaries,
-            sourdough breakfasts, and open hearth fires.
+            Six hill homestays, heritage bungalows and working tea estates across Darjeeling —
+            booked direct, at the rate each property publishes.
           </p>
           <NewsletterForm />
           <p className="mt-4 text-body-sm text-outline">
-            © 2024 Meadowfall Homestay &amp; Retreat Estate. Crafted with tactile care for tranquil
-            living.
+            © 2026 Darjeeling HomeStay. Prices in INR, exclusive of GST unless the property states
+            otherwise.
           </p>
         </div>
 

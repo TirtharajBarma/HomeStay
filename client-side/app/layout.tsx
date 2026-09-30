@@ -15,14 +15,14 @@ const jakarta = Plus_Jakarta_Sans({
 
 export const metadata: Metadata = {
   title: {
-    default: "Meadowfall Homestay | Boutique Countryside Sanctuaries",
-    template: "%s | Meadowfall Homestay",
+    default: "Darjeeling HomeStay | Hillside Homestays & Tea Estate Stays",
+    template: "%s | Darjeeling HomeStay",
   },
   description:
-    "Six handcrafted hillside cottages, lofts and cabins in West Meadows Valley, Vermont — hosted by Eleanor & Thomas.",
+    "Six handpicked homestays, heritage bungalows and working tea estates across Darjeeling, West Bengal — at the rates each property publishes.",
   openGraph: {
-    siteName: "Meadowfall Homestay",
-    locale: "en_US",
+    siteName: "Darjeeling HomeStay",
+    locale: "en_IN",
     type: "website",
   },
 };

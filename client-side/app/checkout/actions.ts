@@ -138,9 +138,9 @@ export async function confirmReservation(
       guests: formatGuests(booking.guests),
       plan,
       settled: quote.total - dueToday <= 0,
-      dueToday: formatMoney(dueToday, true),
-      balance: formatMoney(quote.total - dueToday, true),
-      total: formatMoney(quote.total, true),
+      dueToday: formatMoney(dueToday),
+      balance: formatMoney(quote.total - dueToday),
+      total: formatMoney(quote.total),
       cancellationBy: cancellationDeadline(booking.checkIn),
     },
   };

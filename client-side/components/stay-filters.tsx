@@ -12,9 +12,9 @@ const baseChip =
 
 const counts = {
   all: stays.length,
-  cottage: countByKind("cottage"),
-  loft: countByKind("loft"),
-  cabin: countByKind("cabin"),
+  estate: countByKind("estate"),
+  heritage: countByKind("heritage"),
+  homestay: countByKind("homestay"),
 };
 
 export function StayFilters({

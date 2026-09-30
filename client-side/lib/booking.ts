@@ -1,17 +1,17 @@
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const DAY_MS = 86_400_000;
 
-/** The estate showcase window: three autumn nights starting on the next 25th of October. */
+/** The estate showcase window: three nights starting on the next 15th of October, peak tea season. */
 function defaultWindow() {
   const now = new Date().getTime();
   const thisYear = new Date().getUTCFullYear();
-  const october = Date.UTC(thisYear, 9, 25);
+  const october = Date.UTC(thisYear, 9, 15);
 
   return {
-    checkIn: new Date(october > now ? october : Date.UTC(thisYear + 1, 9, 25))
+    checkIn: new Date(october > now ? october : Date.UTC(thisYear + 1, 9, 15))
       .toISOString()
       .slice(0, 10),
-    checkOut: new Date((october > now ? october : Date.UTC(thisYear + 1, 9, 25)) + 3 * DAY_MS)
+    checkOut: new Date((october > now ? october : Date.UTC(thisYear + 1, 9, 15)) + 3 * DAY_MS)
       .toISOString()
       .slice(0, 10),
   };
@@ -21,8 +21,8 @@ export const DEFAULT_CHECK_IN = defaultWindow().checkIn;
 export const DEFAULT_CHECK_OUT = defaultWindow().checkOut;
 export const DEFAULT_GUESTS = 2;
 
-export const CLEANING_FEE = 40;
-export const LODGING_TAX_RATE = 0.04;
+export const CLEANING_FEE = 500;
+export const GST_RATE = 0.12;
 export const MAX_NIGHTS = 30;
 export const FREE_CANCELLATION_DAYS = 7;
 
@@ -38,7 +38,7 @@ export type Booking = BookingQuery & {
   nights: number;
 };
 
-export type StayKind = "cottage" | "loft" | "cabin";
+export type StayKind = "estate" | "heritage" | "homestay";
 
 export type Filters = {
   kind: StayKind | "all";
@@ -55,22 +55,24 @@ export type Quote = {
   deposit: number;
 };
 
-const dateFormat = new Intl.DateTimeFormat("en-US", {
-  month: "short",
+const dateFormat = new Intl.DateTimeFormat("en-IN", {
   day: "numeric",
+  month: "short",
   timeZone: "UTC",
 });
 
-const longDateFormat = new Intl.DateTimeFormat("en-US", {
-  month: "short",
+const longDateFormat = new Intl.DateTimeFormat("en-IN", {
   day: "numeric",
+  month: "short",
   year: "numeric",
   timeZone: "UTC",
 });
 
-const moneyFormat = new Intl.NumberFormat("en-US", {
+/** INR with Indian digit grouping, e.g. 1,80,000. Rates are whole rupees. */
+const moneyFormat = new Intl.NumberFormat("en-IN", {
   style: "currency",
-  currency: "USD",
+  currency: "INR",
+  maximumFractionDigits: 0,
 });
 
 function first(value: string | string[] | undefined): string | undefined {
@@ -171,14 +173,14 @@ export function countNights(checkIn: string, checkOut: string): number {
 export function readFilters(params: RawParams): Filters {
   const kind = first(params.kind);
   return {
-    kind: kind === "cottage" || kind === "loft" || kind === "cabin" ? kind : "all",
+    kind: kind === "estate" || kind === "heritage" || kind === "homestay" ? kind : "all",
     petFriendly: first(params.pets) === "1",
   };
 }
 
 export function quoteFor(nightly: number, booking: Booking): Quote {
   const roomTotal = nightly * booking.nights;
-  const tax = Math.round((roomTotal + CLEANING_FEE) * LODGING_TAX_RATE);
+  const tax = Math.round((roomTotal + CLEANING_FEE) * GST_RATE);
   const total = roomTotal + CLEANING_FEE + tax;
 
   return {
@@ -243,8 +245,8 @@ export function formatGuests(guests: number): string {
   return `${guests} Adult${guests === 1 ? "" : "s"}`;
 }
 
-export function formatMoney(amount: number, cents = false): string {
-  return cents ? moneyFormat.format(amount) : `$${amount.toLocaleString("en-US")}`;
+export function formatMoney(amount: number): string {
+  return moneyFormat.format(amount);
 }
 
 export function cancellationDeadline(checkIn: string): string {

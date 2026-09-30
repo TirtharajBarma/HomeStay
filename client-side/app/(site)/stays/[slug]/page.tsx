@@ -7,7 +7,7 @@ import { Icon } from "@/components/icon";
 import { MobileReserveBar } from "@/components/mobile-reserve-bar";
 import { StayGallery } from "@/components/stay-gallery";
 import { Stars } from "@/components/stars";
-import { homeHref, resolveBooking, stayHref } from "@/lib/booking";
+import { formatMoney, homeHref, resolveBooking, stayHref } from "@/lib/booking";
 import {
   amenityGroups,
   breakfast,
@@ -87,7 +87,7 @@ export default async function StayPage({ params, searchParams }: PageProps<"/sta
           <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center lg:text-right">
             <div className="inline-flex items-center gap-2 rounded-full border border-outline-variant/30 bg-surface-container px-3.5 py-1.5 text-label-md text-on-surface">
               <Icon name="shield_person" className="text-base text-secondary" />
-              Hosted with care by {hosts.names} • Superhost Estate
+              {stay.kindLabel} • Booked direct through the host
             </div>
             <div className="inline-flex items-center gap-2 rounded-full bg-primary-fixed/30 px-3 py-1.5 text-label-md text-primary">
               <Stars rating={stay.rating} count={stay.reviewCount} />
@@ -131,7 +131,7 @@ export default async function StayPage({ params, searchParams }: PageProps<"/sta
                 Slow Living &amp; Craft
               </span>
               <h2 className="mt-1 font-display text-headline-md text-primary">
-                The Homestay Experience
+                About This Stay
               </h2>
             </div>
             <div className="max-w-none space-y-4 text-body-md leading-relaxed text-on-surface-variant">
@@ -142,7 +142,7 @@ export default async function StayPage({ params, searchParams }: PageProps<"/sta
             <div className="relative overflow-hidden rounded-xl border border-outline-variant/40 bg-surface-container-low p-6">
               <div className="flex items-start gap-4">
                 <div className="shrink-0 rounded-lg bg-surface-container p-3 text-primary">
-                  <Icon name="bakery_dining" className="text-2xl" />
+                  <Icon name="restaurant" className="text-2xl" />
                 </div>
                 <div className="space-y-2">
                   <div className="flex flex-wrap items-center gap-2">
@@ -164,7 +164,7 @@ export default async function StayPage({ params, searchParams }: PageProps<"/sta
                 Thoughtful Details
               </span>
               <h2 className="mt-1 font-display text-headline-md text-primary">
-                Amenities for Mindful Living
+                Amenities at This Stay
               </h2>
             </div>
             <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
@@ -200,7 +200,7 @@ export default async function StayPage({ params, searchParams }: PageProps<"/sta
                 The Grounds
               </span>
               <h2 className="mt-1 font-display text-headline-md text-primary">
-                Estate Grounds &amp; Access
+                Nearby &amp; On the Hill
               </h2>
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -247,7 +247,7 @@ export default async function StayPage({ params, searchParams }: PageProps<"/sta
                   Guest Notes
                 </span>
                 <h2 className="mt-0.5 font-display text-headline-md text-primary">
-                  Reflections From {stay.name.replace("The ", "")}
+                  Reflections From {stay.name}
                 </h2>
               </div>
               <div className="flex items-center gap-2">
@@ -290,7 +290,7 @@ export default async function StayPage({ params, searchParams }: PageProps<"/sta
       {/* More sanctuaries */}
       <section className="mt-12 border-t border-outline-variant/30 pt-8 lg:mt-16">
         <h2 className="mb-6 font-display text-headline-md text-primary">
-          More sanctuaries in the valley
+          More places to stay on the hill
         </h2>
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
           {stays
@@ -312,7 +312,9 @@ export default async function StayPage({ params, searchParams }: PageProps<"/sta
                   </span>
                   <span className="text-body-sm text-on-surface-variant">{other.occupancy}</span>
                 </span>
-                <span className="text-title-md font-bold text-primary">${other.price}</span>
+                <span className="text-title-md font-bold text-primary">
+                  {formatMoney(other.price)}
+                </span>
               </Link>
             ))}
         </div>

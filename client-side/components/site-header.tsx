@@ -9,21 +9,21 @@ const navLinks = [
   {
     href: "/#accommodations",
     label: "Our Accommodations",
-    hint: "Six handcrafted sanctuaries",
+    hint: "Six stays across the Darjeeling hills",
     icon: "cottage",
     active: true,
   },
   {
     href: "/#experiences",
     label: "Experiences",
-    hint: "Breakfast, trails & hearth quiet",
+    hint: "Tiger Hill, tea & Nepali food",
     icon: "spa",
     active: false,
   },
   {
     href: "/#story",
     label: "Our Story",
-    hint: "Twelve years on the hillside",
+    hint: "How the hill homestays began",
     icon: "menu_book",
     active: false,
   },
@@ -46,10 +46,10 @@ export function SiteHeader() {
           </span>
           <span className="flex min-w-0 flex-col">
             <span className="truncate font-display text-headline-sm font-semibold tracking-tight text-primary sm:text-headline-md">
-              Meadowfall Homestay
+              Darjeeling HomeStay
             </span>
             <span className="-mt-0.5 hidden text-label-sm tracking-wider text-outline xs:block sm:block">
-              ESTATE &amp; RETREAT
+              HOMESTAYS &amp; TEA ESTATES
             </span>
           </span>
         </Link>
@@ -101,10 +101,10 @@ export function CheckoutHeader() {
           </span>
           <span className="flex min-w-0 flex-col">
             <span className="truncate font-display text-headline-sm font-semibold leading-tight tracking-tight text-primary sm:text-headline-md">
-              Meadowfall Homestay
+              Darjeeling HomeStay
             </span>
             <span className="hidden text-label-sm font-medium tracking-wider text-on-surface-variant sm:block">
-              RETREAT &amp; FARMSTEAD
+              HOMESTAYS &amp; TEA ESTATES
             </span>
           </span>
         </Link>

@@ -22,7 +22,7 @@ import { getStay } from "@/lib/stays";
 
 export const metadata: Metadata = {
   title: "Secure Reservation",
-  description: "Complete your Meadowfall Homestay reservation with free cancellation.",
+  description: "Complete your Darjeeling homestay reservation with free cancellation.",
 };
 
 export default async function CheckoutPage({
@@ -132,7 +132,7 @@ export default async function CheckoutPage({
               </div>
               <div className="flex items-center justify-between">
                 <dt className="text-on-surface-variant">Check-in</dt>
-                <dd className="font-medium text-on-surface">3:00 PM – 8:00 PM</dd>
+                <dd className="font-medium text-on-surface">12:00 PM – 8:00 PM</dd>
               </div>
             </dl>
 
@@ -142,25 +142,25 @@ export default async function CheckoutPage({
                   {formatMoney(stay.price)} × {formatNights(quote.nights).toLowerCase()}
                 </span>
                 <span className="font-medium text-on-surface">
-                  {formatMoney(quote.roomTotal, true)}
+                  {formatMoney(quote.roomTotal)}
                 </span>
               </div>
               <div className="flex justify-between text-on-surface-variant">
-                <span>Farmstead Breakfast &amp; Firewood</span>
+                <span>Homemade Breakfast</span>
                 <span className="font-medium text-primary">Included (Free)</span>
               </div>
               <div className="flex justify-between text-on-surface-variant">
-                <span>Estate Cleaning &amp; Linens</span>
-                <span className="font-medium text-on-surface">{formatMoney(quote.cleaning, true)}</span>
+                <span>Cleaning &amp; Linen Change</span>
+                <span className="font-medium text-on-surface">{formatMoney(quote.cleaning)}</span>
               </div>
               <div className="flex justify-between text-on-surface-variant">
-                <span>Valley Hospitality Tax (4%)</span>
-                <span className="font-medium text-on-surface">{formatMoney(quote.tax, true)}</span>
+                <span>GST (12%)</span>
+                <span className="font-medium text-on-surface">{formatMoney(quote.tax)}</span>
               </div>
               <div className="flex items-baseline justify-between border-t border-outline-variant/40 pt-3">
                 <span className="text-title-md font-semibold text-primary">Total</span>
                 <span className="font-display text-headline-md text-primary">
-                  {formatMoney(quote.total, true)}
+                  {formatMoney(quote.total)}
                 </span>
               </div>
             </div>
@@ -169,14 +169,14 @@ export default async function CheckoutPage({
               <Icon name="verified_user" className="shrink-0 text-xl text-primary" />
               <p className="text-body-sm text-on-surface-variant">
                 <span className="font-semibold text-on-surface">Direct booking advantage:</span>{" "}
-                our lowest rate, priority breakfast delivery, and a real person on the other end
-                of the lane whenever you need one.
+                the published rate with no platform fee added, and a real person on the phone
+                in Darjeeling whenever you need one.
               </p>
             </div>
 
             <div className="flex items-center gap-3 border-t border-outline-variant/30 pt-4">
               <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-fixed-dim/40 text-xs font-semibold text-primary">
-                E&amp;T
+                DH
               </span>
               <p className="text-body-sm leading-tight text-on-surface-variant">
                 Questions before you book?{" "}

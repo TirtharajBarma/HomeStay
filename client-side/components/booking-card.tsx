@@ -40,27 +40,27 @@ export function BookingCard({ stay, booking }: { stay: Stay; booking: Booking })
             <span>
               {formatMoney(stay.price)} × {formatNights(quote.nights).toLowerCase()}
             </span>
-            <span className="font-medium text-on-surface">{formatMoney(quote.roomTotal, true)}</span>
+            <span className="font-medium text-on-surface">{formatMoney(quote.roomTotal)}</span>
           </div>
           <div className="flex items-center justify-between text-on-surface-variant">
             <span className="flex items-center gap-1.5">
-              Farmstead Breakfast &amp; Firewood
+              Homemade Breakfast
               <Icon name="eco" className="text-xs text-primary" />
             </span>
             <span className="font-medium text-primary">Included (Free)</span>
           </div>
           <div className="flex justify-between text-on-surface-variant">
-            <span>Estate Cleaning &amp; Linens</span>
-            <span className="font-medium text-on-surface">{formatMoney(quote.cleaning, true)}</span>
+            <span>Cleaning &amp; Linen Change</span>
+            <span className="font-medium text-on-surface">{formatMoney(quote.cleaning)}</span>
           </div>
           <div className="flex justify-between text-on-surface-variant">
-            <span>Valley Hospitality Tax (4%)</span>
-            <span className="font-medium text-on-surface">{formatMoney(quote.tax, true)}</span>
+            <span>GST (12%)</span>
+            <span className="font-medium text-on-surface">{formatMoney(quote.tax)}</span>
           </div>
           <div className="flex items-baseline justify-between border-t border-outline-variant/40 pt-3 text-title-md font-semibold text-primary">
             <span>Total</span>
             <span className="font-display text-headline-sm">
-              {formatMoney(quote.total, true)}
+              {formatMoney(quote.total)}
             </span>
           </div>
           <p className="text-label-sm text-outline">
@@ -92,15 +92,15 @@ export function BookingCard({ stay, booking }: { stay: Stay; booking: Booking })
 
         <div className="mt-6 flex items-center gap-3 border-t border-outline-variant/30 pt-4">
           <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-fixed-dim/40 text-xs font-semibold text-primary">
-            E&amp;T
+            DH
           </span>
           <div className="text-left text-body-sm leading-tight">
-            <span className="text-on-surface">Have questions for the hosts?</span>
+            <span className="text-on-surface">Have questions about this stay?</span>
             <a
               href={`mailto:${hosts.email}`}
               className="mt-0.5 inline-flex min-h-9 items-center text-label-sm text-primary hover:underline"
             >
-              Message {hosts.names}
+              Message the host
             </a>
           </div>
         </div>

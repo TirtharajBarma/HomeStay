@@ -23,9 +23,9 @@ type StaySearchProps = {
 
 const kindOptions = [
   { value: "all", label: "All Accommodations" },
-  { value: "cottage", label: "Cottages" },
-  { value: "loft", label: "Lofts" },
-  { value: "cabin", label: "Cabins" },
+  { value: "estate", label: "Tea Estate Stays" },
+  { value: "heritage", label: "Heritage Bungalows" },
+  { value: "homestay", label: "Family Homestays" },
 ];
 
 const fieldClass =
@@ -125,7 +125,7 @@ export function StaySearch({ booking, filters, maxGuests }: StaySearchProps) {
               </option>
             ))}
           </select>
-          <span className={hintClass}>Quiet retreat pacing</span>
+          <span className={hintClass}>Per room booking</span>
         </div>
 
         <div className={fieldClass}>
@@ -134,7 +134,7 @@ export function StaySearch({ booking, filters, maxGuests }: StaySearchProps) {
             className="mb-1.5 flex items-center gap-1.5 text-label-sm text-on-surface-variant"
           >
             <Icon name="villa" className="text-[15px] text-primary" />
-            Shelter Type
+            Stay Type
           </label>
           <select
             id="search-kind"
@@ -149,7 +149,7 @@ export function StaySearch({ booking, filters, maxGuests }: StaySearchProps) {
               </option>
             ))}
           </select>
-          <span className={hintClass}>All Valley options</span>
+          <span className={hintClass}>All Darjeeling options</span>
         </div>
 
         <button

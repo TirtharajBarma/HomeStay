@@ -389,13 +389,13 @@ export function CheckoutForm({ stay, booking }: { stay: Stay; booking: Booking }
           {[
             {
               value: "card_full" as const,
-              title: `Pay in full — ${formatMoney(quote.total, true)}`,
+              title: `Pay in full — ${formatMoney(quote.total)}`,
               note: "Settle the entire stay today, completely hassle-free.",
             },
             {
               value: "deposit" as const,
-              title: `Pay 50% deposit — ${formatMoney(quote.deposit, true)}`,
-              note: `Balance of ${formatMoney(quote.total - quote.deposit, true)} due seven days before arrival.`,
+              title: `Pay 50% deposit — ${formatMoney(quote.deposit)}`,
+              note: `Balance of ${formatMoney(quote.total - quote.deposit)} due seven days before arrival.`,
             },
           ].map((option) => (
             <label
@@ -544,8 +544,8 @@ export function CheckoutForm({ stay, booking }: { stay: Stay; booking: Booking }
             aria-invalid={Boolean(errors.terms)}
           />
           <span className="text-body-sm text-on-surface-variant">
-            I have read and agree to the house rules, quiet hours, and Meadowfall guest terms. I
-            understand free cancellation until {cancellationDeadline(booking.checkIn)}.
+            I have read and agree to the house rules, quiet hours, and the host&apos;s guest terms.
+            I understand free cancellation until {cancellationDeadline(booking.checkIn)}.
           </span>
         </label>
         <FieldError message={errors.terms} />
@@ -557,7 +557,7 @@ export function CheckoutForm({ stay, booking }: { stay: Stay; booking: Booking }
 
       <p className="flex items-center justify-center gap-2 text-center text-label-sm text-on-surface-variant">
         <Icon name="shield_person" className="text-base text-secondary" />
-        Direct booking keeps your reservation in our care, not an agency&apos;s.
+        Direct booking keeps your reservation with the family who own the house.
       </p>
 
       {/* Phones keep the confirm action within thumb reach */}
@@ -565,7 +565,7 @@ export function CheckoutForm({ stay, booking }: { stay: Stay; booking: Booking }
         <div className="flex items-center gap-3">
           <div className="min-w-0">
             <p className="truncate text-title-md font-semibold text-primary">
-              {formatMoney(dueToday, true)}
+              {formatMoney(dueToday)}
             </p>
             <p className="truncate text-label-sm text-outline">
               {plan === "deposit" ? "50% deposit" : "Paid in full"} • {formatNights(quote.nights)}
