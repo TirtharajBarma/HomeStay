@@ -1,5 +1,6 @@
 "use server";
 
+import { API_ENDPOINTS } from "@/lib/api-config";
 import { arrivalWindows, breakfastChoices } from "@/lib/content";
 import { validateCard } from "@/lib/payment";
 import { getStay } from "@/lib/stays";
@@ -119,6 +120,60 @@ export async function confirmReservation(
     .filter((value): value is string => typeof value === "string")
     .map((value) => breakfastChoices.find((choice) => choice.value === value)?.label)
     .filter((label): label is string => Boolean(label));
+
+  try {
+    const res = await fetch(API_ENDPOINTS.reservations.create(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        stay: stay.slug,
+        checkIn: booking.checkIn,
+        checkOut: booking.checkOut,
+        guests: booking.guests,
+        firstName,
+        lastName,
+        email,
+        phone,
+        arrivalWindow: arrival?.label ?? arrivalWindows[0].label,
+        breakfasts,
+        paymentPlan: plan,
+      }),
+      cache: "no-store",
+    });
+
+    if (res.ok) {
+      const result = await res.json();
+      if (result.success && result.data) {
+        const b = result.data;
+        return {
+          status: "confirmed",
+          reservation: {
+            reference: b.reference,
+            pin: b.pin,
+            stayName: b.roomName || stay.name,
+            staySlug: b.staySlug || stay.slug,
+            guestName: b.guestName,
+            email: b.email,
+            phone: b.phone,
+            arrivalWindow: b.arrivalWindow || arrivalWindows[0].label,
+            breakfasts: b.breakfasts || [],
+            dates: formatDateRange(booking),
+            nights: b.nights || booking.nights,
+            guests: formatGuests(b.party || booking.guests),
+            plan: b.plan,
+            settled: b.settled,
+            dueToday: formatMoney(b.dueToday),
+            balance: formatMoney(b.balanceDue),
+            total: formatMoney(b.totalAmount),
+            cancellationBy: b.cancellationBy || cancellationDeadline(booking.checkIn),
+          },
+        };
+      }
+    }
+  } catch (apiErr) {
+    console.warn("Backend reservation sync notice:", apiErr);
+  }
+
   const ids = reference();
 
   return {

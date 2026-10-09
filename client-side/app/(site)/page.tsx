@@ -21,7 +21,7 @@ import {
   testimonials,
   valueBadges,
 } from "@/lib/content";
-import { estateImages, kindFilters, stays } from "@/lib/stays";
+import { estateImages, kindFilters, getLiveStays, type Stay } from "@/lib/stays";
 
 export const metadata: Metadata = {
   description:
@@ -30,8 +30,8 @@ export const metadata: Metadata = {
 
 const MAX_GUESTS = 4;
 
-function filterStays(filters: Filters) {
-  return stays.filter((stay) => {
+function filterStays(list: Stay[], filters: Filters) {
+  return list.filter((stay) => {
     if (filters.kind !== "all" && stay.kind !== filters.kind) return false;
     if (filters.petFriendly && !stay.petFriendly) return false;
     return true;
@@ -42,7 +42,8 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
   const params = await searchParams;
   const booking = resolveBooking(params, MAX_GUESTS);
   const filters = readFilters(params);
-  const visible = filterStays(filters);
+  const allStays = await getLiveStays();
+  const visible = filterStays(allStays, filters);
 
   return (
     <div className="w-full">

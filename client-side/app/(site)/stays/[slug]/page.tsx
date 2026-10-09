@@ -14,7 +14,7 @@ import {
   houseRules,
   hosts,
 } from "@/lib/content";
-import { getStay, getStaySlugs, stays } from "@/lib/stays";
+import { getStay, getLiveStay, getStaySlugs, stays } from "@/lib/stays";
 
 export function generateStaticParams() {
   return getStaySlugs().map((slug) => ({ slug }));
@@ -24,7 +24,7 @@ export async function generateMetadata({
   params,
 }: PageProps<"/stays/[slug]">): Promise<Metadata> {
   const { slug } = await params;
-  const stay = getStay(slug);
+  const stay = await getLiveStay(slug);
 
   if (!stay) return { title: "Stay not found" };
 
@@ -36,7 +36,7 @@ export async function generateMetadata({
 
 export default async function StayPage({ params, searchParams }: PageProps<"/stays/[slug]">) {
   const { slug } = await params;
-  const stay = getStay(slug);
+  const stay = await getLiveStay(slug);
 
   if (!stay) notFound();
 

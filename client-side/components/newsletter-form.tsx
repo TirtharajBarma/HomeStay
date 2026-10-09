@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 
 import { hosts } from "@/lib/content";
+import { API_ENDPOINTS } from "@/lib/api-config";
 
 import { Icon } from "./icon";
 
@@ -24,6 +25,12 @@ export function NewsletterForm() {
 
     setError(null);
     setDone(true);
+
+    fetch(API_ENDPOINTS.newsletter.subscribe(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: email.trim() }),
+    }).catch(() => {});
   }
 
   if (done) {

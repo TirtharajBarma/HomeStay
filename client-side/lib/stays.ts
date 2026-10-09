@@ -1,4 +1,5 @@
 import type { StayKind } from "./booking";
+import { API_ENDPOINTS } from "./api-config";
 import { card, estate, estateShot, oakHero } from "./stay-images";
 
 export type GalleryShot = {
@@ -510,4 +511,60 @@ export function countByKind(kind: StayKind): number {
 
 export function countPetFriendly(): number {
   return stays.filter((stay) => stay.petFriendly).length;
+}
+
+export async function getLiveStays(): Promise<Stay[]> {
+  try {
+    const res = await fetch(API_ENDPOINTS.stays.list(), { cache: "no-store" });
+    if (!res.ok) return stays;
+    const json = await res.json();
+    if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+      return json.data.map((r: any) => ({
+        slug: r.slug || r.code,
+        name: r.name,
+        wing: r.wing || r.location || "Darjeeling Ridge",
+        kind: (r.kind as StayKind) || "cottage",
+        kindLabel: r.kindLabel || r.category || "Estate Cottage",
+        petFriendly: !!r.petFriendly,
+        price: r.nightly || r.price || 2400,
+        maxGuests: r.maxGuests || 2,
+        occupancy: r.occupancy || `${r.maxGuests || 2} Guests`,
+        bedIcon: r.bedIcon || "king_bed",
+        blurb: r.blurb || r.tagline || r.name,
+        amenities: r.amenities || [],
+        highlight: r.highlight || { icon: "coffee", label: "Breakfast included" },
+        rating: r.rating || 4.9,
+        reviewCount: r.reviewCount || 42,
+        eyebrow: r.eyebrow || r.category || "Estate Unit",
+        intro: r.intro || r.blurb || r.name,
+        image: r.image || "https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=1200&q=80",
+        imageAlt: r.imageAlt || r.name,
+        gallery: r.gallery || [
+          {
+            src: r.image || "https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=1200&q=80",
+            alt: r.name,
+            caption: r.name,
+          },
+        ],
+        facts: r.facts || [
+          { icon: "group", label: "Capacity", value: `${r.maxGuests || 2} Guests` },
+          { icon: "bed", label: "Bedding", value: r.bedLabel || "1 Queen Bed" },
+        ],
+        story: r.story || [
+          "Handcrafted hillside residence on the Ging tea terraces overlooking the Kangchenjunga range.",
+        ],
+        reviews: r.reviews || [],
+      }));
+    }
+  } catch {
+    // Graceful fallback to static stays
+  }
+  return stays;
+}
+
+export async function getLiveStay(slug: string): Promise<Stay | undefined> {
+  const liveList = await getLiveStays();
+  const matched = liveList.find((s) => s.slug === slug || s.slug === slug.toLowerCase());
+  if (matched) return matched;
+  return getStay(slug);
 }
