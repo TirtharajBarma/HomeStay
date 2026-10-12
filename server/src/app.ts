@@ -63,6 +63,17 @@ app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 // 7. Health Check Endpoints
+app.get("/", (_req, res) => {
+  res.json({
+    status: "ok",
+    service: "hospitality-transit-api",
+    version: "1.0.0",
+    docs: "/api/v1",
+    health: "/health",
+    timestamp: new Date().toISOString(),
+  });
+});
+
 app.get("/health", (_req, res) => {
   res.json({
     status: "ok",
