@@ -58,7 +58,13 @@ app.use(
   })
 );
 
-// 6. Body Parsing
+// 6. Body Parsing & URL Normalization
+app.use((req, _res, next) => {
+  if (req.url) {
+    req.url = req.url.replace(/%20/g, "").replace(/\s+/g, "").replace(/\/+/g, "/");
+  }
+  next();
+});
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 

@@ -1,5 +1,8 @@
-export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5050/api/v1";
+export const API_BASE_URL = (
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5050/api/v1"
+)
+  .trim()
+  .replace(/\/+$/, "");
 
 export const API_ENDPOINTS = {
   login: () => `${API_BASE_URL}/auth/login`,
