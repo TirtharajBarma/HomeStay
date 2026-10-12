@@ -44,7 +44,9 @@ app.use(
       if (!origin) return callback(null, true);
       if (
         config.corsOrigins.includes(origin) ||
+        config.corsOrigins.includes("*") ||
         config.nodeEnv === "development" ||
+        origin.endsWith(".vercel.app") ||
         origin.startsWith("http://localhost:") ||
         origin.startsWith("http://127.0.0.1:")
       ) {
