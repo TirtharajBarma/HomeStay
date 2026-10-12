@@ -1,153 +1,123 @@
-# 01 - Backend Architecture & Technical Design
+# 01 - System Architecture & Security Design
+**Platform:** Hill Hospitality & Transit Network  
+**Deployment Architecture:** Single Domain with 4 Isolated Subdomain Portals  
+**Status:** Master System Architecture  
 
-## 1. Runtime & Technology Stack
+---
 
-The backend will reside at:
+## 1. Domain & Subdomain Topology (Single Domain Strategy)
+
+To achieve maximum security, clean UI isolation, and zero extra domain costs, the entire platform runs under **1 single purchased domain** (e.g. `yourdomain.com`) with 4 isolated subdomains:
+
 ```
-/Users/tirtharaj/Desktop/Desktop/github/nakh/server
+                                      ┌──────────────────────────────────────────────┐
+                                      │          SINGLE PURCHASED DOMAIN             │
+                                      │            (e.g., yourdomain.com)            │
+                                      └──────────────────────┬───────────────────────┘
+                                                             │
+         ┌───────────────────────────┬───────────────────────┴───────────────────────┬───────────────────────────┐
+         ▼                           ▼                                               ▼                           ▼
+┌──────────────────┐       ┌──────────────────┐                            ┌──────────────────┐       ┌──────────────────┐
+│   CLIENT PORTAL  │       │  OWNER DASHBOARD │                            │  DRIVER PORTAL   │       │   SUPER ADMIN    │
+│  (Travelers/OTA) │       │ (Homestay Hosts) │                            │ (Fleet Drivers)  │       │ (Control Tower)  │
+│  yourdomain.com  │       │owner.yourdomain.c│                            │driver.yourdomain.│       │admin.yourdomain.c│
+│   (Port 3000)    │       │   (Port 3001)    │                            │   (Port 3002)    │       │   (Port 3003)    │
+└────────┬─────────┘       └──────────────────┘                            └──────────────────┘       └──────────────────┘
+         │                                                           ▲
+         ▼                                                           │
+ ┌───────────────────────────────┐                                   │
+ │ Dynamic Single-Stay Page      │                                   │
+ │ yourdomain.com/h/:slug        │                                   │
+ └───────────────────────────────┘                                   │
+         │                                                           │
+         └───────────────────────────┬───────────────────────────────┘
+                                     ▼
+                     ┌───────────────────────────────┐
+                     │     CENTRAL BACKEND API       │
+                     │       api.yourdomain.com      │
+                     │         (Port 5050)           │
+                     │  - Role-Based JWT Auth        │
+                     │  - Multi-Tenant DB Scoping    │
+                     │  - iCal & Dispatch Workers    │
+                     └───────────────┬───────────────┘
+                                     ▼
+                     ┌───────────────────────────────┐
+                     │   MongoDB Atlas (M0 Cluster)  │
+                     └───────────────────────────────┘
 ```
 
-| Component | Technology | Version / Tool | Purpose |
+---
+
+## 2. Security Boundaries: Zero Code-Leak Guarantee
+
+### The Threat
+In many single-app setups, developer teams place Admin and Driver routes inside the same client codebase under `/admin` or `/driver`. Even if hidden behind conditional redirects, **Next.js bundles and ships compiled JavaScript chunks (`_next/static/chunks`) to the user's browser**. Anyone opening browser DevTools can inspect internal API paths, data schemas, and administrative endpoints.
+
+### The Solution: Complete Build & Subdomain Separation
+1. **Independent Client Bundles**:
+   - `client-side` (`yourdomain.com`): Ships **only** traveler-facing code and `/h/:slug` stay pages. Contains zero admin or driver JavaScript.
+   - `owner-side` (`owner.yourdomain.com`): Ships the host Property Management System (PMS).
+   - `driver-side` (`driver.yourdomain.com`): Ships a lightweight, high-contrast mobile PWA for drivers.
+   - `admin-side` (`admin.yourdomain.com`): Ships private management dashboards, protected with whitelist credentials.
+2. **Cryptographic Role-Based Access Control (RBAC)**:
+   - Backend JWT tokens carry cryptographically signed roles: `{ id, email, role: "guest" | "owner" | "driver" | "admin" }`.
+   - Any attempt to access `/api/v1/admin/*` by non-admin tokens is rejected with an immediate `403 Forbidden`.
+3. **Database Tenant Isolation**:
+   - Every database query for homestays, rooms, calendar dates, and guest records is strictly scoped by `ownerId` or `propertyId`. Cross-tenant data leakage is structurally impossible.
+
+---
+
+## 3. Technology Stack: Free-First Production Plan
+
+Since the platform is in its startup launch phase, all infrastructure utilizes production-ready free tiers with zero ongoing software costs:
+
+| Layer | Technology | Cost | Function & Architecture |
 | :--- | :--- | :--- | :--- |
-| **Runtime** | Node.js | `v22.13.1` | Modern ECMAScript, native fetch, crypto |
-| **Language** | TypeScript | `^5.x` | Strict typing shared across client, owner & server |
-| **Execution Engine** | `tsx` | `latest` (`npx tsx watch`) | Instant TypeScript execution without manual compilation steps |
-| **HTTP Server** | Express | `^4.21` or `^5` | Standard, robust, battle-tested REST server |
-| **Data Validation** | Zod | `^3.23` | Runtime schema validation for API request bodies and query parameters |
-| **CORS** | `cors` | `^2.8` | Cross-Origin Resource Sharing for `localhost:3000` (client) and `localhost:3001` (owner) |
-| **Persistence Layer** | File-backed JSON / SQLite Repository | Clean Repository Pattern | Atomic persistence with disk durability and automated seed hydration |
-| **Logging** | `morgan` / Custom Logger | Built-in | Structured request logging with timings |
+| **Domain** | 1 Standard Domain (`.in` / `.com`) | ~₹800 / year | Single apex domain with infinite free subdomains via DNS. |
+| **Frontend Hosting** | Vercel (Hobby Tier) | **₹0 Free** | Hosts all 4 Next.js frontend applications with automated global edge caching and free SSL certificates. |
+| **Backend API** | Node.js 22 + Express + TypeScript (`tsx`) | **₹0 Free** | Hosted on Render / Railway / self-hosted VPS (`api.yourdomain.com`). |
+| **Database** | MongoDB Atlas (M0 Free Cluster) | **₹0 Free** | 512 MB storage (stores ~200,000 bookings and hundreds of homestays before scaling). |
+| **Authentication** | Google OAuth 2.0 + Bcrypt/JWT | **₹0 Free** | Google Cloud Console provides unlimited free Google Sign-In. Email/password is self-hosted with bcrypt. |
+| **Mapping & Routing** | OpenStreetMap + Leaflet | **₹0 Free** | Replaces Google Maps API ($5–$7/1k hits). Mountain winding factor (1.38x) is calculated natively via Haversine. |
+| **Payments** | Direct UPI QR / Pay on Arrival | **₹0 Free** | 70% of North Bengal bookings use UPI QR. Optional Razorpay gateway costs 0 upfront (2% per transaction). |
+| **Messaging & Dispatch** | WhatsApp Deep-Links (`wa.me`) + Nodemailer | **₹0 Free** | Generates pre-filled WhatsApp alert links and SMTP emails without paying monthly WhatsApp API charges. |
+| **OTA Synchronization** | Custom iCal Engine (`node-ical`) | **₹0 Free** | Self-hosted two-way RFC 5545 `.ics` feed parser for Airbnb and Booking.com. |
 
 ---
 
-## 2. Directory Structure (`/server`)
+## 4. Frontend Topology & Responsibilities
 
-```
-/server
-├── package.json
-├── tsconfig.json
-├── .env.example
-├── src
-│   ├── config
-│   │   └── env.ts                 # Validated environment configuration (PORT, CORS origins)
-│   ├── types
-│   │   ├── estate.ts              # Estate, Location & Profile types
-│   │   ├── room.ts                # Room units & stay models
-│   │   ├── booking.ts             # Reservation & booking models
-│   │   ├── guest.ts               # Guest CRM models
-│   │   ├── driver.ts              # Drivers & cab trips models
-│   │   └── analytics.ts           # Financial & operations KPI metrics
-│   ├── data
-│   │   ├── db.ts                  # Persistent storage engine with JSON file store & disk flush
-│   │   ├── seeds
-│   │   │   ├── rooms.seed.ts      # Merged 6 estate units (client stays + owner roomUnits)
-│   │   │   ├── drivers.seed.ts    # Merged driver roster (Dipu, Saraswati, Bikash, etc.)
-│   │   │   ├── profile.seed.ts    # Gumtree Valley / Meadowfall estate info
-│   │   │   ├── bookings.seed.ts   # Initial calendar bookings
-│   │   │   └── guests.seed.ts     # Initial guest CRM records
-│   │   └── storage/               # Runtime persisted database files (gitignored or committed initial)
-│   ├── schemas
-│   │   ├── booking.schema.ts      # Zod validation schemas for booking & quotes
-│   │   ├── room.schema.ts         # Zod validation for room creation / maintenance holds
-│   │   └── driver.schema.ts       # Zod validation for driver additions & status updates
-│   ├── services
-│   │   ├── property.service.ts    # Property profile & locations logic
-│   │   ├── room.service.ts        # Rooms inventory, availability calendar & pricing quotes
-│   │   ├── booking.service.ts     # Reservation creation, conflicts check, door PIN generation
-│   │   ├── guest.service.ts       # Guest CRM queries, search, tag updates, timeline aggregation
-│   │   ├── driver.service.ts      # Fleet status, driver assignment, trip fares, commission
-│   │   └── analytics.service.ts   # Dynamic revenue timeline, occupancy %, ADR, service margins
-│   ├── controllers
-│   │   ├── property.controller.ts
-│   │   ├── room.controller.ts
-│   │   ├── booking.controller.ts
-│   │   ├── guest.controller.ts
-│   │   ├── driver.controller.ts
-│   │   └── analytics.controller.ts
-│   ├── routes
-│   │   ├── index.ts               # Central router mounting /api/v1/*
-│   │   ├── property.routes.ts     # /api/v1/properties
-│   │   ├── room.routes.ts         # /api/v1/rooms, /api/v1/stays
-│   │   ├── booking.routes.ts      # /api/v1/bookings, /api/v1/reservations
-│   │   ├── guest.routes.ts        # /api/v1/guests
-│   │   ├── driver.routes.ts       # /api/v1/drivers, /api/v1/cabs
-│   │   └── analytics.routes.ts    # /api/v1/analytics
-│   ├── middlewares
-│   │   ├── error-handler.ts       # Centralized error formatter
-│   │   ├── not-found.ts           # 404 handler
-│   │   └── validate.ts            # Zod request validation middleware
-│   ├── app.ts                     # Express app configuration & middlewares
-│   └── server.ts                  # Server bootstrap & listen logic
-```
+### 1. Client Application (`yourdomain.com`)
+- **Directory**: `/client-side`
+- **Key Routes**:
+  - `/`: Public landing page, search bar, and curated homestays directory.
+  - `/h/[slug]`: **Dedicated single-homestay landing page** (e.g. `/h/darjeeling-heritage-cottage`). Displays only this property's story, photos, amenities, room availability, and cab transfer booking.
+  - `/cab`: Dedicated hill transfer booking flow (NJP, Bagdogra ↔ Darjeeling, Kalimpong, Mirik).
+  - `/checkout`: Room reservation checkout with live server sync.
 
----
+### 2. Owner Portal (`owner.yourdomain.com`)
+- **Directory**: `/owner-side`
+- **Key Routes**:
+  - `/login` & `/register`: Multi-tenant host onboarding with Google Sign-In and Email/Password.
+  - `/book`: Live calendar availability grid (7, 14, 28 days) and reservation wizard.
+  - `/drivers`: Local driver roster management, status updates ("Active", "On a trip", "Paused").
+  - `/guests`: Guest CRM directory and arrival/departure timeline.
+  - `/profile`: Property details, room inventory CRUD, and Leaflet location coordinates picker.
+  - `/analytics`: Real-time financial reports (Room vs. Cab revenue, ADR, Occupancy %).
 
-## 3. High-Level Architecture Flow
+### 3. Driver Portal (`driver.yourdomain.com`)
+- **Directory**: `/driver-side` (Lightweight Mobile PWA)
+- **Key Features**:
+  - Mobile-first interface with large touch targets for Android phones.
+  - Phone Number + 4-digit PIN authentication.
+  - View assigned trips today with passenger phone and one-tap call button.
+  - Status toggle buttons: **[En Route]**, **[Arrived]**, **[Trip Completed]**.
+  - Personal earnings ledger showing gross fare, 18% commission deduction, and net payout status.
 
-```mermaid
-flowchart TD
-    subgraph Clients["Frontends"]
-        CS["Client-Side (Guest App)\nNext.js :3000\nStays & Cab Booking"]
-        OS["Owner-Side (Host Portal)\nNext.js :3001\nDashboard, Calendar, CRM, Fleet"]
-    end
-
-    subgraph API["Backend Server (Node.js + tsx :5000)"]
-        RT["Express Router (/api/v1/*)"]
-        VAL["Zod Validation & CORS Middlewares"]
-        
-        subgraph Controllers["Controllers Layer"]
-            RC["Room / Stay Controller"]
-            BC["Booking Controller"]
-            GC["Guest CRM Controller"]
-            DC["Fleet / Driver Controller"]
-            AC["Analytics Controller"]
-        end
-        
-        subgraph Services["Services & Business Logic"]
-            RS["Room & Availability Engine"]
-            BS["Booking Engine & Conflict Validator"]
-            GS["Guest CRM & Timeline Aggregator"]
-            DS["Cab Dispatch & Commission Engine"]
-            AS["Financials & KPI Aggregator"]
-        end
-        
-        subgraph Storage["Persistent Store Layer"]
-            REPO["Data Repository (CRUD + Memory Cache)"]
-            JSONDB[("Disk File Store / JSON DB\nserver/src/data/storage")]
-        end
-    end
-
-    CS -->|Fetch stays, quotes, cab drivers\nPOST reservations, cab trips| RT
-    OS -->|Manage rooms, calendar, holds\nView guests, dispatch cabs, view analytics| RT
-    
-    RT --> VAL
-    VAL --> RC & BC & GC & DC & AC
-    RC --> RS
-    BC --> BS
-    GC --> GS
-    DC --> DS
-    AC --> AS
-    
-    RS & BS & GS & DS & AS --> REPO
-    REPO <--> JSONDB
-```
-
----
-
-## 4. Key Architectural Decisions
-
-1. **Port Allocation**:
-   - `client-side`: `http://localhost:3000`
-   - `owner-side`: `http://localhost:3001`
-   - `server`: `http://localhost:5000` (configurable via `PORT` env var).
-2. **Unified Data Model**:
-   - The client-side refers to accommodations as `Stay` (slug-based).
-   - The owner-side refers to accommodations as `RoomUnit` (code-based like `101`, `201`).
-   - The backend maps both seamlessly: each room has an immutable `id`, a unique `code` (e.g. `101`), and an SEO-friendly `slug` (e.g. `ging-tea-cottage`). This bridges `client-side` and `owner-side` without breaking either frontend!
-3. **Persistent Data Storage**:
-   - To make it zero-friction to run immediately without requiring external database server installations (e.g. Docker / PostgreSQL setup), we will use an asynchronous, atomic file-backed JSON store with in-memory indexes.
-   - When seeded on first run, it hydrates rich demo data matching the client and owner apps.
-   - Every mutation is atomically persisted to disk so bookings and changes survive restarts.
-   - The service interface uses an abstraction (`IRepository`), allowing instant swap to Prisma/PostgreSQL or SQLite whenever desired.
-4. **Instant Synchronization**:
-   - When a guest submits a reservation on `client-side`, the booking record is saved, dates are marked unavailable in the calendar, a guest record is created/updated in the CRM, and owner analytics KPIs immediately update.
+### 4. Super Admin Control Tower (`admin.yourdomain.com`)
+- **Directory**: `/admin-side` (Internal Operations Portal)
+- **Key Features**:
+  - Accessible only to verified platform administrator credentials.
+  - Platform-wide KPIs: Gross Booking Value (GBV), total platform commissions, active properties.
+  - Driver Settlement Ledger: Review completed rides, view net driver payouts (82%), and mark as settled.
+  - Property Verification Queue: Review and approve new homestay registrations.

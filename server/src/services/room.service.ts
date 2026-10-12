@@ -10,6 +10,7 @@ export interface RoomFilters {
   checkIn?: string;
   checkOut?: string;
   ownerId?: string;
+  propertyId?: string;
 }
 
 export interface QuoteCalculation {
@@ -26,9 +27,12 @@ export class RoomService {
   static async getAllRooms(filters: RoomFilters = {}): Promise<IRoom[]> {
     const query: any = {};
 
-    if (filters.ownerId) {
+    if (filters.propertyId) {
+      query.propertyId = filters.propertyId;
+    } else if (filters.ownerId) {
       query.ownerId = filters.ownerId;
     }
+
     if (filters.category && filters.category !== "all") {
       query.category = filters.category;
     }
@@ -48,10 +52,14 @@ export class RoomService {
     return await Room.find(query).sort({ code: 1 });
   }
 
-  static async getRoomByCodeOrSlug(codeOrSlug: string): Promise<IRoom | null> {
-    return await Room.findOne({
+  static async getRoomByCodeOrSlug(codeOrSlug: string, propertyId?: string): Promise<IRoom | null> {
+    const query: any = {
       $or: [{ code: codeOrSlug }, { slug: codeOrSlug }],
-    });
+    };
+    if (propertyId) {
+      query.propertyId = propertyId;
+    }
+    return await Room.findOne(query);
   }
 
   static calculateQuote(
@@ -86,39 +94,60 @@ export class RoomService {
     return await Room.create(data);
   }
 
-  static async updateRoom(codeOrSlug: string, updates: Partial<IRoom>): Promise<IRoom | null> {
+  static async updateRoom(
+    codeOrSlug: string,
+    updates: Partial<IRoom>,
+    propertyId?: string,
+    ownerId?: string
+  ): Promise<IRoom | null> {
+    const query: any = { $or: [{ code: codeOrSlug }, { slug: codeOrSlug }] };
+    if (propertyId) query.propertyId = propertyId;
+    else if (ownerId) query.ownerId = ownerId;
+
     return await Room.findOneAndUpdate(
-      { $or: [{ code: codeOrSlug }, { slug: codeOrSlug }] },
+      query,
       updates,
       { returnDocument: "after" }
     );
   }
 
-  static async deleteRoom(codeOrSlug: string): Promise<boolean> {
-    const res = await Room.deleteOne({
-      $or: [{ code: codeOrSlug }, { slug: codeOrSlug }],
-    });
+  static async deleteRoom(codeOrSlug: string, propertyId?: string, ownerId?: string): Promise<boolean> {
+    const query: any = { $or: [{ code: codeOrSlug }, { slug: codeOrSlug }] };
+    if (propertyId) query.propertyId = propertyId;
+    else if (ownerId) query.ownerId = ownerId;
+
+    const res = await Room.deleteOne(query);
     return res.deletedCount > 0;
   }
 
   static async setMaintenanceHold(
     codeOrSlug: string,
-    hold: { label: string; range: string; startDate?: string; endDate?: string } | undefined
+    hold: { label: string; range: string; startDate?: string; endDate?: string } | undefined,
+    propertyId?: string,
+    ownerId?: string
   ): Promise<IRoom | null> {
+    const query: any = { $or: [{ code: codeOrSlug }, { slug: codeOrSlug }] };
+    if (propertyId) query.propertyId = propertyId;
+    else if (ownerId) query.ownerId = ownerId;
+
     return await Room.findOneAndUpdate(
-      { $or: [{ code: codeOrSlug }, { slug: codeOrSlug }] },
+      query,
       { $set: { hold, status: hold ? "Maintenance" : "Active" } },
       { returnDocument: "after" }
     );
   }
 
-  static async getAvailabilityGrid(startDateStr: string, days = 14) {
+  static async getAvailabilityGrid(startDateStr: string, days = 14, propertyId?: string, ownerId?: string) {
     const startDate = new Date(startDateStr);
     const endDate = new Date(startDate);
     endDate.setDate(endDate.getDate() + days);
 
-    const rooms = await Room.find().sort({ code: 1 });
-    const bookings = await Booking.find({
+    const roomQuery: any = {};
+    if (propertyId) roomQuery.propertyId = propertyId;
+    else if (ownerId) roomQuery.ownerId = ownerId;
+
+    const rooms = await Room.find(roomQuery).sort({ code: 1 });
+    const bookingQuery: any = {
       status: { $ne: "cancelled" },
       $or: [
         {
@@ -126,7 +155,11 @@ export class RoomService {
           checkOut: { $gte: startDate.toISOString().slice(0, 10) },
         },
       ],
-    });
+    };
+    if (propertyId) bookingQuery.propertyId = propertyId;
+    else if (ownerId) bookingQuery.ownerId = ownerId;
+
+    const bookings = await Booking.find(bookingQuery);
 
     return rooms.map((room) => {
       const roomBookings = bookings.filter((b) => b.roomCode === room.code);

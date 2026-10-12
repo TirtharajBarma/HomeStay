@@ -1,11 +1,13 @@
 import { Schema, model, Document } from "mongoose";
 
 export interface IGuest extends Document {
+  ownerId?: Schema.Types.ObjectId | string;
+  propertyId?: Schema.Types.ObjectId | string;
   name: string;
   code: string;
   room: string;
   location: string;
-  category: "Ging Lodge" | "Chiyabari Lofts" | "Garden Cottages";
+  category: string;
   checkIn: Date;
   checkOut: Date;
   nights: number;
@@ -33,6 +35,8 @@ export interface IGuest extends Document {
 
 const GuestSchema = new Schema<IGuest>(
   {
+    ownerId: { type: Schema.Types.ObjectId, ref: "User", index: true },
+    propertyId: { type: Schema.Types.ObjectId, ref: "Property", index: true },
     name: { type: String, required: true, index: true },
     code: { type: String, required: true },
     room: { type: String, required: true },
@@ -40,7 +44,7 @@ const GuestSchema = new Schema<IGuest>(
     category: {
       type: String,
       required: true,
-      enum: ["Ging Lodge", "Chiyabari Lofts", "Garden Cottages"],
+      default: "Garden Cottages",
     },
     checkIn: { type: Date, required: true },
     checkOut: { type: Date, required: true },

@@ -13,6 +13,7 @@ import { drivers as seedDrivers, type Driver, type DriverStatus } from "@/lib/dr
 import { createPersistedStore, type PersistedStore } from "@/lib/persisted-store";
 import { roomUnits, type RoomUnit } from "@/lib/rooms-data";
 import { API_ENDPOINTS } from "@/lib/api-config";
+import { useAuth } from "@/components/auth-context";
 
 export type EstateRoom = RoomUnit;
 export type EstateDriver = Driver;
@@ -181,6 +182,8 @@ export function EstateProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const { user, token } = useAuth();
+
   const [rooms, setRooms] = usePersisted(roomStore);
   const [drivers, setDrivers] = usePersisted(driverStore);
   const [bookings, setBookings] = usePersisted(bookingStore);
@@ -192,58 +195,69 @@ export function EstateProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     async function syncBackend() {
       try {
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+
+        const roomsUrl = user?.id ? `${API_ENDPOINTS.rooms.list()}?ownerId=${user.id}` : API_ENDPOINTS.rooms.list();
+
         const [roomsRes, driversRes, bookingsRes, profileRes] = await Promise.allSettled([
-          fetch(API_ENDPOINTS.rooms.list()).then((r) => r.json()),
-          fetch(API_ENDPOINTS.drivers.list()).then((r) => r.json()),
-          fetch(API_ENDPOINTS.bookings.list()).then((r) => r.json()),
-          fetch(API_ENDPOINTS.properties.profile()).then((r) => r.json()),
+          fetch(roomsUrl, { headers }).then((r) => r.json()),
+          fetch(API_ENDPOINTS.drivers.list(), { headers }).then((r) => r.json()),
+          fetch(API_ENDPOINTS.bookings.list(), { headers }).then((r) => r.json()),
+          fetch(API_ENDPOINTS.properties.profile(), { headers }).then((r) => r.json()),
         ]);
 
         if (cancelled) return;
 
-        if (roomsRes.status === "fulfilled" && roomsRes.value?.success && roomsRes.value?.data?.length) {
-          setRooms(roomsRes.value.data);
+        if (roomsRes.status === "fulfilled" && roomsRes.value?.success && Array.isArray(roomsRes.value?.data)) {
+          if (roomsRes.value.data.length > 0 || user?.id) {
+            setRooms(roomsRes.value.data);
+          }
         }
-        if (driversRes.status === "fulfilled" && driversRes.value?.success && driversRes.value?.data?.length) {
-          setDrivers(
-            driversRes.value.data.map((d: any) => ({
-              ...d,
-              joined: d.joined ? new Date(d.joined) : new Date(2024, 9, 24),
-            }))
-          );
+        if (driversRes.status === "fulfilled" && driversRes.value?.success && Array.isArray(driversRes.value?.data)) {
+          if (driversRes.value.data.length > 0) {
+            setDrivers(
+              driversRes.value.data.map((d: any) => ({
+                ...d,
+                joined: d.joined ? new Date(d.joined) : new Date(2024, 9, 24),
+              }))
+            );
+          }
         }
-        if (bookingsRes.status === "fulfilled" && bookingsRes.value?.success && bookingsRes.value?.data?.length) {
-          setBookings(
-            bookingsRes.value.data.map((b: any) => ({
-              id: b.reference || b._id,
-              code: b.roomCode,
-              room: b.roomName,
-              guest: b.guestName,
-              checkIn: b.checkIn,
-              checkOut: b.checkOut,
-              party: b.party || 1,
-              channel: b.channel || "Direct",
-              notes: b.notes || "",
-              total: b.totalAmount || b.roomTotal || 0,
-              createdAt: new Date(b.createdAt).getTime() || Date.now(),
-            }))
-          );
+        if (bookingsRes.status === "fulfilled" && bookingsRes.value?.success && Array.isArray(bookingsRes.value?.data)) {
+          if (bookingsRes.value.data.length > 0) {
+            setBookings(
+              bookingsRes.value.data.map((b: any) => ({
+                id: b.reference || b._id,
+                code: b.roomCode,
+                room: b.roomName,
+                guest: b.guestName,
+                checkIn: b.checkIn,
+                checkOut: b.checkOut,
+                party: b.party || 1,
+                channel: b.channel || "Direct",
+                notes: b.notes || "",
+                total: b.totalAmount || b.roomTotal || 0,
+                createdAt: new Date(b.createdAt).getTime() || Date.now(),
+              }))
+            );
+          }
         }
         if (profileRes.status === "fulfilled" && profileRes.value?.success && profileRes.value?.data) {
           const p = profileRes.value.data;
           setProfile({
-            name: p.name,
-            role: p.role,
-            email: p.email,
-            phone: p.phone,
-            address: p.address,
-            town: p.town,
-            region: p.region,
-            postal: p.postal,
-            bio: p.bio,
-            checkInTime: p.checkInTime,
-            checkOutTime: p.checkOutTime,
-            responseTime: p.responseTime,
+            name: p.name || user?.homestayName || "Homestay Estate",
+            role: p.role || "Estate Owner & Host",
+            email: p.email || user?.email || "",
+            phone: p.phone || user?.phone || "",
+            address: p.address || "",
+            town: p.town || "Darjeeling",
+            region: p.region || "West Bengal",
+            postal: p.postal || "734101",
+            bio: p.bio || `Welcome to ${p.name || user?.homestayName || "our homestay"} in the hills.`,
+            checkInTime: p.checkInTime || "3:00 PM",
+            checkOutTime: p.checkOutTime || "11:00 AM",
+            responseTime: p.responseTime || "Usually within 20 minutes",
           });
           if (p.locations?.length) {
             setLocations(p.locations);
@@ -257,7 +271,13 @@ export function EstateProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [setRooms, setDrivers, setBookings, setProfile, setLocations]);
+  }, [token, user?.id, user?.homestayName, user?.email, user?.phone, setRooms, setDrivers, setBookings, setProfile, setLocations]);
+
+  const authHeaders = useMemo<Record<string, string>>(() => {
+    const h: Record<string, string> = {};
+    if (token) h.Authorization = `Bearer ${token}`;
+    return h;
+  }, [token]);
 
   const addRoom = useCallback<EstateContextValue["addRoom"]>(
     (room) => {
@@ -268,12 +288,12 @@ export function EstateProvider({ children }: { children: ReactNode }) {
       setRooms((current) => [...current, created]);
       fetch(API_ENDPOINTS.rooms.create(), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify(created),
       }).catch((e) => console.warn("Background room sync notice:", e));
       return created;
     },
-    [setRooms],
+    [setRooms, authHeaders],
   );
 
   const updateRoom = useCallback(
@@ -283,11 +303,11 @@ export function EstateProvider({ children }: { children: ReactNode }) {
       );
       fetch(API_ENDPOINTS.rooms.update(code), {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify(patch),
       }).catch((e) => console.warn("Background room update sync notice:", e));
     },
-    [setRooms],
+    [setRooms, authHeaders],
   );
 
   const removeRoom = useCallback(
@@ -295,9 +315,10 @@ export function EstateProvider({ children }: { children: ReactNode }) {
       setRooms((current) => current.filter((room) => room.code !== code));
       fetch(API_ENDPOINTS.rooms.delete(code), {
         method: "DELETE",
+        headers: { ...authHeaders },
       }).catch((e) => console.warn("Background room delete sync notice:", e));
     },
-    [setRooms],
+    [setRooms, authHeaders],
   );
 
   const addDriver = useCallback<EstateContextValue["addDriver"]>(
@@ -313,12 +334,12 @@ export function EstateProvider({ children }: { children: ReactNode }) {
       setDrivers((current) => [...current, created]);
       fetch(API_ENDPOINTS.drivers.create(), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify(created),
       }).catch((e) => console.warn("Background driver sync notice:", e));
       return created;
     },
-    [setDrivers],
+    [setDrivers, authHeaders],
   );
 
   const updateDriver = useCallback(
@@ -329,12 +350,12 @@ export function EstateProvider({ children }: { children: ReactNode }) {
       if (patch.status) {
         fetch(API_ENDPOINTS.drivers.updateStatus(id), {
           method: "PATCH",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...authHeaders },
           body: JSON.stringify({ status: patch.status }),
         }).catch((e) => console.warn("Background driver status sync notice:", e));
       }
     },
-    [setDrivers],
+    [setDrivers, authHeaders],
   );
 
   const removeDriver = useCallback(
@@ -342,11 +363,11 @@ export function EstateProvider({ children }: { children: ReactNode }) {
       setDrivers((current) => current.filter((driver) => driver.id !== id));
       fetch(API_ENDPOINTS.drivers.updateStatus(id), {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify({ status: "Inactive" }),
       }).catch((e) => console.warn("Background driver remove sync notice:", e));
     },
-    [setDrivers],
+    [setDrivers, authHeaders],
   );
 
   const addBooking = useCallback<EstateContextValue["addBooking"]>(
@@ -371,7 +392,7 @@ export function EstateProvider({ children }: { children: ReactNode }) {
       // Sync booking to backend MongoDB
       fetch(API_ENDPOINTS.bookings.create(), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify({
           roomCode: booking.code,
           checkIn: booking.checkIn,
@@ -388,7 +409,7 @@ export function EstateProvider({ children }: { children: ReactNode }) {
 
       return created;
     },
-    [rooms, setBookings],
+    [rooms, setBookings, authHeaders],
   );
 
   const removeBooking = useCallback(
@@ -396,9 +417,10 @@ export function EstateProvider({ children }: { children: ReactNode }) {
       setBookings((current) => current.filter((booking) => booking.id !== id));
       fetch(API_ENDPOINTS.bookings.cancel(id), {
         method: "PATCH",
+        headers: { ...authHeaders },
       }).catch((e) => console.warn("Background booking cancel sync notice:", e));
     },
-    [setBookings],
+    [setBookings, authHeaders],
   );
 
   const updateProfile = useCallback(
@@ -406,11 +428,11 @@ export function EstateProvider({ children }: { children: ReactNode }) {
       setProfile((current) => ({ ...current, ...patch }));
       fetch(API_ENDPOINTS.properties.profile(), {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify(patch),
       }).catch((e) => console.warn("Background profile sync notice:", e));
     },
-    [setProfile],
+    [setProfile, authHeaders],
   );
 
   const addLocation = useCallback<EstateContextValue["addLocation"]>(
@@ -419,12 +441,12 @@ export function EstateProvider({ children }: { children: ReactNode }) {
       setLocations((current) => [...current, created]);
       fetch(API_ENDPOINTS.properties.locations(), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify(location),
       }).catch((e) => console.warn("Background location add sync notice:", e));
       return created;
     },
-    [setLocations],
+    [setLocations, authHeaders],
   );
 
   const updateLocation = useCallback(
@@ -434,11 +456,11 @@ export function EstateProvider({ children }: { children: ReactNode }) {
       );
       fetch(API_ENDPOINTS.properties.location(id), {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify(patch),
       }).catch((e) => console.warn("Background location update sync notice:", e));
     },
-    [setLocations],
+    [setLocations, authHeaders],
   );
 
   const removeLocation = useCallback(
@@ -446,9 +468,10 @@ export function EstateProvider({ children }: { children: ReactNode }) {
       setLocations((current) => current.filter((location) => location.id !== id));
       fetch(API_ENDPOINTS.properties.location(id), {
         method: "DELETE",
+        headers: { ...authHeaders },
       }).catch((e) => console.warn("Background location delete sync notice:", e));
     },
-    [setLocations],
+    [setLocations, authHeaders],
   );
 
   const reset = useCallback(() => {

@@ -38,10 +38,56 @@ export class AdminController {
       const totalCabRevenue = cabTrips.reduce((sum, t) => sum + t.fareAmount, 0);
       const platformCommission = cabTrips.reduce((sum, t) => sum + t.estateCommission, 0);
       const totalDriverPayouts = cabTrips.reduce((sum, t) => sum + t.driverPayout, 0);
+      const pendingPayouts = cabTrips
+        .filter((t) => t.payoutStatus !== "settled")
+        .reduce((sum, t) => sum + t.driverPayout, 0);
+
+      const userMap = new Map(users.map((u) => [String(u._id), u.name]));
+      const driverMap = new Map(drivers.map((d) => [d.id, d.name]));
+
+      const propertiesFormatted = homestays.map((h) => ({
+        id: String(h._id),
+        name: h.name,
+        ownerName: userMap.get(String(h.ownerId)) || "Homestay Host",
+        email: h.email || "",
+        phone: h.phone || "",
+        address: h.address || "",
+        town: h.town || "Darjeeling",
+        status: h.status || "active",
+        commissionRate: h.commissionRate || 0.18,
+        roomsCount: rooms.filter((r) => String(r.propertyId) === String(h._id) || String(r.ownerId) === String(h.ownerId)).length,
+      }));
+
+      const recentTripsFormatted = cabTrips.slice(0, 50).map((t) => ({
+        id: String(t._id),
+        reference: t.reference,
+        driverName: driverMap.get(t.driverId) || t.driverId,
+        passengerName: t.guestName || "Guest Passenger",
+        pickup: t.pickupName || "Darjeeling",
+        dropoff: t.dropoffName || "NJP Railway Station",
+        fare: t.fareAmount,
+        commission: t.estateCommission,
+        payout: t.driverPayout,
+        payoutStatus: t.payoutStatus,
+        settlementReference: t.settlementReference || "",
+        createdAt: t.createdAt ? new Date(t.createdAt).toISOString() : new Date().toISOString(),
+      }));
+
+      const kpisFormatted = {
+        totalProperties: homestays.length,
+        totalDrivers: drivers.length,
+        totalTrips: cabTrips.length,
+        totalGrossRevenue: totalRoomRevenue + totalCabRevenue,
+        totalPlatformCommission: platformCommission,
+        pendingPayouts,
+      };
 
       res.json({
         success: true,
         data: {
+          kpis: kpisFormatted,
+          properties: propertiesFormatted,
+          recentTrips: recentTripsFormatted,
           metrics: {
             totalHomestays: homestays.length,
             totalRooms: rooms.length,
@@ -57,16 +103,7 @@ export class AdminController {
               estateGross: totalRoomRevenue + platformCommission,
             },
           },
-          homestays: homestays.map((h) => ({
-            id: h._id,
-            slug: h.slug,
-            name: h.name,
-            ownerId: h.ownerId,
-            email: h.email,
-            phone: h.phone,
-            town: h.town,
-            roomCount: rooms.filter((r) => String(r.propertyId) === String(h._id) || String(r.ownerId) === String(h.ownerId)).length,
-          })),
+          homestays: propertiesFormatted,
           drivers: drivers.map((d) => ({
             id: d.id,
             name: d.name,
@@ -83,6 +120,37 @@ export class AdminController {
       });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message || "Failed to load admin overview" });
+    }
+  }
+
+  static async settlePayout(req: Request, res: Response) {
+    try {
+      const id = req.params.id || req.body.tripId;
+      const { settlementReference } = req.body;
+      if (!id) {
+        return res.status(400).json({ success: false, error: "Missing tripId or payout id parameter" });
+      }
+      const trip = await CabTrip.findByIdAndUpdate(
+        id,
+        { payoutStatus: "settled", settlementReference: settlementReference || `UPI-${Date.now()}` },
+        { returnDocument: "after" }
+      );
+      if (!trip) return res.status(404).json({ success: false, error: "Trip not found." });
+      res.json({ success: true, message: "Payout marked as settled.", data: trip });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  }
+
+  static async updatePropertyStatus(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+      const prop = await Property.findByIdAndUpdate(id, { status }, { returnDocument: "after" });
+      if (!prop) return res.status(404).json({ success: false, error: "Property not found." });
+      res.json({ success: true, message: "Property status updated.", data: prop });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
     }
   }
 }

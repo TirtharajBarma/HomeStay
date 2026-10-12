@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { API_ENDPOINTS } from "@/lib/api-config";
 import { useEstate } from "@/components/estate-provider";
 import { Icon } from "@/components/icon";
 import { PeriodNav } from "@/components/owner/period-nav";
@@ -55,14 +56,64 @@ export function GuestsView() {
   const caption = windowCaption(start, days);
   const timeline = useMemo(() => guestTimeline(start, days), [start, days]);
 
+  const [serverGuests, setServerGuests] = useState<Guest[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadGuests() {
+      try {
+        const token = window.localStorage.getItem("platform_auth_token");
+        const headers: Record<string, string> = {};
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+        const res = await fetch(API_ENDPOINTS.guests.list(query, status, roomFilter), { headers });
+        if (res.ok) {
+          const json = await res.json();
+          if (!cancelled && json?.success && Array.isArray(json?.data) && json.data.length > 0) {
+            setServerGuests(
+              json.data.map((g: any) => ({
+                id: g.id || g._id,
+                name: g.name,
+                code: g.roomCode || g.code || "RM-101",
+                room: g.roomName || g.room || "Suite",
+                location: g.location || "Homestay Estate",
+                category: g.category || "Main Lodge",
+                checkIn: new Date(g.checkIn),
+                checkOut: new Date(g.checkOut),
+                nights: g.nights || 1,
+                party: g.party || g.guests || 1,
+                channel: g.channel || "Direct",
+                channelTone: "bg-surface-container text-on-surface-variant",
+                email: g.email || "—",
+                phone: g.phone || "—",
+                origin: g.origin || "Direct booking",
+                spend: g.spend || g.totalSpend || 0,
+                status: g.status || "Upcoming",
+                note: g.note || g.notes || "",
+                tags: g.tags || ["Verified Guest"],
+                stays: g.stays || 1,
+                lifetime: g.lifetime || g.spend || 0,
+              }))
+            );
+          }
+        }
+      } catch (e) {
+        // Fall back gracefully to local guests
+      }
+    }
+    loadGuests();
+    return () => {
+      cancelled = true;
+    };
+  }, [query, status, roomFilter]);
+
   // Bookings made on the Book Rooms page join the directory immediately.
   const extra: Guest[] = bookings.map((booking) => ({
     id: booking.id,
     name: booking.guest,
     code: booking.code,
     room: booking.room,
-    location: rooms.find((room) => room.code === booking.code)?.location ?? "Gumtree Valley",
-    category: rooms.find((room) => room.code === booking.code)?.category ?? "Ging Lodge",
+    location: rooms.find((room) => room.code === booking.code)?.location ?? "Homestay Estate",
+    category: rooms.find((room) => room.code === booking.code)?.category ?? "Main Lodge",
     checkIn: new Date(`${booking.checkIn}T00:00:00`),
     checkOut: new Date(`${booking.checkOut}T00:00:00`),
     nights: Math.max(
@@ -85,11 +136,13 @@ export function GuestsView() {
     lifetime: booking.total,
   }));
 
+  const baseGuestList = serverGuests.length > 0 ? serverGuests : guests;
+
   const directory = useMemo(() => {
     const day = activeDay ? new Date(`${activeDay}T00:00:00`) : null;
     const needle = query.trim().toLowerCase();
 
-    return [...extra, ...guests].filter((guest) => {
+    return [...extra, ...baseGuestList].filter((guest) => {
       if (status !== "all" && guest.status !== status) return false;
       if (roomFilter !== "all" && guest.code !== roomFilter) return false;
       if (day && !staying(guest, day)) return false;
@@ -99,13 +152,13 @@ export function GuestsView() {
       }
       return true;
     });
-  }, [extra, status, roomFilter, activeDay, query]);
+  }, [extra, baseGuestList, status, roomFilter, activeDay, query]);
 
-  const liveGuests = [...extra, ...guests];
+  const liveGuests = [...extra, ...baseGuestList];
   const activeToday = liveGuests.filter((guest) => staying(guest, baseToday));
 
   const exportDirectory = () => {
-    downloadCsv(`gumtree-valley-guests-${status}-${roomFilter}`, [
+    downloadCsv(`homestay-guests-${status}-${roomFilter}`, [
       ["Guest", "Room", "Check-in", "Check-out", "Nights", "Guests", "Channel", "Spend", "Status"],
       ...directory.map((guest) => [
         guest.name,

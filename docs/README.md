@@ -1,6 +1,6 @@
-# Tirtha Backend & Integration Documentation Index
+# Hospitality & Hill Transit Network — Documentation Index
 
-This directory maintains all technical specifications, requirements, data schemas, API contracts, integration bridges, and live progress tracking for connecting **Client-Side** and **Owner-Side** via the **Node.js + tsx Backend Server** in `/server`.
+This directory maintains all master specifications, architectural plans, data schemas, API contracts, and operational execution plans for the 4-sided platform connecting **Travelers (Client)**, **Homestay Hosts (Owner)**, **Cab Drivers**, and the **Super Admin** via the centralized Node.js + Express backend server.
 
 ---
 
@@ -8,16 +8,23 @@ This directory maintains all technical specifications, requirements, data schema
 
 | File | Purpose |
 | :--- | :--- |
-| **[`00_REQUIREMENTS.md`](file:///Users/tirtharaj/Desktop/Desktop/github/nakh/docs/00_REQUIREMENTS.md)** | Core domain overview (Homestays & Darjeeling Cab Transfers), user roles, and immediate Phase 1 boundaries (Owner <-> Client connect). |
-| **[`01_ARCHITECTURE.md`](file:///Users/tirtharaj/Desktop/Desktop/github/nakh/docs/01_ARCHITECTURE.md)** | Technical design, Node.js + tsx runtime, Express server layers (Routes -> Controllers -> Services -> Storage), error handling, and directory structure. |
-| **[`02_DATA_SCHEMA.md`](file:///Users/tirtharaj/Desktop/Desktop/github/nakh/docs/02_DATA_SCHEMA.md)** | Canonical shared data models harmonizing Client `Stay` and Owner `RoomUnit`, Bookings, Guests CRM, Drivers Fleet, and Financials. |
+| **[`00_REQUIREMENTS.md`](file:///Users/tirtharaj/Desktop/Desktop/github/nakh/docs/00_REQUIREMENTS.md)** | Core domain overview, the 4-sided business model, free PMS hook, high-margin cab transfers, and OTA synchronization requirements. |
+| **[`01_ARCHITECTURE.md`](file:///Users/tirtharaj/Desktop/Desktop/github/nakh/docs/01_ARCHITECTURE.md)** | Single domain + 4 isolated subdomains topology, zero code-leak security design, role-based JWT auth, and free-first technology matrix. |
+| **[`02_DATA_SCHEMA.md`](file:///Users/tirtharaj/Desktop/Desktop/github/nakh/docs/02_DATA_SCHEMA.md)** | Canonical shared Mongoose schemas harmonizing Multi-Tenant Properties, Rooms, Bookings, Guests CRM, Drivers, and Cab Trips. |
 | **[`03_API_CONTRACT.md`](file:///Users/tirtharaj/Desktop/Desktop/github/nakh/docs/03_API_CONTRACT.md)** | Complete REST API endpoint reference (`/api/v1/*`), request bodies, response formats, and status codes. |
-| **[`04_CLIENT_OWNER_INTEGRATION.md`](file:///Users/tirtharaj/Desktop/Desktop/github/nakh/docs/04_CLIENT_OWNER_INTEGRATION.md)** | Integration guide for connecting `client-side` server actions and `owner-side` `estate-provider` to the live backend server. |
-| **[`05_TODO.md`](file:///Users/tirtharaj/Desktop/Desktop/github/nakh/docs/05_TODO.md)** | Granular master checklist with checkboxes and milestones to track progress without losing scope. |
+| **[`04_CLIENT_OWNER_INTEGRATION.md`](file:///Users/tirtharaj/Desktop/Desktop/github/nakh/docs/04_CLIENT_OWNER_INTEGRATION.md)** | Integration guide for connecting client-side server actions and owner-side `estate-provider` to the live backend server. |
+| **[`05_TODO.md`](file:///Users/tirtharaj/Desktop/Desktop/github/nakh/docs/05_TODO.md)** | Granular master checklist with checkboxes and milestones across all 6 phases. |
 
 ---
 
-## Quick Reference
-- **Client App**: `http://localhost:5500` (`/Users/tirtharaj/Desktop/Desktop/github/nakh/client-side`)
-- **Owner Portal**: `http://localhost:5501` (`/Users/tirtharaj/Desktop/Desktop/github/nakh/owner-side`)
-- **Backend API**: `http://localhost:5050/api/v1` (`/Users/tirtharaj/Desktop/Desktop/github/nakh/server`)
+## Portals & Runtime Ports
+
+- **Client Application (`yourdomain.com`)**: `http://localhost:3000` (`/Users/tirtharaj/Desktop/Desktop/github/nakh/client-side`)
+  - Public catalog & dedicated stay page: `yourdomain.com/h/:slug`
+- **Owner Dashboard (`owner.yourdomain.com`)**: `http://localhost:3001` (`/Users/tirtharaj/Desktop/Desktop/github/nakh/owner-side`)
+  - Free PMS, room inventory, live calendar, local driver roster
+- **Driver Portal (`driver.yourdomain.com`)**: `http://localhost:3002` (Mobile PWA)
+  - Daily trip dispatches, pickup status toggles, earnings ledger
+- **Super Admin (`admin.yourdomain.com`)**: `http://localhost:3003` (Control Tower)
+  - Marketplace financials, driver payout settlement desk, property approvals
+- **Central API Server (`api.yourdomain.com`)**: `http://localhost:5050/api/v1` (`/Users/tirtharaj/Desktop/Desktop/github/nakh/server`)

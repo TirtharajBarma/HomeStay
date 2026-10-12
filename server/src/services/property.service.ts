@@ -35,8 +35,8 @@ export class PropertyService {
     return await Property.findOne({ slug: slug.toLowerCase() });
   }
 
-  static async addLocation(location: Partial<IEstateLocation>): Promise<IProperty> {
-    const prop = await this.getProfile();
+  static async addLocation(location: Partial<IEstateLocation>, ownerId?: string): Promise<IProperty> {
+    const prop = await this.getProfile(ownerId);
     const newLoc: IEstateLocation = {
       id: location.id || `loc_${Date.now()}`,
       name: location.name || "Untitled Location",
@@ -54,9 +54,10 @@ export class PropertyService {
 
   static async updateLocation(
     locationId: string,
-    updates: Partial<IEstateLocation>
+    updates: Partial<IEstateLocation>,
+    ownerId?: string
   ): Promise<IProperty> {
-    const prop = await this.getProfile();
+    const prop = await this.getProfile(ownerId);
     const loc = prop.locations.find((l) => l.id === locationId);
     if (!loc) {
       throw new Error(`Location with id ${locationId} not found`);
@@ -67,8 +68,8 @@ export class PropertyService {
     return prop;
   }
 
-  static async deleteLocation(locationId: string): Promise<IProperty> {
-    const prop = await this.getProfile();
+  static async deleteLocation(locationId: string, ownerId?: string): Promise<IProperty> {
+    const prop = await this.getProfile(ownerId);
     prop.locations = prop.locations.filter((l) => l.id !== locationId);
     prop.markModified("locations");
     await prop.save();

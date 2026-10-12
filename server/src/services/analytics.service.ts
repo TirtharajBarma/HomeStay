@@ -54,11 +54,16 @@ export class AnalyticsService {
       bookings = await Booking.find(bookingFilter);
     }
 
-    let cabTrips = await CabTrip.find({
+    const cabFilter: any = {
       createdAt: { $gte: startDate, $lte: endDate },
-    });
+    };
+    if (ownerId) {
+      cabFilter.ownerId = ownerId;
+    }
+
+    let cabTrips = await CabTrip.find(cabFilter);
     if (cabTrips.length === 0) {
-      cabTrips = await CabTrip.find();
+      cabTrips = await CabTrip.find(ownerId ? { ownerId } : {});
     }
 
     const roomFilter: any = {};
@@ -66,7 +71,7 @@ export class AnalyticsService {
       roomFilter.ownerId = ownerId;
     }
     const rooms = await Room.find(roomFilter);
-    const totalUnitsCount = rooms.length || 6;
+    const totalUnitsCount = rooms.length || 1;
 
     // 2. Compute Totals
     const roomRevenue = bookings.reduce((sum, b) => sum + b.totalAmount, 0);

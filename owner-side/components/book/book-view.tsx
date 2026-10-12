@@ -16,8 +16,10 @@ import {
   solidButton,
 } from "@/components/owner/primitives";
 import { RoomFormDialog } from "@/components/rooms/room-form-dialog";
+import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { useMoney } from "@/components/currency-provider";
+import { API_ENDPOINTS } from "@/lib/api-config";
 import { addDays, defaultStart, getSchedule } from "@/lib/calendar-window";
 import { baseToday, isoDate, shortDate, windowCaption } from "@/lib/timeline";
 
@@ -27,13 +29,22 @@ const windows = [
   { key: "month", label: "28-day window", days: 28 },
 ];
 
-const sources = ["Direct", "Phone", "WhatsApp", "Walk-in", "OTA"];
+const sources = [
+  "MakeMyTrip",
+  "Goibibo",
+  "Airbnb",
+  "Booking.com",
+  "Direct Website",
+  "Phone / WhatsApp",
+  "Walk-in",
+];
 
 type Step = "rooms" | "calendar" | "details";
 
 type Draft = {
   room: string;
   guestName: string;
+  guestPhone: string;
   checkIn: string;
   checkOut: string;
   /** Empty until typed; falls back to 1 guest on save. */
@@ -63,12 +74,32 @@ export function BookView() {
   const [draft, setDraft] = useState<Draft>({
     room: "",
     guestName: "",
+    guestPhone: "",
     checkIn: "",
     checkOut: "",
     guests: "",
     source: "",
     notes: "",
   });
+
+  const [shareModal, setShareModal] = useState<{
+    booking: any;
+    roomName: string;
+    shareUrl: string;
+    guestPhone: string;
+    guestName: string;
+    checkIn: string;
+    checkOut: string;
+  } | null>(null);
+  const [copiedShare, setCopiedShare] = useState(false);
+
+  // iCal sync modal state
+  const [icalModalOpen, setIcalModalOpen] = useState(false);
+  const [syncRoomCode, setSyncRoomCode] = useState<string>("");
+  const [inboundIcalUrl, setInboundIcalUrl] = useState("");
+  const [syncingIcal, setSyncingIcal] = useState(false);
+  const [syncResult, setSyncResult] = useState<string | null>(null);
+  const [copiedIcalFeed, setCopiedIcalFeed] = useState(false);
 
   const days = windows.find((entry) => entry.key === windowKey)?.days ?? 14;
   const start = addDays(defaultStart, offset * days);
@@ -114,6 +145,7 @@ export function BookView() {
     setDraft({
       room: roomName,
       guestName: "",
+      guestPhone: "",
       checkIn,
       checkOut: "",
       guests: "",
@@ -126,7 +158,7 @@ export function BookView() {
   const save = () => {
     const room = rooms.find((entry) => entry.name === draft.room);
     if (!room) return;
-    if (draft.checkIn < baseTodayIso() ) return;
+    if (draft.checkIn < baseTodayIso()) return;
     const created = addBooking({
       code: room.code,
       room: room.name,
@@ -141,11 +173,30 @@ export function BookView() {
       icon: "event_available",
       tone: "success",
     });
+
+    const guestPhone = draft.guestPhone.trim();
+    const roomSlug = (room as any).slug || room.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    const clientBase =
+      typeof window !== "undefined" && window.location.port === "3001"
+        ? `${window.location.protocol}//${window.location.hostname}:3000`
+        : "http://localhost:3000";
+    const guestUrl = `${clientBase}/h/${roomSlug}?ref=${created.id}&checkIn=${created.checkIn}&checkOut=${created.checkOut}&guest=${encodeURIComponent(created.guest)}`;
+
+    setShareModal({
+      booking: created,
+      roomName: room.name,
+      shareUrl: guestUrl,
+      guestPhone,
+      guestName: created.guest,
+      checkIn: created.checkIn,
+      checkOut: created.checkOut,
+    });
+
     const remaining = selected.filter((code) => code !== room.code);
     setSelected(remaining);
     setSeed((value) => value + 1);
     setStep(remaining.length ? "calendar" : "rooms");
-    setDraft((current) => ({ ...current, guestName: "", notes: "" }));
+    setDraft((current) => ({ ...current, guestName: "", guestPhone: "", notes: "" }));
   };
 
   const nights =
@@ -177,28 +228,40 @@ export function BookView() {
         title="Book Rooms"
         description="Three short steps: choose the rooms, pick the dates, then confirm the guest."
         actions={
-          step === "calendar" || step === "details" ? (
-            <PeriodNav
-              options={windows.map((entry) => ({
-                ...entry,
-                hint: windowCaption(addDays(defaultStart, 0), entry.days),
-              }))}
-              value={windowKey}
-              onChange={(key) => {
-                setWindowKey(key);
-                setOffset(0);
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => {
+                if (!syncRoomCode && rooms.length) setSyncRoomCode(rooms[0].code);
+                setIcalModalOpen(true);
               }}
-              onShift={(delta) => setOffset((current) => Math.min(0, current + delta))}
-              caption={caption}
-              atLatest={offset === 0}
-              icon="calendar_month"
-            />
-          ) : (
-            <button onClick={() => setAddOpen(true)} className={solidButton}>
-              <Icon name="add_home" className="flex-shrink-0 text-[18px]" />
-              Add room
+              className="flex min-h-[2.25rem] items-center gap-1.5 rounded-lg border border-outline-variant/40 bg-surface px-3 py-1.5 text-label-sm font-semibold text-on-surface shadow-xs transition-colors hover:bg-surface-container"
+            >
+              <Icon name="sync" className="text-[17px] text-primary" />
+              <span>OTA Sync (Airbnb)</span>
             </button>
-          )
+            {step === "calendar" || step === "details" ? (
+              <PeriodNav
+                options={windows.map((entry) => ({
+                  ...entry,
+                  hint: windowCaption(addDays(defaultStart, 0), entry.days),
+                }))}
+                value={windowKey}
+                onChange={(key) => {
+                  setWindowKey(key);
+                  setOffset(0);
+                }}
+                onShift={(delta) => setOffset((current) => Math.min(0, current + delta))}
+                caption={caption}
+                atLatest={offset === 0}
+                icon="calendar_month"
+              />
+            ) : (
+              <button onClick={() => setAddOpen(true)} className={solidButton}>
+                <Icon name="add_home" className="flex-shrink-0 text-[18px]" />
+                Add room
+              </button>
+            )}
+          </div>
         }
         meta={
           <>
@@ -530,6 +593,19 @@ export function BookView() {
                 />
               </div>
               <div>
+                <label className={labelClass} htmlFor="bk-phone">
+                  Guest WhatsApp / Phone
+                </label>
+                <input
+                  id="bk-phone"
+                  type="tel"
+                  value={draft.guestPhone}
+                  onChange={(event) => setDraft({ ...draft, guestPhone: event.target.value })}
+                  placeholder="e.g. +91 98300 12345"
+                  className={fieldClass}
+                />
+              </div>
+              <div>
                 <label className={labelClass} htmlFor="bk-in">
                   Check-in
                 </label>
@@ -669,6 +745,252 @@ export function BookView() {
       ) : null}
 
       <RoomFormDialog open={addOpen} onClose={() => setAddOpen(false)} />
+
+      {/* ------------------------------------------------ SHARE CONFIRMATION MODAL */}
+      {shareModal ? (
+        <Modal
+          open={Boolean(shareModal)}
+          onClose={() => setShareModal(null)}
+          title="Guest Confirmation & Cab Booking Link"
+          description="Send your guest their private homestay portal link to confirm their check-in details and book door-to-door hill cab transfers."
+          icon="share"
+          size="md"
+          footer={
+            <div className="flex w-full items-center justify-end gap-2">
+              <button
+                onClick={() => setShareModal(null)}
+                className="flex items-center gap-1.5 rounded-lg border border-outline-variant/40 px-4 py-2 text-label-md font-semibold text-on-surface hover:bg-surface-container"
+              >
+                Done
+              </button>
+            </div>
+          }
+        >
+          <div className="flex flex-col gap-4">
+            <div className="rounded-xl border border-primary/20 bg-primary-tint/30 p-4">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <h4 className="font-semibold text-on-surface">{shareModal.guestName}</h4>
+                  <p className="text-body-sm text-outline">
+                    {shareModal.roomName} · {shareModal.checkIn} → {shareModal.checkOut}
+                  </p>
+                </div>
+                <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-label-xs font-semibold text-primary">
+                  {shareModal.booking.channel || "Direct"}
+                </span>
+              </div>
+            </div>
+
+            <div>
+              <label className={labelClass}>Dedicated Guest Homestay Link</label>
+              <div className="mt-1 flex items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={shareModal.shareUrl}
+                  className={`${fieldClass} bg-surface-container text-body-sm text-outline selection:bg-primary-tint`}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(shareModal.shareUrl);
+                    setCopiedShare(true);
+                    setTimeout(() => setCopiedShare(false), 2000);
+                  }}
+                  className="flex flex-shrink-0 items-center gap-1.5 rounded-lg bg-surface-container-high px-3 py-2 text-label-sm font-semibold text-on-surface hover:bg-surface-container-highest"
+                >
+                  <Icon name={copiedShare ? "check" : "content_copy"} className="text-[16px] text-primary" />
+                  {copiedShare ? "Copied" : "Copy"}
+                </button>
+              </div>
+              <p className="mt-1 text-label-xs text-outline">
+                Guests only see their specific homestay details, host contact, and cab options to NJP / Bagdogra.
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-3">
+              <p className="text-label-xs font-semibold text-outline uppercase tracking-wider">
+                WhatsApp Invitation Preview
+              </p>
+              <p className="mt-1.5 text-body-sm text-on-surface whitespace-pre-line bg-surface-container/50 p-2.5 rounded-lg border border-outline-variant/20 font-sans text-left">
+                {`Namaste ${shareModal.guestName}! 🌸\n\nYour stay at ${shareModal.roomName} (${shareModal.checkIn} to ${shareModal.checkOut}) is confirmed.\n\nView your personalized homestay portal and reserve your direct hill cab transfer (NJP Railway Station / Bagdogra Airport IXB) here:\n${shareModal.shareUrl}`}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                const cleanPhone = shareModal.guestPhone.replace(/\D/g, "");
+                const phoneWithCountry = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+                const msg = `Namaste ${shareModal.guestName}! 🌸\n\nYour stay at ${shareModal.roomName} (${shareModal.checkIn} to ${shareModal.checkOut}) is confirmed.\n\nView your personalized homestay portal and reserve your direct hill cab transfer (NJP Railway Station / Bagdogra Airport IXB) here:\n${shareModal.shareUrl}`;
+                const waUrl = phoneWithCountry
+                  ? `https://wa.me/${phoneWithCountry}?text=${encodeURIComponent(msg)}`
+                  : `https://wa.me/?text=${encodeURIComponent(msg)}`;
+                window.open(waUrl, "_blank");
+              }}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#25D366] px-4 py-3 font-semibold text-white shadow-xs hover:bg-[#1EBE5D] transition-colors"
+            >
+              <Icon name="chat" className="text-[18px]" />
+              Send to Guest on WhatsApp
+            </button>
+          </div>
+        </Modal>
+      ) : null}
+
+      {/* ------------------------------------------------ OTA CALENDAR SYNC MODAL */}
+      {icalModalOpen ? (
+        <Modal
+          open={icalModalOpen}
+          onClose={() => {
+            setIcalModalOpen(false);
+            setSyncResult(null);
+          }}
+          title="OTA Calendar Synchronization (Airbnb / iCal)"
+          description="Sync room availability two-way with Airbnb, MakeMyTrip, and external OTAs via standard iCal (.ics) feeds."
+          icon="sync"
+          size="lg"
+          footer={
+            <div className="flex w-full items-center justify-end gap-2">
+              <button
+                onClick={() => {
+                  setIcalModalOpen(false);
+                  setSyncResult(null);
+                }}
+                className="flex items-center gap-1.5 rounded-lg border border-outline-variant/40 px-4 py-2 text-label-md font-semibold text-on-surface hover:bg-surface-container"
+              >
+                Close
+              </button>
+            </div>
+          }
+        >
+          <div className="flex flex-col gap-5">
+            <div>
+              <label className={labelClass}>Select Room Unit</label>
+              <select
+                value={syncRoomCode || (rooms[0]?.code ?? "")}
+                onChange={(e) => {
+                  setSyncRoomCode(e.target.value);
+                  setSyncResult(null);
+                }}
+                className={fieldClass}
+              >
+                {rooms.map((room) => (
+                  <option key={room.code} value={room.code}>
+                    {room.name} ({room.code}) - {room.category}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Outbound Sync Card */}
+            <div className="rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-4">
+              <div className="flex items-start gap-3">
+                <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-primary-tint text-primary">
+                  <Icon name="upload" className="text-[18px]" />
+                </span>
+                <div className="flex-1">
+                  <h4 className="text-body-md font-semibold text-on-surface">
+                    1. Export to Airbnb / OTAs (Outbound Feed)
+                  </h4>
+                  <p className="mt-0.5 text-label-sm text-outline">
+                    Copy this iCal URL and paste it into Airbnb Listing Settings ➔ Pricing & Availability ➔ Calendar Sync ➔ Import Calendar.
+                  </p>
+                  <div className="mt-3 flex items-center gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={API_ENDPOINTS.ical.exportFeed(syncRoomCode || rooms[0]?.code || "101")}
+                      className={`${fieldClass} bg-surface-container text-body-sm text-outline selection:bg-primary-tint`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const url = API_ENDPOINTS.ical.exportFeed(syncRoomCode || rooms[0]?.code || "101");
+                        navigator.clipboard.writeText(url);
+                        setCopiedIcalFeed(true);
+                        setTimeout(() => setCopiedIcalFeed(false), 2000);
+                      }}
+                      className="flex flex-shrink-0 items-center gap-1.5 rounded-lg bg-surface-container-high px-3 py-2 text-label-sm font-semibold text-on-surface hover:bg-surface-container-highest"
+                    >
+                      <Icon name={copiedIcalFeed ? "check" : "content_copy"} className="text-[16px] text-primary" />
+                      {copiedIcalFeed ? "Copied" : "Copy"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Inbound Sync Card */}
+            <div className="rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-4">
+              <div className="flex items-start gap-3">
+                <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-secondary-tint text-secondary-ink">
+                  <Icon name="download" className="text-[18px]" />
+                </span>
+                <div className="flex-1">
+                  <h4 className="text-body-md font-semibold text-on-surface">
+                    2. Import from Airbnb (Inbound Sync)
+                  </h4>
+                  <p className="mt-0.5 text-label-sm text-outline">
+                    Paste your Airbnb Calendar Export URL (.ics) to block occupied dates and import reservations.
+                  </p>
+                  <div className="mt-3 flex flex-col gap-2.5 sm:flex-row">
+                    <input
+                      type="url"
+                      placeholder="https://www.airbnb.com/calendar/ical/12345678.ics?s=..."
+                      value={inboundIcalUrl}
+                      onChange={(e) => setInboundIcalUrl(e.target.value)}
+                      className={`${fieldClass} flex-1`}
+                    />
+                    <button
+                      type="button"
+                      disabled={syncingIcal || !inboundIcalUrl.trim()}
+                      onClick={async () => {
+                        try {
+                          setSyncingIcal(true);
+                          setSyncResult(null);
+                          const targetCode = syncRoomCode || rooms[0]?.code || "101";
+                          const res = await fetch(API_ENDPOINTS.ical.syncInbound(targetCode), {
+                            method: "POST",
+                            headers: {
+                              "Content-Type": "application/json",
+                            },
+                            body: JSON.stringify({ icalUrl: inboundIcalUrl.trim() }),
+                          });
+                          const data = await res.json();
+                          if (data.success) {
+                            setSyncResult(data.message || `Successfully synced ${data.data?.syncedCount ?? 0} dates.`);
+                            notify(data.message || "Calendar synchronized successfully!", {
+                              icon: "sync",
+                              tone: "success",
+                            });
+                          } else {
+                            setSyncResult(`Sync failed: ${data.error || "Unknown error"}`);
+                            notify(data.error || "Sync failed", { tone: "warning" });
+                          }
+                        } catch (err: any) {
+                          setSyncResult(`Network error: ${err.message}`);
+                          notify("Network error synchronizing calendar", { tone: "warning" });
+                        } finally {
+                          setSyncingIcal(false);
+                        }
+                      }}
+                      className={`${solidButton} justify-center disabled:cursor-not-allowed disabled:opacity-45`}
+                    >
+                      <Icon name={syncingIcal ? "hourglass_top" : "sync"} className="text-[18px]" />
+                      {syncingIcal ? "Syncing…" : "Sync Now"}
+                    </button>
+                  </div>
+                  {syncResult ? (
+                    <p className={`mt-2 text-label-sm font-semibold ${syncResult.includes("failed") || syncResult.includes("error") ? "text-error" : "text-primary"}`}>
+                      {syncResult}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          </div>
+        </Modal>
+      ) : null}
     </PageShell>
   );
 }

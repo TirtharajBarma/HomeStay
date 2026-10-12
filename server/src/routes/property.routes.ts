@@ -1,14 +1,15 @@
 import { Router } from "express";
 import { PropertyController } from "../controllers/property.controller.js";
+import { optionalAuth } from "../middlewares/auth.js";
 
 const router = Router();
 
-router.get("/", PropertyController.getAllProperties);
-router.get("/profile", PropertyController.getProfile);
-router.patch("/profile", PropertyController.updateProfile);
+router.get("/", optionalAuth, PropertyController.getAllProperties);
+router.get("/profile", optionalAuth, PropertyController.getProfile);
+router.patch("/profile", optionalAuth, PropertyController.updateProfile);
 router.get("/:slug", PropertyController.getPropertyBySlug);
-router.post("/locations", PropertyController.addLocation);
-router.patch("/locations/:id", PropertyController.updateLocation);
-router.delete("/locations/:id", PropertyController.deleteLocation);
+router.post("/locations", optionalAuth, PropertyController.addLocation);
+router.patch("/locations/:id", optionalAuth, PropertyController.updateLocation);
+router.delete("/locations/:id", optionalAuth, PropertyController.deleteLocation);
 
 export default router;

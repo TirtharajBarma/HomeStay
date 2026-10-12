@@ -2,6 +2,8 @@
 
 import Image from "next/image";
 import type { ReactNode } from "react";
+import { useAuth } from "@/components/auth-context";
+import { useEstate } from "@/components/estate-provider";
 import { hostPortraits } from "@/components/top-nav";
 import { primaryNav, type NavKey } from "@/lib/navigation";
 import { Icon } from "./icon";
@@ -30,6 +32,12 @@ export function SideNav({
   onNavigate,
   onNewBooking,
 }: SideNavProps) {
+  const { user } = useAuth();
+  const { profile } = useEstate();
+
+  const propertyName = user?.homestayName || profile?.name || "Homestay Host Portal";
+  const propertySub = profile?.town ? `${profile.town} · Operations` : "Estate & Fleet Operations";
+
   const positioning =
     variant === "fixed"
       ? "fixed top-0 left-0 z-40 h-screen w-[var(--rail-w)] transition-[width] duration-200 motion-reduce:transition-none"
@@ -45,11 +53,11 @@ export function SideNav({
             <Icon name={brandIcon} className="text-[22px]" />
           </div>
           <div className="flex min-w-0 flex-col overflow-hidden">
-            <span className="truncate text-title-md text-title-md font-semibold tracking-tight text-primary">
-              Gumtree Valley Estate
+            <span className="truncate text-title-md font-semibold tracking-tight text-primary">
+              {propertyName}
             </span>
-            <span className="truncate text-label-sm text-label-sm text-outline">
-              Estate &amp; Retreat Operations
+            <span className="truncate text-label-sm text-outline">
+              {propertySub}
             </span>
           </div>
         </div>
@@ -115,26 +123,32 @@ export function SideNavHostCard({
   chevron = false,
 }: HostCardProps) {
   const { notify } = useToast();
+  const { user, logout } = useAuth();
+
+  const displayName = user?.name || name;
+  const displayRole = user?.role === "owner" ? "Homestay Host" : (user?.role || role);
+  const displayInitials =
+    initials ||
+    displayName
+      .split(" ")
+      .map((part) => part[0])
+      .join("")
+      .slice(0, 2)
+      .toUpperCase();
 
   if (withPortrait) {
     const card = (
       <>
         <div className="flex min-w-0 items-center gap-2.5 overflow-hidden">
-          <div className="relative h-9 w-9 flex-shrink-0 overflow-hidden rounded-full border border-outline-variant/30">
-            <Image
-              src={hostPortraits.ananyaArjun}
-              alt={`${name}, ${role}`}
-              fill
-              sizes="36px"
-              className="object-cover"
-            />
+          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-primary-tint text-sm font-bold text-primary border border-outline-variant/30">
+            {displayInitials}
           </div>
           <div className="flex min-w-0 flex-col text-left">
-            <span className="truncate text-body-sm text-body-sm font-semibold text-on-surface">
-              {name}
+            <span className="truncate text-body-sm font-semibold text-on-surface">
+              {displayName}
             </span>
-            <span className="truncate text-label-sm text-label-sm text-outline">
-              {role}
+            <span className="truncate text-label-sm text-outline">
+              {displayRole}
             </span>
           </div>
         </div>
@@ -174,10 +188,10 @@ export function SideNavHostCard({
           {(close) => (
             <div className="py-1">
               <div className="border-b border-outline-variant/30 px-3 py-2.5">
-                <p className="text-body-md text-body-md font-semibold text-primary">
-                  {name}
+                <p className="text-body-md font-semibold text-primary">
+                  {displayName}
                 </p>
-                <p className="text-label-sm text-label-sm text-outline">{role}</p>
+                <p className="text-label-sm text-outline">{user?.email || displayRole}</p>
               </div>
               <AccountLink
                 icon="person"
@@ -186,19 +200,12 @@ export function SideNavHostCard({
                 onSelect={close}
               />
               <AccountLink
-                icon="switch_account"
-                label="Switch role"
-                onSelect={() => {
-                  notify("Role switcher is limited to estate owners.", { tone: "warning" });
-                  close();
-                }}
-              />
-              <AccountLink
                 icon="logout"
                 label="Sign out"
                 onSelect={() => {
-                  notify("Signed out of the demo session.");
+                  notify("Signing out...");
                   close();
+                  logout();
                 }}
               />
             </div>
@@ -211,14 +218,14 @@ export function SideNavHostCard({
   return (
     <div className="mt-2 flex items-center gap-2.5 rounded-lg bg-surface-container p-2.5">
       <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-tertiary-container text-xs font-bold text-tertiary-fixed uppercase">
-        {initials}
+        {displayInitials}
       </div>
       <div className="flex min-w-0 flex-col">
-        <span className="truncate text-label-md text-label-md font-medium text-on-surface">
-          {name}
+        <span className="truncate text-label-md font-medium text-on-surface">
+          {displayName}
         </span>
-        <span className="truncate text-label-sm text-label-sm text-outline">
-          {role}
+        <span className="truncate text-label-sm text-outline">
+          {displayRole}
         </span>
       </div>
     </div>

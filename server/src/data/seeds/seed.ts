@@ -15,12 +15,6 @@ import { initialGuests } from "./guests.seed.js";
 export async function seedDatabase(cleanExisting = false): Promise<void> {
   console.log("🌱 Starting Database Seeding...");
 
-  const roomsCount = await Room.countDocuments();
-  if (roomsCount > 0 && !cleanExisting) {
-    console.log(`ℹ️  Database already contains ${roomsCount} rooms. Skipping initial seed.`);
-    return;
-  }
-
   if (cleanExisting) {
     console.log("🧹 Clearing existing collections...");
     await Property.deleteMany({});
@@ -30,45 +24,64 @@ export async function seedDatabase(cleanExisting = false): Promise<void> {
     await Guest.deleteMany({});
   }
 
-  // 1. Seed Property
-  await Property.findOneAndUpdate({}, initialProperty, { upsert: true, returnDocument: "after" });
-  console.log("✅ Seeded Estate Property Profile & Locations");
+  const roomsCount = await Room.countDocuments();
+  if (roomsCount === 0 || cleanExisting) {
+    // 1. Seed Property
+    await Property.findOneAndUpdate({}, initialProperty, { upsert: true, returnDocument: "after" });
+    console.log("✅ Seeded Estate Property Profile & Locations");
 
-  // 2. Seed Rooms
-  for (const r of initialRooms) {
-    await Room.findOneAndUpdate({ code: r.code }, r, { upsert: true, returnDocument: "after" });
-  }
-  console.log(`✅ Seeded ${initialRooms.length} Accommodation Rooms/Suites`);
+    // 2. Seed Rooms
+    for (const r of initialRooms) {
+      await Room.findOneAndUpdate({ code: r.code }, r, { upsert: true, returnDocument: "after" });
+    }
+    console.log(`✅ Seeded ${initialRooms.length} Accommodation Rooms/Suites`);
 
-  // 3. Seed Drivers
-  for (const d of initialDrivers) {
-    await Driver.findOneAndUpdate({ id: d.id }, d, { upsert: true, returnDocument: "after" });
-  }
-  console.log(`✅ Seeded ${initialDrivers.length} Fleet Drivers`);
+    // 3. Seed Drivers
+    for (const d of initialDrivers) {
+      await Driver.findOneAndUpdate({ id: d.id }, d, { upsert: true, returnDocument: "after" });
+    }
+    console.log(`✅ Seeded ${initialDrivers.length} Fleet Drivers`);
 
-  // 4. Seed Bookings
-  for (const b of initialBookings) {
-    await Booking.findOneAndUpdate({ reference: b.reference }, b, { upsert: true, returnDocument: "after" });
-  }
-  console.log(`✅ Seeded ${initialBookings.length} Initial Bookings`);
+    // 4. Seed Bookings
+    for (const b of initialBookings) {
+      await Booking.findOneAndUpdate({ reference: b.reference }, b, { upsert: true, returnDocument: "after" });
+    }
+    console.log(`✅ Seeded ${initialBookings.length} Initial Bookings`);
 
-  // 5. Seed Guests
-  for (const g of initialGuests) {
-    await Guest.findOneAndUpdate({ email: g.email, code: g.code }, g, { upsert: true, returnDocument: "after" });
+    // 5. Seed Guests
+    for (const g of initialGuests) {
+      await Guest.findOneAndUpdate({ email: g.email, code: g.code }, g, { upsert: true, returnDocument: "after" });
+    }
+    console.log(`✅ Seeded ${initialGuests.length} Guest CRM Records`);
+  } else {
+    console.log(`ℹ️ Database already contains ${roomsCount} rooms. Skipping room seed.`);
   }
-  console.log(`✅ Seeded ${initialGuests.length} Guest CRM Records`);
+
 
   // 6. Seed Default Owner Account
-  const existingOwner = await User.findOne({ email: "owner@tirtha.com" });
+  const existingOwner = await User.findOne({ email: "owner@estate.com" });
   if (!existingOwner) {
     await User.create({
-      name: "Tirtha Estate Owner",
-      email: "owner@tirtha.com",
-      password: "tirthaPassword123!",
+      name: "Demo Estate Owner",
+      email: "owner@estate.com",
+      password: "estatePassword123!",
       role: "owner",
       phone: "+91 98300 41000",
     });
-    console.log("✅ Seeded Default Owner Account (owner@tirtha.com / tirthaPassword123!)");
+    console.log("✅ Seeded Default Owner Account (owner@estate.com / estatePassword123!)");
+  }
+
+  // 7. Seed Default Admin Account
+  const existingAdmin = await User.findOne({ email: "admin@platform.com" });
+  if (!existingAdmin) {
+    await User.create({
+      name: "Platform Super Admin",
+      email: "admin@platform.com",
+      password: "adminMasterPassword2026!",
+      role: "admin",
+      phone: "+91 98300 11111",
+    });
+    console.log("✅ Seeded Default Admin Account (admin@platform.com / adminMasterPassword2026!)");
   }
 
   console.log("🎉 Database seeding completed successfully!");

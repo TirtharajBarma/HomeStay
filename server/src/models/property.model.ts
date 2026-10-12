@@ -27,6 +27,13 @@ export interface IProperty extends Document {
   checkOutTime: string;
   responseTime: string;
   currency: string;
+  status: "active" | "pending" | "paused";
+  commissionRate: number;
+  icalFeeds?: {
+    airbnbUrl?: string;
+    bookingUrl?: string;
+    lastSyncedAt?: Date;
+  };
   locations: IEstateLocation[];
   createdAt: Date;
   updatedAt: Date;
@@ -63,6 +70,18 @@ const PropertySchema = new Schema<IProperty>(
     checkOutTime: { type: String, default: "11:00 AM" },
     responseTime: { type: String, default: "Usually within 20 minutes" },
     currency: { type: String, default: "INR" },
+    status: {
+      type: String,
+      enum: ["active", "pending", "paused"],
+      default: "active",
+      index: true,
+    },
+    commissionRate: { type: Number, default: 0.18 },
+    icalFeeds: {
+      airbnbUrl: { type: String, default: "" },
+      bookingUrl: { type: String, default: "" },
+      lastSyncedAt: { type: Date },
+    },
     locations: { type: [LocationSchema], default: [] },
   },
   { timestamps: true }

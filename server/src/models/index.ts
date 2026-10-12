@@ -5,3 +5,4 @@ export * from "./guest.model.js";
 export * from "./driver.model.js";
 export * from "./cab-trip.model.js";
 export * from "./newsletter.model.js";
+export * from "./user.model.js";

@@ -4,7 +4,7 @@ export const CreateDriverSchema = z.object({
   id: z.string().optional(),
   name: z.string().min(1, "Driver name is required"),
   phone: z.string().min(7, "Phone number is required"),
-  email: z.string().email("Valid email required").optional().default("driver@tirtha-estate.com"),
+  email: z.string().email("Valid email required").optional().default("driver@local-fleet.com"),
   vehicle: z.string().min(1, "Vehicle make and model required"),
   plate: z.string().min(1, "License plate is required"),
   seats: z.coerce.number().min(2).default(4),
@@ -73,7 +73,7 @@ export const CreateCabBookingSchema = z
   .transform((data) => ({
     driverId: data.driverId,
     guestName: data.guestName,
-    email: data.email || "guest@tirtha-estate.com",
+    email: data.email || "guest@hillstay.com",
     phone: data.phone,
     pickupName: data.pickupName || data.pickup || "Pickup Location",
     pickupLat: data.pickupLat ?? (data.pickupCoords ? data.pickupCoords[1] : 26.6812),

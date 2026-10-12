@@ -29,7 +29,7 @@ export class BookingService {
     const refNum = (num % 900000) + 100000;
     const pinNum = (num % 9000) + 1000;
     return {
-      reference: `MF-${refNum}`,
+      reference: `BK-${refNum}`,
       pin: String(pinNum),
     };
   }
@@ -49,9 +49,9 @@ export class BookingService {
       throw new Error(`Room '${room.name}' is currently closed for maintenance.`);
     }
 
-    // Check for overlapping bookings
+    // Check for overlapping bookings on this specific room
     const overlap = await Booking.findOne({
-      roomCode: room.code,
+      roomId: room._id,
       status: { $in: ["confirmed", "checked_in"] },
       $or: [
         {
@@ -87,7 +87,7 @@ export class BookingService {
       year: "numeric",
     });
 
-    const booking = await Booking.create({
+    const booking = new Booking({
       reference,
       pin,
       roomId: room._id,
@@ -96,7 +96,7 @@ export class BookingService {
       staySlug: room.slug,
       ownerId: room.ownerId,
       propertyId: room.propertyId,
-      homestayName: room.homestayName || "Tirtha Homestay Estate",
+      homestayName: room.homestayName || "Boutique Homestay Estate",
       guestName: guestFullName,
       email: data.email.toLowerCase().trim(),
       phone: data.phone.trim(),
@@ -120,10 +120,14 @@ export class BookingService {
       cancellationBy,
       notes: data.notes || "",
     });
+    await booking.save();
 
     // Automatically upsert or update the Guest record in the CRM
     try {
-      let guest = await Guest.findOne({ email: booking.email });
+      const guestQuery: any = { email: booking.email };
+      if (room.propertyId) guestQuery.propertyId = room.propertyId;
+
+      let guest = await Guest.findOne(guestQuery);
       if (guest) {
         guest.stays += 1;
         guest.lifetime += booking.totalAmount;
@@ -136,6 +140,8 @@ export class BookingService {
         await guest.save();
       } else {
         await Guest.create({
+          ownerId: room.ownerId,
+          propertyId: room.propertyId,
           name: guestFullName,
           code: room.code,
           room: room.name,
@@ -169,7 +175,7 @@ export class BookingService {
         reference: booking.reference,
         pin: booking.pin,
         roomName: booking.roomName,
-        homestayName: booking.homestayName || room.homestayName || "Tirtha Homestay Estate",
+        homestayName: booking.homestayName || room.homestayName || "Boutique Homestay Estate",
         guestName: booking.guestName,
         guestEmail: booking.email,
         checkIn: booking.checkIn,

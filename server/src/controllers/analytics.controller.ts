@@ -17,7 +17,7 @@ export class AnalyticsController {
     const ownerId = (req.query.ownerId as string) || (user?.role === "owner" ? user.id : undefined);
     const csv = await AnalyticsService.generateCsvExport(range, ownerId);
     res.setHeader("Content-Type", "text/csv");
-    res.setHeader("Content-Disposition", `attachment; filename=gumtree-analytics-${range}.csv`);
+    res.setHeader("Content-Disposition", `attachment; filename=homestay-analytics-${range}.csv`);
     res.status(200).send(csv);
   }
 }

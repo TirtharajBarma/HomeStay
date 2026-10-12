@@ -1,5 +1,5 @@
 /**
- * End-to-end HTTP test suite for Tirtha Backend.
+ * End-to-end HTTP test suite for Backend API.
  * Tests every endpoint across Auth (JWT 15m), Properties, Rooms, Bookings, Guests, Drivers, Cabs, Analytics, and Newsletter.
  * Also verifies real-world multi-step scenarios:
  *   Owner registers/logs in -> adds room -> guest searches stays -> sees new room ->
@@ -107,17 +107,17 @@ async function runTest(
 
 async function runAllTests() {
   console.log("==================================================================");
-  console.log("     TIRTHA PRODUCTION BACKEND - COMPLETE MULTI-SCENARIO SUITE    ");
+  console.log("     HOSPITALITY TRANSIT PRODUCTION BACKEND - COMPLETE SUITE      ");
   console.log(` Target Base: ${BASE_URL}`);
   console.log("==================================================================\n");
 
   // 1. Health & System
   await runTest("System", "Health Check", "GET", HEALTH_URL, 200, undefined, (d) => {
-    return d.status === "ok" && d.service === "tirtha-backend";
+    return d.status === "ok" && d.service === "hospitality-transit-api";
   });
 
   // 2. Auth & JWT (15-minute Token Lifespan)
-  const testUserEmail = `guest_${Date.now()}@tirtha-estate.com`;
+  const testUserEmail = `guest_${Date.now()}@example.com`;
   let guestJwtToken = "";
   let guestUserId = "";
 
@@ -128,7 +128,7 @@ async function runAllTests() {
     "/auth/register",
     201,
     {
-      name: "Tirtha Guest",
+      name: "Demo Guest",
       email: testUserEmail,
       password: "guestPassword123!",
       role: "guest",
@@ -206,7 +206,7 @@ async function runAllTests() {
     "PATCH",
     "/properties/profile",
     200,
-    { bio: "Darjeeling hillside heritage cottage hosted by Tirtha team." },
+    { bio: "Darjeeling hillside heritage cottage hosted by local team." },
     (d) => d.success === true
   );
 
@@ -318,9 +318,9 @@ async function runAllTests() {
       checkIn: "2026-11-20",
       checkOut: "2026-11-23",
       guests: 2,
-      firstName: "Tirtha",
+      firstName: "Aarav",
       lastName: "Traveler",
-      email: "traveler.tirtha@example.com",
+      email: "traveler.guest@example.com",
       phone: "+91 98300 77777",
       channel: "direct",
     },
@@ -360,7 +360,7 @@ async function runAllTests() {
     "/guests?query=Traveler",
     200,
     undefined,
-    (d) => d.success && Array.isArray(d.data) && d.data.length > 0 && d.data[0].email === "traveler.tirtha@example.com"
+    (d) => d.success && Array.isArray(d.data) && d.data.some((g: any) => g.email === "traveler.guest@example.com")
   );
 
   // Scenario: Owner Puts Room on Maintenance Hold -> Booking Blocked
@@ -489,8 +489,8 @@ async function runAllTests() {
     201,
     {
       driverId: testDriverId || "DRV-101",
-      guestName: "Tirtha Guest",
-      email: "tirtha.guest@example.com",
+      guestName: "Demo Passenger",
+      email: "passenger.demo@example.com",
       phone: "+91 98300 54321",
       pickup: "Bagdogra Airport (IXB)",
       dropoff: "Meadowfall Homestay",
@@ -546,7 +546,27 @@ async function runAllTests() {
     (d) => d.success === true
   );
 
-  // 10. Super-Admin Platform Overview (Branch 4 in Architectural Diagram)
+  // 10. Super-Admin Platform Overview (Requires Admin Role)
+  let adminToken = "";
+  await runTest(
+    "Admin",
+    "Admin Logs In to Control Tower",
+    "POST",
+    "/auth/login",
+    200,
+    {
+      email: "admin@platform.com",
+      password: "adminMasterPassword2026!",
+    },
+    (d) => {
+      if (d.success && d.data?.token) {
+        adminToken = d.data.token;
+        return true;
+      }
+      return false;
+    }
+  );
+
   await runTest(
     "Admin",
     "Get Super-Admin Overview (Homestays, Drivers, Platform Revenue)",
@@ -563,7 +583,8 @@ async function runAllTests() {
         Array.isArray(d.data?.drivers) &&
         typeof d.data?.metrics?.financials?.estateGross === "number"
       );
-    }
+    },
+    adminToken ? { Authorization: `Bearer ${adminToken}` } : undefined
   );
 
   // 11. Multi-Homestay Owner Isolation Test (Branch 2 in Architectural Diagram)
@@ -577,7 +598,7 @@ async function runAllTests() {
 
   await runTest(
     "MultiOwner",
-    "Register Owner A (Tirtha Pine Crest)",
+    "Register Owner A (Pine Crest Retreat)",
     "POST",
     "/auth/register",
     201,
@@ -626,7 +647,7 @@ async function runAllTests() {
       nightly: 5500,
       maxGuests: 2,
       ownerId: ownerAId,
-      homestayName: "Tirtha Pine Crest",
+      homestayName: "Pine Crest Retreat",
     },
     (d) => d.success === true && d.data.code === roomACode,
     { Authorization: `Bearer ${ownerAToken}` }

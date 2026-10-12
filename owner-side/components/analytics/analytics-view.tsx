@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { API_ENDPOINTS } from "@/lib/api-config";
 import { Icon } from "@/components/icon";
 import { PeriodNav } from "@/components/owner/period-nav";
 import {
@@ -43,10 +44,54 @@ export function AnalyticsView() {
   const [offset, setOffset] = useState(0);
   const { notify } = useToast();
 
+  const [liveData, setLiveData] = useState<any>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadLive() {
+      try {
+        const token = window.localStorage.getItem("platform_auth_token");
+        const headers: Record<string, string> = {};
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+        const res = await fetch(API_ENDPOINTS.analytics.get(range, offset), { headers });
+        if (res.ok) {
+          const json = await res.json();
+          if (!cancelled && json?.success && json?.data?.kpis) {
+            setLiveData(json.data);
+          }
+        }
+      } catch (e) {
+        // Fall back gracefully to deterministic model
+      }
+    }
+    loadLive();
+    return () => {
+      cancelled = true;
+    };
+  }, [range, offset]);
+
   const days = rangeOptions.find((option) => option.key === range)?.days ?? 14;
   const start = windowStart(days, offset);
   const stats = useMemo(() => rangeStats(start, days), [start, days]);
-  const totals = useMemo(() => totalsFor(stats), [stats]);
+  const calculatedTotals = useMemo(() => totalsFor(stats), [stats]);
+
+  // Merge live backend KPIs if available
+  const totals = useMemo(() => {
+    if (!liveData?.kpis) return calculatedTotals;
+    const k = liveData.kpis;
+    return {
+      ...calculatedTotals,
+      revenue: (k.roomRevenue || 0) + (k.cabRevenue || 0),
+      roomRevenue: k.roomRevenue ?? calculatedTotals.roomRevenue,
+      cabRevenue: k.cabRevenue ?? calculatedTotals.cabRevenue,
+      cabCommission: k.platformCommission ?? calculatedTotals.cabCommission,
+      driverPayout: (k.cabRevenue || 0) - (k.platformCommission || 0),
+      guests: k.totalGuests ?? calculatedTotals.guests,
+      roomNights: k.roomsSold ?? calculatedTotals.roomNights,
+      occupancy: k.occupancyRate ?? calculatedTotals.occupancy,
+      cabTrips: k.cabTrips ?? calculatedTotals.cabTrips,
+    };
+  }, [calculatedTotals, liveData]);
 
   const previous = useMemo(
     () => totalsFor(rangeStats(windowStart(days, offset + 1), days)),
@@ -71,7 +116,7 @@ export function AnalyticsView() {
   const commissionRate = `${Math.round(CAB_COMMISSION_RATE * 100)}%`;
 
   const exportReport = () => {
-    downloadCsv(`gumtree-valley-analytics-${range}-${offset}`, [
+    downloadCsv(`homestay-analytics-${range}-${offset}`, [
       ["Metric", "Value"],
       ["Period", caption],
       ["Total revenue", money(totals.revenue)],

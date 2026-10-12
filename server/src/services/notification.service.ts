@@ -30,10 +30,12 @@ export interface CabNotificationPayload {
   fareAmount: number;
 }
 
-export class NotificationService {
-  private static transporter: nodemailer.Transporter | null = null;
+type MailTransporter = ReturnType<typeof nodemailer.createTransport>;
 
-  private static getTransporter(): nodemailer.Transporter | null {
+export class NotificationService {
+  private static transporter: MailTransporter | null = null;
+
+  private static getTransporter(): MailTransporter | null {
     if (this.transporter) return this.transporter;
     if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
       this.transporter = nodemailer.createTransport({
@@ -57,7 +59,7 @@ export class NotificationService {
     guestNotified: boolean;
     ownerNotified: boolean;
   }> {
-    const homestay = data.homestayName || "Tirtha Homestay Estate";
+    const homestay = data.homestayName || "Boutique Homestay Estate";
     const guestSubject = `Reservation Confirmed: ${data.reference} at ${homestay}`;
     const guestBody = `
 Dear ${data.guestName},
@@ -76,7 +78,7 @@ Warm regards,
 ${homestay} Team
     `.trim();
 
-    const ownerEmail = data.ownerEmail || "host@tirtha-estate.com";
+    const ownerEmail = data.ownerEmail || "host@homestay-estate.com";
     const ownerSubject = `New Guest Booking Alert: ${data.reference} (${data.guestName})`;
     const ownerBody = `
 New Booking Notification for ${homestay}:
@@ -94,13 +96,13 @@ The reservation schedule and CRM have been updated automatically.
     if (transporter) {
       try {
         await transporter.sendMail({
-          from: process.env.SMTP_FROM || `"Tirtha Stays" <no-reply@tirtha-estate.com>`,
+          from: process.env.SMTP_FROM || `"Homestay Stays" <no-reply@homestay-estate.com>`,
           to: data.guestEmail,
           subject: guestSubject,
           text: guestBody,
         });
         await transporter.sendMail({
-          from: process.env.SMTP_FROM || `"Tirtha Stays" <no-reply@tirtha-estate.com>`,
+          from: process.env.SMTP_FROM || `"Homestay Stays" <no-reply@homestay-estate.com>`,
           to: ownerEmail,
           subject: ownerSubject,
           text: ownerBody,
@@ -165,13 +167,13 @@ Please arrive 10 minutes prior to pickup time.
     if (transporter) {
       try {
         await transporter.sendMail({
-          from: process.env.SMTP_FROM || `"Tirtha Cabs" <no-reply@tirtha-estate.com>`,
+          from: process.env.SMTP_FROM || `"Hill Cabs" <no-reply@hilltransit.com>`,
           to: data.guestEmail,
           subject: guestSubject,
           text: guestBody,
         });
         await transporter.sendMail({
-          from: process.env.SMTP_FROM || `"Tirtha Cabs" <no-reply@tirtha-estate.com>`,
+          from: process.env.SMTP_FROM || `"Hill Cabs" <no-reply@hilltransit.com>`,
           to: driverEmail,
           subject: driverSubject,
           text: driverBody,

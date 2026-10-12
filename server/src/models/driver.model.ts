@@ -2,7 +2,9 @@ import { Schema, model, Document } from "mongoose";
 
 export interface IDriver extends Document {
   ownerId?: Schema.Types.ObjectId | string;
+  propertyId?: Schema.Types.ObjectId | string;
   id: string; // DRV-101
+  pin?: string; // 4-digit PIN for driver PWA login
   name: string;
   phone: string;
   email: string;
@@ -29,7 +31,9 @@ export interface IDriver extends Document {
 const DriverSchema = new Schema<IDriver>(
   {
     ownerId: { type: Schema.Types.ObjectId, ref: "User", index: true },
+    propertyId: { type: Schema.Types.ObjectId, ref: "Property", index: true },
     id: { type: String, required: true, unique: true, index: true },
+    pin: { type: String, default: "1234" },
     name: { type: String, required: true },
     phone: { type: String, required: true },
     email: { type: String, required: true },

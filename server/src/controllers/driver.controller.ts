@@ -55,4 +55,16 @@ export class DriverController {
     const ledger = await DriverService.getPayoutsLedger();
     res.json({ success: true, data: ledger });
   }
+
+  static async getDriverTrips(req: Request, res: Response) {
+    const trips = await DriverService.getDriverTrips(req.params.id as string);
+    res.json({ success: true, count: trips.length, data: trips });
+  }
+
+  static async updateTripStatus(req: Request, res: Response) {
+    const { status } = req.body;
+    const trip = await DriverService.updateTripStatus(req.params.id as string, status);
+    if (!trip) return res.status(404).json({ success: false, error: "Trip not found" });
+    res.json({ success: true, data: trip });
+  }
 }

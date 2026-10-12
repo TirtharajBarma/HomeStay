@@ -9,6 +9,8 @@ import { CurrencySelect } from "@/components/currency-select";
 import { MenuRow, Popover } from "@/components/ui/popover";
 import { useToast } from "@/components/ui/toast";
 import { Modal } from "@/components/ui/modal";
+import { useAuth } from "@/components/auth-context";
+import { useEstate } from "@/components/estate-provider";
 import { estates, todayLabel } from "@/lib/navigation";
 
 export const hostPortraits = {
@@ -65,12 +67,16 @@ export function TopNav({
   showAvatar = false,
 }: TopNavProps) {
   const router = useRouter();
+  const { user } = useAuth();
+  const { profile } = useEstate();
+
   const [activeEstate, setActiveEstate] = useState(estateActiveIndex ?? 0);
   // null keeps the caller's own pill wording until a property is picked.
   const [activeProperty, setActiveProperty] = useState<number | null>(null);
   const propertyOptions = ["All Retreats", ...estates];
+  const dynamicDefaultPill = user?.homestayName || profile?.name || propertyPill || "Homestay Estate";
   const propertyLabel =
-    activeProperty === null ? propertyPill : propertyOptions[activeProperty];
+    activeProperty === null ? dynamicDefaultPill : propertyOptions[activeProperty];
   const [range, setRange] = useState(todayLabel);
   const [params, setParams] = useState(false);
   const [compact, setCompact] = useState(true);

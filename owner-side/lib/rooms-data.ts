@@ -2,7 +2,7 @@ export type RoomUnit = {
   code: string;
   name: string;
   location: string;
-  category: "Ging Lodge" | "Chiyabari Lofts" | "Garden Cottages";
+  category: string;
   status: "Active" | "Maintenance";
   maxGuests: number;
   nightly: number;

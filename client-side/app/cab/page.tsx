@@ -43,7 +43,7 @@ export default async function CabPage({ searchParams }: PageProps<"/cab">) {
           className="mb-6 flex flex-wrap items-center gap-2 text-body-sm text-on-surface-variant"
         >
           <Link href="/" className="-mx-1 inline-flex min-h-11 items-center rounded px-1 hover:text-primary">
-            Meadowfall Homestay
+            Hill Stays & Cabs
           </Link>
           <Icon name="chevron_right" className="text-xs" />
           <span className="font-medium text-primary">Cab Booking</span>

@@ -2,6 +2,7 @@ import app from "./app.js";
 import { config } from "./config/env.js";
 import { connectDB, disconnectDB } from "./config/db.js";
 import { seedDatabase } from "./data/seeds/seed.js";
+import { CronService } from "./services/cron.service.js";
 
 async function bootstrap() {
   try {
@@ -14,17 +15,21 @@ async function bootstrap() {
     // 3. Start HTTP Server
     const server = app.listen(config.port, () => {
       console.log(`\n======================================================`);
-      console.log(`🚀 Tirtha Backend Server running on http://localhost:${config.port}`);
+      console.log(`🚀 Backend Server running on http://localhost:${config.port}`);
       console.log(`📡 Health Check: http://localhost:${config.port}/health`);
       console.log(`📚 API Root:     http://localhost:${config.port}/api/v1`);
       console.log(`🔒 Security:     Helmet, CORS, Rate-Limiting, Compression enabled`);
       console.log(`🗄️  Database:     MongoDB & Mongoose (Atlas ready)`);
       console.log(`⚡ Engine:       Node ${process.version} with tsx`);
       console.log(`======================================================\n`);
+
+      // 4. Start automated background workers
+      CronService.startIcalWorker(15);
     });
 
     const shutdown = async (signal: string) => {
       console.log(`\n${signal} received. Closing HTTP server & database...`);
+      CronService.stopWorker();
       server.close(async () => {
         console.log("HTTP server closed.");
         await disconnectDB();

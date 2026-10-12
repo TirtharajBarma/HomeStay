@@ -6,6 +6,7 @@ import { CabProgress } from "@/components/cab/cab-header";
 import { TripSummary } from "@/components/cab/trip-summary";
 import { Icon } from "@/components/icon";
 import { Stars } from "@/components/stars";
+import { API_ENDPOINTS } from "@/lib/api-config";
 import {
   cabReference,
   driversHref,
@@ -13,11 +14,12 @@ import {
   formatEta,
   formatFare,
   readCabRequest,
+  seatCapacity,
 } from "@/lib/cabs";
 
 export const metadata: Metadata = {
   title: "Cab Booked",
-  description: "Your Meadowfall estate transfer is confirmed.",
+  description: "Your hill estate transfer is confirmed.",
 };
 
 export default async function CabConfirmedPage({
@@ -34,6 +36,47 @@ export default async function CabConfirmedPage({
   if (!driver) redirect(driversHref(request));
 
   const reference = cabReference(request, driver.id);
+
+  const guestName =
+    typeof query.guest === "string" && query.guest.trim()
+      ? query.guest.trim()
+      : typeof query.guestName === "string" && query.guestName.trim()
+        ? query.guestName.trim()
+        : "Direct Traveler";
+  const phone =
+    typeof query.phone === "string" && query.phone.trim()
+      ? query.phone.trim()
+      : "+91 98300 00000";
+  const email =
+    typeof query.email === "string" && query.email.trim()
+      ? query.email.trim()
+      : "traveler@platform.com";
+
+  // Persist trip to server MongoDB CabTrip collection
+  try {
+    await fetch(API_ENDPOINTS.cabs.book(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        driverId: driver.id,
+        guestName,
+        email,
+        phone,
+        pickupName: request.source.label,
+        pickupLat: request.source.lat,
+        pickupLng: request.source.lng,
+        dropoffName: request.destination.label,
+        dropoffLat: request.destination.lat,
+        dropoffLng: request.destination.lng,
+        pickupDate: request.date || new Date().toISOString().slice(0, 10),
+        pickupTime: request.time || "10:00 AM",
+        seats: seatCapacity(request.seats),
+      }),
+      cache: "no-store",
+    });
+  } catch (err) {
+    console.warn("Background cab booking sync notice:", err);
+  }
 
   return (
     <>
@@ -128,7 +171,7 @@ export default async function CabConfirmedPage({
                 href="/"
                 className="group flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-primary-container px-5 text-label-md font-semibold text-on-primary transition-colors hover:bg-primary"
               >
-                <span>Back to Meadowfall</span>
+                <span>Back to Stays &amp; Retreats</span>
                 <Icon
                   name="arrow_forward"
                   className="text-sm transition-transform group-hover:translate-x-0.5"

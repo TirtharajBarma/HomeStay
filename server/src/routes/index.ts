@@ -7,6 +7,8 @@ import driverRoutes from "./driver.routes.js";
 import analyticsRoutes from "./analytics.routes.js";
 import authRoutes from "./auth.routes.js";
 import adminRoutes from "./admin.routes.js";
+import { IcalController } from "../controllers/ical.controller.js";
+import { optionalAuth } from "../middlewares/auth.js";
 import { Newsletter } from "../models/newsletter.model.js";
 
 const apiRouter = Router();
@@ -23,6 +25,8 @@ apiRouter.use("/guests", guestRoutes);
 apiRouter.use("/drivers", driverRoutes);
 apiRouter.use("/cabs", driverRoutes); // Alias for client-side
 apiRouter.use("/analytics", analyticsRoutes);
+apiRouter.get("/ical/export/:codeOrSlug", IcalController.exportIcal);
+apiRouter.post("/ical/sync/:codeOrSlug", optionalAuth, IcalController.syncInboundIcal);
 
 // Newsletter subscription endpoint
 apiRouter.post("/newsletter/subscribe", async (req, res) => {

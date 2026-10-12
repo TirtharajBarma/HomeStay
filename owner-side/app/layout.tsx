@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Playfair_Display, Plus_Jakarta_Sans } from "next/font/google";
+import { AuthProvider } from "@/components/auth-context";
 import { CurrencyProvider } from "@/components/currency-provider";
 import { EstateProvider } from "@/components/estate-provider";
 import "./globals.css";
@@ -18,11 +19,11 @@ const jakarta = Plus_Jakarta_Sans({
 
 export const metadata: Metadata = {
   title: {
-    default: "Gumtree Valley",
-    template: "%s | Gumtree Valley",
+    default: "Host Portal",
+    template: "%s | Host Portal",
   },
   description:
-    "Estate & retreat operations for Gumtree Valley, Gumtree Valley, Darjeeling.",
+    "Homestay management, room inventory, fleet transit dispatch and analytics.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -47,9 +48,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         />
       </head>
       <body className="min-h-full bg-surface font-body-md text-on-surface selection:bg-primary selection:text-on-primary">
-        <CurrencyProvider>
-          <EstateProvider>{children}</EstateProvider>
-        </CurrencyProvider>
+        <AuthProvider>
+          <CurrencyProvider>
+            <EstateProvider>{children}</EstateProvider>
+          </CurrencyProvider>
+        </AuthProvider>
       </body>
     </html>
   );

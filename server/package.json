@@ -7,7 +7,7 @@
   "type": "module",
   "main": "index.js",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
+    "dev": "nodemon --exec tsx src/server.ts --ext ts",
     "seed": "tsx src/data/seeds/seed.ts",
     "build": "tsc",
     "start": "node dist/server.js",
@@ -26,6 +26,7 @@
     "mongoose": "^9.11.1",
     "morgan": "^1.12.1",
     "nodemailer": "^10.0.16",
+    "nodemon": "^3.1.14",
     "zod": "^4.6.5"
   },
   "devDependencies": {

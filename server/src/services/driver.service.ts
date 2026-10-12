@@ -276,4 +276,17 @@ export class DriverService {
       trips,
     };
   }
+
+  static async getDriverTrips(driverId: string) {
+    return await CabTrip.find({
+      $or: [{ driverId }, { driverName: new RegExp(driverId, "i") }],
+    }).sort({ createdAt: -1 });
+  }
+
+  static async updateTripStatus(tripId: string, status: string) {
+    const filter = mongoose.isValidObjectId(tripId)
+      ? { _id: tripId }
+      : { $or: [{ reference: tripId }, { id: tripId }] };
+    return await CabTrip.findOneAndUpdate(filter, { status }, { returnDocument: "after" });
+  }
 }

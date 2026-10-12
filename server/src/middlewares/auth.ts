@@ -6,7 +6,8 @@ export interface AuthUserPayload {
   id: string;
   email: string;
   name: string;
-  role: "guest" | "owner" | "admin";
+  role: "guest" | "owner" | "admin" | "driver";
+  propertyId?: string;
 }
 
 declare global {
@@ -46,7 +47,7 @@ export function verifyToken(req: Request, res: Response, next: NextFunction) {
   }
 }
 
-export function requireRole(...allowedRoles: Array<"guest" | "owner" | "admin">) {
+export function requireRole(...allowedRoles: Array<"guest" | "owner" | "admin" | "driver">) {
   return (req: Request, res: Response, next: NextFunction) => {
     if (!req.user) {
       return res.status(401).json({ success: false, error: "Authentication required." });

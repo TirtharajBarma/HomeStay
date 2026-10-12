@@ -29,7 +29,7 @@ export interface IRoom extends Document {
   name: string;
   wing: string;
   location: string;
-  category: "Ging Lodge" | "Chiyabari Lofts" | "Garden Cottages";
+  category: string;
   kind: "cottage" | "loft" | "cabin";
   kindLabel: string;
   status: "Active" | "Maintenance";
@@ -71,8 +71,8 @@ const RoomSchema = new Schema<IRoom>(
     ownerId: { type: Schema.Types.ObjectId, ref: "User", index: true },
     propertyId: { type: Schema.Types.ObjectId, ref: "Property", index: true },
     homestayName: { type: String, default: "" },
-    code: { type: String, required: true, unique: true, index: true },
-    slug: { type: String, required: true, unique: true, index: true },
+    code: { type: String, required: true, trim: true, index: true },
+    slug: { type: String, required: true, trim: true, index: true },
     name: { type: String, required: true },
     wing: { type: String, default: "" },
     location: { type: String, required: true },
@@ -145,5 +145,9 @@ const RoomSchema = new Schema<IRoom>(
   },
   { timestamps: true }
 );
+
+// Tenant-scoped compound indexes
+RoomSchema.index({ propertyId: 1, code: 1 });
+RoomSchema.index({ propertyId: 1, slug: 1 });
 
 export const Room = model<IRoom>("Room", RoomSchema);

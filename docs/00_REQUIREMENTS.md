@@ -1,86 +1,93 @@
 # 00 - Business Requirements & System Scope
-
-## 1. System Overview & Vision
-
-Based on the architectural diagram (`image/image copy.png`) and the existing codebase, **Tirtha** is a dual-sided boutique estate hospitality and local transfer platform centered around tea estates in Darjeeling.
-
-The system connects:
-1. **Guests (Client-Side)**: Discover homestays, browse rooms/cottages, book stays with instant confirmation, and reserve point-to-point hill cab transfers without needing mandatory account login.
-2. **Homestay Owners (Owner-Side)**: Manage estate rooms/units, view live availability calendars, create direct/walk-in/OTA bookings, manage guest CRM & history, manage dedicated cab driver rosters, track service revenues and financial analytics, and manage host profiles.
-3. **Cab Drivers** *(Future Phase)*: Driver portal for profiles, rates, notifications, past trips, and calendar bookings.
-4. **Admin** *(Future Phase)*: Global super-admin overview of all estates, drivers, and platform commission.
+**Platform:** Hill Hospitality & Transit Network  
+**Target Region:** North Bengal & Sikkim (Darjeeling, Kalimpong, Kurseong, Mirik, Siliguri, NJP, Bagdogra)  
+**Status:** Updated Master Specification  
 
 ---
 
-## 2. Immediate Scope (Phase 1 Target)
+## 1. System Vision & Business Model
 
-As explicitly requested:
-> **"currently only do for owner side and client side connect"**
-> - `/client-side`
-> - `/owner-side`
-> - `/server` (Node.js + TypeScript with `tsx`)
+The platform is a 4-sided boutique hospitality and hill transit network connecting:
+1. **Guests (Travelers)**: Discover homestays directly OR land on a dedicated single-homestay page (`/h/:slug`) after an OTA reservation (Airbnb, MakeMyTrip, Goibibo) to access stay guides and reserve point-to-point hill transfers (e.g., NJP / Bagdogra ↔ Darjeeling, local sightseeing).
+2. **Homestay Owners**: Receive a **100% free, lightweight Property Management System (PMS)** to manage rooms, live calendar, direct walk-in bookings, OTA reservations, and their trusted local driver rosters.
+3. **Cab Drivers**: Local verified drivers with hill vehicles (Innova, Sumo, Bolero, Dzire) operating with pre-agreed fares, automated WhatsApp dispatch, and transparent payouts.
+4. **Super Admin (Platform Operator)**: Central operations dashboard to view all homestays, rooms, drivers, trip volumes, platform commissions (18–20% on cabs), and driver payout settlements.
 
-The backend will serve as the single source of truth connecting:
-- What the **Guest books** on the `client-side` directly appears on the **Owner-side** calendar, guest directory, and analytics.
-- What the **Owner updates** (rates, room details, availability, maintenance holds, driver rosters) is instantly reflected on the `client-side`.
-
----
-
-## 3. Core Functional Requirements
-
-### A. Estate & Room Management
-- **Owner**:
-  - View, create, update, and manage room units (`code`, `name`, `category`, `nightly`, `weekend`, `maxGuests`, `bedLabel`, `features`, `image`, `status`).
-  - Set maintenance holds (`hold: { label, range }`) blocking room availability.
-  - Update estate profile (host details, check-in/out hours, response times, location coordinates).
-- **Guest / Client**:
-  - Browse stays with filters (`all`, `cottage`, `loft`, `cabin`, `petFriendly`).
-  - View individual stay detail, photos, facts, slow-living story, and amenities.
-  - Calculate real-time price quotes (nights × rate + ₹900 cleaning fee + 12% GST).
-
-### B. Room Reservation & Booking Synchronization
-- **Guest / Client**:
-  - Check room availability for specified check-in and check-out dates.
-  - Reserve room with guest contact details (first name, last name, email, phone, arrival window, breakfast preferences, payment plan: 100% full card vs. 50% deposit).
-  - Receive instant reservation confirmation with reference code (`MF-XXXXXX`) and 4-digit keyless door PIN.
-- **Owner-Side**:
-  - Bookings made by guests immediately sync to the owner's booking desk and interactive calendar.
-  - Owner can also create direct walk-in / phone / OTA reservations on behalf of guests (`channel`: direct, Airbnb, Booking.com, walk-in).
-  - Check calendar occupancy across 7-day, 14-day, and 28-day windows.
-
-### C. Guest Directory & CRM
-- **Owner-Side**:
-  - Comprehensive guest directory (`id`, `name`, `code`, `room`, `checkIn`, `checkOut`, `nights`, `party`, `channel`, `email`, `phone`, `origin`, `spend`, `status`, `tags`, `note`, `vip`).
-  - Status tracking: `Arriving today`, `In house`, `Departing today`, `Upcoming`, `Past stay`.
-  - Ability to add guest tags, notes, and VIP statuses.
-  - Timeline arrivals/departures summary by date.
-
-### D. Cab Driver Fleet & Transfer Bookings
-- **Owner-Side**:
-  - Manage driver roster (`DRV-XXX`, `name`, `phone`, `email`, `vehicle`, `plate`, `rating`, `trips`, `commission`, `status`, `coverage`).
-  - Register new drivers, change status (`Active`, `On a trip`, `Invited`, `Paused`), track completed trips and paid commission.
-- **Guest / Client**:
-  - Interactive map route selection (pickup, dropoff, date, time, passenger seats).
-  - Match available active drivers based on vehicle seating capacity (4, 6, 8 seats).
-  - Calculate hill road distance and fare (base ₹/km + hill surcharge + min fare).
-  - Book cab transfer with instant booking voucher (`CAB-XXXX`) and email notification trigger.
-  - When a guest books a driver, the driver's status can update and trip logs reflect in owner metrics.
-
-### E. Financial Analytics & Reporting
-- **Owner-Side**:
-  - Real-time KPIs: Gross revenue, total guest head count, room revenue, cab revenue, estate cab commission (18%), driver payouts, occupancy rate, Average Daily Rate (ADR), revenue per guest.
-  - Timeline filter: Today, 7 days, 14 days, this month, 90 days, year-to-date.
-  - Breakdown by service (Rooms vs. Cabs vs. Breakfast/Add-ons) and performance per room unit.
-  - Data export in CSV format.
+### The Business Strategy:
+- **Free PMS as the Acquisition Hook**: Small hill homestay owners do not pay monthly SaaS fees for complex systems. A free, clean mobile tool drives initial adoption.
+- **Cab Transfers as the Primary Monetization Engine**: 
+  - Room commissions on small homestays are modest and face direct competition from major OTAs.
+  - In contrast, exclusive hill cab transfers (₹3,500 to ₹5,000 per trip) yield **₹630 to ₹900 net profit per booking** at an 18% commission rate.
+  - Particular focus is placed on the **outbound return trip (Darjeeling → NJP/Bagdogra)**, where travelers prioritize reliable, pre-arranged transport to avoid missing scheduled flights and trains.
 
 ---
 
-## 4. Non-Functional Requirements
-1. **Runtime & Execution**: Node.js 22+ with `tsx` (`npx tsx watch src/server.ts`). Zero compile wait time during development.
-2. **Type Safety**: End-to-end TypeScript interfaces matching both client and owner expectations.
-3. **Data Integrity & Seeding**:
-   - Out-of-the-box seeded dataset reflecting Gumtree Valley / Meadowfall Estate so both frontends work out-of-the-box immediately upon boot.
-   - Persistent disk-backed storage so new bookings and changes survive server restarts.
-4. **CORS & Network**:
-   - Proper CORS configured for `http://localhost:3000` (client-side) and `http://localhost:3001` (owner-side).
-   - Standard JSON request and response payloads with informative HTTP status codes and error bodies.
+## 2. Core Functional Requirements Across the 4 Sides
+
+### A. Homestay Owner Portal (`/owner-side`)
+- **Authentication**:
+  - Multi-tenant host registration and login via Email + Password, Google OAuth, and OTP verification.
+  - Strict tenant isolation: Owners can access only their own homestay profile, rooms, calendar, and drivers.
+- **Room & Rate Management**:
+  - Manage room inventory with scoped room codes (e.g. "Room 101" unique per property).
+  - Configure nightly pricing, weekend adjustments, and maintenance blackout holds.
+- **Live Booking Desk & Calendar**:
+  - Interactive multi-day availability grid (7, 14, 28 days) supporting real-time reservation creation.
+  - Categorized booking channels: Direct, Phone, Walk-in, Airbnb, MakeMyTrip, Goibibo.
+- **Driver Fleet & Roster**:
+  - Onboard and manage trusted local drivers (name, phone, vehicle class, license plate, coverage area).
+  - Track assigned trips, driver status ("Active", "On a trip", "Paused"), and earnings.
+- **Guest CRM & Stays Directory**:
+  - Directory of past and incoming guests with status indicators ("Arriving today", "In house", "Departing today").
+  - Tags (VIP, dietary preferences, family) and stay notes.
+
+### B. Client / Guest Application (`/client-side`)
+- **Direct Catalog & Search**:
+  - Browse available homestays and filter by region, category, and amenities.
+- **Dedicated Homestay Landing Pages (`/h/:slug`)**:
+  - Clean, dedicated presentation of a single homestay's details, photos, house rules, and room options.
+  - Deep-link target for OTA-referred guests to view their reservation and access add-on services.
+- **Hill Cab Booking**:
+  - Route selection across key regional transit points (NJP, Bagdogra Airport, Darjeeling, Kalimpong, Mirik, Tiger Hill).
+  - Transparent fare calculation based on distance, hill road factor, and vehicle seating capacity (4, 6, 8 seats).
+  - Instant trip voucher generation with driver assignment and pickup instructions.
+
+### C. Cab Driver Interface & Dispatch
+- **Driver Profile & Vehicle Specs**:
+  - Vehicle classification (4-seater sedan, 6-seater SUV, 8-seater van), registration plate, and verification details.
+- **Dispatch Flow**:
+  - Asynchronous dispatch alerts delivered via automated WhatsApp Cloud API / SMS containing passenger name, contact number, pickup location, and scheduled time.
+  - PWA / Mobile web view allowing drivers to view upcoming trips and log trip completions.
+
+### D. Super Admin Control Tower
+- **Platform Analytics**:
+  - Aggregated view of Gross Booking Value (GBV), platform commission totals, and active properties.
+- **Driver Payout Settlement Desk**:
+  - Ledger tracking gross fares, platform commission cuts (18%), and outstanding driver payouts (82%).
+  - Interface to mark payouts as settled following UPI or direct bank transfers.
+- **Onboarding & Verification**:
+  - Verification workflow to approve new homestay listings and review driver credentials.
+
+---
+
+## 3. Third-Party OTA Synchronization Requirements
+
+### 1. Two-Way iCal (.ics) Calendar Sync (Airbnb & Booking.com)
+- **Export**: Provide a persistent `.ics` calendar URL per room (`GET /api/v1/properties/:id/rooms/:code/calendar.ics`) for hosts to paste into their Airbnb availability settings.
+- **Import**: Background worker to fetch external Airbnb iCal URLs every 15 minutes, automatically blocking corresponding calendar dates.
+
+### 2. MakeMyTrip & Goibibo Integration
+- **Direct Integration Partner**: Connect via certified channel manager APIs (e.g. Channex.io) for automated two-way inventory and booking synchronization with IngoMMT.
+- **Dashboard Quick-Entry**: Provide an expedited manual entry dialog on the host dashboard to record MMT/Goibibo bookings in under 15 seconds.
+
+### 3. Automated Guest Onboarding Sequence
+- Ingested or logged reservations trigger an automated WhatsApp confirmation message welcoming the guest and providing a direct link to their dedicated homestay guide and cab booking page.
+
+---
+
+## 4. Technical Stack & Architecture
+
+- **Backend (`/server`)**: Node.js 22+, TypeScript, Express, MongoDB (Mongoose), JWT, Zod validation, Nodemailer.
+- **Owner Frontend (`/owner-side`)**: Next.js 16 (App Router), React 19, Tailwind CSS v4, Lucide/Material Symbols, Leaflet / OpenStreetMap.
+- **Client Frontend (`/client-side`)**: Next.js 16 (App Router), React 19, Tailwind CSS v4, Leaflet / OpenStreetMap, dynamic routing.
+- **Integrations**: Razorpay (Payments), WhatsApp Cloud API / Twilio (Messaging), iCal / `node-ical` (Calendar sync).

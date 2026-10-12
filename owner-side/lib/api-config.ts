@@ -79,17 +79,36 @@ export const API_ENDPOINTS = {
     register: () => `${API_BASE_URL}/auth/register`,
     login: () => `${API_BASE_URL}/auth/login`,
     me: () => `${API_BASE_URL}/auth/me`,
+    google: () => `${API_BASE_URL}/auth/google`,
+    sendOtp: () => `${API_BASE_URL}/auth/otp/send`,
+    verifyOtp: () => `${API_BASE_URL}/auth/otp/verify`,
+  },
+  ical: {
+    exportFeed: (codeOrSlug: string) => `${API_BASE_URL}/rooms/${codeOrSlug}/calendar.ics`,
+    syncInbound: (codeOrSlug: string) => `${API_BASE_URL}/rooms/${codeOrSlug}/sync-ical`,
   },
 } as const;
+
+export function getAuthToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem("platform_auth_token");
+}
+
+export function getAuthHeaders(): Record<string, string> {
+  const token = getAuthToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 export async function apiFetch<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
+  const authHeaders = getAuthHeaders();
   const res = await fetch(endpoint, {
     ...options,
     headers: {
       "Content-Type": "application/json",
+      ...authHeaders,
       ...options.headers,
     },
     cache: options.cache ?? "no-store",

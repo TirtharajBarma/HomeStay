@@ -64,7 +64,7 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.get("/health", (_req, res) => {
   res.json({
     status: "ok",
-    service: "tirtha-backend",
+    service: "hospitality-transit-api",
     uptime: Math.round(process.uptime()),
     timestamp: new Date().toISOString(),
   });
@@ -73,7 +73,7 @@ app.get("/health", (_req, res) => {
 app.get("/api/v1/health", (_req, res) => {
   res.json({
     status: "ok",
-    service: "tirtha-backend",
+    service: "hospitality-transit-api",
     version: "1.0.0",
     timestamp: new Date().toISOString(),
   });

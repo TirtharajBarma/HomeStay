@@ -1,0 +1,18 @@
+@import "tailwindcss";
+
+:root {
+  --primary: #1e3a2b;
+  --primary-foreground: #ffffff;
+  --surface: #f8faf8;
+  --surface-container: #edf1ed;
+  --surface-container-high: #e2e8e2;
+  --text-main: #192019;
+  --text-muted: #526052;
+}
+
+body {
+  background-color: var(--surface);
+  color: var(--text-main);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}

@@ -15,6 +15,8 @@ router.get("/places", DriverController.getPlaces);
 router.post("/quote", validate(CabQuoteSchema, "body"), DriverController.calculateQuote);
 router.post("/bookings", validate(CreateCabBookingSchema, "body"), DriverController.createCabBooking);
 router.get("/payouts", DriverController.getPayouts);
+router.get("/:id/trips", DriverController.getDriverTrips);
+router.patch("/trips/:id/status", DriverController.updateTripStatus);
 router.post("/", validate(CreateDriverSchema, "body"), DriverController.addDriver);
 router.patch("/:id/status", validate(DriverStatusSchema, "body"), DriverController.updateStatus);
 
