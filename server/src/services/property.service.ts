@@ -7,9 +7,28 @@ export class PropertyService {
     let prop = await Property.findOne(filter);
     if (!prop) {
       if (ownerId) {
-        prop = await Property.create({ ...initialProperty, ownerId, name: "Homestay Estate" });
+        prop = await Property.create({
+          name: "Homestay Estate",
+          role: "Estate Owner & Host",
+          email: "",
+          phone: "+91 98000 00000",
+          address: "Darjeeling Hills",
+          town: "Darjeeling",
+          region: "West Bengal",
+          postal: "734101",
+          bio: "Welcome to our homestay in the hills.",
+          checkInTime: "3:00 PM",
+          checkOutTime: "11:00 AM",
+          responseTime: "Usually within 1 hour",
+          currency: "INR",
+          locations: [],
+          ownerId,
+        });
       } else {
-        prop = await Property.create(initialProperty);
+        prop = await Property.findOne();
+        if (!prop) {
+          prop = await Property.create(initialProperty);
+        }
       }
     }
     return prop;

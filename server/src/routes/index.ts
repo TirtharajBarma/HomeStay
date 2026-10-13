@@ -13,6 +13,15 @@ import { Newsletter } from "../models/newsletter.model.js";
 
 const apiRouter = Router();
 
+apiRouter.get("/", (_req, res) => {
+  res.json({
+    success: true,
+    message: "Hill Hospitality & Transit Network API v1",
+    version: "1.0.0",
+    docs: "/api/v1",
+  });
+});
+
 apiRouter.use("/auth", authRoutes);
 apiRouter.use("/admin", adminRoutes);
 

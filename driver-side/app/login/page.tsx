@@ -7,8 +7,8 @@ import { API_ENDPOINTS } from "@/lib/api-config";
 export default function DriverLoginPage() {
   const { login } = useDriverAuth();
 
-  const [phone, setPhone] = useState("+91 98300 41042");
-  const [pin, setPin] = useState("1234");
+  const [phone, setPhone] = useState("");
+  const [pin, setPin] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

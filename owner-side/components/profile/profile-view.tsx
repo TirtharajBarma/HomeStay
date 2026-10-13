@@ -438,7 +438,7 @@ export function ProfileView() {
                   </div>
 
                   <p className="mt-3 text-label-sm text-label-sm text-outline">
-                    {room.bedLabel} · {room.features.join(" · ")}
+                    {room.bedLabel} · {(room.features || []).join(" · ")}
                   </p>
 
                   <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-outline-variant/20 pt-3">

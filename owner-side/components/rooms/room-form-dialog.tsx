@@ -34,7 +34,7 @@ const blank: Draft = {
   maxGuests: 2,
   nightly: 200,
   weekend: 240,
-  bedLabel: "Queen Bed",
+  bedLabel: "",
   features: "",
   image: photos[0].url,
 };
@@ -48,7 +48,7 @@ const toDraft = (room: EstateRoom): Draft => ({
   nightly: room.nightly,
   weekend: room.weekend ?? room.nightly,
   bedLabel: room.bedLabel,
-  features: room.features.join(", "),
+  features: Array.isArray(room.features) ? room.features.join(", ") : "",
   image: room.image,
 });
 

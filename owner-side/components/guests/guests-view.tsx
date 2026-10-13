@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { API_ENDPOINTS } from "@/lib/api-config";
 import { useEstate } from "@/components/estate-provider";
+import { useAuth } from "@/components/auth-context";
 import { Icon } from "@/components/icon";
 import { PeriodNav } from "@/components/owner/period-nav";
 import {
@@ -40,6 +41,8 @@ const staying = (guest: Guest, date: Date) =>
 
 export function GuestsView() {
   const { money } = useMoney();
+  const { user } = useAuth();
+  const isDemo = !user || user.email === "owner@estate.com";
 
   const { rooms, bookings } = useEstate();
   const { notify } = useToast();
@@ -65,10 +68,13 @@ export function GuestsView() {
         const token = window.localStorage.getItem("platform_auth_token");
         const headers: Record<string, string> = {};
         if (token) headers["Authorization"] = `Bearer ${token}`;
-        const res = await fetch(API_ENDPOINTS.guests.list(query, status, roomFilter), { headers });
+        const url = user?.id
+          ? `${API_ENDPOINTS.guests.list(query, status, roomFilter)}&ownerId=${user.id}`
+          : API_ENDPOINTS.guests.list(query, status, roomFilter);
+        const res = await fetch(url, { headers });
         if (res.ok) {
           const json = await res.json();
-          if (!cancelled && json?.success && Array.isArray(json?.data) && json.data.length > 0) {
+          if (!cancelled && json?.success && Array.isArray(json?.data)) {
             setServerGuests(
               json.data.map((g: any) => ({
                 id: g.id || g._id,
@@ -136,7 +142,7 @@ export function GuestsView() {
     lifetime: booking.total,
   }));
 
-  const baseGuestList = serverGuests.length > 0 ? serverGuests : guests;
+  const baseGuestList = serverGuests.length > 0 ? serverGuests : (isDemo ? guests : []);
 
   const directory = useMemo(() => {
     const day = activeDay ? new Date(`${activeDay}T00:00:00`) : null;
@@ -147,7 +153,7 @@ export function GuestsView() {
       if (roomFilter !== "all" && guest.code !== roomFilter) return false;
       if (day && !staying(guest, day)) return false;
       if (needle) {
-        const haystack = `${guest.name} ${guest.room} ${guest.email} ${guest.origin} ${guest.tags.join(" ")}`.toLowerCase();
+        const haystack = `${guest.name} ${guest.room} ${guest.email} ${guest.origin} ${(guest.tags || []).join(" ")}`.toLowerCase();
         if (!haystack.includes(needle)) return false;
       }
       return true;
@@ -230,23 +236,23 @@ export function GuestsView() {
         />
         <StatCard
           label="Arriving today"
-          value={String(guestStats.arriving)}
+          value={String(isDemo ? guestStats.arriving : liveGuests.filter((g) => g.status === "Arriving today" || isSameDay(g.checkIn, baseToday)).length)}
           icon="login"
           iconTone="bg-secondary-tint text-secondary-ink"
           footnote="Check-in from 3:00 PM"
         />
         <StatCard
           label="Departing today"
-          value={String(guestStats.departing)}
+          value={String(isDemo ? guestStats.departing : liveGuests.filter((g) => g.status === "Departing today" || isSameDay(g.checkOut, baseToday)).length)}
           icon="logout"
           iconTone="bg-secondary-tint text-secondary-ink"
           footnote="Check-out by 11:00 AM"
         />
         <StatCard
           label="Returning guests"
-          value={String(guestStats.returning)}
+          value={String(isDemo ? guestStats.returning : liveGuests.filter((g) => g.stays > 1).length)}
           icon="favorite"
-          footnote={`${guestStats.vip} flagged as VIP`}
+          footnote={isDemo ? `${guestStats.vip} flagged as VIP` : `${liveGuests.filter((g) => g.tags?.includes("VIP")).length} flagged as VIP`}
         />
         <StatCard
           label="Directory size"
@@ -421,7 +427,16 @@ export function GuestsView() {
                 </tr>
               </thead>
               <tbody>
-                {directory.slice(0, 24).map((guest) => (
+                {directory.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-12 text-center text-outline">
+                      <Icon name="person_search" className="mx-auto text-4xl text-outline/50 mb-2 block" />
+                      <p className="text-sm font-medium text-on-surface">No guest CRM records found</p>
+                      <p className="text-xs text-outline mt-1">Guest profiles will automatically populate here as guests book your homestay.</p>
+                    </td>
+                  </tr>
+                ) : (
+                  directory.slice(0, 24).map((guest) => (
                   <tr key={guest.id} className="border-b border-outline-variant/20 last:border-0">
                     <td className="px-1 py-3">
                       <div className="flex items-center gap-2.5">
@@ -478,7 +493,7 @@ export function GuestsView() {
                       </span>
                     </td>
                   </tr>
-                ))}
+                )))}
               </tbody>
             </table>
 

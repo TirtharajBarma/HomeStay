@@ -3,10 +3,12 @@ import { GuestService } from "../services/guest.service.js";
 
 export class GuestController {
   static async getGuests(req: Request, res: Response) {
+    const user = (req as any).user;
     const filters = {
       status: req.query.status as string,
       query: (req.query.query || req.query.search) as string,
       room: req.query.room as string,
+      ownerId: (req.query.ownerId as string) || (user?.role === "owner" ? user.id : undefined),
     };
     const guests = await GuestService.getGuests(filters);
     res.json({

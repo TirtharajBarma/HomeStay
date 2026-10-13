@@ -19,7 +19,7 @@ import {
   stayHref,
 } from "@/lib/booking";
 import { hosts } from "@/lib/content";
-import { getStay } from "@/lib/stays";
+import { getLiveStay } from "@/lib/stays";
 
 export const metadata: Metadata = {
   title: "Secure Reservation",
@@ -30,7 +30,7 @@ export default async function CheckoutPage({
   searchParams,
 }: PageProps<"/checkout">) {
   const query = await searchParams;
-  const stay = getStay(typeof query.stay === "string" ? query.stay : "");
+  const stay = await getLiveStay(typeof query.stay === "string" ? query.stay : "");
 
   // A checkout without a stay (bookmark, shared link, dropped query) sends the
   // guest back to the catalogue instead of a dead end.

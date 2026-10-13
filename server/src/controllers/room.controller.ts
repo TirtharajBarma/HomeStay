@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { RoomService } from "../services/room.service.js";
+import { Property } from "../models/property.model.js";
 
 export class RoomController {
   static async getAllRooms(req: Request, res: Response) {
@@ -39,8 +40,16 @@ export class RoomController {
   static async createRoom(req: Request, res: Response) {
     const user = (req as any).user;
     const payload = { ...req.body };
-    if (user?.role === "owner" && !payload.ownerId) {
-      payload.ownerId = user.id;
+    if (user?.role === "owner") {
+      if (!payload.ownerId) payload.ownerId = user.id;
+      if (!payload.propertyId) {
+        if (user.propertyId) {
+          payload.propertyId = user.propertyId;
+        } else {
+          const prop = await Property.findOne({ ownerId: user.id });
+          if (prop) payload.propertyId = prop._id;
+        }
+      }
     }
     const room = await RoomService.createRoom(payload);
     res.status(201).json({ success: true, data: room });

@@ -46,7 +46,13 @@ export class BookingService {
     }
 
     if (room.status === "Maintenance") {
-      throw new Error(`Room '${room.name}' is currently closed for maintenance.`);
+      if (room.hold?.startDate && room.hold?.endDate) {
+        if (data.checkIn < room.hold.endDate && data.checkOut > room.hold.startDate) {
+          throw new Error(`Room '${room.name}' is currently closed for maintenance between ${room.hold.startDate} and ${room.hold.endDate}.`);
+        }
+      } else {
+        throw new Error(`Room '${room.name}' is currently closed for maintenance.`);
+      }
     }
 
     // Check for overlapping bookings on this specific room

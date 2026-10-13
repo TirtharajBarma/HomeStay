@@ -55,7 +55,11 @@ const INITIAL_TRIPS: Trip[] = [
 
 export default function DriverDashboard() {
   const { driver, logout, updateStatus } = useDriverAuth();
-  const [trips, setTrips] = useState<Trip[]>(INITIAL_TRIPS);
+  const isDemoDriver =
+    driver?.phone === "+91 98300 41042" ||
+    driver?.phone === "+91 98300 22110" ||
+    driver?.id === "DRV-101";
+  const [trips, setTrips] = useState<Trip[]>(isDemoDriver ? INITIAL_TRIPS : []);
   const [updatingStatus, setUpdatingStatus] = useState(false);
 
   // Sync driver availability status with server backend
@@ -86,30 +90,35 @@ export default function DriverDashboard() {
         const res = await fetch(API_ENDPOINTS.driverTrips(activeDriverId));
         if (res.ok) {
           const json = await res.json();
-          if (json.success && Array.isArray(json.data) && json.data.length > 0) {
-            const mapped: Trip[] = json.data.map((t: any) => ({
-              id: t._id || t.reference,
-              reference: t.reference,
-              passengerName: t.guestName || "Guest Passenger",
-              passengerPhone: t.phone || "+91 98300 00000",
-              pickup: t.pickupName || "Darjeeling",
-              dropoff: t.dropoffName || "NJP Railway Station",
-              time: `${t.pickupDate || "Today"} • ${t.pickupTime || "10:00 AM"}`,
-              distance: `${t.distanceKm || 65} km`,
-              seats: `${t.seats || 4} Seats`,
-              fare: t.fareAmount || 3200,
-              netPayout: t.driverPayout || Math.round((t.fareAmount || 3200) * 0.82),
-              commission: t.estateCommission || Math.round((t.fareAmount || 3200) * 0.18),
-              status:
-                t.status === "completed"
-                  ? "Completed"
-                  : t.status === "en_route"
-                    ? "En Route"
-                    : t.status === "arrived"
-                      ? "Arrived"
-                      : "Assigned",
-            }));
-            setTrips(mapped);
+          if (json.success && Array.isArray(json.data)) {
+            if (json.data.length > 0) {
+              const mapped: Trip[] = json.data.map((t: any) => ({
+                id: t._id || t.reference,
+                reference: t.reference,
+                passengerName: t.guestName || "Guest Passenger",
+                passengerPhone: t.phone || "+91 98300 00000",
+                pickup: t.pickupName || "Darjeeling",
+                dropoff: t.dropoffName || "NJP Railway Station",
+                date: t.pickupDate || "Today",
+                time: `${t.pickupDate || "Today"} • ${t.pickupTime || "10:00 AM"}`,
+                distanceKm: t.distanceKm || 65,
+                seats: t.seats || 4,
+                grossFare: t.fareAmount || 3200,
+                netPayout: t.driverPayout || Math.round((t.fareAmount || 3200) * 0.82),
+                commission: t.estateCommission || Math.round((t.fareAmount || 3200) * 0.18),
+                status:
+                  t.status === "completed"
+                    ? "Completed"
+                    : t.status === "en_route"
+                      ? "En Route"
+                      : t.status === "arrived"
+                        ? "Arrived"
+                        : "Assigned",
+              }));
+              setTrips(mapped);
+            } else if (!isDemoDriver) {
+              setTrips([]);
+            }
           }
         }
       } catch (err) {
@@ -117,7 +126,7 @@ export default function DriverDashboard() {
       }
     }
     fetchTrips();
-  }, [driver?.id]);
+  }, [driver?.id, isDemoDriver]);
 
   async function advanceTripStatus(tripId: string) {
     let nextBackendStatus = "scheduled";
@@ -175,10 +184,10 @@ export default function DriverDashboard() {
           </div>
           <div>
             <h1 className="text-base font-bold leading-tight text-[#1e3a2b]">
-              {driver?.name || "Sonam Lama"}
+              {driver?.name || "Driver Partner"}
             </h1>
             <p className="text-xs font-medium text-neutral-500">
-              {driver?.vehicle || "Toyota Innova"} • {driver?.plate || "WB 06 D 1158"}
+              {driver?.vehicle ? `${driver.vehicle} • ${driver.plate}` : "Fleet Partner"}
             </p>
           </div>
         </div>
@@ -247,7 +256,7 @@ export default function DriverDashboard() {
               Net Earnings (82%)
             </span>
             <p className="mt-1 font-mono text-2xl font-black text-emerald-900">
-              ₹{totalEarned > 0 ? totalEarned.toLocaleString() : "5,412"}
+              ₹{totalEarned.toLocaleString()}
             </p>
             <span className="text-[10px] text-emerald-700">Direct Cash / UPI</span>
           </div>
@@ -257,7 +266,7 @@ export default function DriverDashboard() {
               Platform Fee (18%)
             </span>
             <p className="mt-1 font-mono text-2xl font-black text-neutral-800">
-              ₹{totalCommission > 0 ? totalCommission.toLocaleString() : "1,188"}
+              ₹{totalCommission.toLocaleString()}
             </p>
             <span className="text-[10px] text-neutral-500">Auto-settled weekly</span>
           </div>
@@ -274,9 +283,18 @@ export default function DriverDashboard() {
             </span>
           </div>
 
-          {trips.map((trip) => {
-            const isCompleted = trip.status === "Completed";
-            return (
+          {trips.length === 0 ? (
+            <div className="rounded-2xl border border-neutral-200 bg-white p-8 text-center shadow-sm">
+              <span className="material-symbols-outlined text-4xl text-neutral-300">no_crash</span>
+              <h3 className="mt-2 text-sm font-semibold text-neutral-800">No Trips Assigned</h3>
+              <p className="mt-1 text-xs text-neutral-500">
+                You are currently online. When a guest or host reserves a hill transfer, your route will appear here in real time.
+              </p>
+            </div>
+          ) : (
+            trips.map((trip) => {
+              const isCompleted = trip.status === "Completed";
+              return (
               <div
                 key={trip.id}
                 className={`overflow-hidden rounded-2xl border bg-white shadow-sm transition ${
@@ -424,7 +442,7 @@ export default function DriverDashboard() {
                 </div>
               </div>
             );
-          })}
+          }))}
         </section>
       </main>
     </div>

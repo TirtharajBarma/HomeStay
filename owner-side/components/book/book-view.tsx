@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useMemo, useState } from "react";
 import { AvailabilityGrid } from "@/components/book/availability-grid";
 import { useEstate } from "@/components/estate-provider";
+import { useAuth } from "@/components/auth-context";
 import { Icon } from "@/components/icon";
 import { PeriodNav } from "@/components/owner/period-nav";
 import {
@@ -62,6 +63,8 @@ const steps: { key: Step; label: string; short: string; icon: string }[] = [
 
 export function BookView() {
   const { money } = useMoney();
+  const { user } = useAuth();
+  const isDemo = !user || user.email === "owner@estate.com";
   const { rooms, bookings, addBooking } = useEstate();
   const { notify } = useToast();
 
@@ -104,7 +107,7 @@ export function BookView() {
   const days = windows.find((entry) => entry.key === windowKey)?.days ?? 14;
   const start = addDays(defaultStart, offset * days);
   const caption = windowCaption(start, days);
-  const schedule = useMemo(() => getSchedule(start), [start]);
+  const schedule = useMemo(() => (isDemo ? getSchedule(start) : []), [start, isDemo]);
 
   const chosen = rooms.filter((room) => selected.includes(room.code));
   const shown = chosen.length ? chosen : rooms;
@@ -384,7 +387,16 @@ export function BookView() {
               </>
             }
           >
-            <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-3">
+            {rooms.length === 0 ? (
+              <div className="flex flex-col items-center justify-center p-8 text-center text-outline">
+                <Icon name="meeting_room" className="mb-2 text-4xl text-outline/50" />
+                <p className="text-sm font-medium text-on-surface">No rooms added yet</p>
+                <p className="mt-1 text-xs text-outline">
+                  Add accommodation units in Rooms & Rates to open them for bookings.
+                </p>
+              </div>
+            ) : (
+              <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-3">
               {rooms.map((room) => {
                 const isSelected = selected.includes(room.code);
                 const free = openCount(room.code);
@@ -452,6 +464,7 @@ export function BookView() {
                 );
               })}
             </ul>
+            )}
 
             <div className="mt-4 flex flex-col gap-3 border-t border-outline-variant/20 pt-4 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-label-sm text-label-sm text-outline">

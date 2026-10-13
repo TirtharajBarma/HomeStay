@@ -520,6 +520,7 @@ export async function getLiveStays(): Promise<Stay[]> {
     const json = await res.json();
     if (json.success && Array.isArray(json.data) && json.data.length > 0) {
       return json.data.map((r: Record<string, unknown>) => ({
+        code: (r.code as string) || "",
         slug: (r.slug as string) || (r.code as string),
         name: (r.name as string) || "Homestay Suite",
         wing: (r.wing as string) || (r.location as string) || "Darjeeling Ridge",
@@ -564,7 +565,13 @@ export async function getLiveStays(): Promise<Stay[]> {
 
 export async function getLiveStay(slug: string): Promise<Stay | undefined> {
   const liveList = await getLiveStays();
-  const matched = liveList.find((s) => s.slug === slug || s.slug === slug.toLowerCase());
+  const matched = liveList.find(
+    (s) =>
+      s.slug === slug ||
+      s.slug === slug.toLowerCase() ||
+      (s as any).code === slug ||
+      (s as any).code === slug.toUpperCase()
+  );
   if (matched) return matched;
   return getStay(slug);
 }

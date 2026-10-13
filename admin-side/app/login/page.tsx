@@ -7,8 +7,8 @@ import { API_ENDPOINTS } from "@/lib/api-config";
 export default function AdminLoginPage() {
   const { login } = useAdminAuth();
 
-  const [email, setEmail] = useState("admin@platform.com");
-  const [password, setPassword] = useState("adminMasterPassword2026!");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

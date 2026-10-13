@@ -24,44 +24,10 @@ export async function seedDatabase(cleanExisting = false): Promise<void> {
     await Guest.deleteMany({});
   }
 
-  const roomsCount = await Room.countDocuments();
-  if (roomsCount === 0 || cleanExisting) {
-    // 1. Seed Property
-    await Property.findOneAndUpdate({}, initialProperty, { upsert: true, returnDocument: "after" });
-    console.log("✅ Seeded Estate Property Profile & Locations");
-
-    // 2. Seed Rooms
-    for (const r of initialRooms) {
-      await Room.findOneAndUpdate({ code: r.code }, r, { upsert: true, returnDocument: "after" });
-    }
-    console.log(`✅ Seeded ${initialRooms.length} Accommodation Rooms/Suites`);
-
-    // 3. Seed Drivers
-    for (const d of initialDrivers) {
-      await Driver.findOneAndUpdate({ id: d.id }, d, { upsert: true, returnDocument: "after" });
-    }
-    console.log(`✅ Seeded ${initialDrivers.length} Fleet Drivers`);
-
-    // 4. Seed Bookings
-    for (const b of initialBookings) {
-      await Booking.findOneAndUpdate({ reference: b.reference }, b, { upsert: true, returnDocument: "after" });
-    }
-    console.log(`✅ Seeded ${initialBookings.length} Initial Bookings`);
-
-    // 5. Seed Guests
-    for (const g of initialGuests) {
-      await Guest.findOneAndUpdate({ email: g.email, code: g.code }, g, { upsert: true, returnDocument: "after" });
-    }
-    console.log(`✅ Seeded ${initialGuests.length} Guest CRM Records`);
-  } else {
-    console.log(`ℹ️ Database already contains ${roomsCount} rooms. Skipping room seed.`);
-  }
-
-
-  // 6. Seed Default Owner Account
-  const existingOwner = await User.findOne({ email: "owner@estate.com" });
+  // 1. Ensure Default Owner Account exists
+  let existingOwner = await User.findOne({ email: "owner@estate.com" });
   if (!existingOwner) {
-    await User.create({
+    existingOwner = await User.create({
       name: "Demo Estate Owner",
       email: "owner@estate.com",
       password: "estatePassword123!",
@@ -69,6 +35,65 @@ export async function seedDatabase(cleanExisting = false): Promise<void> {
       phone: "+91 98300 41000",
     });
     console.log("✅ Seeded Default Owner Account (owner@estate.com / estatePassword123!)");
+  }
+
+  const roomsCount = await Room.countDocuments();
+  if (roomsCount === 0 || cleanExisting) {
+    // 2. Seed Property linked to demo owner
+    const prop = await Property.findOneAndUpdate(
+      {},
+      { ...initialProperty, ownerId: existingOwner._id },
+      { upsert: true, returnDocument: "after" }
+    );
+    existingOwner.propertyId = prop._id as any;
+    await existingOwner.save();
+    console.log("✅ Seeded Estate Property Profile & Locations");
+
+    // 3. Seed Rooms linked to demo owner
+    for (const r of initialRooms) {
+      await Room.findOneAndUpdate(
+        { code: r.code },
+        { ...r, ownerId: existingOwner._id, propertyId: prop._id },
+        { upsert: true, returnDocument: "after" }
+      );
+    }
+    console.log(`✅ Seeded ${initialRooms.length} Accommodation Rooms/Suites`);
+
+    // 4. Seed Drivers
+    for (const d of initialDrivers) {
+      await Driver.findOneAndUpdate({ id: d.id }, d, { upsert: true, returnDocument: "after" });
+    }
+    console.log(`✅ Seeded ${initialDrivers.length} Fleet Drivers`);
+
+    // 5. Seed Bookings linked to demo owner
+    for (const b of initialBookings) {
+      await Booking.findOneAndUpdate(
+        { reference: b.reference },
+        { ...b, ownerId: existingOwner._id, propertyId: prop._id },
+        { upsert: true, returnDocument: "after" }
+      );
+    }
+    console.log(`✅ Seeded ${initialBookings.length} Initial Bookings`);
+
+    // 6. Seed Guests linked to demo owner
+    for (const g of initialGuests) {
+      await Guest.findOneAndUpdate(
+        { email: g.email, code: g.code },
+        { ...g, ownerId: existingOwner._id, propertyId: prop._id },
+        { upsert: true, returnDocument: "after" }
+      );
+    }
+    console.log(`✅ Seeded ${initialGuests.length} Guest CRM Records`);
+  } else {
+    console.log(`ℹ️ Database already contains ${roomsCount} rooms. Skipping room seed.`);
+  }
+
+  // Ensure legacy records in DB without ownerId are strictly claimed by demoOwner
+  if (existingOwner) {
+    await Property.updateMany({ ownerId: { $exists: false } }, { $set: { ownerId: existingOwner._id } });
+    await Room.updateMany({ ownerId: { $exists: false } }, { $set: { ownerId: existingOwner._id } });
+    await Booking.updateMany({ ownerId: { $exists: false } }, { $set: { ownerId: existingOwner._id } });
+    await Guest.updateMany({ ownerId: { $exists: false } }, { $set: { ownerId: existingOwner._id } });
   }
 
   // 7. Seed Default Admin Account

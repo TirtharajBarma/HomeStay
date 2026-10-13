@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { API_ENDPOINTS } from "@/lib/api-config";
+import { useAuth } from "@/components/auth-context";
 import { Icon } from "@/components/icon";
 import { PeriodNav } from "@/components/owner/period-nav";
 import {
@@ -21,6 +22,7 @@ import {
   roomBreakdown,
   serviceBreakdown,
   totalsFor,
+  type DayStat,
   type RangeKey,
 } from "@/lib/analytics-data";
 import { downloadCsv } from "@/lib/download";
@@ -39,6 +41,8 @@ const delta = (current: number, previous: number) =>
 
 export function AnalyticsView() {
   const { money, compact } = useMoney();
+  const { user } = useAuth();
+  const isDemo = !user || user.email === "owner@estate.com";
 
   const [range, setRange] = useState<RangeKey>("fortnight");
   const [offset, setOffset] = useState(0);
@@ -53,50 +57,104 @@ export function AnalyticsView() {
         const token = window.localStorage.getItem("platform_auth_token");
         const headers: Record<string, string> = {};
         if (token) headers["Authorization"] = `Bearer ${token}`;
-        const res = await fetch(API_ENDPOINTS.analytics.get(range, offset), { headers });
+        const url = user?.id
+          ? `${API_ENDPOINTS.analytics.get(range, offset)}&ownerId=${user.id}`
+          : API_ENDPOINTS.analytics.get(range, offset);
+        const res = await fetch(url, { headers });
         if (res.ok) {
           const json = await res.json();
-          if (!cancelled && json?.success && json?.data?.kpis) {
+          if (!cancelled && json?.success && (json?.data?.totals || json?.data?.kpis)) {
             setLiveData(json.data);
           }
         }
       } catch (e) {
-        // Fall back gracefully to deterministic model
+        // Fall back gracefully
       }
     }
     loadLive();
     return () => {
       cancelled = true;
     };
-  }, [range, offset]);
+  }, [range, offset, user?.id]);
 
   const days = rangeOptions.find((option) => option.key === range)?.days ?? 14;
   const start = windowStart(days, offset);
-  const stats = useMemo(() => rangeStats(start, days), [start, days]);
+
+  const zeroTotals = useMemo(
+    () => ({
+      revenue: 0,
+      roomRevenue: 0,
+      cabRevenue: 0,
+      cabCommission: 0,
+      driverPayout: 0,
+      guests: 0,
+      roomNights: 0,
+      occupancy: 0,
+      adr: 0,
+      cabTrips: 0,
+      avgStay: 0,
+      revenuePerGuest: 0,
+    }),
+    [],
+  );
+
+  const stats = useMemo(() => {
+    if (!isDemo && (!liveData || liveData.totals?.revenue === 0)) {
+      return Array.from({ length: days }, (_, i): DayStat => {
+        const d = new Date(start);
+        d.setDate(d.getDate() + i);
+        return {
+          date: d,
+          label: `${d.getDate()} ${d.toLocaleString("en-US", { month: "short" })}`,
+          dow: d.toLocaleString("en-US", { weekday: "short" }).toUpperCase(),
+          weekend: d.getDay() === 0 || d.getDay() === 6,
+          today: d.toDateString() === new Date().toDateString(),
+          roomsSold: 0,
+          occupancy: 0,
+          guests: 0,
+          roomRevenue: 0,
+          cabTrips: 0,
+          cabRevenue: 0,
+          cabCommission: 0,
+        };
+      });
+    }
+    return rangeStats(start, days);
+  }, [start, days, isDemo, liveData]);
+
   const calculatedTotals = useMemo(() => totalsFor(stats), [stats]);
 
-  // Merge live backend KPIs if available
+  // Merge live backend KPIs/totals if available
   const totals = useMemo(() => {
-    if (!liveData?.kpis) return calculatedTotals;
-    const k = liveData.kpis;
-    return {
-      ...calculatedTotals,
-      revenue: (k.roomRevenue || 0) + (k.cabRevenue || 0),
-      roomRevenue: k.roomRevenue ?? calculatedTotals.roomRevenue,
-      cabRevenue: k.cabRevenue ?? calculatedTotals.cabRevenue,
-      cabCommission: k.platformCommission ?? calculatedTotals.cabCommission,
-      driverPayout: (k.cabRevenue || 0) - (k.platformCommission || 0),
-      guests: k.totalGuests ?? calculatedTotals.guests,
-      roomNights: k.roomsSold ?? calculatedTotals.roomNights,
-      occupancy: k.occupancyRate ?? calculatedTotals.occupancy,
-      cabTrips: k.cabTrips ?? calculatedTotals.cabTrips,
-    };
-  }, [calculatedTotals, liveData]);
+    if (liveData?.totals) {
+      return {
+        ...calculatedTotals,
+        ...liveData.totals,
+      };
+    }
+    if (liveData?.kpis) {
+      const k = liveData.kpis;
+      return {
+        ...calculatedTotals,
+        revenue: (k.roomRevenue || 0) + (k.cabRevenue || 0),
+        roomRevenue: k.roomRevenue ?? calculatedTotals.roomRevenue,
+        cabRevenue: k.cabRevenue ?? calculatedTotals.cabRevenue,
+        cabCommission: k.platformCommission ?? calculatedTotals.cabCommission,
+        driverPayout: (k.cabRevenue || 0) - (k.platformCommission || 0),
+        guests: k.totalGuests ?? calculatedTotals.guests,
+        roomNights: k.roomsSold ?? calculatedTotals.roomNights,
+        occupancy: k.occupancyRate ?? calculatedTotals.occupancy,
+        cabTrips: k.cabTrips ?? calculatedTotals.cabTrips,
+      };
+    }
+    if (!isDemo) return zeroTotals;
+    return calculatedTotals;
+  }, [calculatedTotals, liveData, isDemo, zeroTotals]);
 
-  const previous = useMemo(
-    () => totalsFor(rangeStats(windowStart(days, offset + 1), days)),
-    [days, offset],
-  );
+  const previous = useMemo(() => {
+    if (!isDemo && totals.revenue === 0) return zeroTotals;
+    return totalsFor(rangeStats(windowStart(days, offset + 1), days));
+  }, [days, offset, isDemo, totals.revenue, zeroTotals]);
 
   const services = useMemo(() => serviceBreakdown(totals), [totals]);
   const rooms = useMemo(() => roomBreakdown(stats), [stats]);

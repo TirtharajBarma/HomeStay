@@ -19,11 +19,11 @@ export default function LoginPage() {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   // Email / Password Form State
-  const [email, setEmail] = useState("owner@estate.com");
-  const [password, setPassword] = useState("estatePassword123!");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
   // OTP Form State
-  const [phone, setPhone] = useState("+91 98300 41000");
+  const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
   const [otpSent, setOtpSent] = useState(false);
 
@@ -53,14 +53,51 @@ export default function LoginPage() {
     }
   }
 
+  // Google Form State
+  const [googleEmail, setGoogleEmail] = useState("");
+
   // 2. Google OAuth Handler
-  async function handleGoogleLogin() {
+  async function handleGoogleLogin(e?: React.FormEvent) {
+    if (e) e.preventDefault();
     setError(null);
     setLoading(true);
 
     try {
-      // In production with Google Client ID: window.google.accounts.id.prompt() or @react-oauth/google
-      // Our backend accepts { googleToken, email, name }
+      const targetEmail = googleEmail.trim().toLowerCase();
+      if (!targetEmail) {
+        throw new Error("Please enter your Google account email to sign in.");
+      }
+      const targetName = targetEmail.split("@")[0];
+
+      const res = await fetch(API_ENDPOINTS.auth.google(), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          googleToken: "demo_google_oauth_token",
+          email: targetEmail,
+          name: targetName ? `${targetName.charAt(0).toUpperCase() + targetName.slice(1)} Host` : "Host",
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Google authentication failed.");
+      }
+
+      login(data.data.token, data.data.user);
+    } catch (err: any) {
+      setError(err.message || "Could not complete Google Sign-In.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Showcase Demo Login Handler
+  async function handleShowcaseDemoLogin() {
+    setError(null);
+    setLoading(true);
+
+    try {
       const res = await fetch(API_ENDPOINTS.auth.google(), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -73,12 +110,12 @@ export default function LoginPage() {
 
       const data = await res.json();
       if (!res.ok || !data.success) {
-        throw new Error(data.error || "Google authentication failed.");
+        throw new Error(data.error || "Showcase login failed.");
       }
 
       login(data.data.token, data.data.user);
     } catch (err: any) {
-      setError(err.message || "Could not complete Google Sign-In.");
+      setError(err.message || "Could not log into showcase demo estate.");
     } finally {
       setLoading(false);
     }
@@ -277,36 +314,70 @@ export default function LoginPage() {
 
         {/* Tab 2: Google Sign In */}
         {activeTab === "google" && (
-          <div className="space-y-4 text-center">
-            <p className="text-xs text-outline">
-              Sign in securely using your registered Google Workspace or Gmail account.
+          <div className="space-y-4">
+            <p className="text-center text-xs text-outline">
+              Sign in securely with your Google Workspace or Gmail account.
             </p>
+
+            <form onSubmit={handleGoogleLogin} className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-on-surface">
+                  Google Account Email
+                </label>
+                <div className="relative mt-1">
+                  <input
+                    type="email"
+                    required
+                    value={googleEmail}
+                    onChange={(e) => setGoogleEmail(e.target.value)}
+                    placeholder="you@gmail.com"
+                    className="w-full rounded-xl border border-outline-variant/50 bg-surface px-3.5 py-2.5 text-sm text-on-surface shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="flex w-full items-center justify-center gap-3 rounded-xl border border-outline-variant/60 bg-surface py-2.5 text-sm font-semibold text-on-surface shadow-sm transition hover:bg-surface-container hover:shadow disabled:opacity-50"
+              >
+                <svg className="h-5 w-5" viewBox="0 0 24 24">
+                  <path
+                    fill="#4285F4"
+                    d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
+                  />
+                  <path
+                    fill="#34A853"
+                    d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.34 24 12 24z"
+                  />
+                  <path
+                    fill="#FBBC05"
+                    d="M5.28 14.27a7.22 7.22 0 0 1 0-4.54V6.58H1.25a11.96 11.96 0 0 0 0 10.84l4.03-3.15z"
+                  />
+                  <path
+                    fill="#EA4335"
+                    d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
+                  />
+                </svg>
+                <span>{loading ? "Signing In..." : "Continue with Google"}</span>
+              </button>
+            </form>
+
+            <div className="relative my-3 flex items-center justify-center">
+              <div className="w-full border-t border-outline-variant/30" />
+              <span className="absolute bg-surface-container-low px-2 text-[11px] text-outline">
+                Or explore showcase
+              </span>
+            </div>
 
             <button
               type="button"
-              onClick={handleGoogleLogin}
+              onClick={handleShowcaseDemoLogin}
               disabled={loading}
-              className="flex w-full items-center justify-center gap-3 rounded-xl border border-outline-variant/60 bg-surface py-3 text-sm font-semibold text-on-surface shadow-sm transition hover:bg-surface-container hover:shadow disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-outline-variant/70 bg-surface/50 py-2 text-xs font-medium text-outline transition hover:border-primary hover:text-primary disabled:opacity-50"
             >
-              <svg className="h-5 w-5" viewBox="0 0 24 24">
-                <path
-                  fill="#4285F4"
-                  d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
-                />
-                <path
-                  fill="#34A853"
-                  d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.34 24 12 24z"
-                />
-                <path
-                  fill="#FBBC05"
-                  d="M5.28 14.27a7.22 7.22 0 0 1 0-4.54V6.58H1.25a11.96 11.96 0 0 0 0 10.84l4.03-3.15z"
-                />
-                <path
-                  fill="#EA4335"
-                  d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
-                />
-              </svg>
-              <span>{loading ? "Authenticating..." : "Continue with Google"}</span>
+              <Icon name="explore" className="text-sm" />
+              <span>Preview Demo Showcase Estate (Gumtree Valley)</span>
             </button>
           </div>
         )}

@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import app from "./app.js";
 import { config } from "./config/env.js";
 import { connectDB, disconnectDB } from "./config/db.js";
@@ -8,6 +9,14 @@ async function bootstrap() {
   try {
     // 1. Connect to MongoDB Atlas (or in-memory fallback during dev)
     await connectDB();
+
+    // Ensure legacy global unique constraints are dropped for multi-tenant compound indexing
+    try {
+      await mongoose.connection.collection("rooms").dropIndex("code_1");
+    } catch {}
+    try {
+      await mongoose.connection.collection("rooms").dropIndex("slug_1");
+    } catch {}
 
     // 2. Ensure initial seed data exists
     await seedDatabase(false);

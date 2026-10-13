@@ -3,7 +3,7 @@
 import { API_ENDPOINTS } from "@/lib/api-config";
 import { arrivalWindows, breakfastChoices } from "@/lib/content";
 import { validateCard } from "@/lib/payment";
-import { getStay } from "@/lib/stays";
+import { getLiveStay } from "@/lib/stays";
 import {
   cancellationDeadline,
   formatDateRange,
@@ -68,7 +68,7 @@ export async function confirmReservation(
   _previous: CheckoutState,
   formData: FormData,
 ): Promise<CheckoutState> {
-  const stay = getStay(text(formData, "stay"));
+  const stay = await getLiveStay(text(formData, "stay"));
   if (!stay) {
     return {
       status: "error",

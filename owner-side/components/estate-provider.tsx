@@ -190,6 +190,8 @@ export function EstateProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = usePersisted(profileStore);
   const [locations, setLocations] = usePersisted(locationStore);
 
+  const isDemo = !user || user.email === "owner@estate.com";
+
   // Real-time synchronization from live Node/MongoDB backend
   useEffect(() => {
     let cancelled = false;
@@ -199,21 +201,41 @@ export function EstateProvider({ children }: { children: ReactNode }) {
         if (token) headers["Authorization"] = `Bearer ${token}`;
 
         const roomsUrl = user?.id ? `${API_ENDPOINTS.rooms.list()}?ownerId=${user.id}` : API_ENDPOINTS.rooms.list();
+        const bookingsUrl = user?.id ? `${API_ENDPOINTS.bookings.list()}?ownerId=${user.id}` : API_ENDPOINTS.bookings.list();
+        const profileUrl = user?.id ? `${API_ENDPOINTS.properties.profile()}?ownerId=${user.id}` : API_ENDPOINTS.properties.profile();
 
         const [roomsRes, driversRes, bookingsRes, profileRes] = await Promise.allSettled([
           fetch(roomsUrl, { headers }).then((r) => r.json()),
           fetch(API_ENDPOINTS.drivers.list(), { headers }).then((r) => r.json()),
-          fetch(API_ENDPOINTS.bookings.list(), { headers }).then((r) => r.json()),
-          fetch(API_ENDPOINTS.properties.profile(), { headers }).then((r) => r.json()),
+          fetch(bookingsUrl, { headers }).then((r) => r.json()),
+          fetch(profileUrl, { headers }).then((r) => r.json()),
         ]);
 
         if (cancelled) return;
 
         if (roomsRes.status === "fulfilled" && roomsRes.value?.success && Array.isArray(roomsRes.value?.data)) {
           if (roomsRes.value.data.length > 0 || user?.id) {
-            setRooms(roomsRes.value.data);
+            setRooms(
+              roomsRes.value.data.map((r: any) => ({
+                ...r,
+                code: r.code || r._id,
+                name: r.name || "Estate Room",
+                location: r.location || "Darjeeling",
+                category: r.category || r.type || "Ging Lodge",
+                status: r.status || "Active",
+                maxGuests: r.maxGuests || r.capacity || 2,
+                nightly: r.nightly || r.basePrice || 2400,
+                weekend: r.weekend || r.weekendPrice || r.nightly || r.basePrice || 2800,
+                bedLabel: r.bedLabel || "1 King Bed",
+                features: Array.isArray(r.features) ? r.features : Array.isArray(r.amenities) ? r.amenities : [],
+                image: r.image || r.photos?.[0] || "https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=1200&q=80",
+              }))
+            );
           }
+        } else if (!isDemo && rooms.some((r) => r.code === "101")) {
+          setRooms([]);
         }
+
         if (driversRes.status === "fulfilled" && driversRes.value?.success && Array.isArray(driversRes.value?.data)) {
           if (driversRes.value.data.length > 0) {
             setDrivers(
@@ -222,10 +244,15 @@ export function EstateProvider({ children }: { children: ReactNode }) {
                 joined: d.joined ? new Date(d.joined) : new Date(2024, 9, 24),
               }))
             );
+          } else if (!isDemo) {
+            setDrivers([]);
           }
+        } else if (!isDemo) {
+          setDrivers([]);
         }
+
         if (bookingsRes.status === "fulfilled" && bookingsRes.value?.success && Array.isArray(bookingsRes.value?.data)) {
-          if (bookingsRes.value.data.length > 0) {
+          if (bookingsRes.value.data.length > 0 || user?.id) {
             setBookings(
               bookingsRes.value.data.map((b: any) => ({
                 id: b.reference || b._id,
@@ -242,11 +269,14 @@ export function EstateProvider({ children }: { children: ReactNode }) {
               }))
             );
           }
+        } else if (!isDemo) {
+          setBookings([]);
         }
+
         if (profileRes.status === "fulfilled" && profileRes.value?.success && profileRes.value?.data) {
           const p = profileRes.value.data;
           setProfile({
-            name: p.name || user?.homestayName || "Homestay Estate",
+            name: p.name || user?.homestayName || `${user?.name || "Host"}'s Homestay`,
             role: p.role || "Estate Owner & Host",
             email: p.email || user?.email || "",
             phone: p.phone || user?.phone || "",
@@ -259,9 +289,25 @@ export function EstateProvider({ children }: { children: ReactNode }) {
             checkOutTime: p.checkOutTime || "11:00 AM",
             responseTime: p.responseTime || "Usually within 20 minutes",
           });
-          if (p.locations?.length) {
+          if (Array.isArray(p.locations) && (p.locations.length > 0 || !isDemo)) {
             setLocations(p.locations);
           }
+        } else if (!isDemo) {
+          setProfile({
+            name: user?.homestayName || `${user?.name || "Host"}'s Homestay`,
+            role: "Estate Owner & Host",
+            email: user?.email || "",
+            phone: user?.phone || "",
+            address: "",
+            town: "Darjeeling",
+            region: "West Bengal",
+            postal: "734101",
+            bio: "Welcome to our homestay in the hills.",
+            checkInTime: "3:00 PM",
+            checkOutTime: "11:00 AM",
+            responseTime: "Usually within 20 minutes",
+          });
+          setLocations([]);
         }
       } catch (err) {
         console.warn("Could not sync from backend:", err);

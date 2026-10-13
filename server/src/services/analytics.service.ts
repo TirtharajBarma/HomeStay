@@ -46,11 +46,14 @@ export class AnalyticsService {
 
     let bookings = await Booking.find({
       ...bookingFilter,
-      checkIn: { $gte: startISO, $lte: endISO },
+      $or: [
+        { checkIn: { $gte: startISO, $lte: endISO } },
+        { createdAt: { $gte: startDate, $lte: endDate } },
+      ],
     });
 
-    // If no bookings in strict calendar range, aggregate all confirmed bookings
-    if (bookings.length === 0) {
+    // If no bookings in strict calendar range and viewing global demo, aggregate all confirmed bookings
+    if (bookings.length === 0 && !ownerId) {
       bookings = await Booking.find(bookingFilter);
     }
 
@@ -62,8 +65,8 @@ export class AnalyticsService {
     }
 
     let cabTrips = await CabTrip.find(cabFilter);
-    if (cabTrips.length === 0) {
-      cabTrips = await CabTrip.find(ownerId ? { ownerId } : {});
+    if (cabTrips.length === 0 && !ownerId) {
+      cabTrips = await CabTrip.find({});
     }
 
     const roomFilter: any = {};
@@ -185,9 +188,9 @@ export class AnalyticsService {
         revenuePerGuest,
       },
       previousDelta: {
-        revenuePct: 14.8,
-        occupancyPct: 5.2,
-        guestsPct: 8.4,
+        revenuePct: bookings.length > 0 ? 14.8 : 0,
+        occupancyPct: bookings.length > 0 ? 5.2 : 0,
+        guestsPct: bookings.length > 0 ? 8.4 : 0,
       },
       timeline,
       serviceBreakdown,
