@@ -1,4 +1,4 @@
-# Nakh Hill Hospitality & Transit Network
+# Hill Hospitality & Transit Network
 
 > A production-grade, 4-sided marketplace connecting **Travelers (Guests)**, **Boutique Homestay Hosts (Owners)**, **Mountain Cab Drivers**, and the **Super Admin Platform Tower** across Darjeeling and the Eastern Himalayas.
 
@@ -19,7 +19,7 @@
 
 ## 🏛️ Platform Overview & Architecture
 
-Nakh solves the two primary problems of hill tourism:
+The platform solves the two primary problems of hill tourism:
 1. **Boutique Homestay Management (PMS)**: A 100% free property management system for hill hosts (14-day visual tape chart, room inventory, direct bookings, RFC 5545 iCal two-way sync with Airbnb/MakeMyTrip, and guest CRM).
 2. **Hill Cab Transit Dispatch**: Reliable mountain transit between remote estates and hill hubs (NJP Railway Station, Bagdogra Airport, Tiger Hill, Chowrasta, Batasia Loop) with upfront rupee pricing, driver dispatching, and automated 82% driver take-home vs. 18% platform commission reconciliation.
 
@@ -158,7 +158,7 @@ cd admin-side && npm run dev
 ## 🧭 Manual Verification Walkthrough
 
 A complete step-by-step testing guide for QA engineers and developers is documented in:  
-👉 **[`WALKTHROUGH.md`](file:///Users/tirtharaj/Desktop/Desktop/github/nakh/WALKTHROUGH.md)**
+👉 **[`WALKTHROUGH.md`](./WALKTHROUGH.md)**
 
 ### Quick Walkthrough Checklist:
 1. **Guest Flow (`:3000`)**: Browse catalog ➔ Open stay ➔ Complete checkout with test card ➔ Receive confirmation voucher & digital door PIN ➔ Search cab (Ging Tea Estate ➔ Darjeeling Station) ➔ Select driver ➔ View cab voucher.
@@ -173,14 +173,14 @@ A complete step-by-step testing guide for QA engineers and developers is documen
 ### 1. 60-Point Automated cURL Audit
 Runs a complete regression suite against all REST endpoints, multi-tenancy rules, and state progressions:
 ```bash
-bash /Users/tirtharaj/.gemini/antigravity-cli/brain/4e4ee3b5-721e-449d-84df-68d43e467a6f/scratch/run_audit_curl_tests.sh
+bash scripts/run_audit_curl_tests.sh
 ```
 *Current Result*: **60 / 60 Passed (100% Green)**
 
 ### 2. End-to-End Playwright Browser Walkthrough
 Runs an automated Chromium browser across all 4 frontend portals, asserting clean visual layouts, true input placeholders, interactive modals, and zero console errors:
 ```bash
-python3 /Users/tirtharaj/.gemini/antigravity-cli/brain/4e4ee3b5-721e-449d-84df-68d43e467a6f/scratch/test_ui_walkthrough.py
+python3 scripts/test_ui_walkthrough.py
 ```
 *Current Result*: **0 Console Errors, 0 Network Failures, 21 Screenshots Verified**
 

@@ -1,12 +1,12 @@
-# Nakh Platform: Developer & QA Manual Walkthrough Guide
+# Hill Hospitality & Transit Platform: Developer & QA Manual Walkthrough Guide
 
 This document is a step-by-step, manual testing and verification guide for engineers, QA testers, and product reviewers. If you are new to the codebase, this guide explains exactly **what the application is**, **which URLs to open**, **what credentials to use**, **what to click**, and **what to expect on screen**.
 
 ---
 
-## 📌 Context: What is Nakh?
+## 📌 Context: Platform Overview
 
-**Nakh** is a 4-sided marketplace designed for hill tourism in Darjeeling and the Eastern Himalayas:
+**This platform** is a 4-sided marketplace designed for hill tourism in Darjeeling and the Eastern Himalayas:
 1. **Travelers (Guests)**: Can discover boutique hillside homestays, book rooms, and reserve door-to-door mountain cabs with upfront rupee fares.
 2. **Homestay Hosts (Owners)**: Get a 100% free Property Management System (PMS) with an interactive 14-day tape chart calendar, room inventory manager, guest CRM, and fleet roster.
 3. **Cab Drivers**: Receive point-to-point transit dispatches on their mobile terminal PWA, advance trip statuses, and take home 82% of fares while paying an 18% platform fee.
@@ -30,7 +30,7 @@ Before you start manual testing, make sure all 5 services are running on their a
 > ```bash
 > lsof -nP -iTCP:5050 -iTCP:3000 -iTCP:3001 -iTCP:3002 -iTCP:3003 -sTCP:LISTEN
 > ```
-> If any service is missing, consult the [Quick Start section in README.md](file:///Users/tirtharaj/Desktop/Desktop/github/nakh/README.md#-quick-start-run-locally).
+> If any service is missing, consult the [Quick Start section in README.md](./README.md#-quick-start-run-locally).
 
 ---
 
@@ -276,13 +276,13 @@ All seeded drivers use the 4-digit PIN `1234`.
 ### Q4: How do I re-run the automated Playwright browser test suite?
 You can run the end-to-end Python Playwright suite anytime:
 ```bash
-python3 /Users/tirtharaj/.gemini/antigravity-cli/brain/4e4ee3b5-721e-449d-84df-68d43e467a6f/scratch/test_ui_walkthrough.py
+python3 scripts/test_ui_walkthrough.py
 ```
-It tests all 4 portals in sequence and outputs 21 visual screenshots in `scratch/screenshots/`.
+It tests all 4 portals in sequence and outputs visual screenshots.
 
 ### Q5: How do I run the 60-point backend API audit?
 Run the automated cURL script:
 ```bash
-bash /Users/tirtharaj/.gemini/antigravity-cli/brain/4e4ee3b5-721e-449d-84df-68d43e467a6f/scratch/run_audit_curl_tests.sh
+bash scripts/run_audit_curl_tests.sh
 ```
 All 60 tests execute against the live API on port 5050 and report individual pass/fail results.
