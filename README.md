@@ -47,13 +47,13 @@ The platform solves the two primary problems of hill tourism:
 
 ## 🔌 Applications & Port Mapping
 
-| Application | Directory | Default Port | Role & Primary Flows |
+| Application | Directory & Docs | Default Port | Role & Primary Flows |
 |:---|:---|:---:|:---|
-| **API Server** | `/server` | **`5050`** | Central Node/Express REST API, Atlas MongoDB, JWT auth, iCal sync engine, UPI settlements |
-| **Client Side** | `/client-side` | **`3000`** | Public catalog, stay editorial, dynamic quote calculation, room checkout, point-to-point cab booking |
-| **Owner Side** | `/owner-side` | **`3001`** | Host PMS, 14-day tape chart, room inventory, guest CRM directory, fleet drivers roster, analytics |
-| **Driver Side** | `/driver-side` | **`3002`** | Mobile driver terminal PWA, duty toggle (Available/On a trip/Offline), assigned hill trips, status progression |
-| **Admin Side** | `/admin-side` | **`3003`** | Super Admin control tower, global platform KPIs, property listing moderation, driver UPI payout ledger |
+| **API Server** | [`server/`](./server/README.md) | **`5050`** | Central Node/Express REST API, Atlas MongoDB, JWT auth, iCal sync engine, UPI settlements |
+| **Client Side** | [`client-side/`](./client-side/README.md) | **`3000`** | Public catalog, stay editorial, dynamic quote calculation, room checkout, point-to-point cab booking |
+| **Owner Side** | [`owner-side/`](./owner-side/README.md) | **`3001`** | Host PMS, 14-day tape chart, room inventory, guest CRM directory, fleet drivers roster, analytics |
+| **Driver Side** | [`driver-side/`](./driver-side/README.md) | **`3002`** | Mobile driver terminal PWA, duty toggle (Available/On a trip/Offline), assigned hill trips, status progression |
+| **Admin Side** | [`admin-side/`](./admin-side/README.md) | **`3003`** | Super Admin control tower, global platform KPIs, property listing moderation, driver UPI payout ledger |
 
 ---
 
