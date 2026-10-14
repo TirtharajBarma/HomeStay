@@ -1,4 +1,5 @@
 import { Schema, model, Document } from "mongoose";
+import { getISTTimestamp } from "../utils/date.js";
 
 export interface IEstateLocation {
   id: string;
@@ -37,6 +38,8 @@ export interface IProperty extends Document {
   locations: IEstateLocation[];
   createdAt: Date;
   updatedAt: Date;
+  createdAtIST?: string;
+  updatedAtIST?: string;
 }
 
 const LocationSchema = new Schema<IEstateLocation>(
@@ -83,8 +86,17 @@ const PropertySchema = new Schema<IProperty>(
       lastSyncedAt: { type: Date },
     },
     locations: { type: [LocationSchema], default: [] },
+    createdAtIST: { type: String, default: () => getISTTimestamp() },
+    updatedAtIST: { type: String, default: () => getISTTimestamp() },
   },
   { timestamps: true }
 );
+
+PropertySchema.pre("save", function () {
+  this.updatedAtIST = getISTTimestamp();
+  if (!this.createdAtIST) {
+    this.createdAtIST = getISTTimestamp();
+  }
+});
 
 export const Property = model<IProperty>("Property", PropertySchema);

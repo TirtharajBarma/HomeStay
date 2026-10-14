@@ -1,5 +1,6 @@
 import { Schema, model, Document } from "mongoose";
 import bcrypt from "bcryptjs";
+import { getISTTimestamp } from "../utils/date.js";
 
 export interface IUser extends Document {
   name: string;
@@ -8,9 +9,12 @@ export interface IUser extends Document {
   role: "guest" | "owner" | "admin" | "driver";
   phone?: string;
   avatar?: string;
+  clerkId?: string;
   propertyId?: Schema.Types.ObjectId | string;
   createdAt: Date;
   updatedAt: Date;
+  createdAtIST?: string;
+  updatedAtIST?: string;
   comparePassword(candidate: string): Promise<boolean>;
 }
 
@@ -22,13 +26,20 @@ const UserSchema = new Schema<IUser>(
     role: { type: String, enum: ["guest", "owner", "admin", "driver"], default: "guest", index: true },
     phone: { type: String, default: "" },
     avatar: { type: String, default: "" },
+    clerkId: { type: String, sparse: true, index: true },
     propertyId: { type: Schema.Types.ObjectId, ref: "Property" },
+    createdAtIST: { type: String, default: () => getISTTimestamp() },
+    updatedAtIST: { type: String, default: () => getISTTimestamp() },
   },
   { timestamps: true }
 );
 
-// Hash password before saving
+// Hash password before saving & update IST timestamp
 UserSchema.pre("save", async function () {
+  this.updatedAtIST = getISTTimestamp();
+  if (!this.createdAtIST) {
+    this.createdAtIST = getISTTimestamp();
+  }
   if (!this.isModified("password")) return;
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);

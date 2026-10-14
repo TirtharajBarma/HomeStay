@@ -23,6 +23,9 @@ export function getPropertyModel(isDemo: boolean = false): mongoose.Model<any> {
 }
 
 import jwt from 'jsonwebtoken';
+import { verifyToken, clerkClient } from '@clerk/express';
+import bcrypt from 'bcryptjs';
+import { getISTTimestamp } from '../utils/date.js';
 import { config } from '../config/env.js';
 
 interface StayRideAuthPayload {
@@ -66,24 +69,48 @@ async function getStoreForReq(req: Request): Promise<{ store: StayRideMemoryStor
   return { store, tenantKey: 'demo@stayride.in', isDemo: true };
 }
 
-// Middleware that enforces valid JWT on protected routes
-function authenticateStayRide(req: Request, res: Response, next: () => void) {
+// Middleware that enforces valid JWT (StayRide or Clerk) on protected routes
+async function authenticateStayRide(req: Request, res: Response, next: () => void) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ error: { message: 'Authentication required. Missing Bearer token.' } });
   }
 
   const token = authHeader.split(' ')[1];
+
+  // 1. Try StayRide custom JWT verification first
   try {
     const decoded = jwt.verify(token, config.jwtSecret) as StayRideAuthPayload;
-    if (!decoded || !decoded.tenantKey) {
-      return res.status(401).json({ error: { message: 'Invalid token payload.' } });
+    if (decoded && decoded.tenantKey) {
+      (req as any).stayrideUser = decoded;
+      return next();
     }
-    (req as any).stayrideUser = decoded;
-    next();
-  } catch (err: any) {
-    return res.status(401).json({ error: { message: 'Invalid or expired token. Please sign in again.' } });
+  } catch {
+    // Custom JWT check failed, fallback to Clerk check
   }
+
+  // 2. Try Clerk session token verification
+  if (config.clerkSecretKey) {
+    try {
+      const clerkPayload = await verifyToken(token, { secretKey: config.clerkSecretKey });
+      if (clerkPayload && clerkPayload.sub) {
+        const UserModel = getUserModel(false);
+        const user = await UserModel.findOne({ clerkId: clerkPayload.sub });
+        if (user) {
+          (req as any).stayrideUser = {
+            id: user._id.toString(),
+            email: user.email,
+            role: user.role || 'owner',
+            tenantKey: user.email,
+            isDemo: false,
+          };
+          return next();
+        }
+      }
+    } catch {}
+  }
+
+  return res.status(401).json({ error: { message: 'Invalid or expired token. Please sign in again.' } });
 }
 
 // ==========================================
@@ -339,8 +366,256 @@ stayrideV1Router.post('/auth/refresh', async (req: Request, res: Response) => {
   }
 });
 
+// ==========================================
+// Clerk Sync & Webhook (Google + Password + MongoDB Sync)
+// ==========================================
+stayrideV1Router.post('/auth/clerk-sync', async (req: Request, res: Response) => {
+  const { email, name, phone, avatar, clerkId, homestayName, location } = req.body;
+  const cleanEmail = (email || '').toLowerCase().trim();
+  const cleanName = (name || 'Host').trim();
+  const cleanPhone = (phone || '').trim();
+  const cleanAvatar = (avatar || '').trim();
+  const cleanHomestay = (homestayName || `${cleanName}'s Homestay`).trim();
+  const cleanLocation = (location || 'Gangtok, Sikkim').trim();
+
+  if (!cleanEmail) {
+    return res.status(400).json({ error: { message: 'Email address is required from Clerk profile.' } });
+  }
+
+  // Verify Clerk Bearer token if provided
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ') && config.clerkSecretKey) {
+    const token = authHeader.split(' ')[1];
+    try {
+      await verifyToken(token, { secretKey: config.clerkSecretKey });
+    } catch (err: any) {
+      console.warn('[StayRide] Clerk token verification notice:', err.message);
+    }
+  }
+
+  try {
+    const UserModel = getUserModel(false); // Production DB
+    let user = await UserModel.findOne({
+      $or: [{ email: cleanEmail }, ...(clerkId ? [{ clerkId }] : [])],
+    });
+
+    const isNew = !user;
+    if (!user) {
+      // 1. Create new MongoDB User
+      user = await UserModel.create({
+        name: cleanName,
+        email: cleanEmail,
+        clerkId: clerkId || '',
+        password: `clerk_oauth_${Date.now()}_${Math.random().toString(36)}`,
+        phone: cleanPhone,
+        avatar: cleanAvatar,
+        role: 'owner',
+      });
+
+      // 2. Create Property
+      const PropertyModel = getPropertyModel(false);
+      let propDoc = await PropertyModel.findOne({ email: cleanEmail });
+      if (!propDoc) {
+        propDoc = await PropertyModel.create({
+          ownerId: (user as any)._id,
+          name: cleanHomestay,
+          email: cleanEmail,
+          phone: cleanPhone,
+          address: cleanLocation,
+          town: cleanLocation.split(',')[0].trim() || 'Gangtok',
+          region: 'Sikkim',
+          status: 'active',
+        } as any);
+      }
+
+      (user as any).propertyId = propDoc._id;
+      await user.save();
+
+      // 3. Create fresh tenant workspace
+      tenantManager.createFreshTenant(cleanEmail, {
+        name: cleanHomestay,
+        ownerName: cleanName,
+        phone: cleanPhone,
+        email: cleanEmail,
+        location: cleanLocation,
+        link: `https://stayride.in/h/${cleanHomestay.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+        mapQuery: cleanLocation,
+      });
+
+      console.log(`✅ [Clerk Sync] New user registered & synced to MongoDB: ${cleanEmail}`);
+    } else {
+      // Update existing user with Clerk ID or avatar if missing
+      let modified = false;
+      if (clerkId && user.clerkId !== clerkId) {
+        user.clerkId = clerkId;
+        modified = true;
+      }
+      if (cleanAvatar && !user.avatar) {
+        user.avatar = cleanAvatar;
+        modified = true;
+      }
+      if (modified) await user.save();
+      console.log(`✅ [Clerk Sync] Existing user verified & synced: ${cleanEmail}`);
+    }
+
+    const tenantKey = cleanEmail;
+    const store = await tenantManager.getStoreAsync(tenantKey);
+
+    const tokenPayload: StayRideAuthPayload = {
+      id: user._id.toString(),
+      email: cleanEmail,
+      role: user.role || 'owner',
+      tenantKey,
+      isDemo: false,
+    };
+
+    const accessToken = jwt.sign(tokenPayload, config.jwtSecret, { expiresIn: '30d' });
+    const refreshToken = jwt.sign({ ...tokenPayload, type: 'refresh' }, config.jwtSecret, { expiresIn: '60d' });
+
+    return res.json({
+      accessToken,
+      refreshToken,
+      owner: {
+        id: 1,
+        name: store.homestay.ownerName || user.name,
+        phone: store.homestay.phone || user.phone,
+        email: user.email,
+        avatar: user.avatar,
+      },
+      homestay: {
+        id: 1,
+        name: store.homestay.name || cleanHomestay,
+        link: store.homestay.link || `https://stayride.in/h/${encodeURIComponent(cleanEmail)}`,
+      },
+      isNew,
+    });
+  } catch (err: any) {
+    console.error('[StayRide] Clerk sync error:', err);
+    return res.status(500).json({ error: { message: err.message || 'Clerk synchronization failed.' } });
+  }
+});
+
+stayrideV1Router.post('/auth/clerk-webhook', async (req: Request, res: Response) => {
+  const event = req.body;
+  if (!event || !event.type) {
+    return res.status(400).json({ error: { message: 'Invalid Clerk webhook payload.' } });
+  }
+
+  try {
+    const UserModel = getUserModel(false);
+    const { type, data } = event;
+
+    if (type === 'user.created' || type === 'user.updated') {
+      const clerkId = data.id;
+      const primaryEmail =
+        data.email_addresses?.find((e: any) => e.id === data.primary_email_address_id)?.email_address ||
+        data.email_addresses?.[0]?.email_address;
+      const name = [data.first_name, data.last_name].filter(Boolean).join(' ') || data.username || 'Host';
+      const avatar = data.image_url || '';
+
+      if (primaryEmail) {
+        const cleanEmail = primaryEmail.toLowerCase().trim();
+        let user = await UserModel.findOne({ $or: [{ clerkId }, { email: cleanEmail }] });
+        if (!user && type === 'user.created') {
+          user = await UserModel.create({
+            name,
+            email: cleanEmail,
+            clerkId,
+            password: `clerk_${Date.now()}_${Math.random().toString(36)}`,
+            role: 'owner',
+            avatar,
+          });
+          tenantManager.createFreshTenant(cleanEmail, {
+            name: `${name}'s Homestay`,
+            ownerName: name,
+            email: cleanEmail,
+          });
+        } else if (user) {
+          user.name = name;
+          user.avatar = avatar;
+          user.clerkId = clerkId;
+          await user.save();
+        }
+      }
+    } else if (type === 'user.deleted') {
+      const clerkId = data.id;
+      if (clerkId) {
+        await UserModel.deleteOne({ clerkId });
+      }
+    }
+
+    return res.json({ received: true });
+  } catch (err: any) {
+    console.error('[StayRide] Webhook handling error:', err);
+    return res.status(500).json({ error: { message: 'Webhook processing failed.' } });
+  }
+});
+
 // Enforce JWT authentication on all data routes
 stayrideV1Router.use(authenticateStayRide);
+
+// ==========================================
+// Set / Update Password (Bidirectional Clerk & MongoDB)
+// ==========================================
+stayrideV1Router.post('/auth/set-password', async (req: Request, res: Response) => {
+  try {
+    const authUser = (req as any).stayrideUser as StayRideAuthPayload | undefined;
+    if (!authUser || !authUser.email) {
+      return res.status(401).json({ error: { message: 'Authentication required.' } });
+    }
+
+    const { newPassword } = req.body;
+    if (!newPassword || typeof newPassword !== 'string' || newPassword.trim().length < 8) {
+      return res.status(400).json({ error: { message: 'Password must be at least 8 characters long.' } });
+    }
+
+    const cleanPass = newPassword.trim();
+    const cleanEmail = authUser.email.toLowerCase().trim();
+    const UserModel = getUserModel(authUser.isDemo);
+
+    let user = null;
+    if (authUser.id && mongoose.Types.ObjectId.isValid(authUser.id)) {
+      user = await UserModel.findById(authUser.id);
+    }
+    if (!user) {
+      user = await UserModel.findOne({ email: cleanEmail });
+    }
+
+    if (!user) {
+      return res.status(404).json({ error: { message: 'User account not found.' } });
+    }
+
+    // 1. Update in Clerk if user is linked to Clerk
+    const clerkId = user.clerkId;
+    if (clerkId && config.clerkSecretKey) {
+      try {
+        await clerkClient.users.updateUser(clerkId, {
+          password: cleanPass,
+        });
+        console.log(`✅ [Clerk Password Sync] Successfully updated password for Clerk user ${clerkId}`);
+      } catch (clerkErr: any) {
+        console.error('[Clerk Password Update Error]:', clerkErr);
+        const errMsg = clerkErr?.errors?.[0]?.longMessage || clerkErr?.errors?.[0]?.message || clerkErr.message;
+        return res.status(400).json({ error: { message: `Clerk password update failed: ${errMsg}` } });
+      }
+    }
+
+    // 2. Hash and update in MongoDB Atlas
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(cleanPass, salt);
+    user.updatedAtIST = getISTTimestamp();
+    await user.save();
+    console.log(`✅ [MongoDB Password Sync] Updated hashed password in Atlas for ${user.email} (IST: ${user.updatedAtIST})`);
+
+    return res.json({
+      success: true,
+      message: 'Password set successfully! You can now log in using either Google or your email and password.',
+    });
+  } catch (err: any) {
+    console.error('[Set-Password Error]:', err);
+    return res.status(500).json({ error: { message: err.message || 'Failed to update password.' } });
+  }
+});
 
 // ==========================================
 // Snapshot (Single high-speed aggregator)

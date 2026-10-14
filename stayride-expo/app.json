@@ -1,0 +1,57 @@
+{
+  "expo": {
+    "name": "StayRide",
+    "slug": "stayride",
+    "scheme": "stayride",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#1E1837",
+      "resizeMode": "contain"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.stayride.app"
+    },
+    "android": {
+      "package": "com.stayride.app",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#1E1837",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "owner": "tirtharaj_barma",
+    "runtimeVersion": "1",
+    "updates": {
+      "url": "https://u.expo.dev/0bdb67a8-8671-40a4-93e5-925504d907ee",
+      "requestHeaders": {
+        "expo-channel-name": "preview"
+      },
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 3000
+    },
+    "extra": {
+      "eas": {
+        "projectId": "0bdb67a8-8671-40a4-93e5-925504d907ee"
+      },
+      "updateVersion": "v1.0.0",
+      "updateDescription": "Initial base release",
+      "updateNotes": [
+        "Base release"
+      ],
+      "easUpdateMessage": "v1.0.0: Initial release"
+    },
+    "plugins": [
+      "./plugins/with-ios-local-no-push"
+    ]
+  }
+}

@@ -23,4 +23,6 @@ export const config = {
   jwtSecret: process.env.JWT_SECRET || "estate-transit-production-jwt-secret-key-2026",
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || "15m",
   googleClientId: process.env.GOOGLE_CLIENT_ID || "",
+  clerkPublishableKey: process.env.CLERK_PUBLISHABLE_KEY || process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY || "",
+  clerkSecretKey: process.env.CLERK_SECRET_KEY || "",
 };

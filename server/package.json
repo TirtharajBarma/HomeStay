@@ -15,6 +15,7 @@
     "test:api": "tsx scripts/test-endpoints.ts"
   },
   "dependencies": {
+    "@clerk/express": "^2.1.78",
     "bcryptjs": "^3.0.3",
     "compression": "^1.8.2",
     "cors": "^2.8.6",

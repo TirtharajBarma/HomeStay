@@ -176,7 +176,7 @@ export class StayRideMemoryStore {
       this.drivers = [];
       this.trips = [];
       this.campaigns = [];
-      this.networkDrivers = [];
+      this.seedNetworkDrivers();
     }
   }
 
@@ -550,6 +550,7 @@ export class StayRideMemoryStore {
 }
 
 import mongoose, { Schema, model } from 'mongoose';
+import { getISTTimestamp } from '../utils/date.js';
 
 export const StayRideTenantSchema = new Schema(
   {
@@ -568,9 +569,20 @@ export const StayRideTenantSchema = new Schema(
     location: { type: String, default: '' },
     data: { type: Schema.Types.Mixed, required: true },
     lastActiveAt: { type: Date, default: Date.now },
+    lastActiveAtIST: { type: String, default: () => getISTTimestamp() },
+    createdAtIST: { type: String, default: () => getISTTimestamp() },
+    updatedAtIST: { type: String, default: () => getISTTimestamp() },
   },
   { timestamps: true }
 );
+
+StayRideTenantSchema.pre('save', function () {
+  this.updatedAtIST = getISTTimestamp();
+  this.lastActiveAtIST = getISTTimestamp();
+  if (!this.createdAtIST) {
+    this.createdAtIST = getISTTimestamp();
+  }
+});
 
 export function getStayRideTenantModel(isDemo: boolean = false) {
   const dbName = isDemo ? 'test' : 'production';
@@ -621,6 +633,8 @@ export class StayRideTenantManager {
           location: 'Upper Sichey, Gangtok, Sikkim 737101',
           data: demoStore.toJSON(),
           lastActiveAt: new Date(),
+          lastActiveAtIST: getISTTimestamp(),
+          updatedAtIST: getISTTimestamp(),
         },
         { upsert: true, new: true }
       );
@@ -708,6 +722,8 @@ export class StayRideTenantManager {
           location: store.homestay.location || '',
           data: store.toJSON(),
           lastActiveAt: new Date(),
+          lastActiveAtIST: getISTTimestamp(),
+          updatedAtIST: getISTTimestamp(),
         },
         { upsert: true, new: true }
       );

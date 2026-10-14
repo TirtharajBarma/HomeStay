@@ -32,6 +32,26 @@ build/
 *.env.local
 !.env.example
 !*/.env.example
+!**/.env.example
+
+# Expo & Mobile
+.expo/
+*/.expo/
+**/.expo/
+web-build/
+expo-env.d.ts
+*/expo-env.d.ts
+.metro-health-check*
+.kotlin/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+/ios/
+/android/
+*/ios/
+*/android/
 
 # Testing & Coverage
 coverage/
