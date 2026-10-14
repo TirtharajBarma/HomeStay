@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
+import * as AuthSession from 'expo-auth-session';
 import * as Linking from 'expo-linking';
 import { useOAuth, useUser, useClerk } from '@clerk/expo';
 import { useSignIn, useSignUp } from '@clerk/expo/legacy';

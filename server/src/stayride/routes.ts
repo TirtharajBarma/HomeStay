@@ -586,7 +586,19 @@ stayrideV1Router.post('/auth/set-password', async (req: Request, res: Response) 
     }
 
     // 1. Update in Clerk if user is linked to Clerk
-    const clerkId = user.clerkId;
+    let clerkId = user.clerkId;
+    if (!clerkId && config.clerkSecretKey) {
+      try {
+        const clerkUsers = await clerkClient.users.getUserList({ emailAddress: [cleanEmail] });
+        if (clerkUsers.data && clerkUsers.data.length > 0) {
+          clerkId = clerkUsers.data[0].id;
+          user.clerkId = clerkId;
+        }
+      } catch (e) {
+        console.warn('[Clerk User Lookup Note]:', e);
+      }
+    }
+
     if (clerkId && config.clerkSecretKey) {
       try {
         await clerkClient.users.updateUser(clerkId, {

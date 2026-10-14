@@ -255,8 +255,8 @@ export const MoreScreen: React.FC = () => {
         <View style={styles.cardGroup}>
           {renderRow(
             'key-outline',
-            'Set Account Password',
-            'Enable or change email & password login',
+            'Change / Set Password',
+            'Update password for Clerk & MongoDB Atlas',
             () => setPasswordModalVisible(true)
           )}
           {renderRow(
@@ -293,9 +293,9 @@ export const MoreScreen: React.FC = () => {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Set Account Password</Text>
+            <Text style={styles.modalTitle}>Change Account Password</Text>
             <Text style={styles.modalSubtitle}>
-              Create a secure password to sign in with your email and password across Clerk and StayRide.
+              Enter your new password below. It will sync automatically across Clerk and MongoDB Atlas.
             </Text>
 
             <Text style={styles.modalLabel}>New Password</Text>
