@@ -6,6 +6,7 @@ import morgan from "morgan";
 import rateLimit from "express-rate-limit";
 import { config } from "./config/env.js";
 import apiRouter from "./routes/index.js";
+import stayrideV1Router from "./stayride/routes.js";
 import { errorHandler, notFoundHandler } from "./middlewares/error-handler.js";
 
 const app = express();
@@ -92,8 +93,10 @@ app.get("/api/v1/health", (_req, res) => {
   });
 });
 
-// 8. Mount Main API Router
+// 8. Mount Main API Router & StayRide Mobile Adapter Router
 app.use("/api/v1", apiRouter);
+app.use("/v1", stayrideV1Router);
+app.use("/api/v1/stayride", stayrideV1Router);
 
 // 9. Error and 404 Handlers
 app.use(notFoundHandler);

@@ -4,6 +4,7 @@ import { config } from "./config/env.js";
 import { connectDB, disconnectDB } from "./config/db.js";
 import { seedDatabase } from "./data/seeds/seed.js";
 import { CronService } from "./services/cron.service.js";
+import { tenantManager } from "./stayride/store.js";
 
 async function bootstrap() {
   try {
@@ -18,8 +19,9 @@ async function bootstrap() {
       await mongoose.connection.collection("rooms").dropIndex("slug_1");
     } catch {}
 
-    // 2. Ensure initial seed data exists
+    // 2. Ensure initial seed data exists & StayRide demo tenant is in MongoDB
     await seedDatabase(false);
+    await tenantManager.initDemoTenant();
 
     // 3. Start HTTP Server
     const server = app.listen(config.port, () => {

@@ -147,7 +147,11 @@ export class AuthService {
     let name = data.name?.trim() || "";
     let avatar = "";
 
-    if (rawToken && !rawToken.startsWith("demo_")) {
+    if (rawToken && rawToken.startsWith("demo_")) {
+      if (config.nodeEnv === "production") {
+        throw new Error("Demo token authentication is disabled in production.");
+      }
+    } else if (rawToken) {
       try {
         const decoded: any = jwt.decode(rawToken);
         if (decoded && decoded.email) {
@@ -226,8 +230,12 @@ export class AuthService {
     const cleanPhone = data.phone.replace(/[^0-9+]/g, "");
     const stored = otpStore.get(cleanPhone);
 
-    // Accept 123456 as universal dev OTP or valid stored OTP
-    if (data.otp !== "123456" && (!stored || stored.otp !== data.otp || Date.now() > stored.expires)) {
+    // In production, universal dev OTP '123456' is rejected unless actively stored
+    const isDev = config.nodeEnv !== "production";
+    const isMatch =
+      (isDev && data.otp === "123456") ||
+      (stored && stored.otp === data.otp && Date.now() <= stored.expires);
+    if (!isMatch) {
       throw new Error("Invalid or expired OTP.");
     }
 
@@ -275,7 +283,7 @@ export class AuthService {
       throw new Error("Driver with this phone number not found in fleet roster.");
     }
 
-    if (driver.pin && driver.pin !== data.pin) {
+    if (!driver.pin || driver.pin !== data.pin) {
       throw new Error("Invalid driver security PIN.");
     }
 
