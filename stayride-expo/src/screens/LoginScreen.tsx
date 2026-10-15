@@ -123,9 +123,26 @@ export const LoginScreen: React.FC = () => {
     }
   };
 
-  // Role Selection Modal for Google Sign-In
+  // Google OAuth Onboarding State
   const [showRoleSelectModal, setShowRoleSelectModal] = useState(false);
+  const [googleOnboardingStep, setGoogleOnboardingStep] = useState<'role' | 'details'>('role');
+  const [googleRole, setGoogleRole] = useState<'owner' | 'driver'>('owner');
   const [pendingGoogleUser, setPendingGoogleUser] = useState<any>(null);
+
+  // Form inputs for Google onboarding
+  const [googlePhone, setGooglePhone] = useState('');
+  const [googleHomestayName, setGoogleHomestayName] = useState('');
+  const [googleLocation, setGoogleLocation] = useState('Gangtok, Sikkim');
+  const [googleVehicleType, setGoogleVehicleType] = useState<'SUV' | 'Sedan' | '7-seater' | '9-seater'>('SUV');
+  const [googleVehicleNumber, setGoogleVehicleNumber] = useState('');
+  const [googleArea, setGoogleArea] = useState('Gangtok & North Sikkim');
+
+  // Mountain GPS Fine-Tuner & Pin Modal
+  const [showGpsModal, setShowGpsModal] = useState(false);
+  const [calibratingCoords, setCalibratingCoords] = useState<{ latitude: number; longitude: number }>({
+    latitude: 27.3389,
+    longitude: 88.6065,
+  });
 
   const isDemoEmail =
     email.trim().toLowerCase() === 'demo@stayride.in' ||
@@ -140,10 +157,30 @@ export const LoginScreen: React.FC = () => {
     if (isSignedIn && user && !hasSyncedRef.current) {
       const existingRole = (user.unsafeMetadata?.role as string) || '';
 
+      // Direct check: If admin, reject access immediately on mobile
+      if (existingRole === 'admin') {
+        (async () => {
+          try {
+            await signOut();
+            hasSyncedRef.current = false;
+          } catch {}
+          Alert.alert(
+            'Access Denied',
+            'You are an Administrator. The mobile app is strictly for Homestay Hosts and Cab Drivers. Please use the Web Control Tower.'
+          );
+        })();
+        return;
+      }
+
       // If brand new Google OAuth user who hasn't chosen role yet, display role selection modal
       if (!existingRole && !user.unsafeMetadata?.homestayName && !user.unsafeMetadata?.vehicleType && authMode !== 'signup') {
-        // The Clerk token is fetched fresh when the role is submitted
         setPendingGoogleUser(user);
+        setGoogleHomestayName(`${user.firstName || 'My'} Homestay`);
+        const p = user.primaryPhoneNumber?.phoneNumber || user.phoneNumbers?.[0]?.phoneNumber || '';
+        setGooglePhone(p);
+        setGoogleLocation('Gangtok, Sikkim');
+        setGoogleArea('Gangtok & North Sikkim');
+        setGoogleOnboardingStep('role');
         setShowRoleSelectModal(true);
         return;
       }
@@ -196,7 +233,7 @@ export const LoginScreen: React.FC = () => {
         }
       })();
     }
-  }, [isSignedIn, user, homestayName, location, phone, name, signupRole, vehicleType, vehicleNumber, area, authMode, navigation, syncClerkUser, getToken, signOut]);
+  }, [isSignedIn, user, homestayName, location, phone, name, signupRole, vehicleType, vehicleNumber, area, authMode, navigation, syncClerkUser, getToken, signOut, coords]);
 
   // Google OAuth Flow with Clerk
   const handleGoogleAuth = useCallback(async () => {
@@ -226,36 +263,70 @@ export const LoginScreen: React.FC = () => {
     }
   }, [startOAuthFlow, setActive, clerkReady]);
 
-  const handleSelectGoogleRole = async (chosenRole: 'owner' | 'driver') => {
-    setShowRoleSelectModal(false);
-    if (!pendingGoogleUser) return;
+  const handleStartGoogleOnboarding = (chosenRole: 'owner' | 'driver') => {
+    setGoogleRole(chosenRole);
+    setGoogleOnboardingStep('details');
+  };
 
+  const handleCompleteGoogleOnboarding = async () => {
+    if (!pendingGoogleUser) return;
+    const cleanPhone = googlePhone.trim();
+    if (!cleanPhone) {
+      Alert.alert('Phone Required', 'Please enter your contact phone number for guest and cab coordination.');
+      return;
+    }
+
+    if (googleRole === 'driver') {
+      if (!googleVehicleNumber.trim()) {
+        Alert.alert('Vehicle Plate Required', 'Please enter your vehicle registration / plate number (e.g. SK-01-A-4488).');
+        return;
+      }
+    } else {
+      if (!googleHomestayName.trim()) {
+        Alert.alert('Homestay Name Required', 'Please enter your homestay or property name.');
+        return;
+      }
+    }
+
+    setShowRoleSelectModal(false);
     hasSyncedRef.current = true;
     setLoading(true);
 
     try {
+      const metadataPayload = {
+        role: googleRole,
+        phone: cleanPhone,
+        homestayName: googleHomestayName.trim(),
+        location: googleLocation.trim() || 'Gangtok, Sikkim',
+        vehicleType: googleVehicleType,
+        vehicleNumber: googleVehicleNumber.trim().toUpperCase(),
+        area: googleArea.trim() || 'Gangtok & North Sikkim',
+        latitude: coords?.latitude,
+        longitude: coords?.longitude,
+        mapQuery: coords ? `${coords.latitude},${coords.longitude}` : (googleLocation.trim() || 'Gangtok, Sikkim'),
+      };
+
       if (pendingGoogleUser.update) {
         await pendingGoogleUser.update({
           unsafeMetadata: {
             ...pendingGoogleUser.unsafeMetadata,
-            role: chosenRole,
+            ...metadataPayload,
           },
         });
       }
 
       const clerkToken = await getToken();
       if (!clerkToken) throw new Error('Could not get your sign-in session. Please try again.');
+
       await syncClerkUser(pendingGoogleUser, clerkToken, {
-        role: chosenRole,
-        name: pendingGoogleUser.fullName || pendingGoogleUser.firstName || (chosenRole === 'driver' ? 'Driver' : 'Host'),
-        homestayName: `${pendingGoogleUser.firstName || 'My'} Homestay`,
-        location: 'Gangtok, Sikkim',
-        vehicleType: 'SUV',
-        area: 'Darjeeling • Sikkim Hill Roads',
+        name: pendingGoogleUser.fullName || pendingGoogleUser.firstName || (googleRole === 'driver' ? 'Driver' : 'Host'),
+        ...metadataPayload,
       });
+
       setLoading(false);
       navigation.replace('Main');
     } catch (err: any) {
+      console.error('[StayRide] Clerk Google onboarding sync failed:', err);
       try {
         await signOut();
         hasSyncedRef.current = false;
@@ -267,19 +338,43 @@ export const LoginScreen: React.FC = () => {
     }
   };
 
-  const handleDemoLogin = async (role: 'owner' | 'driver') => {
-    const demoEmail = role === 'driver' ? 'driver@stayride.in' : 'demo@stayride.in';
-    setEmail(demoEmail);
-    setPassword('demo123');
-    setLoading(true);
+  const handleOpenGoogleMaps = () => {
+    const lat = calibratingCoords.latitude;
+    const lng = calibratingCoords.longitude;
+    const url = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+    Linking.openURL(url).catch(() => {
+      Alert.alert('Google Maps Error', 'Could not open Google Maps app.');
+    });
+  };
+
+  const handleNudgeCoords = (deltaLat: number, deltaLng: number) => {
+    setCalibratingCoords((prev) => ({
+      latitude: parseFloat((prev.latitude + deltaLat).toFixed(6)),
+      longitude: parseFloat((prev.longitude + deltaLng).toFixed(6)),
+    }));
+  };
+
+  const handleConfirmCalibratedCoords = async () => {
+    setCoords(calibratingCoords);
     try {
-      await login(demoEmail, 'demo123');
-      navigation.replace('Main');
-    } catch (err: any) {
-      Alert.alert('Demo Login Error', err?.message || 'Could not log in as demo.');
-    } finally {
-      setLoading(false);
-    }
+      const [geo] = await Location.reverseGeocodeAsync(calibratingCoords);
+      if (geo) {
+        const parts = [
+          geo.name,
+          geo.street,
+          geo.district || geo.subregion,
+          geo.city || geo.region,
+        ].filter(Boolean);
+        const formatted = parts.join(', ');
+        setLocation(formatted);
+        setGoogleLocation(formatted);
+      }
+    } catch {}
+    setShowGpsModal(false);
+    Alert.alert(
+      'Mountain GPS Pin Saved!',
+      `Homestay gate pinned at:\n${calibratingCoords.latitude.toFixed(4)}° N, ${calibratingCoords.longitude.toFixed(4)}° E.`
+    );
   };
 
   // Email & Password Sign In
@@ -817,36 +912,11 @@ export const LoginScreen: React.FC = () => {
                 placeholderTextColor={Colors.textSecondary}
               />
 
-              {/* Quick Demo Logins for Testing */}
-              {authMode === 'signin' && (
-                <View style={styles.demoSection}>
-                  <Text style={styles.demoSectionTitle}>One-Tap Demo Logins</Text>
-                  <View style={styles.demoBtnRow}>
-                    <TouchableOpacity
-                      style={styles.demoBtn}
-                      onPress={() => handleDemoLogin('owner')}
-                      disabled={loading}
-                    >
-                      <Ionicons name="home" size={14} color="#0F172A" />
-                      <Text style={styles.demoBtnText}>Demo Host</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.demoBtn, styles.demoBtnDriver]}
-                      onPress={() => handleDemoLogin('driver')}
-                      disabled={loading}
-                    >
-                      <Ionicons name="car" size={14} color="#2563EB" />
-                      <Text style={[styles.demoBtnText, { color: '#1D4ED8' }]}>Demo Driver</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
-
               {/* Submit Button */}
               <TouchableOpacity
-                style={[styles.submitBtn, !clerkReady && !isDemoEmail && { opacity: 0.6 }]}
+                style={[styles.submitBtn, loading && { opacity: 0.6 }]}
                 onPress={authMode === 'signin' ? handleEmailSignIn : handleEmailSignUp}
-                disabled={loading || googleLoading || (!clerkReady && !isDemoEmail)}
+                disabled={loading || googleLoading}
                 activeOpacity={0.8}
               >
                 {loading ? (
@@ -865,47 +935,273 @@ export const LoginScreen: React.FC = () => {
           )}
         </View>
 
-        {/* Google OAuth Role Selection Modal */}
+        {/* Google OAuth Multi-Step Onboarding Modal */}
         <Modal visible={showRoleSelectModal} transparent animationType="fade">
           <View style={styles.modalOverlay}>
-            <View style={styles.modalCard}>
-              <View style={styles.modalHeaderIcon}>
-                <Ionicons name="sparkles" size={28} color="#2563EB" />
+            <View style={[styles.modalCard, googleOnboardingStep === 'details' && { maxHeight: '88%' }]}>
+              {googleOnboardingStep === 'role' ? (
+                <>
+                  <View style={styles.modalHeaderIcon}>
+                    <Ionicons name="sparkles" size={28} color="#2563EB" />
+                  </View>
+                  <Text style={styles.modalTitle}>Welcome to StayRide!</Text>
+                  <Text style={styles.modalSubtitle}>
+                    Choose how you want to use StayRide with your account:
+                  </Text>
+
+                  <TouchableOpacity
+                    style={styles.modalChoiceCard}
+                    onPress={() => handleStartGoogleOnboarding('owner')}
+                  >
+                    <View style={styles.modalChoiceIconWrap}>
+                      <Ionicons name="home" size={24} color="#0F172A" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.modalChoiceTitle}>Homestay Host / Owner</Text>
+                      <Text style={styles.modalChoiceDesc}>
+                        Manage rooms, bookings, guests, and dispatch mountain cabs for homestay riders.
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.modalChoiceCard, { borderColor: '#BFDBFE', backgroundColor: '#F0F9FF' }]}
+                    onPress={() => handleStartGoogleOnboarding('driver')}
+                  >
+                    <View style={[styles.modalChoiceIconWrap, { backgroundColor: '#DBEAFE' }]}>
+                      <Ionicons name="car" size={24} color="#2563EB" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.modalChoiceTitle, { color: '#1E40AF' }]}>Cab Driver / Operator</Text>
+                      <Text style={styles.modalChoiceDesc}>
+                        Receive nearby ride requests, quote fares, navigate routes, and collect cash.
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color="#2563EB" />
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 10 }}>
+                  <TouchableOpacity
+                    style={styles.onboardingBackBtn}
+                    onPress={() => setGoogleOnboardingStep('role')}
+                  >
+                    <Ionicons name="arrow-back" size={16} color="#64748B" style={{ marginRight: 4 }} />
+                    <Text style={styles.onboardingBackText}>Back to Role Selection</Text>
+                  </TouchableOpacity>
+
+                  <Text style={styles.modalTitle}>
+                    {googleRole === 'owner' ? 'Homestay Host Details' : 'Driver & Vehicle Details'}
+                  </Text>
+                  <Text style={styles.modalSubtitle}>
+                    {googleRole === 'owner'
+                      ? 'Add your phone, property name, and pin your mountain GPS.'
+                      : 'Add your WhatsApp contact and vehicle registration plate.'}
+                  </Text>
+
+                  {/* Contact Phone (Required for both) */}
+                  <Text style={styles.label}>WhatsApp / Phone Number *</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="+91 98000 11223"
+                    keyboardType="phone-pad"
+                    value={googlePhone}
+                    onChangeText={setGooglePhone}
+                    placeholderTextColor={Colors.textSecondary}
+                  />
+
+                  {googleRole === 'owner' ? (
+                    <>
+                      <Text style={styles.label}>Homestay / Property Name *</Text>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="e.g. Kanchenjunga View Homestay"
+                        value={googleHomestayName}
+                        onChangeText={setGoogleHomestayName}
+                        placeholderTextColor={Colors.textSecondary}
+                      />
+
+                      <Text style={styles.label}>Location / Village / Town</Text>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="e.g. Upper Pelling, West Sikkim"
+                        value={googleLocation}
+                        onChangeText={setGoogleLocation}
+                        placeholderTextColor={Colors.textSecondary}
+                      />
+
+                      <View style={{ marginTop: 8, marginBottom: 12 }}>
+                        <TouchableOpacity
+                          style={styles.gpsDetectBtn}
+                          onPress={handleDetectGPS}
+                          disabled={locating}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons name="navigate-circle" size={18} color="#2563EB" style={{ marginRight: 6 }} />
+                          <Text style={styles.gpsDetectBtnText}>
+                            {locating ? 'Detecting Satellite GPS…' : '📍 Auto-Detect Live GPS'}
+                          </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={[styles.gpsDetectBtn, { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0', marginTop: 8 }]}
+                          onPress={() => setShowGpsModal(true)}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons name="map" size={18} color="#16A34A" style={{ marginRight: 6 }} />
+                          <Text style={[styles.gpsDetectBtnText, { color: '#15803D' }]}>
+                            {coords ? `📍 Calibrate Mountain Pin (${coords.latitude.toFixed(4)}°, ${coords.longitude.toFixed(4)}°)` : '📍 Calibrate Pin & Google Map'}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    </>
+                  ) : (
+                    <>
+                      <Text style={styles.label}>Vehicle Type</Text>
+                      <View style={styles.vehicleTypeRow}>
+                        {(['SUV', 'Sedan', '7-seater', '9-seater'] as const).map((v) => (
+                          <TouchableOpacity
+                            key={v}
+                            style={[styles.vehicleChip, googleVehicleType === v && styles.vehicleChipActive]}
+                            onPress={() => setGoogleVehicleType(v)}
+                          >
+                            <Text style={[styles.vehicleChipText, googleVehicleType === v && styles.vehicleChipTextActive]}>
+                              {v}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+
+                      <Text style={styles.label}>Vehicle Plate / Reg Number *</Text>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="e.g. SK-01-A-4488"
+                        autoCapitalize="characters"
+                        value={googleVehicleNumber}
+                        onChangeText={setGoogleVehicleNumber}
+                        placeholderTextColor={Colors.textSecondary}
+                      />
+
+                      <Text style={styles.label}>Operating Base / Valley Route</Text>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="e.g. Gangtok & North Sikkim"
+                        value={googleArea}
+                        onChangeText={setGoogleArea}
+                        placeholderTextColor={Colors.textSecondary}
+                      />
+                    </>
+                  )}
+
+                  <TouchableOpacity
+                    style={[styles.submitBtn, { marginTop: 14 }]}
+                    onPress={handleCompleteGoogleOnboarding}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.submitBtnText}>Complete Setup & Enter StayRide</Text>
+                  </TouchableOpacity>
+                </ScrollView>
+              )}
+            </View>
+          </View>
+        </Modal>
+
+        {/* Mountain GPS Fine-Tuner & Pin Modal */}
+        <Modal visible={showGpsModal} transparent animationType="slide">
+          <View style={styles.modalOverlay}>
+            <View style={[styles.modalCard, { maxWidth: 420 }]}>
+              <View style={[styles.modalHeaderIcon, { backgroundColor: '#DCFCE7' }]}>
+                <Ionicons name="location" size={28} color="#16A34A" />
               </View>
-              <Text style={styles.modalTitle}>Welcome to StayRide!</Text>
+              <Text style={styles.modalTitle}>Mountain GPS Calibration</Text>
               <Text style={styles.modalSubtitle}>
-                Choose how you want to use StayRide with your account:
+                Signals drift in mountain valleys. Use D-Pad controls or open in Google Maps to drop your exact gate pin.
               </Text>
 
-              <TouchableOpacity
-                style={styles.modalChoiceCard}
-                onPress={() => handleSelectGoogleRole('owner')}
-              >
-                <View style={styles.modalChoiceIconWrap}>
-                  <Ionicons name="home" size={24} color="#0F172A" />
-                </View>
+              {/* Coordinates Readout */}
+              <View style={styles.coordsBox}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.modalChoiceTitle}>Homestay Host / Owner</Text>
-                  <Text style={styles.modalChoiceDesc}>
-                    Manage rooms, bookings, guests, and dispatch mountain cabs for homestay riders.
-                  </Text>
+                  <Text style={styles.coordsBoxTitle}>Latitude</Text>
+                  <Text style={styles.coordsBoxVal}>{calibratingCoords.latitude.toFixed(5)}° N</Text>
                 </View>
+                <View style={{ width: 1, backgroundColor: '#CBD5E1', marginHorizontal: 12 }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.coordsBoxTitle}>Longitude</Text>
+                  <Text style={styles.coordsBoxVal}>{calibratingCoords.longitude.toFixed(5)}° E</Text>
+                </View>
+              </View>
+
+              {/* Fine-Tuning D-Pad */}
+              <View style={styles.dpadBox}>
+                <Text style={styles.dpadLabel}>Nudge Pin (~50m Offset):</Text>
+                <View style={{ alignItems: 'center', marginTop: 8 }}>
+                  <TouchableOpacity
+                    style={styles.dpadBtn}
+                    onPress={() => handleNudgeCoords(0.00045, 0)}
+                  >
+                    <Ionicons name="chevron-up" size={18} color="#1E293B" />
+                    <Text style={styles.dpadBtnText}>North</Text>
+                  </TouchableOpacity>
+
+                  <View style={{ flexDirection: 'row', gap: 16, marginVertical: 6, alignItems: 'center' }}>
+                    <TouchableOpacity
+                      style={styles.dpadBtn}
+                      onPress={() => handleNudgeCoords(0, -0.0005)}
+                    >
+                      <Ionicons name="chevron-back" size={18} color="#1E293B" />
+                      <Text style={styles.dpadBtnText}>West</Text>
+                    </TouchableOpacity>
+
+                    <View style={styles.dpadPinCenter}>
+                      <Ionicons name="pin" size={24} color="#EF4444" />
+                    </View>
+
+                    <TouchableOpacity
+                      style={styles.dpadBtn}
+                      onPress={() => handleNudgeCoords(0, 0.0005)}
+                    >
+                      <Ionicons name="chevron-forward" size={18} color="#1E293B" />
+                      <Text style={styles.dpadBtnText}>East</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <TouchableOpacity
+                    style={styles.dpadBtn}
+                    onPress={() => handleNudgeCoords(-0.00045, 0)}
+                  >
+                    <Ionicons name="chevron-down" size={18} color="#1E293B" />
+                    <Text style={styles.dpadBtnText}>South</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Open in Google Maps */}
+              <TouchableOpacity
+                style={styles.googleMapsBtn}
+                onPress={handleOpenGoogleMaps}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="navigate" size={16} color="#1D4ED8" style={{ marginRight: 6 }} />
+                <Text style={styles.googleMapsBtnText}>Verify Pin on Google Maps</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[styles.modalChoiceCard, { borderColor: '#BFDBFE', backgroundColor: '#F0F9FF' }]}
-                onPress={() => handleSelectGoogleRole('driver')}
-              >
-                <View style={[styles.modalChoiceIconWrap, { backgroundColor: '#DBEAFE' }]}>
-                  <Ionicons name="car" size={24} color="#2563EB" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.modalChoiceTitle, { color: '#1E40AF' }]}>Cab Driver / Operator</Text>
-                  <Text style={styles.modalChoiceDesc}>
-                    Receive nearby ride requests, quote fares, navigate routes, and collect cash.
-                  </Text>
-                </View>
-              </TouchableOpacity>
+              {/* Actions */}
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
+                <TouchableOpacity
+                  style={[styles.submitBtn, { flex: 1, backgroundColor: '#F1F5F9' }]}
+                  onPress={() => setShowGpsModal(false)}
+                >
+                  <Text style={[styles.submitBtnText, { color: '#475569' }]}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.submitBtn, { flex: 2 }]}
+                  onPress={handleConfirmCalibratedCoords}
+                >
+                  <Text style={styles.submitBtnText}>Confirm Coordinates</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </Modal>
@@ -1158,45 +1454,6 @@ const styles = StyleSheet.create({
     color: '#1D4ED8',
     fontWeight: '700',
   },
-  demoSection: {
-    marginTop: 14,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
-  },
-  demoSectionTitle: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#64748B',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 8,
-  },
-  demoBtnRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  demoBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 9,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    backgroundColor: '#F8FAFC',
-  },
-  demoBtnDriver: {
-    borderColor: '#93C5FD',
-    backgroundColor: '#EFF6FF',
-  },
-  demoBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#0F172A',
-  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(15, 23, 42, 0.65)',
@@ -1295,5 +1552,95 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     color: '#15803D',
+  },
+  onboardingBackBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    alignSelf: 'flex-start',
+    paddingVertical: 4,
+  },
+  onboardingBackText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  coordsBox: {
+    flexDirection: 'row',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+  },
+  coordsBoxTitle: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748B',
+    textTransform: 'uppercase',
+  },
+  coordsBoxVal: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginTop: 2,
+  },
+  dpadBox: {
+    backgroundColor: '#F1F5F9',
+    borderRadius: 16,
+    padding: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  dpadLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#475569',
+  },
+  dpadBtn: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 70,
+    ...Shadows.sm,
+  },
+  dpadBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#1E293B',
+    marginTop: 2,
+  },
+  dpadPinCenter: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FEE2E2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  googleMapsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 10,
+    paddingVertical: 10,
+    marginTop: 12,
+  },
+  googleMapsBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1D4ED8',
   },
 });

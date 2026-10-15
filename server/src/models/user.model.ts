@@ -11,6 +11,10 @@ export interface IUser extends Document {
   avatar?: string;
   clerkId?: string;
   propertyId?: Schema.Types.ObjectId | string;
+  accountStatus: "ACTIVE" | "PENDING_APPROVAL" | "BLOCKED";
+  statusReason?: string;
+  isAvailable?: boolean;
+  vehicle?: { type?: string; model?: string; plate?: string; seats?: number; area?: string };
   createdAt: Date;
   updatedAt: Date;
   createdAtIST?: string;
@@ -28,6 +32,17 @@ const UserSchema = new Schema<IUser>(
     avatar: { type: String, default: "" },
     clerkId: { type: String, sparse: true, index: true },
     propertyId: { type: Schema.Types.ObjectId, ref: "Property" },
+    // Admin-controlled. Only ACTIVE accounts may use the app; drivers start PENDING_APPROVAL.
+    accountStatus: { type: String, enum: ["ACTIVE", "PENDING_APPROVAL", "BLOCKED"], default: "ACTIVE", index: true },
+    statusReason: { type: String, default: "" },
+    isAvailable: { type: Boolean, default: true },
+    vehicle: {
+      type: { type: String, default: "" },
+      model: { type: String, default: "" },
+      plate: { type: String, default: "" },
+      seats: { type: Number, default: 0 },
+      area: { type: String, default: "" },
+    },
     createdAtIST: { type: String, default: () => getISTTimestamp() },
     updatedAtIST: { type: String, default: () => getISTTimestamp() },
   },

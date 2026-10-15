@@ -1,11 +1,13 @@
 import { Router } from "express";
 import { GuestController } from "../controllers/guest.controller.js";
-import { optionalAuth } from "../middlewares/auth.js";
+import { verifyToken, requireRole } from "../middlewares/auth.js";
 
 const router = Router();
 
-router.get("/", optionalAuth, GuestController.getGuests);
-router.get("/timeline", optionalAuth, GuestController.getTimeline);
+router.use(verifyToken, requireRole("owner", "admin"));
+
+router.get("/", GuestController.getGuests);
+router.get("/timeline", GuestController.getTimeline);
 router.get("/:id", GuestController.getGuest);
 router.patch("/:id", GuestController.updateGuest);
 

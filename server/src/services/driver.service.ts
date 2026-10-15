@@ -231,12 +231,46 @@ export class DriverService {
       throw new Error(`Driver with ID '${data.driverId}' not found`);
     }
 
-    const distanceKm = this.calculateDistanceKm(
-      data.pickupLat,
-      data.pickupLng,
-      data.dropoffLat,
-      data.dropoffLng
+    // Validate & snap coordinates against curated landmarks if available
+    let pickupLat = data.pickupLat;
+    let pickupLng = data.pickupLng;
+    let dropoffLat = data.dropoffLat;
+    let dropoffLng = data.dropoffLng;
+
+    const matchedPickup = CURATED_CAB_PLACES.find(
+      (p) =>
+        p.id.toLowerCase() === data.pickupName?.toLowerCase() ||
+        p.name.toLowerCase() === data.pickupName?.toLowerCase()
     );
+    if (matchedPickup) {
+      pickupLat = matchedPickup.lat;
+      pickupLng = matchedPickup.lng;
+    }
+
+    const matchedDropoff = CURATED_CAB_PLACES.find(
+      (p) =>
+        p.id.toLowerCase() === data.dropoffName?.toLowerCase() ||
+        p.name.toLowerCase() === data.dropoffName?.toLowerCase()
+    );
+    if (matchedDropoff) {
+      dropoffLat = matchedDropoff.lat;
+      dropoffLng = matchedDropoff.lng;
+    }
+
+    let distanceKm = this.calculateDistanceKm(
+      pickupLat,
+      pickupLng,
+      dropoffLat,
+      dropoffLng
+    );
+
+    // If locations have distinct names, enforce minimum route distance of 3km
+    if (
+      data.pickupName?.trim().toLowerCase() !== data.dropoffName?.trim().toLowerCase() &&
+      distanceKm < 3
+    ) {
+      distanceKm = 3;
+    }
 
     const surgeMultiplier = distanceKm > 40 ? 1.15 : 1.0;
     const rawFare = distanceKm * driver.perKm * surgeMultiplier;
@@ -258,11 +292,11 @@ export class DriverService {
       email: data.email,
       phone: data.phone,
       pickupName: data.pickupName,
-      pickupLat: data.pickupLat,
-      pickupLng: data.pickupLng,
+      pickupLat,
+      pickupLng,
       dropoffName: data.dropoffName,
-      dropoffLat: data.dropoffLat,
-      dropoffLng: data.dropoffLng,
+      dropoffLat,
+      dropoffLng,
       pickupDate: data.pickupDate,
       pickupTime: data.pickupTime,
       seats: data.seats,

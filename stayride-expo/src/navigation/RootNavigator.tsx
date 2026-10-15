@@ -1,5 +1,5 @@
 import React from 'react';
-import { Platform, StyleSheet } from 'react-native';
+import { Platform, StyleSheet, View, Text, TouchableOpacity } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -204,9 +204,28 @@ const DriverTabs: React.FC = () => {
 };
 
 const UnifiedAppTabs: React.FC = () => {
-  const { session } = useStayRide();
+  const { session, logout } = useStayRide();
   if (session?.role === 'driver') {
     return <DriverTabs />;
+  }
+  if (session?.role === 'admin') {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: '#0F172A' }}>
+        <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: '#EF4444', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+          <Ionicons name="shield-outline" size={32} color="#FFFFFF" />
+        </View>
+        <Text style={{ fontSize: 20, fontWeight: '800', color: '#FFFFFF', textAlign: 'center' }}>Administrator Access</Text>
+        <Text style={{ fontSize: 14, color: '#94A3B8', textAlign: 'center', marginTop: 8, lineHeight: 20, maxWidth: 300 }}>
+          Super Admin controls are strictly accessible via the Web Control Tower at platform admin portal. This mobile app is reserved for Homestay Hosts and Cab Drivers.
+        </Text>
+        <TouchableOpacity
+          onPress={logout}
+          style={{ marginTop: 24, backgroundColor: '#EF4444', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 }}
+        >
+          <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 14 }}>Sign Out</Text>
+        </TouchableOpacity>
+      </View>
+    );
   }
   return <MainTabs />;
 };

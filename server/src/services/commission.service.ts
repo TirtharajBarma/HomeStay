@@ -1,161 +1,179 @@
-import { CommissionSettings, ICommissionSettings } from "../models/commission-settings.model.js";
-import mongoose from "mongoose";
-import { Property } from "../models/property.model.js";
+import { getCommissionSettingsModel, ICommissionSettings } from "../models/commission-settings.model.js";
+import { getTenantControlModel, FEATURE_KEYS, FeatureKey } from "../models/tenant-control.model.js";
 
 export interface CommissionCalculationResult {
   agreedFare: number;
-  platformFeeRate: number; // e.g. 0.05
-  platformFeePercent: number; // e.g. 5.0
+  platformFeeRate: number;
+  platformFeePercent: number;
   platformFeeAmount: number;
-  homestayCommissionRate: number; // e.g. 0.10
-  homestayCommissionPercent: number; // e.g. 10.0
+  homestayCommissionRate: number;
+  homestayCommissionPercent: number;
   homestayCommissionAmount: number;
-  driverPayoutRate: number; // e.g. 0.85
+  driverPayoutRate: number;
   driverPayoutAmount: number;
-  advanceRate: number; // e.g. 0.15
+  advanceRate: number;
   advanceAmount: number;
   remainingCashToDriver: number;
+  driverShareOfAdvance: number; // part of the advance the platform owes the driver
+}
+
+// Defaults when admin hasn't configured a feature yet.
+const FEATURE_DEFAULTS: Record<FeatureKey, { enabled: boolean; defaultOn: boolean }> = {
+  campaigns: { enabled: true, defaultOn: false }, // gated: admin grants per homestay (or via appeal)
+  guestCabLinks: { enabled: true, defaultOn: true },
+  platformDispatch: { enabled: true, defaultOn: true },
+  payouts: { enabled: true, defaultOn: true },
+  driverQuotes: { enabled: true, defaultOn: true },
+};
+
+const pct = (v: unknown) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : NaN;
+};
+
+export function validateRates(pf: number, hc: number, adv: number) {
+  if (![pf, hc, adv].every((n) => Number.isFinite(n))) throw new Error("Rates must be numbers.");
+  if (pf < 0 || hc < 0 || pf > 100 || hc > 100) throw new Error("Percentages must be between 0 and 100.");
+  if (pf + hc >= 100) throw new Error("Platform Fee % + Homestay Commission % must be less than 100%.");
+  if (adv < 5 || adv > 100) throw new Error("Advance % must be between 5 and 100.");
 }
 
 export class CommissionService {
-  /**
-   * Retrieves the current CommissionSettings document, initializing with defaults if none exists.
-   */
-  static async getSettings(): Promise<ICommissionSettings> {
-    let settings = await CommissionSettings.findOne().sort({ createdAt: -1 });
-    if (!settings) {
-      settings = await CommissionSettings.create({
-        globalPlatformFeePercent: 5.0,
-        globalHomestayCommissionPercent: 10.0,
-        defaultAdvancePercent: 15.0,
-        propertyOverrides: [],
-        updatedBy: "system_init",
-        changeReason: "Initial system default rates",
-      });
-    }
-    return settings;
+  static async getSettings(isDemo = false): Promise<ICommissionSettings> {
+    const Model = getCommissionSettingsModel(isDemo);
+    const existing = await Model.findOne().sort({ createdAt: -1 });
+    if (existing) return existing;
+    // Upsert on a fixed key so concurrent cold starts can't create two settings docs.
+    await Model.updateOne(
+      { updatedBy: "system_init" },
+      {
+        $setOnInsert: {
+          globalPlatformFeePercent: 5,
+          globalHomestayCommissionPercent: 10,
+          defaultAdvancePercent: 15,
+          minAdvanceAmount: 300,
+          // Demo showcases every feature; real homestays follow the admin defaults.
+          features: isDemo
+            ? Object.fromEntries(FEATURE_KEYS.map((k) => [k, { enabled: true, defaultOn: true }]))
+            : FEATURE_DEFAULTS,
+          propertyOverrides: [],
+          changeReason: "Initial system default rates",
+        },
+      },
+      { upsert: true }
+    );
+    return (await Model.findOne().sort({ createdAt: -1 }))!;
   }
 
-  /**
-   * Updates global commission rates and records audit details.
-   */
   static async updateSettings(params: {
-    globalPlatformFeePercent: number;
-    globalHomestayCommissionPercent: number;
-    defaultAdvancePercent?: number;
-    updatedBy?: string;
+    globalPlatformFeePercent: unknown;
+    globalHomestayCommissionPercent: unknown;
+    defaultAdvancePercent?: unknown;
+    minAdvanceAmount?: unknown;
+    features?: Record<string, { enabled?: unknown; defaultOn?: unknown }>;
+    updatedBy: string;
     changeReason?: string;
-  }): Promise<ICommissionSettings> {
-    const { globalPlatformFeePercent, globalHomestayCommissionPercent, defaultAdvancePercent, updatedBy, changeReason } = params;
-
-    if (globalPlatformFeePercent < 0 || globalHomestayCommissionPercent < 0) {
-      throw new Error("Commission percentages cannot be negative.");
+  }): Promise<{ before: any; after: ICommissionSettings }> {
+    const settings = await this.getSettings(false);
+    const before = settings.toObject();
+    const pf = pct(params.globalPlatformFeePercent);
+    const hc = pct(params.globalHomestayCommissionPercent);
+    const adv = params.defaultAdvancePercent === undefined ? settings.defaultAdvancePercent : pct(params.defaultAdvancePercent);
+    validateRates(pf, hc, adv);
+    settings.globalPlatformFeePercent = pf;
+    settings.globalHomestayCommissionPercent = hc;
+    settings.defaultAdvancePercent = adv;
+    if (params.minAdvanceAmount !== undefined) {
+      const min = pct(params.minAdvanceAmount);
+      if (!Number.isFinite(min) || min < 0) throw new Error("Minimum advance must be 0 or more.");
+      settings.minAdvanceAmount = min;
     }
-
-    if (globalPlatformFeePercent + globalHomestayCommissionPercent >= 100) {
-      throw new Error("Combined Platform Fee % and Homestay Commission % must be less than 100%.");
+    if (params.features) {
+      const next: any = { ...this.globalFeatures(settings) };
+      for (const key of FEATURE_KEYS) {
+        const f = params.features[key];
+        if (!f) continue;
+        next[key] = {
+          enabled: f.enabled === undefined ? next[key].enabled : f.enabled === true,
+          defaultOn: f.defaultOn === undefined ? next[key].defaultOn : f.defaultOn === true,
+        };
+      }
+      settings.features = next;
+      settings.markModified("features");
     }
-
-    let settings = await CommissionSettings.findOne().sort({ createdAt: -1 });
-    if (!settings) {
-      settings = new CommissionSettings();
-    }
-
-    settings.globalPlatformFeePercent = globalPlatformFeePercent;
-    settings.globalHomestayCommissionPercent = globalHomestayCommissionPercent;
-    if (defaultAdvancePercent !== undefined) {
-      settings.defaultAdvancePercent = defaultAdvancePercent;
-    }
-    settings.updatedBy = updatedBy || "admin";
-    settings.changeReason = changeReason || "Admin updated commission rates";
+    settings.updatedBy = params.updatedBy;
+    settings.changeReason = params.changeReason || "Admin updated platform settings";
     settings.effectiveFrom = new Date();
-
     await settings.save();
-    return settings;
+    return { before, after: settings };
   }
 
-  /**
-   * Resolves the effective commission rates for a given property (override if set, otherwise global).
-   */
-  static async getEffectiveRates(propertyId?: string): Promise<{
-    pfPercent: number;
-    hcPercent: number;
-    advancePercent: number;
-    isOverride: boolean;
-  }> {
-    const settings = await this.getSettings();
-    let pfPercent = settings.globalPlatformFeePercent;
-    let hcPercent = settings.globalHomestayCommissionPercent;
-    let isOverride = false;
+  static globalFeatures(settings: ICommissionSettings): Record<FeatureKey, { enabled: boolean; defaultOn: boolean }> {
+    const out: any = {};
+    for (const key of FEATURE_KEYS) out[key] = { ...FEATURE_DEFAULTS[key], ...((settings.features || {}) as any)[key] };
+    return out;
+  }
 
-    if (propertyId) {
-      // 1. Check in CommissionSettings propertyOverrides array
-      const override = settings.propertyOverrides.find(
-        (o) => o.propertyId.toString() === propertyId.toString()
-      );
-      if (override) {
-        pfPercent = override.platformFeePercent;
-        hcPercent = override.homestayCommissionPercent;
-        isOverride = true;
-      } else if (mongoose.isValidObjectId(propertyId)) {
-        // 2. Check on Property document itself (StayRide tenant keys are emails, not ObjectIds)
-        const prop = await Property.findById(propertyId).select("platformFeePercent homestayCommissionPercent");
-        if (prop?.platformFeePercent !== null && prop?.platformFeePercent !== undefined) {
-          pfPercent = prop.platformFeePercent;
-          isOverride = true;
-        }
-        if (prop?.homestayCommissionPercent !== null && prop?.homestayCommissionPercent !== undefined) {
-          hcPercent = prop.homestayCommissionPercent;
-          isOverride = true;
-        }
-      }
+  static async getControl(tenantKey: string, isDemo = false) {
+    return getTenantControlModel(isDemo).findOne({ tenantKey }).lean() as Promise<any>;
+  }
+
+  /** Effective account state for a homestay: blocked flag + features (global disable always wins). */
+  static async getAccountState(tenantKey: string, isDemo = false) {
+    const [settings, control] = await Promise.all([this.getSettings(isDemo), this.getControl(tenantKey, isDemo)]);
+    const global = this.globalFeatures(settings);
+    const features = {} as Record<FeatureKey, boolean>;
+    for (const key of FEATURE_KEYS) {
+      const override = control?.features?.[key];
+      features[key] = global[key].enabled && (typeof override === "boolean" ? override : global[key].defaultOn);
     }
+    return { blocked: Boolean(control?.blocked), blockReason: control?.blockReason || "", features, settings, control };
+  }
 
+  static async getEffectiveRates(tenantKey?: string, isDemo = false) {
+    const settings = await this.getSettings(isDemo);
+    const control = tenantKey ? await this.getControl(tenantKey, isDemo) : null;
+    const o = control?.commissionOverride;
     return {
-      pfPercent,
-      hcPercent,
-      advancePercent: settings.defaultAdvancePercent ?? 15.0,
-      isOverride,
+      pfPercent: o?.pfPercent ?? settings.globalPlatformFeePercent,
+      hcPercent: o?.hcPercent ?? settings.globalHomestayCommissionPercent,
+      advancePercent: o?.advancePercent ?? settings.defaultAdvancePercent ?? 15,
+      minAdvanceAmount: settings.minAdvanceAmount ?? 300,
+      isOverride: Boolean(o),
     };
   }
 
-  /**
-   * Calculates the exact financial split for an agreed cab fare.
-   */
-  static async calculateSplit(fare: number, propertyId?: string): Promise<CommissionCalculationResult> {
-    const { pfPercent, hcPercent, advancePercent } = await this.getEffectiveRates(propertyId);
+  /** Exact split for an agreed fare. Integer rupees; PF + HC + driver always equals the fare. */
+  static async calculateSplit(fare: number, tenantKey?: string, isDemo = false): Promise<CommissionCalculationResult> {
+    const { pfPercent, hcPercent, advancePercent, minAdvanceAmount } = await this.getEffectiveRates(tenantKey, isDemo);
+    return this.split(fare, pfPercent, hcPercent, advancePercent, minAdvanceAmount);
+  }
 
-    const agreedFare = Math.max(0, Math.round(fare));
-    const pfRate = pfPercent / 100;
-    const hcRate = hcPercent / 100;
-    const advRate = advancePercent / 100;
-
-    const platformFeeAmount = Math.round(agreedFare * pfRate);
-    const homestayCommissionAmount = Math.round(agreedFare * hcRate);
-    const driverPayoutAmount = Math.max(0, agreedFare - (platformFeeAmount + homestayCommissionAmount));
-    const driverPayoutRate = Math.max(0, 1 - (pfRate + hcRate));
-
-    // Advance from guest: advance% (min ₹300), always enough to cover PF + HC, never more than the fare.
+  static split(fare: number, pfPercent: number, hcPercent: number, advancePercent: number, minAdvanceAmount: number): CommissionCalculationResult {
+    if (!Number.isFinite(fare) || fare <= 0) throw new Error("Fare must be a positive number.");
+    const agreedFare = Math.round(fare);
+    const platformFeeAmount = Math.round((agreedFare * pfPercent) / 100);
+    const homestayCommissionAmount = Math.round((agreedFare * hcPercent) / 100);
+    const driverPayoutAmount = agreedFare - platformFeeAmount - homestayCommissionAmount;
+    // Advance covers at least PF + HC (the platform must collect what it pays out), never more than the fare.
     const advanceAmount = Math.min(
       agreedFare,
-      Math.max(300, Math.round(agreedFare * advRate), platformFeeAmount + homestayCommissionAmount)
+      Math.max(minAdvanceAmount, Math.round((agreedFare * advancePercent) / 100), platformFeeAmount + homestayCommissionAmount)
     );
-    // Remaining cash guest pays directly to driver
-    const remainingCashToDriver = Math.max(0, agreedFare - advanceAmount);
-
     return {
       agreedFare,
-      platformFeeRate: pfRate,
+      platformFeeRate: pfPercent / 100,
       platformFeePercent: pfPercent,
       platformFeeAmount,
-      homestayCommissionRate: hcRate,
+      homestayCommissionRate: hcPercent / 100,
       homestayCommissionPercent: hcPercent,
       homestayCommissionAmount,
-      driverPayoutRate,
+      driverPayoutRate: Math.max(0, 1 - (pfPercent + hcPercent) / 100),
       driverPayoutAmount,
-      advanceRate: advRate,
+      advanceRate: advancePercent / 100,
       advanceAmount,
-      remainingCashToDriver,
+      remainingCashToDriver: agreedFare - advanceAmount,
+      driverShareOfAdvance: advanceAmount - platformFeeAmount - homestayCommissionAmount,
     };
   }
 }

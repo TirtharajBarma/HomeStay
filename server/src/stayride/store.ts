@@ -98,6 +98,7 @@ export interface StayRideTrip {
   guestId?: number;
   bookingId?: number;
   payoutId?: string; // set once the commission is settled through a platform payout
+  dispatchMode?: 'PLATFORM' | 'OWN_DRIVER';
 }
 
 export interface StayRideCampaign {
@@ -163,6 +164,9 @@ export class StayRideMemoryStore {
   private nextBookingId = 100;
   private nextDriverId = 100;
   private nextTripId = 100;
+  // Optimistic-concurrency bookkeeping, set by StayRideTenantManager.load(); never serialized.
+  tenantKey = '';
+  version = 0;
   private nextCampaignId = 100;
 
   constructor(isDemo: boolean = true, initialHomestay?: Partial<StayRideHomestay>) {
@@ -274,10 +278,10 @@ export class StayRideMemoryStore {
     ];
 
     this.trips = [
-      { id: 1, guestName: 'Ananya Roy', phone: '+91 98301 12345', pickup: 'Bagdogra Airport', destination: 'Mountain View Homestay', date: t - 2 * DAY, time: '12:00 PM', passengers: 2, vehicleType: 'SUV', estFare: 3200, status: 'COMPLETED', driverId: 1, driverName: 'Pemba Lepcha', ownerDriver: true, fare: 3200, commission: 384, commissionPaid: true, advancePaid: true, advanceAmount: 480, remainingCashAmount: 2720, reference: 'REQ-DEMO-001' },
-      { id: 2, guestName: 'Vikram Mehta', phone: '+91 98200 45678', pickup: 'NJP Station', destination: 'Mountain View Homestay', date: t - 1 * DAY, time: '09:00 AM', passengers: 4, vehicleType: 'SUV', estFare: 3000, status: 'COMPLETED', driverId: 2, driverName: 'Karma Bhutia', ownerDriver: true, fare: 3000, commission: 360, commissionPaid: false, advancePaid: true, advanceAmount: 450, remainingCashAmount: 2550, reference: 'REQ-DEMO-002' },
-      { id: 3, guestName: 'Pooja Chawla', phone: '+91 97110 88990', pickup: 'Mountain View Homestay', destination: 'Bagdogra Airport', date: t + 4 * DAY, time: '08:00 AM', passengers: 2, vehicleType: 'SUV', estFare: 3200, status: 'DRIVER_ASSIGNED', driverId: 201, driverName: 'Norbu Sherpa', ownerDriver: false, fare: 0, commission: 384, commissionPaid: false, advancePaid: true, advanceAmount: 480, remainingCashAmount: 2720, reference: 'REQ-DEMO-003' },
-      { id: 4, guestName: 'Rahul Verma', phone: '+91 98111 22334', pickup: 'Mountain View Homestay', destination: 'Tsomgo Lake & Baba Mandir', date: t + 1 * DAY, time: '07:30 AM', passengers: 4, vehicleType: 'SUV', estFare: 5500, status: 'NEW_REQUEST', driverId: null, driverName: null, ownerDriver: false, fare: 0, commission: 660, commissionPaid: false, reference: 'REQ-DEMO-004' },
+      { id: 1, guestName: 'Ananya Roy', phone: '+91 98301 12345', pickup: 'Bagdogra Airport', destination: 'Mountain View Homestay', date: t - 2 * DAY, time: '12:00 PM', passengers: 2, vehicleType: 'SUV', estFare: 3200, status: 'COMPLETED', driverId: 1, driverName: 'Pemba Lepcha', ownerDriver: true, fare: 3200, commission: 384, commissionPaid: true, advancePaid: true, advanceAmount: 480, remainingCashAmount: 2720 },
+      { id: 2, guestName: 'Vikram Mehta', phone: '+91 98200 45678', pickup: 'NJP Station', destination: 'Mountain View Homestay', date: t - 1 * DAY, time: '09:00 AM', passengers: 4, vehicleType: 'SUV', estFare: 3000, status: 'COMPLETED', driverId: 2, driverName: 'Karma Bhutia', ownerDriver: true, fare: 3000, commission: 360, commissionPaid: false, advancePaid: true, advanceAmount: 450, remainingCashAmount: 2550 },
+      { id: 3, guestName: 'Pooja Chawla', phone: '+91 97110 88990', pickup: 'Mountain View Homestay', destination: 'Bagdogra Airport', date: t + 4 * DAY, time: '08:00 AM', passengers: 2, vehicleType: 'SUV', estFare: 3200, status: 'DRIVER_ASSIGNED', driverId: 201, driverName: 'Norbu Sherpa', ownerDriver: false, fare: 0, commission: 384, commissionPaid: false, advancePaid: true, advanceAmount: 480, remainingCashAmount: 2720 },
+      { id: 4, guestName: 'Rahul Verma', phone: '+91 98111 22334', pickup: 'Mountain View Homestay', destination: 'Tsomgo Lake & Baba Mandir', date: t + 1 * DAY, time: '07:30 AM', passengers: 4, vehicleType: 'SUV', estFare: 5500, status: 'NEW_REQUEST', driverId: null, driverName: null, ownerDriver: false, fare: 0, commission: 660, commissionPaid: false },
     ];
 
     this.campaigns = [
@@ -342,14 +346,21 @@ export class StayRideMemoryStore {
     // Prevent overlapping bookings on the same room
     const requestedCheckIn = Number(data.checkIn);
     const requestedCheckOut = Number(data.checkOut);
+    if (!Number.isFinite(requestedCheckIn) || !Number.isFinite(requestedCheckOut) || requestedCheckOut <= requestedCheckIn) {
+      throw Object.assign(new Error('Valid check-in and check-out dates are required (check-out after check-in).'), { status: 400 });
+    }
+    if (!this.rooms.some((r) => r.number === data.roomNumber)) {
+      throw Object.assign(new Error('Unknown room.'), { status: 400 });
+    }
     const hasCollision = this.bookings.some((b) => {
       if (b.roomNumber !== data.roomNumber || b.status === 'CANCELLED') return false;
       return requestedCheckIn < b.checkOut && requestedCheckOut > b.checkIn;
     });
 
     if (hasCollision) {
-      throw new Error(
-        `Room ${data.roomNumber} is already booked for these dates (${new Date(requestedCheckIn).toLocaleDateString()} to ${new Date(requestedCheckOut).toLocaleDateString()}). Please select different dates or a different room.`
+      throw Object.assign(
+        new Error(`Room ${data.roomNumber} is already booked for these dates. Please choose different dates or another room.`),
+        { status: 409 }
       );
     }
 
@@ -469,10 +480,6 @@ export class StayRideMemoryStore {
       fare: 0,
       commission: 0,
       commissionPaid: false,
-      ...(data.reference ? { reference: data.reference } : {}),
-      ...(data.advancePaid !== undefined ? { advancePaid: data.advancePaid } : {}),
-      ...(data.advanceAmount !== undefined ? { advanceAmount: data.advanceAmount } : {}),
-      ...(data.remainingCashAmount !== undefined ? { remainingCashAmount: data.remainingCashAmount } : {}),
     };
     this.trips.unshift(t);
     return t;
@@ -521,9 +528,10 @@ export class StayRideMemoryStore {
     t.fare = agreedFare;
     t.status = 'CONFIRMED';
     t.financialSnapshot = financialSnapshot;
-    t.commission = financialSnapshot?.homestayCommissionAmount ?? Math.round(agreedFare * 0.10);
-    t.advanceAmount = financialSnapshot?.advanceAmount ?? Math.round(agreedFare * 0.15);
-    t.remainingCashAmount = financialSnapshot?.remainingCashToDriver ?? Math.max(0, agreedFare - (t.advanceAmount || 0));
+    // Own-driver trips never carry platform money; platform trips live in CabRequest (see platform.ts).
+    t.commission = 0;
+    t.advanceAmount = 0;
+    t.remainingCashAmount = agreedFare;
     return t;
   }
 
@@ -540,17 +548,17 @@ export class StayRideMemoryStore {
     const t = this.trip(tripId);
     if (!t) return null;
     if (t.status !== 'CONFIRMED' && t.status !== 'DRIVER_ASSIGNED') {
-      throw new Error(`Cannot start trip in status '${t.status}'. Only CONFIRMED or DRIVER_ASSIGNED trips can be started.`);
+      throw Object.assign(new Error(`Cannot start trip in status '${t.status}'. Only CONFIRMED or DRIVER_ASSIGNED trips can be started.`), { status: 409 });
     }
     t.status = 'TRIP_STARTED';
     return t;
   }
 
-  completeTrip(tripId: number, finalFare?: number, hcRate = 0.10) {
+  completeTrip(tripId: number, finalFare?: number) {
     const t = this.trip(tripId);
     if (!t) return null;
     if (t.status !== 'TRIP_STARTED' && t.status !== 'CONFIRMED' && t.status !== 'DRIVER_ASSIGNED') {
-      throw new Error(`Cannot complete trip in status '${t.status}'. Only active trips (TRIP_STARTED, CONFIRMED, or DRIVER_ASSIGNED) can be completed.`);
+      throw Object.assign(new Error(`Cannot complete trip in status '${t.status}'. Only active trips (TRIP_STARTED, CONFIRMED, or DRIVER_ASSIGNED) can be completed.`), { status: 409 });
     }
     t.status = 'COMPLETED';
     if (t.financialSnapshot) {
@@ -558,9 +566,10 @@ export class StayRideMemoryStore {
       t.fare = t.financialSnapshot.agreedFare;
       t.commission = t.financialSnapshot.homestayCommissionAmount;
     } else {
+      // Own-driver trip: the fare is the owner's own record; no platform commission is ever earned.
       const f = Number(finalFare);
-      t.fare = Number.isFinite(f) && f > 0 ? Math.round(f) : t.estFare || 3000;
-      t.commission = Math.round(t.fare * hcRate);
+      t.fare = Number.isFinite(f) && f > 0 ? Math.round(f) : 0;
+      t.commission = 0;
     }
     return t;
   }
@@ -569,7 +578,7 @@ export class StayRideMemoryStore {
     const t = this.trip(tripId);
     if (!t) return null;
     if (t.status === 'COMPLETED') {
-      throw new Error(`Cannot cancel a trip that is already COMPLETED.`);
+      throw Object.assign(new Error(`Cannot cancel a trip that is already COMPLETED.`), { status: 409 });
     }
     if (t.status === 'CANCELLED') {
       return t;
@@ -669,6 +678,7 @@ import { getISTTimestamp } from '../utils/date.js';
 export const StayRideTenantSchema = new Schema(
   {
     tenantId: { type: String, required: true, unique: true, index: true },
+    version: { type: Number, default: 0 },
     accountType: {
       type: String,
       enum: ['DEMO', 'PRODUCTION'],
@@ -720,161 +730,119 @@ export const StayRideTenantModel =
 const DEMO_KEYS = new Set(['demo', 'demo@stayride.in', 'stay@mountainviewgangtok.com', 'stay@mountainview.in']);
 export const isDemoKey = (key: string) => DEMO_KEYS.has((key || '').toLowerCase().trim());
 
-export class StayRideTenantManager {
-  private stores = new Map<string, StayRideMemoryStore>();
-  private loading = new Map<string, Promise<StayRideMemoryStore>>();
-
+export class ConflictError extends Error {
+  status = 409;
+  code = 'CONFLICT';
   constructor() {
-    // Demo store is always initialized with Mountain View Homestay showcase data
-    const demoStore = new StayRideMemoryStore(true);
-    this.stores.set('demo', demoStore);
-    this.stores.set('demo@stayride.in', demoStore);
-    this.stores.set('stay@mountainviewgangtok.com', demoStore);
-    this.stores.set('stay@mountainview.in', demoStore);
+    super('This record was changed at the same time by another request. Please retry.');
+  }
+}
+
+const DEMO_TENANT = 'demo@stayride.in';
+const normKey = (k: string) => (isDemoKey(k) ? DEMO_TENANT : (k || '').toLowerCase().trim());
+
+/**
+ * Stateless tenant persistence for serverless (Vercel): every request loads the tenant fresh from
+ * MongoDB and saves with optimistic concurrency ({tenantId, version} + $inc). Nothing is cached
+ * between requests, so concurrent instances can never overwrite each other's newer data.
+ */
+export class StayRideTenantManager {
+  private requireDb() {
+    if (mongoose.connection.readyState !== 1) throw Object.assign(new Error('Database unavailable'), { status: 503 });
   }
 
-  async initDemoTenant() {
-    if (mongoose.connection.readyState !== 1) return;
-    try {
-      const demoStore = this.stores.get('demo') || new StayRideMemoryStore(true);
-      const testModel = getStayRideTenantModel(true); // Saved to 'test' database in MongoDB Atlas
-      await testModel.findOneAndUpdate(
-        { tenantId: 'demo@stayride.in' },
+  /** Load the tenant, creating (demo: seeding) it if it does not exist yet. */
+  async load(tenantId: string, homestayInfo?: Partial<StayRideHomestay>): Promise<StayRideMemoryStore> {
+    this.requireDb();
+    const key = normKey(tenantId);
+    const isDemo = key === DEMO_TENANT;
+    const Model = getStayRideTenantModel(isDemo);
+    let doc: any = await Model.findOne({ tenantId: key }).lean();
+    if (!doc) {
+      const seed = new StayRideMemoryStore(isDemo, homestayInfo);
+      await Model.updateOne(
+        { tenantId: key },
         {
-          tenantId: 'demo@stayride.in',
-          accountType: 'DEMO',
-          isDemo: true,
-          ownerName: 'Tshering Bhutia (Demo Host)',
-          homestayName: 'Mountain View Homestay',
-          email: 'demo@stayride.in',
-          phone: '+91 98001 23456',
-          location: 'Upper Sichey, Gangtok, Sikkim 737101',
-          data: demoStore.toJSON(),
-          lastActiveAt: new Date(),
-          lastActiveAtIST: getISTTimestamp(),
-          updatedAtIST: getISTTimestamp(),
+          $setOnInsert: {
+            tenantId: key,
+            version: 0,
+            accountType: isDemo ? 'DEMO' : 'PRODUCTION',
+            isDemo,
+            ...this.summary(key, seed),
+            data: seed.toJSON(),
+          },
         },
-        { upsert: true, new: true }
+        { upsert: true }
       );
-      console.log("✅ Demo tenant initialized in MongoDB 'test' database (Cluster0 > test > stayridetenants)");
-    } catch (err) {
-      console.warn('[StayRide] Failed to seed demo tenant to MongoDB:', err);
+      doc = await Model.findOne({ tenantId: key }).lean();
     }
-  }
-
-  getStore(tenantId: string = 'demo'): StayRideMemoryStore {
-    const key = (tenantId || 'demo').toLowerCase().trim();
-    if (isDemoKey(key)) {
-      return this.stores.get('demo')!;
-    }
-    if (!this.stores.has(key)) {
-      // Create fresh isolated homestay workspace for real user!
-      this.stores.set(key, new StayRideMemoryStore(false));
-    }
-    return this.stores.get(key)!;
-  }
-
-  async getStoreAsync(tenantId: string = 'demo'): Promise<StayRideMemoryStore> {
-    const key = (tenantId || 'demo').toLowerCase().trim();
-    if (isDemoKey(key)) {
-      return this.stores.get('demo')!;
-    }
-
-    if (this.stores.has(key)) {
-      return this.stores.get(key)!;
-    }
-
-    // Hydrate from MongoDB. On DB errors/disconnects we throw instead of caching an
-    // empty store, otherwise the next persistTenant would overwrite the real data.
-    if (mongoose.connection.readyState !== 1) throw new Error('Database unavailable');
-    // Single-flight per tenant so concurrent first requests share one store instance.
-    let pending = this.loading.get(key);
-    if (!pending) {
-      pending = this.loadPersisted(key)
-        .then((persisted) => {
-          if (persisted) return persisted;
-          const fresh = new StayRideMemoryStore(false);
-          this.stores.set(key, fresh);
-          return fresh;
-        })
-        .finally(() => this.loading.delete(key));
-      this.loading.set(key, pending);
-    }
-    return pending;
-  }
-
-  private async loadPersisted(key: string): Promise<StayRideMemoryStore | null> {
-    if (mongoose.connection.readyState !== 1) return null;
-    const existing = await getStayRideTenantModel(false).findOne({ tenantId: key }).lean();
-    if (!existing || !(existing as any).data) return null;
-    const store = new StayRideMemoryStore(false);
-    store.fromJSON((existing as any).data);
-    this.stores.set(key, store);
+    const store = new StayRideMemoryStore(isDemo);
+    store.fromJSON(doc.data);
+    store.tenantKey = key;
+    store.version = doc.version ?? 0;
     return store;
   }
 
-  // Never replaces existing tenant data; DB errors propagate instead of wiping.
-  async createTenantIfMissing(tenantId: string, homestayInfo?: Partial<StayRideHomestay>): Promise<StayRideMemoryStore> {
-    const key = tenantId.toLowerCase().trim();
-    const existing = this.stores.get(key) || (await this.loadPersisted(key));
-    return existing || this.createFreshTenant(key, homestayInfo);
+  /** Alias kept for existing callers. */
+  getStoreAsync(tenantId: string) {
+    return this.load(tenantId);
   }
 
-  createFreshTenant(tenantId: string, homestayInfo?: Partial<StayRideHomestay>): StayRideMemoryStore {
-    const key = tenantId.toLowerCase().trim();
-    const store = new StayRideMemoryStore(false, homestayInfo);
-    this.stores.set(key, store);
-    this.persistTenant(key).catch(() => {});
-    return store;
+  createTenantIfMissing(tenantId: string, homestayInfo?: Partial<StayRideHomestay>) {
+    return this.load(tenantId, homestayInfo);
   }
 
-  async persistTenant(tenantId: string) {
-    const key = (tenantId || 'demo').toLowerCase().trim();
-    if (mongoose.connection.readyState !== 1) return;
+  /** Compare-and-set save. Throws ConflictError if another request saved first; throws on any DB error. */
+  async save(store: StayRideMemoryStore): Promise<void> {
+    this.requireDb();
+    if (!store.tenantKey) throw new Error('Store was not loaded through the tenant manager');
+    const isDemo = store.tenantKey === DEMO_TENANT;
+    const versionFilter = store.version === 0 ? { $in: [0, null] } : store.version;
+    const result = await getStayRideTenantModel(isDemo).updateOne(
+      { tenantId: store.tenantKey, version: versionFilter },
+      {
+        $set: { ...this.summary(store.tenantKey, store), data: store.toJSON(), lastActiveAt: new Date(), updatedAtIST: getISTTimestamp() },
+        $inc: { version: 1 },
+      }
+    );
+    if (result.matchedCount === 0) throw new ConflictError();
+    store.version += 1;
+  }
 
-    const isDemo = isDemoKey(key);
-    const store = isDemo ? (this.stores.get('demo') || this.stores.get(key)) : this.stores.get(key);
-    if (!store) return;
-
-    const accountType = isDemo ? 'DEMO' : 'PRODUCTION';
-    const effectiveTenantId = isDemo ? 'demo@stayride.in' : key;
-    const model = getStayRideTenantModel(isDemo);
-
-    try {
-      await model.findOneAndUpdate(
-        { tenantId: effectiveTenantId },
-        {
-          tenantId: effectiveTenantId,
-          accountType,
-          isDemo,
-          ownerName: store.homestay.ownerName || (isDemo ? 'Tshering Bhutia (Demo Host)' : 'Host'),
-          homestayName: store.homestay.name || (isDemo ? 'Mountain View Homestay' : 'My Homestay'),
-          email: store.homestay.email || (effectiveTenantId.includes('@') ? effectiveTenantId : ''),
-          phone: store.homestay.phone || '',
-          location: store.homestay.location || '',
-          data: store.toJSON(),
-          lastActiveAt: new Date(),
-          lastActiveAtIST: getISTTimestamp(),
-          updatedAtIST: getISTTimestamp(),
-        },
-        { upsert: true, returnDocument: 'after' }
-      );
-    } catch (err) {
-      console.warn(`[StayRide] Error persisting tenant ${key} to MongoDB:`, err);
+  /** Load → mutate → save, retrying on concurrent writes. `fn` must only change the store. */
+  async mutate<T>(tenantId: string, fn: (store: StayRideMemoryStore) => T, attempts = 5): Promise<T> {
+    for (let i = 0; ; i++) {
+      const store = await this.load(tenantId);
+      const result = fn(store);
+      try {
+        await this.save(store);
+        return result;
+      } catch (err) {
+        if (!(err instanceof ConflictError) || i >= attempts - 1) throw err;
+        await new Promise((r) => setTimeout(r, 20 + Math.random() * 60));
+      }
     }
   }
 
-  resetDemoStore(): StayRideMemoryStore {
-    const freshDemo = new StayRideMemoryStore(true);
-    this.stores.set('demo', freshDemo);
-    this.stores.set('demo@stayride.in', freshDemo);
-    this.stores.set('stay@mountainviewgangtok.com', freshDemo);
-    this.stores.set('stay@mountainview.in', freshDemo);
-    this.persistTenant('demo@stayride.in').catch(() => {});
-    return freshDemo;
+  async resetDemoStore(): Promise<void> {
+    this.requireDb();
+    const fresh = new StayRideMemoryStore(true);
+    await getStayRideTenantModel(true).updateOne(
+      { tenantId: DEMO_TENANT },
+      { $set: { ...this.summary(DEMO_TENANT, fresh), data: fresh.toJSON(), accountType: 'DEMO', isDemo: true }, $inc: { version: 1 } },
+      { upsert: true }
+    );
+  }
+
+  private summary(key: string, store: StayRideMemoryStore) {
+    return {
+      ownerName: store.homestay.ownerName || '',
+      homestayName: store.homestay.name || '',
+      email: store.homestay.email || (key.includes('@') ? key : ''),
+      phone: store.homestay.phone || '',
+      location: store.homestay.location || '',
+    };
   }
 }
 
 export const tenantManager = new StayRideTenantManager();
-export const stayRideStore = tenantManager.getStore('demo');
-

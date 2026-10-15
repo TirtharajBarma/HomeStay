@@ -6,11 +6,14 @@ import {
   ScrollView,
   Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Shadows } from '../theme/colors';
 import { useStayRide } from '../data/store';
+import { formatINR } from '../utils/format';
 
 export const DriverEarningsScreen: React.FC = () => {
+  const insets = useSafeAreaInsets();
   const { trips, session } = useStayRide();
 
   const driverId = Number(session?.driver?.id) || 1;
@@ -39,7 +42,7 @@ export const DriverEarningsScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: Math.max(insets.top + 10, Platform.OS === 'ios' ? 54 : 38) }]}>
         <Text style={styles.headerTitle}>Driver Earnings &amp; Ledger</Text>
         <Text style={styles.headerSubtitle}>Direct Mountain Cash &amp; Commission Breakdown</Text>
       </View>
@@ -48,7 +51,7 @@ export const DriverEarningsScreen: React.FC = () => {
         {/* Main Payout Card */}
         <View style={styles.highlightCard}>
           <Text style={styles.highlightLabel}>NET DRIVER EARNINGS</Text>
-          <Text style={styles.highlightValue}>₹{netEarnings.toLocaleString()}</Text>
+          <Text style={styles.highlightValue}>{formatINR(netEarnings)}</Text>
           <Text style={styles.highlightSub}>From {completedTrips.length} completed mountain trips</Text>
         </View>
 
@@ -59,7 +62,7 @@ export const DriverEarningsScreen: React.FC = () => {
               <Ionicons name="cash-outline" size={20} color="#16A34A" />
             </View>
             <Text style={styles.gridLabel}>Cash Collected</Text>
-            <Text style={styles.gridValue}>₹{totalCashCollected.toLocaleString()}</Text>
+            <Text style={styles.gridValue}>{formatINR(totalCashCollected)}</Text>
             <Text style={styles.gridSub}>In hand from guests</Text>
           </View>
           <View style={styles.gridCard}>
@@ -77,19 +80,19 @@ export const DriverEarningsScreen: React.FC = () => {
           <Text style={styles.sectionTitle}>Commission &amp; Fee Breakdown</Text>
           <View style={styles.breakdownRow}>
             <Text style={styles.rowLabel}>Total Gross Fare Value:</Text>
-            <Text style={styles.rowVal}>₹{totalGrossFares.toLocaleString()}</Text>
+            <Text style={styles.rowVal}>{formatINR(totalGrossFares)}</Text>
           </View>
           <View style={styles.breakdownRow}>
             <Text style={styles.rowLabel}>Homestay Host Commission (~10%):</Text>
-            <Text style={[styles.rowVal, { color: '#DC2626' }]}>- ₹{totalHostCommission.toLocaleString()}</Text>
+            <Text style={[styles.rowVal, { color: '#DC2626' }]}>- {formatINR(totalHostCommission)}</Text>
           </View>
           <View style={styles.breakdownRow}>
             <Text style={styles.rowLabel}>Platform Tech Fee (~5%):</Text>
-            <Text style={[styles.rowVal, { color: '#DC2626' }]}>- ₹{totalPlatformFees.toLocaleString()}</Text>
+            <Text style={[styles.rowVal, { color: '#DC2626' }]}>- {formatINR(totalPlatformFees)}</Text>
           </View>
           <View style={[styles.breakdownRow, styles.totalRow]}>
             <Text style={styles.totalRowLabel}>Net Payout to You:</Text>
-            <Text style={styles.totalRowVal}>₹{netEarnings.toLocaleString()}</Text>
+            <Text style={styles.totalRowVal}>{formatINR(netEarnings)}</Text>
           </View>
         </View>
 

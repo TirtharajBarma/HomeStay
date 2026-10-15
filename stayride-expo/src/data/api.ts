@@ -15,6 +15,7 @@ class ApiService {
   private session: UserSession | null = null;
   private refreshPromise: Promise<boolean> | null = null;
   private sessionExpiredListener: (() => void) | null = null;
+  private sessionUpdatedListener: ((session: UserSession | null) => void) | null = null;
 
   async init() {
     try {
@@ -67,11 +68,20 @@ class ApiService {
   async saveSession(session: UserSession) {
     this.session = session;
     await AsyncStorage.setItem('stayride_session', JSON.stringify(session));
+    this.sessionUpdatedListener?.(session);
   }
 
   async clearSession() {
     this.session = null;
     await AsyncStorage.removeItem('stayride_session');
+    this.sessionUpdatedListener?.(null);
+  }
+
+  onSessionUpdated(listener: (session: UserSession | null) => void) {
+    this.sessionUpdatedListener = listener;
+    return () => {
+      this.sessionUpdatedListener = null;
+    };
   }
 
   // Called when the server rejects the refresh token (session is already cleared).

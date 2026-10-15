@@ -12,9 +12,12 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Shadows } from '../theme/colors';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useStayRide } from '../data/store';
+import { formatINR } from '../utils/format';
 
 export const DriverActiveRideScreen: React.FC = () => {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const { trips, session, completeTrip } = useStayRide();
 
@@ -61,7 +64,7 @@ export const DriverActiveRideScreen: React.FC = () => {
 
     Alert.alert(
       'Complete Trip',
-      `Did you collect ₹${cashDue.toLocaleString()} in cash from ${activeRide.guestName}?`,
+      `Did you collect ${formatINR(cashDue)} in cash from ${activeRide.guestName}?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -70,7 +73,7 @@ export const DriverActiveRideScreen: React.FC = () => {
           onPress: async () => {
             try {
               await completeTrip(activeRide.id, activeRide.fare);
-              Alert.alert('Trip Completed!', `₹${cashDue.toLocaleString()} cash collected successfully.`);
+              Alert.alert('Trip Completed!', `${formatINR(cashDue)} cash collected successfully.`);
             } catch (e: any) {
               Alert.alert('Error', e?.message || 'Could not complete trip.');
             }
@@ -82,7 +85,7 @@ export const DriverActiveRideScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) }]}>
         <Text style={styles.headerTitle}>Active Ride Navigation</Text>
         <Text style={styles.headerSubtitle}>Live Turn-by-Turn Route & Cash Collection</Text>
       </View>

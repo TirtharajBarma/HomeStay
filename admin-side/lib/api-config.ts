@@ -19,6 +19,14 @@ export const API_ENDPOINTS = {
   recordCabRequestPayment: (id: string) => `${API_BASE_URL}/admin/cab-requests/${id}/record-payment`,
   hostPayouts: () => `${API_BASE_URL}/admin/host-payouts`,
   settleHostPayout: (id: string) => `${API_BASE_URL}/admin/host-payouts/${id}/settle`,
+  rejectHostPayout: (id: string) => `${API_BASE_URL}/admin/host-payouts/${id}/reject`,
+  drivers: (status?: string) => `${API_BASE_URL}/admin/stayride/drivers${status ? `?status=${status}` : ""}`,
+  driverStatus: (id: string) => `${API_BASE_URL}/admin/stayride/drivers/${id}/status`,
+  users: (role?: string) => `${API_BASE_URL}/admin/stayride/users${role ? `?role=${role}` : ""}`,
+  userRole: (id: string) => `${API_BASE_URL}/admin/stayride/users/${id}/role`,
+  userStatus: (id: string) => `${API_BASE_URL}/admin/stayride/users/${id}/status`,
+  cabRequests: (status?: string) => `${API_BASE_URL}/admin/cab-requests${status ? `?status=${status}` : ""}`,
+  settleDriverCabRequest: (id: string) => `${API_BASE_URL}/admin/cab-requests/${id}/driver-settled`,
 };
 
 export function getAdminToken(): string | null {

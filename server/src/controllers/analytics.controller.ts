@@ -6,7 +6,7 @@ export class AnalyticsController {
     const user = (req as any).user;
     const range = (req.query.range as string) || "month";
     const offset = req.query.offset ? Number(req.query.offset) : 0;
-    const ownerId = (req.query.ownerId as string) || (user?.role === "owner" ? user.id : undefined);
+    const ownerId = user?.role === "admin" && req.query.ownerId ? String(req.query.ownerId) : user?.id;
     const data = await AnalyticsService.getAnalytics(range, offset, ownerId);
     res.json({ success: true, data });
   }
@@ -14,7 +14,7 @@ export class AnalyticsController {
   static async exportCsv(req: Request, res: Response) {
     const user = (req as any).user;
     const range = (req.query.range as string) || "month";
-    const ownerId = (req.query.ownerId as string) || (user?.role === "owner" ? user.id : undefined);
+    const ownerId = user?.role === "admin" && req.query.ownerId ? String(req.query.ownerId) : user?.id;
     const csv = await AnalyticsService.generateCsvExport(range, ownerId);
     res.setHeader("Content-Type", "text/csv");
     res.setHeader("Content-Disposition", `attachment; filename=homestay-analytics-${range}.csv`);

@@ -10,7 +10,8 @@ export interface ITripDestination {
 }
 
 export interface IDriverQuote {
-  driverId: string | number;
+  driverId: string | number; // platform driver User _id
+  vehicleType?: string;
   driverName: string;
   driverPhone: string;
   driverVehicle: string;
@@ -87,6 +88,18 @@ export interface ICabRequest extends Document {
   paymentRecordedBy?: string;
   paymentRecordedAt?: Date;
   paymentNote?: string;
+  assignedDriverUserId?: string | null;
+  hostPayoutId?: string | null; // PayoutRequest that covers this request's homestay commission
+  refundStatus: "NONE" | "PENDING" | "REFUNDED";
+  refundReference?: string;
+  refundedAt?: Date | null;
+  voidedPayments: Array<{ transactionId: string; amount: number; method: string; reason: string; voidedBy: string; at: Date }>;
+  driverSettlementStatus: "NONE" | "PENDING" | "SETTLED";
+  driverSettlementRef?: string;
+  driverSettledAt?: Date | null;
+  startedAt?: Date | null;
+  completedAt?: Date | null;
+  cancelledBy?: string;
   remainingCashAmount: number; // Cash collected directly by driver during journey
   financialSnapshot?: IFinancialSnapshot;
   guestNotes?: string;
@@ -111,6 +124,7 @@ const DestinationSchema = new Schema<ITripDestination>(
 const DriverQuoteSchema = new Schema<IDriverQuote>(
   {
     driverId: { type: Schema.Types.Mixed, required: true },
+    vehicleType: { type: String, default: "" },
     driverName: { type: String, required: true },
     driverPhone: { type: String, required: true },
     driverVehicle: { type: String, required: true },
@@ -212,6 +226,26 @@ const CabRequestSchema = new Schema<ICabRequest>(
     paymentRecordedBy: { type: String, default: "" },
     paymentRecordedAt: { type: Date, default: null },
     paymentNote: { type: String, default: "" },
+    assignedDriverUserId: { type: String, default: null, index: true },
+    hostPayoutId: { type: String, default: null, index: true },
+    refundStatus: { type: String, enum: ["NONE", "PENDING", "REFUNDED"], default: "NONE" },
+    refundReference: { type: String, default: "" },
+    refundedAt: { type: Date, default: null },
+    voidedPayments: {
+      type: [
+        new Schema(
+          { transactionId: String, amount: Number, method: String, reason: String, voidedBy: String, at: Date },
+          { _id: false }
+        ),
+      ],
+      default: [],
+    },
+    driverSettlementStatus: { type: String, enum: ["NONE", "PENDING", "SETTLED"], default: "NONE" },
+    driverSettlementRef: { type: String, default: "" },
+    driverSettledAt: { type: Date, default: null },
+    startedAt: { type: Date, default: null },
+    completedAt: { type: Date, default: null },
+    cancelledBy: { type: String, default: "" },
     remainingCashAmount: { type: Number, default: 0 },
     financialSnapshot: { type: FinancialSnapshotSchema, default: null },
     guestNotes: { type: String, default: "" },
@@ -221,6 +255,13 @@ const CabRequestSchema = new Schema<ICabRequest>(
   },
   { timestamps: true }
 );
+
+// A bank/UPI transaction can be recorded against only one request.
+CabRequestSchema.index(
+  { advancePaymentId: 1 },
+  { name: "unique_advance_payment_id", unique: true, partialFilterExpression: { advancePaymentId: { $type: "string", $gt: "" } } }
+);
+CabRequestSchema.index({ propertyId: 1, status: 1 }, { name: "property_status" });
 
 CabRequestSchema.pre("save", function () {
   this.updatedAtIST = getISTTimestamp();

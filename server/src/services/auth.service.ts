@@ -63,7 +63,7 @@ export class AuthService {
     homestayName?: string;
   }) {
     const cleanEmail = data.email.toLowerCase().trim();
-    const reservedEmails = ['demo@stayride.in', 'driver@stayride.in', 'stay@mountainviewgangtok.com', 'stay@mountainview.in'];
+    const reservedEmails = ['demo@stayride.in', 'driver@stayride.in', 'demo-driver@stayride.in', 'stay@mountainviewgangtok.com', 'stay@mountainview.in'];
     if (reservedEmails.includes(cleanEmail)) {
       throw new Error(`The email '${cleanEmail}' is reserved for demo showcase accounts and cannot be registered.`);
     }
@@ -115,6 +115,9 @@ export class AuthService {
     const isMatch = await user.comparePassword(data.password);
     if (!isMatch) {
       throw new Error("Invalid email or password.");
+    }
+    if ((user as any).accountStatus === "BLOCKED") {
+      throw new Error("This account is blocked. Contact support.");
     }
 
     let property: any = null;

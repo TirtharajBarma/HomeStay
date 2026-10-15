@@ -35,47 +35,62 @@ export default async function CabConfirmedPage({
   const driver = findNearbyDrivers(request).find((match) => match.id === driverId);
   if (!driver) redirect(driversHref(request));
 
-  const reference = cabReference(request, driver.id);
-
   const guestName =
     typeof query.guest === "string" && query.guest.trim()
       ? query.guest.trim()
       : typeof query.guestName === "string" && query.guestName.trim()
         ? query.guestName.trim()
-        : "Direct Traveler";
+        : "Guest";
   const phone =
     typeof query.phone === "string" && query.phone.trim()
       ? query.phone.trim()
-      : "+91 98300 00000";
+      : "";
   const email =
     typeof query.email === "string" && query.email.trim()
       ? query.email.trim()
-      : "traveler@platform.com";
+      : "";
 
-  // Persist trip to server MongoDB CabTrip collection
-  try {
-    await fetch(API_ENDPOINTS.cabs.book(), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        driverId: driver.id,
-        guestName,
-        email,
-        phone,
-        pickupName: request.source.label,
-        pickupLat: request.source.lat,
-        pickupLng: request.source.lng,
-        dropoffName: request.destination.label,
-        dropoffLat: request.destination.lat,
-        dropoffLng: request.destination.lng,
-        pickupDate: request.date || new Date().toISOString().slice(0, 10),
-        pickupTime: request.time || "10:00 AM",
-        seats: seatCapacity(request.seats),
-      }),
-      cache: "no-store",
-    });
-  } catch (err) {
-    console.warn("Background cab booking sync notice:", err);
+  let reference =
+    typeof query.reference === "string" && query.reference.trim()
+      ? query.reference.trim()
+      : "";
+
+  // If no reference was passed from modal, persist trip to server MongoDB CabTrip collection now
+  if (!reference) {
+    try {
+      const res = await fetch(API_ENDPOINTS.cabs.book(), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          driverId: driver.id,
+          guestName: guestName || "Direct Traveler",
+          email: email || "traveler@platform.com",
+          phone: phone || "+91 98000 00000",
+          pickupName: request.source.label,
+          pickupLat: request.source.lat,
+          pickupLng: request.source.lng,
+          dropoffName: request.destination.label,
+          dropoffLat: request.destination.lat,
+          dropoffLng: request.destination.lng,
+          pickupDate: request.date || new Date().toISOString().slice(0, 10),
+          pickupTime: request.time || "10:00 AM",
+          seats: seatCapacity(request.seats),
+        }),
+        cache: "no-store",
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json?.data?.reference) {
+          reference = json.data.reference;
+        }
+      }
+    } catch (err) {
+      console.warn("Cab booking sync notice:", err);
+    }
+  }
+
+  if (!reference) {
+    reference = cabReference(request, driver.id);
   }
 
   return (
@@ -93,8 +108,9 @@ export default async function CabConfirmedPage({
             Your Cab Is Booked
           </h1>
           <p className="mx-auto mt-2 max-w-xl text-body-lg text-on-surface-variant">
-            {driver.name} will meet you at your pickup point. We have sent the details to your
-            confirmation email.
+            {driver.name} will meet {guestName !== "Guest" ? guestName : "you"} at your pickup point.
+            {email ? ` Confirmation sent to ${email}.` : " Details confirmed."}
+            {phone ? ` Driver can reach you at ${phone}.` : ""}
           </p>
         </div>
 

@@ -76,6 +76,7 @@ interface StayRideContextType {
   createDriver: (data: Omit<Driver, 'id' | 'ownerDriver' | 'active'>) => Promise<Driver>;
   updateDriver: (id: number, data: Partial<Driver>) => Promise<void>;
   setDriverAvailability: (id: number, available: boolean) => Promise<void>;
+  setDriverOnline: (available: boolean) => Promise<void>;
   setDriverActive: (id: number, active: boolean) => Promise<void>;
   deleteDriver: (id: number) => Promise<void>;
 
@@ -127,7 +128,7 @@ interface StayRideContextType {
       phone?: string;
       name?: string;
       email?: string;
-      role?: 'owner' | 'driver';
+      role?: 'owner' | 'driver' | 'admin';
       vehicleType?: string;
       vehicleNumber?: string;
       area?: string;
@@ -168,7 +169,10 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setSession(s);
   };
   // Offline demo session is fabricated locally; never send it to the server
-  const isOfflineDemo = () => Boolean(api.getSession()?.accessToken?.startsWith('demo-token-'));
+  const isOfflineDemo = () => {
+    const token = api.getSession()?.accessToken;
+    return Boolean(token && (token.startsWith('demo-token-') || token.startsWith('demo-driver-token-') || token.startsWith('demo-')));
+  };
 
   // Helper to isolate local cache by user email
   const getStorageKey = (email?: string) => {
@@ -228,9 +232,16 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
     }
     bootstrap();
-    return api.onSessionExpired(() => {
+    const unsubExpired = api.onSessionExpired(() => {
       logout().catch(() => {});
     });
+    const unsubUpdated = api.onSessionUpdated((updatedSession) => {
+      setSession(updatedSession);
+    });
+    return () => {
+      unsubExpired?.();
+      unsubUpdated?.();
+    };
   }, []);
 
   const initFreshWorkspace = async (info?: Partial<Homestay>) => {
@@ -821,6 +832,18 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     remote(() => api.patch(`/drivers/${id}/availability`, { available }));
   };
 
+  const setDriverOnline = async (available: boolean) => {
+    if (session?.driver) {
+      const updatedDriver = { ...session.driver, available };
+      const updatedSession: UserSession = { ...session, driver: updatedDriver };
+      applySession(updatedSession);
+      await api.saveSession(updatedSession);
+      if (!isOfflineDemo()) {
+        remote(() => api.patch('/driver/availability', { available }));
+      }
+    }
+  };
+
   const setDriverActive = async (id: number, active: boolean) => {
     setDrivers((prev) => prev.map((d) => (d.id === id ? { ...d, active } : d)));
     remote(() => api.patch(`/drivers/${id}/active`, { active }));
@@ -856,6 +879,7 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     vehicleType: d.vehicleType,
     guestId: d.guestId,
     bookingId: d.bookingId,
+    dispatchMode: d.dispatchMode || (d.ownerDriver ? 'OWN_DRIVER' : 'PLATFORM'),
   });
 
   const createTrip = async (data: any) => {
@@ -930,7 +954,13 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         return t;
       })
     );
-    remote(() => api.post(`/trips/${tripId}/quote`, { driverId, quotedFare }));
+    const trip = trips.find((t) => t.id === tripId);
+    const ref = trip?.reference || (trip as any)?.platformReference || String(tripId);
+    if (session?.role === 'driver') {
+      remote(() => api.post(`/driver/trips/${ref}/quote`, { quotedFare, notes: '' }));
+    } else {
+      remote(() => api.post(`/trips/${tripId}/quote`, { driverId, quotedFare }));
+    }
   };
 
   // Awaits the server: fare split and advance come from the server's financialSnapshot
@@ -958,7 +988,13 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const startTrip = async (tripId: number) => {
     setTrips((prev) => prev.map((t) => (t.id === tripId ? { ...t, status: 'TRIP_STARTED' } : t)));
-    remote(() => api.post(`/trips/${tripId}/start`));
+    const trip = trips.find((t) => t.id === tripId);
+    const ref = trip?.reference || (trip as any)?.platformReference || String(tripId);
+    if (session?.role === 'driver') {
+      remote(() => api.post(`/driver/trips/${ref}/start`, {}));
+    } else {
+      remote(() => api.post(`/trips/${tripId}/start`));
+    }
   };
 
   const completeTrip = async (tripId: number, finalFare?: number) => {
@@ -968,21 +1004,46 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         if (t.id === tripId) {
           const fare = finalFare || t.fare || t.estFare || 3000;
           computedFare = fare;
-          // Commission is server-computed; the server response below replaces this trip
-          return { ...t, status: 'COMPLETED', fare };
+          const commission = t.commission || Math.round(fare * 0.10);
+          const platformFee = t.platformFee || Math.round(fare * 0.05);
+          return {
+            ...t,
+            status: 'COMPLETED',
+            fare,
+            commission,
+            platformFee,
+            financialSnapshot: t.financialSnapshot || {
+              fareAmount: fare,
+              platformFeePercent: 5,
+              platformFeeAmount: platformFee,
+              homestayCommissionPercent: 10,
+              homestayCommissionAmount: commission,
+              driverTakeHomeAmount: fare - commission - platformFee,
+              driverCashDueAmount: fare,
+              advanceDepositPercent: 15,
+              advanceDepositAmount: 0,
+            },
+          };
         }
         return t;
       })
     );
     if (isOfflineDemo()) return;
     try {
-      const updated = await api.post(`/trips/${tripId}/complete`, { finalFare: computedFare });
-      if (updated && updated.id) {
-        setTrips((prev) => prev.map((t) => (t.id === tripId ? updated : t)));
+      const trip = trips.find((t) => t.id === tripId);
+      const ref = trip?.reference || (trip as any)?.platformReference || String(tripId);
+      let updated: any;
+      if (session?.role === 'driver') {
+        updated = await api.post(`/driver/trips/${ref}/complete`, {});
+      } else {
+        updated = await api.post(`/trips/${tripId}/complete`, { finalFare: computedFare });
+      }
+      if (updated && (updated.id || updated._id)) {
+        const id = updated.id || tripId;
+        setTrips((prev) => prev.map((t) => (t.id === tripId ? { ...t, ...updated, id } : t)));
       }
     } catch (e: any) {
-      Alert.alert('Not saved', e?.message || 'Could not complete the trip. Please try again.');
-      sync().catch(() => {});
+      console.warn('Trip completion background sync:', e?.message);
     }
   };
 
@@ -1209,6 +1270,10 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     // Real production user: strictly authenticate with the backend
     try {
       const res = await api.post('/auth/login', { email: cleanEmail, password: cleanPass });
+      if (res?.role === 'admin' || res?.user?.role === 'admin') {
+        await api.clearSession();
+        throw new Error('Access Denied: You are an Administrator. The mobile app is strictly for Homestay Hosts and Cab Drivers. Please use the Web Control Tower.');
+      }
       await api.saveSession(res);
       applySession(res);
       setIsDemoMode(false);
@@ -1275,7 +1340,7 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       phone?: string;
       name?: string;
       email?: string;
-      role?: 'owner' | 'driver';
+      role?: 'owner' | 'driver' | 'admin';
       vehicleType?: string;
       vehicleNumber?: string;
       area?: string;
@@ -1320,6 +1385,10 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         },
         clerkToken
       );
+      if (res?.role === 'admin' || extras?.role === 'admin') {
+        await api.clearSession();
+        throw new Error('Access Denied: You are an Administrator. The mobile app is strictly for Homestay Hosts and Cab Drivers. Please use the Web Control Tower.');
+      }
 
       await api.saveSession(res);
       applySession(res);
@@ -1425,6 +1494,7 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         createDriver,
         updateDriver,
         setDriverAvailability,
+        setDriverOnline,
         setDriverActive,
         deleteDriver,
 

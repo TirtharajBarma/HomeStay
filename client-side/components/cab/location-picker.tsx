@@ -106,7 +106,7 @@ export function LocationPicker({ from, to, onChange, errors = {} }: Props) {
         Pickup {from.label}. Drop {to.label}. {sameSpot ? "Same point." : `${formatDistance(km)} apart.`}
       </p>
       <div className="relative">
-        <div className="flex items-stretch gap-2">
+        <div className="flex flex-col sm:flex-row items-stretch gap-2">
           <div className="relative min-w-0 flex-1">
             <span
               aria-hidden
@@ -135,7 +135,7 @@ export function LocationPicker({ from, to, onChange, errors = {} }: Props) {
             type="button"
             onClick={swap}
             aria-label="Swap pickup and drop"
-            className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border border-outline-variant/70 bg-surface-container-lowest text-on-surface-variant transition-colors hover:bg-surface-container-low hover:text-on-surface"
+            className="self-center grid h-10 w-10 sm:h-12 sm:w-12 shrink-0 place-items-center rounded-2xl border border-outline-variant/70 bg-surface-container-lowest text-on-surface-variant transition-colors hover:bg-surface-container-low hover:text-on-surface"
           >
             <Icon name="swap_vert" className="text-[20px]" />
           </button>

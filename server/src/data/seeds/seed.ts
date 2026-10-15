@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { connectDB, disconnectDB } from "../../config/db.js";
 import { Property } from "../../models/property.model.js";
 import { Room } from "../../models/room.model.js";
@@ -13,6 +14,10 @@ import { initialBookings } from "./bookings.seed.js";
 import { initialGuests } from "./guests.seed.js";
 
 export async function seedDatabase(cleanExisting = false): Promise<void> {
+  // Sample data + sample accounts must never reach a deployed database.
+  if (process.env.VERCEL || process.env.NODE_ENV === "production" || process.env.ALLOW_SEED !== "true") {
+    throw new Error("Seeding is disabled. Set ALLOW_SEED=true on a local/dev database only.");
+  }
   console.log("🌱 Starting Database Seeding...");
 
   if (cleanExisting) {
@@ -30,11 +35,11 @@ export async function seedDatabase(cleanExisting = false): Promise<void> {
     existingOwner = await User.create({
       name: "Demo Estate Owner",
       email: "owner@estate.com",
-      password: "estatePassword123!",
+      password: process.env.SEED_PASSWORD || crypto.randomBytes(16).toString("hex"),
       role: "owner",
       phone: "+91 98300 41000",
     });
-    console.log("✅ Seeded Default Owner Account (owner@estate.com / estatePassword123!)");
+    console.log("✅ Seeded sample owner account owner@estate.com (password from SEED_PASSWORD)");
   }
 
   const roomsCount = await Room.countDocuments();
@@ -102,11 +107,11 @@ export async function seedDatabase(cleanExisting = false): Promise<void> {
     await User.create({
       name: "Platform Super Admin",
       email: "admin@platform.com",
-      password: "adminMasterPassword2026!",
+      password: process.env.SEED_PASSWORD || crypto.randomBytes(16).toString("hex"),
       role: "admin",
       phone: "+91 98300 11111",
     });
-    console.log("✅ Seeded Default Admin Account (admin@platform.com / adminMasterPassword2026!)");
+    console.log("✅ Seeded sample admin account admin@platform.com (password from SEED_PASSWORD)");
   }
 
   console.log("🎉 Database seeding completed successfully!");

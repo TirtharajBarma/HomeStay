@@ -1,10 +1,12 @@
 import { Router } from "express";
 import { AnalyticsController } from "../controllers/analytics.controller.js";
-import { optionalAuth } from "../middlewares/auth.js";
+import { verifyToken, requireRole } from "../middlewares/auth.js";
 
 const router = Router();
 
-router.get("/", optionalAuth, AnalyticsController.getAnalytics);
-router.get("/export", optionalAuth, AnalyticsController.exportCsv);
+router.use(verifyToken, requireRole("owner", "admin"));
+
+router.get("/", AnalyticsController.getAnalytics);
+router.get("/export", AnalyticsController.exportCsv);
 
 export default router;

@@ -74,115 +74,184 @@ try {
   r = await call('/v1/trips', { method: 'POST', token: accessToken });
   assert.notEqual(r.status, 500, 'POST without body must not 500');
 
-  // ---- Payouts / admin / guest-link / payment flow ----
+  // ---- Admin, money, drivers, concurrency ----
   const { config } = await import('../src/config/env.js');
   const jwt = (await import('jsonwebtoken')).default;
   const adminToken = jwt.sign({ id: 'admin1', email: 'admin@example.com', name: 'Admin', role: 'admin' }, config.jwtSecret);
   const ownerAsAdmin = jwt.sign({ id: 'o1', email, name: 'Host', role: 'owner' }, config.jwtSecret);
+  const admin = (path: string, body?: any, method?: string) => call('/api/v1/admin' + path, { token: adminToken, body, method });
 
-  // Owner/StayRide tokens can't reach admin payouts; old StayRide admin routes are gone.
-  assert.equal((await call('/api/v1/stayride/admin/payouts', { token: accessToken })).status, 404);
+  assert.equal((await call('/api/v1/stayride/admin/payouts', { token: accessToken })).status, 404, 'no StayRide-side admin routes');
   assert.equal((await call('/api/v1/admin/host-payouts', { token: accessToken })).status, 401);
   assert.equal((await call('/api/v1/admin/host-payouts', { token: ownerAsAdmin })).status, 403);
-  assert.equal((await call('/api/v1/admin/host-payouts', { token: adminToken })).status, 200);
+  assert.equal((await admin('/host-payouts')).status, 200);
 
-  // Public endpoints: no ?host= tenant selection, no unauthenticated payment.
-  r = await call('/v1/public/cab-requests', { body: { hostEmail: email, guestName: 'x', guestPhone: '1' } });
-  assert.equal(r.status, 401, 'old host-based public create must be gone');
-  r = await call('/v1/public/cab-requests/REQ-1/pay-advance', { body: { amount: 99999 } });
-  assert.equal(r.status, 401, 'public pay-advance must be gone');
-  r = await call('/v1/public/guest-links/' + 'a'.repeat(43));
-  assert.equal(r.status, 404, 'unknown token rejected');
+  const tok = (await call('/v1/auth/login', { body: { email, password: 'newpass123' } })).json.accessToken;
+  const owner = (path: string, body?: any, method?: string) => call('/v1' + path, { token: tok, body, method });
+  const tomorrow = Date.now() + 86400000;
 
-  // Owner creates a secure guest link; guest uses it.
-  const login = await call('/v1/auth/login', { body: { email, password: 'newpass123' } });
-  const tok = login.json.accessToken;
-  r = await call('/v1/guest-links', { token: tok, body: { guestName: 'Asha', guestPhone: '+91 90000 11111' } });
+  // Demo emails can't be registered; demo flag can't be forged.
+  assert.equal((await call('/v1/auth/signup', { body: { email: 'stay@mountainview.in', password: 'whatever123' } })).status, 400);
+  const forged = jwt.sign({ id: 'x', email, role: 'owner', tenantKey: email, isDemo: true, type: 'access' }, config.jwtSecret, { audience: 'stayride' });
+  assert.equal((await call('/v1/snapshot', { token: forged })).status, 401, 'isDemo claim must match tenant');
+
+  // 1) Concurrency: 20 parallel writes to one homestay must all persist (no lost updates).
+  await Promise.all(Array.from({ length: 20 }, (_, i) => owner('/rooms', { number: `R${i}`, type: 'Std', floor: '1', price: 1000, status: 'AVAILABLE', note: '' })));
+  r = await owner('/rooms');
+  assert.equal(r.json.length, 20, `parallel writes lost: ${r.json.length}/20 rooms saved`);
+
+  // 2) Mass assignment / own-driver trips carry no money.
+  r = await owner('/drivers', { name: 'Own Driver', phone: '9000000002', vehicle: 'Car', vehicleType: 'SUV', seats: 4, area: 'x', trips: [] });
+  const ownDriverId = r.json.id;
+  r = await owner('/trips', { guestName: 'X', phone: '9000000001', date: tomorrow, time: '10:00 AM', vehicleType: 'SUV', advancePaid: true, commission: 99999, financialSnapshot: { homestayCommissionAmount: 99999 }, reference: 'REQ-HACK' });
+  assert.equal(r.status, 201);
+  assert.equal(r.json.advancePaid, undefined, 'advancePaid not mass-assignable');
+  assert.equal(r.json.reference, undefined, 'reference not mass-assignable');
+  const ownTrip = r.json.id;
+  assert.equal((await owner(`/trips/${ownTrip}/assign`, { driverId: ownDriverId })).status, 200);
+  r = await owner(`/trips/${ownTrip}/complete`, { finalFare: 1000000 });
+  assert.equal(r.json.commission, 0, 'own-driver trips earn no platform commission');
+  assert.equal((await owner(`/trips/${ownTrip}/commission/pay`, { paid: true })).status, 410);
+  r = await owner('/payouts/summary');
+  assert.equal(r.json.available, 0, 'nothing payable from own-driver trips');
+  assert.equal((await owner('/payouts/request', { upiId: 'evil@upi' })).status, 400);
+
+  // 3) Admin feature + block controls are enforced by the server.
+  assert.equal((await owner('/campaigns')).status, 403, 'campaigns off by default');
+  r = await admin(`/stayride/tenants/${encodeURIComponent(email)}/controls`, { features: { campaigns: true } }, 'PUT');
+  assert.equal(r.status, 200, JSON.stringify(r.json));
+  assert.equal((await owner('/campaigns')).status, 200, 'admin granted campaigns');
+  r = await admin('/commission/settings', { globalPlatformFeePercent: 5, globalHomestayCommissionPercent: 10, features: { campaigns: { enabled: false } } }, 'PUT');
+  assert.equal(r.status, 200, JSON.stringify(r.json));
+  assert.equal((await owner('/campaigns')).status, 403, 'global disable wins over homestay override');
+  await admin('/commission/settings', { globalPlatformFeePercent: 5, globalHomestayCommissionPercent: 10, features: { campaigns: { enabled: true } } }, 'PUT');
+  assert.equal((await admin('/commission/settings', { globalPlatformFeePercent: 60, globalHomestayCommissionPercent: 50 }, 'PUT')).status, 400, 'PF+HC >= 100 rejected');
+  assert.equal((await admin('/commission/settings', { globalPlatformFeePercent: 'abc', globalHomestayCommissionPercent: 10 }, 'PUT')).status, 400, 'NaN rejected');
+
+  // 4) Guest link → platform request (secure token, no PII in link).
+  r = await owner('/guest-links', { guestName: 'Asha', guestPhone: '+91 90000 11111' });
   assert.equal(r.status, 201, JSON.stringify(r.json));
   const t = new URL(r.json.url).searchParams.get('t')!;
-  assert.ok(t && t.length >= 40, 'random token in link');
-  assert.ok(!r.json.url.includes('@') && !r.json.url.includes('90000'), 'no host email / phone in link');
-
-  r = await call(`/v1/public/guest-links/${t}`);
-  assert.equal(r.status, 200);
-  assert.equal(r.json.guestName, 'Asha');
-
-  const tomorrow = Date.now() + 86400000;
+  assert.ok(t.length >= 40 && !r.json.url.includes('@') && !r.json.url.includes('90000'));
   const reqBody = { guestName: 'Asha', guestPhone: '+91 90000 11111', destinations: ['Tiger Hill', 'Batasia Loop'], isRoundTrip: false, date: tomorrow, time: '09:00 AM', passengers: 2, vehicleType: 'SUV', clientRequestId: 'c-1' };
-  r = await call(`/v1/public/guest-links/${t}/cab-requests`, { body: { ...reqBody, date: Date.now() - 3 * 86400000 } });
-  assert.equal(r.status, 400, 'past date rejected');
-  r = await call(`/v1/public/guest-links/${t}/cab-requests`, { body: { ...reqBody, isRoundTrip: true } });
-  assert.equal(r.status, 400, 'round trip without return rejected');
+  assert.equal((await call(`/v1/public/guest-links/${t}/cab-requests`, { body: { ...reqBody, date: Date.now() - 3 * 86400000 } })).status, 400, 'past date rejected');
   r = await call(`/v1/public/guest-links/${t}/cab-requests`, { body: reqBody });
   assert.equal(r.status, 201, JSON.stringify(r.json));
   const reference = r.json.reference;
-  assert.match(reference, /^REQ-[0-9A-F]{10}$/);
-  r = await call(`/v1/public/guest-links/${t}/cab-requests`, { body: reqBody });
-  assert.equal(r.json.reference, reference, 'retry with same clientRequestId is idempotent');
-  assert.equal((await call(`/v1/public/cab-requests/${reference}`)).status, 404, 'status needs the token');
-  assert.equal((await call(`/v1/public/cab-requests/${reference}?t=${t}`)).status, 200);
+  assert.equal((await call(`/v1/public/guest-links/${t}/cab-requests`, { body: reqBody })).json.reference, reference, 'idempotent');
 
-  // Trip shows in the owner app as a guest request; admin queue sees it.
-  r = await call('/v1/trips', { token: tok });
-  const guestTrips = r.json.filter((x: any) => x.source === 'GUEST_WEB_LINK');
-  assert.equal(guestTrips.length, 1, 'exactly one guest trip');
-  r = await call('/api/v1/admin/cab-requests/pending', { token: adminToken });
-  const queued = r.json.data.find((x: any) => x.reference === reference);
-  assert.ok(queued, 'admin queue receives guest request');
+  // Blocking the homestay kills its guest links and owner API.
+  await admin(`/stayride/tenants/${encodeURIComponent(email)}/controls`, { blocked: true, blockReason: 'KYC pending' }, 'PUT');
+  r = await owner('/snapshot');
+  assert.equal(r.status, 403);
+  assert.equal(r.json.error.code, 'ACCOUNT_BLOCKED');
+  assert.equal((await call(`/v1/public/guest-links/${t}`)).status, 404, 'blocked homestay link disabled');
+  assert.equal((await call('/v1/auth/login', { body: { email, password: 'newpass123' } })).status, 403, 'blocked owner cannot log in');
+  await admin(`/stayride/tenants/${encodeURIComponent(email)}/controls`, { blocked: false }, 'PUT');
+  assert.equal((await owner('/snapshot')).status, 200);
 
-  // Admin assigns (₹2,500 -> PF 125 / HC 250 / driver 2,125), records payment.
-  r = await call(`/api/v1/admin/cab-requests/${queued._id}/assign-driver`, { token: adminToken, body: { assignedDriverName: 'Pemba', assignedDriverPhone: '9800011111', agreedFare: 2500 } });
+  // 5) Drivers: self-signup is pending until admin approval; no guest PII before assignment.
+  r = await call('/v1/auth/signup', { body: { email: 'd1@example.com', password: 'driverpass1', name: 'Driver One', phone: '9800011111', role: 'driver', vehicleType: 'SUV', vehicleNumber: 'SK01A1234' } });
+  assert.equal(r.status, 201, JSON.stringify(r.json));
+  assert.equal(r.json.driver.status, 'PENDING_APPROVAL');
+  const dTok = r.json.accessToken;
+  const driverId = r.json.driver.id;
+  const driver = (path: string, body?: any) => call('/v1' + path, { token: dTok, body });
+  assert.equal((await driver('/driver/trips')).status, 403, 'pending driver blocked');
+  assert.equal((await driver('/rooms')).status, 403, 'drivers cannot use owner API');
+  assert.equal((await admin(`/stayride/drivers/${driverId}/status`, { status: 'ACTIVE' }, 'PATCH')).status, 200);
+  r = await driver('/driver/trips');
+  assert.equal(r.status, 200);
+  const open = r.json.find((x: any) => x.reference === reference);
+  assert.ok(open, 'approved driver sees open request');
+  assert.equal(open.phone, undefined, 'no guest phone before assignment');
+  assert.equal(open.guestName, undefined, 'no guest name before assignment');
+
+  r = await driver(`/driver/trips/${reference}/quote`, { quotedFare: 2500 });
   assert.equal(r.status, 200, JSON.stringify(r.json));
-  const snap = r.json.data.financialSnapshot;
+  let ownerTrip = (await owner('/trips')).json.find((x: any) => x.reference === reference);
+  assert.equal(ownerTrip.quotes.length, 1, 'owner sees the real driver quote');
+  assert.equal((await owner(`/trips/${ownerTrip.id}/complete`, {})).status, 409, 'owner cannot complete platform trips');
+  assert.equal((await owner(`/trips/${ownerTrip.id}/quote`, { driverId: 1, quotedFare: 10 })).status, 409, 'owner cannot fake platform quotes');
+
+  // Owner confirms the quote: fare comes from the quote, not the client.
+  r = await owner(`/trips/${ownerTrip.id}/confirm-quote`, { driverId, agreedFare: 999999 });
+  assert.equal(r.status, 200, JSON.stringify(r.json));
+  assert.equal(r.json.fare, 2500);
+  assert.equal(r.json.status, 'AWAITING_ADVANCE');
+  const snap = r.json.financialSnapshot;
   assert.deepEqual([snap.platformFeeAmount, snap.homestayCommissionAmount, snap.driverPayoutAmount], [125, 250, 2125]);
-  assert.ok(snap.advanceAmount >= 375 && snap.advanceAmount <= 2500, 'advance covers PF+HC and <= fare');
+  assert.ok(snap.advanceAmount >= 375 && snap.advanceAmount <= 2500);
 
-  // Owner can't inject money fields or complete with an inflated fare.
-  const ownerTrip = (await call('/v1/trips', { token: tok })).json.find((x: any) => x.reference === reference);
-  assert.equal(ownerTrip.status, 'AWAITING_ADVANCE');
-  r = await call(`/api/v1/admin/cab-requests/${queued._id}/record-payment`, { token: adminToken, body: { transactionId: 'UTR123', amount: 1, method: 'UPI' } });
+  // Driver can't start before payment.
+  assert.equal((await driver(`/driver/trips/${reference}/start`, {})).status, 409);
+
+  const queued = (await admin('/cab-requests/pending')).json.data.find((x: any) => x.reference === reference);
+  r = await admin(`/cab-requests/${queued._id}/record-payment`, { transactionId: 'UTR1', amount: 1, method: 'UPI' });
   assert.equal(r.status, 400, 'underpayment rejected');
-  r = await call(`/api/v1/admin/cab-requests/${queued._id}/record-payment`, { token: adminToken, body: { transactionId: 'UTR123', amount: snap.advanceAmount, method: 'UPI' } });
+  r = await admin(`/cab-requests/${queued._id}/record-payment`, { transactionId: 'UTR1', amount: snap.advanceAmount, method: 'UPI' });
   assert.equal(r.status, 200, JSON.stringify(r.json));
-  assert.equal(r.json.data.paymentRecordedBy, 'admin@example.com');
-  r = await call(`/api/v1/admin/cab-requests/${queued._id}/record-payment`, { token: adminToken, body: { transactionId: 'UTR123', amount: snap.advanceAmount, method: 'UPI' } });
-  assert.equal(r.status, 409, 'payment recorded only once');
+  assert.equal((await admin(`/cab-requests/${queued._id}/record-payment`, { transactionId: 'UTR1', amount: snap.advanceAmount, method: 'UPI' })).status, 409, 'once only');
+  // Void + re-record works and is audited.
+  assert.equal((await admin(`/cab-requests/${queued._id}/void-payment`, {})).status, 400, 'void needs a reason');
+  assert.equal((await admin(`/cab-requests/${queued._id}/void-payment`, { reason: 'wrong UTR' })).status, 200);
+  assert.equal((await admin(`/cab-requests/${queued._id}/record-payment`, { transactionId: 'UTR1B', amount: snap.advanceAmount, method: 'UPI' })).status, 200);
 
-  r = await call(`/v1/trips/${ownerTrip.id}/confirm-quote`, { token: tok, body: { driverId: 1, agreedFare: 999999 } });
-  assert.equal(r.status, 409, 'fare locked after payment');
-  r = await call(`/v1/trips/${ownerTrip.id}/complete`, { token: tok, body: { finalFare: 999999 } });
-  assert.equal(r.json.commission, 250, 'commission comes from the snapshot');
+  // Driver now sees guest details, starts and completes.
+  r = await driver('/driver/trips');
+  const mine = r.json.find((x: any) => x.reference === reference && x.assignedToMe);
+  assert.equal(mine.phone, '+91 90000 11111', 'assigned driver gets guest phone');
+  assert.equal((await driver(`/driver/trips/${reference}/complete`, {})).status, 409, 'cannot complete before start');
+  assert.equal((await driver(`/driver/trips/${reference}/start`, {})).status, 200);
+  assert.equal((await driver(`/driver/trips/${reference}/complete`, {})).status, 200);
+  assert.equal((await owner(`/trips/${ownerTrip.id}/cancel`, {})).status, 409, 'completed trip cannot be cancelled');
 
-  r = await call('/v1/trips', { token: tok, body: { guestName: 'X', phone: '1', date: tomorrow, time: '10:00 AM', vehicleType: 'SUV', commission: 99999, advancePaid: true, financialSnapshot: { homestayCommissionAmount: 99999 } } });
-  assert.equal(r.status, 201);
-  assert.equal(r.json.commission, 0);
-  assert.equal(r.json.advancePaid, undefined, 'money fields not mass-assignable');
-
-  // Payouts: only platform-collected commission; one pending at a time; settle once.
-  r = await call('/v1/payouts/request', { token: tok, body: { amount: 251, upiId: 'host@upi' } });
-  assert.equal(r.status, 400, 'cannot exceed eligible balance');
-  const [p1, p2] = await Promise.all([
-    call('/v1/payouts/request', { token: tok, body: { amount: 250, upiId: 'host@upi' } }),
-    call('/v1/payouts/request', { token: tok, body: { amount: 250, upiId: 'host@upi' } }),
-  ]);
+  // 6) Payouts: exactly the collected commission, one pending at a time, settle once.
+  r = await owner('/payouts/summary');
+  assert.equal(r.json.available, 250);
+  assert.equal((await owner('/payouts/request', { upiId: 'host@upi', expectedAmount: 999 })).status, 409, 'stale balance refused');
+  const [p1, p2] = await Promise.all([owner('/payouts/request', { upiId: 'host@upi' }), owner('/payouts/request', { upiId: 'host@upi' })]);
   assert.equal([p1, p2].filter((x) => x.status === 201).length, 1, 'parallel payout requests: exactly one succeeds');
-  assert.ok([p1, p2].some((x) => x.status === 400 || x.status === 409));
-  const payoutId = (p1.status === 201 ? p1 : p2).json.payout._id;
-  r = await call(`/api/v1/admin/host-payouts/${payoutId}/settle`, { token: adminToken, body: { utrNumber: 'UTR9' } });
-  assert.equal(r.status, 200, JSON.stringify(r.json));
-  r = await call(`/api/v1/admin/host-payouts/${payoutId}/settle`, { token: adminToken, body: { utrNumber: 'UTR9' } });
-  assert.equal(r.status, 409, 'settle only once');
-  r = await call(`/v1/trips/${ownerTrip.id}/commission/pay`, { token: tok, body: { paid: false } });
-  assert.equal(r.json.commissionPaid, true, 'settled commission cannot be reopened');
-  r = await call('/v1/payouts/request', { token: tok, body: { amount: 1, upiId: 'host@upi' } });
-  assert.equal(r.status, 400, 'nothing left to claim');
+  const payout = (p1.status === 201 ? p1 : p2).json.payout;
+  assert.equal(payout.amount, 250);
+  assert.equal((await owner('/payouts/summary')).json.available, 0, 'locked');
+  assert.equal((await admin(`/host-payouts/${payout._id}/settle`, {})).status, 400, 'UTR required');
+  assert.equal((await admin(`/host-payouts/${payout._id}/settle`, { utrNumber: 'UTR9' })).status, 200);
+  assert.equal((await admin(`/host-payouts/${payout._id}/settle`, { utrNumber: 'UTR9' })).status, 409, 'settle once');
+  assert.equal((await admin(`/host-payouts/${payout._id}/reject`, { reason: 'x' })).status, 409, 'cannot reject settled');
+  ownerTrip = (await owner('/trips')).json.find((x: any) => x.reference === reference);
+  assert.equal(ownerTrip.commission, 250);
+  assert.equal(ownerTrip.commissionPaid, true);
 
-  // Snapshot exposes server commission rates; demo reset is demo-only.
-  r = await call('/v1/snapshot', { token: tok });
-  assert.deepEqual(r.json.commissionRates, { pfPercent: 5, hcPercent: 10, advancePercent: 15 });
-  assert.equal((await call('/v1/demo/reset', { token: tok, method: 'POST' })).status, 403);
+  // 7) Owner platform dispatch → admin assigns manual driver → paid → cancel ⇒ refund pending → refunded.
+  r = await owner('/trips', { guestName: 'B', phone: '9000000003', date: tomorrow, time: '11:00 AM', vehicleType: 'Sedan', dispatchMode: 'PLATFORM', destinations: ['NJP'] });
+  assert.equal(r.status, 201, JSON.stringify(r.json));
+  const ref2 = r.json.reference;
+  assert.ok(ref2 && r.json.platform);
+  const q2 = (await admin('/cab-requests/pending')).json.data.find((x: any) => x.reference === ref2);
+  assert.equal((await admin(`/cab-requests/${q2._id}/assign-driver`, { assignedDriverName: 'Phone Driver', assignedDriverPhone: '9811111111', agreedFare: 3000 })).status, 200);
+  assert.equal((await admin(`/cab-requests/${q2._id}/record-payment`, { transactionId: 'UTR1B', amount: 600, method: 'UPI' })).status, 409, 'transaction id reuse refused');
+  assert.equal((await admin(`/cab-requests/${q2._id}/record-payment`, { transactionId: 'UTR2', amount: 600, method: 'UPI' })).status, 200);
+  r = await owner(`/trips/${r.json.id}/cancel`, { reason: 'guest changed plans' });
+  assert.equal(r.json.status, 'CANCELLED');
+  assert.equal(r.json.refundStatus, 'PENDING');
+  assert.equal((await admin(`/cab-requests/${q2._id}/refund`, { reference: 'RFND1' })).status, 200);
+  assert.equal((await owner('/payouts/summary')).json.available, 0, 'cancelled trips never payable');
 
-  console.log('✓ all StayRide auth checks passed');
+  // 8) Per-homestay commission override (admin only) and audit trail.
+  await admin(`/stayride/tenants/${encodeURIComponent(email)}/controls`, { commissionOverride: { pfPercent: 4, hcPercent: 12, advancePercent: 20 } }, 'PUT');
+  r = await owner('/snapshot');
+  assert.deepEqual([r.json.commissionRates.pfPercent, r.json.commissionRates.hcPercent], [4, 12]);
+  r = await admin('/audit-log');
+  const actions = new Set(r.json.data.map((a: any) => a.action));
+  for (const a of ['tenant.controls', 'settings.update', 'cab.confirm_quote', 'payment.record', 'payment.void', 'payout.settle', 'payment.refund', 'driver.status']) {
+    assert.ok(actions.has(a), `audit log missing ${a}`);
+  }
+
+  // 9) Blocked driver loses access immediately.
+  await admin(`/stayride/drivers/${driverId}/status`, { status: 'BLOCKED', reason: 'test' }, 'PATCH');
+  assert.equal((await driver('/driver/trips')).status, 403);
+  console.log('✓ all StayRide security + money checks passed');
 } finally {
   server.close();
   await mongoose.disconnect();

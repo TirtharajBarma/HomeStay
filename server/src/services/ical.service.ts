@@ -74,8 +74,60 @@ export class IcalService {
       throw new Error(`Room '${roomCodeOrSlug}' not found.`);
     }
 
-    // 1. Fetch raw .ics feed
-    const res = await fetch(icalUrl);
+    // Validate URL for SSRF prevention
+    let parsed: URL;
+    try {
+      parsed = new URL(icalUrl);
+    } catch {
+      throw new Error("Invalid iCal URL format.");
+    }
+    if (parsed.protocol !== "https:") {
+      throw new Error("iCal feed must use secure HTTPS protocol.");
+    }
+    const hostname = parsed.hostname.toLowerCase();
+    const disallowedPatterns = [
+      "localhost",
+      "127.",
+      "0.0.0.0",
+      "169.254.",
+      "10.",
+      "192.168.",
+      "172.16.",
+      "172.17.",
+      "172.18.",
+      "172.19.",
+      "172.20.",
+      "172.21.",
+      "172.22.",
+      "172.23.",
+      "172.24.",
+      "172.25.",
+      "172.26.",
+      "172.27.",
+      "172.28.",
+      "172.29.",
+      "172.30.",
+      "172.31.",
+      ".internal",
+      ".local",
+    ];
+    if (disallowedPatterns.some((p) => hostname === p || hostname.startsWith(p) || hostname.endsWith(p))) {
+      throw new Error("Invalid or private iCal destination host.");
+    }
+
+    // 1. Fetch raw .ics feed with 6-second timeout
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 6000);
+    let res: Response;
+    try {
+      res = await fetch(icalUrl, { signal: controller.signal });
+    } catch (fetchErr: any) {
+      if (fetchErr.name === "AbortError") throw new Error("iCal feed request timed out after 6 seconds.");
+      throw fetchErr;
+    } finally {
+      clearTimeout(timeout);
+    }
+
     if (!res.ok) {
       throw new Error(`Failed to fetch iCal feed from ${icalUrl} (Status ${res.status})`);
     }

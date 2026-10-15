@@ -8,7 +8,7 @@ export class GuestController {
       status: req.query.status as string,
       query: (req.query.query || req.query.search) as string,
       room: req.query.room as string,
-      ownerId: (req.query.ownerId as string) || (user?.role === "owner" ? user.id : undefined),
+      ownerId: user?.role === "admin" && req.query.ownerId ? String(req.query.ownerId) : user?.id,
     };
     const guests = await GuestService.getGuests(filters);
     res.json({

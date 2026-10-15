@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { CabTrip } from '../types';
 import { Colors, Radii, Shadows } from '../theme/colors';
 import { Pill } from './Pill';
+import { formatINR } from '../utils/format';
 
 interface TripItemProps {
   trip: CabTrip;
@@ -38,7 +39,7 @@ export const TripItem: React.FC<TripItemProps> = ({ trip, onPress }) => {
 
       <View style={styles.bottomRow}>
         <Text style={styles.fare}>
-          {trip.status === 'COMPLETED' ? `Fare: ₹${trip.fare?.toLocaleString()}` : `Est. ₹${trip.estFare?.toLocaleString()}`}
+          {trip.status === 'COMPLETED' ? `Fare: ${formatINR(trip.fare)}` : `Est. ${formatINR(trip.estFare)}`}
         </Text>
         {trip.driverName ? (
           <Text style={styles.driverText} numberOfLines={1}>

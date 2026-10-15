@@ -16,6 +16,7 @@ import { Header } from '../components/Header';
 import { Pill } from '../components/Pill';
 import { Colors } from '../theme/colors';
 import { Driver } from '../types';
+import { formatINR } from '../utils/format';
 
 export const CabRequestDetailScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
@@ -162,7 +163,7 @@ export const CabRequestDetailScreen: React.FC = () => {
 
   const handleCompleteTrip = async () => {
     await completeTrip(trip.id);
-    Alert.alert('Trip Completed', `Commission Earned: ₹${trip.commission.toLocaleString()}`);
+    Alert.alert('Trip Completed', `Commission Earned: ${formatINR(trip.commission)}`);
   };
 
   const handleChangeDriver = async () => {
@@ -274,8 +275,8 @@ export const CabRequestDetailScreen: React.FC = () => {
           <View style={styles.rowBetween}>
             <Text style={styles.fareText}>
               {trip.status === 'COMPLETED'
-                ? `₹${trip.fare.toLocaleString()}`
-                : `Est. ₹${trip.estFare.toLocaleString()}`}
+                ? formatINR(trip.fare)
+                : `Est. ${formatINR(trip.estFare)}`}
             </Text>
             <Text style={styles.driverTagText}>
               {trip.driverName
@@ -312,10 +313,10 @@ export const CabRequestDetailScreen: React.FC = () => {
         {trip.status === 'COMPLETED' && (
           <View style={styles.commissionCard}>
             <Text style={styles.commissionTitle}>
-              Commission earned: ₹{trip.commission.toLocaleString()}
+              Commission earned: {formatINR(trip.commission)}
             </Text>
             <Text style={styles.commissionMeta}>
-              Trip fare ₹{trip.fare.toLocaleString()} · 12% StayRide commission ·{' '}
+              Trip fare {formatINR(trip.fare)} · 12% StayRide commission ·{' '}
               {trip.commissionPaid ? 'Paid to you' : 'Pending payout'}
             </Text>
           </View>

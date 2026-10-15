@@ -27,6 +27,13 @@ export const config = {
         "http://localhost:5501",
       ],
   nodeEnv: process.env.NODE_ENV || "development",
+  // Deployed = running on Vercel or NODE_ENV=production. Used to fail closed.
+  isDeployed: Boolean(process.env.VERCEL) || process.env.NODE_ENV === "production",
+  // Shared demo account (demo@stayride.in). Off in deployments unless DEMO_ENABLED=true.
+  demoEnabled:
+    process.env.DEMO_ENABLED !== undefined
+      ? process.env.DEMO_ENABLED === "true"
+      : !(Boolean(process.env.VERCEL) || process.env.NODE_ENV === "production"),
   jwtSecret,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || "15m",
   googleClientId: process.env.GOOGLE_CLIENT_ID || "",

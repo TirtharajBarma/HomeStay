@@ -10,15 +10,17 @@ import {
   Platform,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Shadows } from '../theme/colors';
 import { useStayRide } from '../data/store';
 
 export const DriverProfileScreen: React.FC = () => {
   const navigation = useNavigation<any>();
-  const { session, logout } = useStayRide();
+  const insets = useSafeAreaInsets();
+  const { session, logout, setDriverOnline } = useStayRide();
 
-  const [isOnline, setIsOnline] = useState(true);
+  const isOnline = session?.driver?.available !== false;
 
   const driver = session?.driver || {
     name: 'Pemba Lepcha',
@@ -31,14 +33,18 @@ export const DriverProfileScreen: React.FC = () => {
     area: 'Gangtok & North Sikkim',
   };
 
-  const handleToggleOnline = (val: boolean) => {
-    setIsOnline(val);
-    Alert.alert(
-      val ? 'You are Online' : 'You are Offline',
-      val
-        ? 'Homestays and guests nearby can now dispatch ride requests and quote requests to you.'
-        : 'You will not receive any new ride requests until you go online again.'
-    );
+  const handleToggleOnline = async (val: boolean) => {
+    try {
+      await setDriverOnline(val);
+      Alert.alert(
+        val ? 'You are Online' : 'You are Offline',
+        val
+          ? 'Homestays and guests nearby can now dispatch ride requests and quote requests to you.'
+          : 'You will not receive any new ride requests until you go online again.'
+      );
+    } catch (e: any) {
+      Alert.alert('Status Error', e?.message || 'Could not update availability.');
+    }
   };
 
   const handleLogout = () => {
@@ -57,7 +63,7 @@ export const DriverProfileScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: Math.max(insets.top + 10, Platform.OS === 'ios' ? 54 : 38) }]}>
         <Text style={styles.headerTitle}>Driver Profile</Text>
         <Text style={styles.headerSubtitle}>Vehicle &amp; Network Availability</Text>
       </View>

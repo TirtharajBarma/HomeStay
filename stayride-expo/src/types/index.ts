@@ -144,7 +144,7 @@ export interface Homestay {
   photos: string[];
 }
 
-export type UserRole = 'owner' | 'driver';
+export type UserRole = 'owner' | 'driver' | 'admin';
 
 export interface DriverSessionProfile {
   id: number | string;
@@ -158,6 +158,8 @@ export interface DriverSessionProfile {
   area?: string;
   available?: boolean;
   active?: boolean;
+  status?: 'ACTIVE' | 'PENDING_APPROVAL' | 'BLOCKED';
+  statusReason?: string;
 }
 
 export interface UserSession {

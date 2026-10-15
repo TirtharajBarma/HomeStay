@@ -16,6 +16,9 @@ export interface IPayoutRequest extends Document {
   };
   status: 'PENDING' | 'SETTLED' | 'REJECTED';
   tripIds: number[];
+  cabRequestIds: string[]; // CabRequest _ids whose homestay commission this payout covers
+  rejectedReason?: string;
+  decidedBy?: string;
   utrNumber?: string;
   notes?: string;
   requestedAt: Date;
@@ -39,23 +42,30 @@ const PayoutRequestSchema: Schema = new Schema(
       bankName: { type: String, trim: true },
     },
     tripIds: { type: [Number], default: [] },
+    cabRequestIds: { type: [String], default: [] },
+    rejectedReason: { type: String, default: '' },
+    decidedBy: { type: String, default: '' },
     status: {
       type: String,
       enum: ['PENDING', 'SETTLED', 'REJECTED'],
       default: 'PENDING',
-      index: true,
     },
     utrNumber: { type: String, trim: true },
     notes: { type: String, default: '' },
     requestedAt: { type: Date, default: Date.now },
     settledAt: { type: Date },
-    isDemo: { type: Boolean, default: false, index: true },
+    isDemo: { type: Boolean, default: false },
   },
   { timestamps: true }
 );
 
 // At most one PENDING payout per tenant: parallel requests can't both pass the balance check.
-PayoutRequestSchema.index({ tenantId: 1 }, { unique: true, partialFilterExpression: { status: 'PENDING' } });
+// Explicit names: an older non-unique "tenantId_1" index exists in deployed DBs (see scripts/migrate-indexes.ts).
+PayoutRequestSchema.index(
+  { tenantId: 1, status: 1 },
+  { name: 'one_pending_payout_per_tenant', unique: true, partialFilterExpression: { status: 'PENDING' } }
+);
+PayoutRequestSchema.index({ status: 1, requestedAt: -1 }, { name: 'status_requestedAt' });
 
 export function getPayoutRequestModel(isDemo: boolean = false): mongoose.Model<IPayoutRequest> {
   const dbName = isDemo ? 'test' : 'production';

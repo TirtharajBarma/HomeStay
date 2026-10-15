@@ -13,6 +13,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Radii, Shadows } from '../theme/colors';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useStayRide } from '../data/store';
 import { CabTrip } from '../types';
 
@@ -93,19 +94,82 @@ export const DriverTripsScreen: React.FC = () => {
     }
   };
 
+  const insets = useSafeAreaInsets();
+  const driverStatus = session?.driver?.status || 'ACTIVE';
+  const statusReason = session?.driver?.statusReason || '';
+  const isOnline = session?.driver?.available !== false;
+
   return (
     <View style={styles.container}>
       {/* Top Banner */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) }]}>
         <View>
           <Text style={styles.headerTitle}>Driver Console</Text>
           <Text style={styles.headerSubtitle}>{driverName} • {session?.driver?.vehicle || 'SUV'}</Text>
         </View>
-        <View style={styles.statusBadge}>
-          <View style={styles.statusDot} />
-          <Text style={styles.statusText}>Online</Text>
+        <View style={[
+          styles.statusBadge,
+          driverStatus === 'BLOCKED'
+            ? { backgroundColor: '#FEE2E2' }
+            : driverStatus === 'PENDING_APPROVAL'
+            ? { backgroundColor: '#FEF3C7' }
+            : !isOnline
+            ? { backgroundColor: '#F1F5F9' }
+            : { backgroundColor: '#DCFCE7' }
+        ]}>
+          <View style={[
+            styles.statusDot,
+            driverStatus === 'BLOCKED'
+              ? { backgroundColor: '#EF4444' }
+              : driverStatus === 'PENDING_APPROVAL'
+              ? { backgroundColor: '#F59E0B' }
+              : !isOnline
+              ? { backgroundColor: '#94A3B8' }
+              : { backgroundColor: '#16A34A' }
+          ]} />
+          <Text style={[
+            styles.statusText,
+            driverStatus === 'BLOCKED'
+              ? { color: '#B91C1C' }
+              : driverStatus === 'PENDING_APPROVAL'
+              ? { color: '#B45309' }
+              : !isOnline
+              ? { color: '#64748B' }
+              : { color: '#15803D' }
+          ]}>
+            {driverStatus === 'BLOCKED' ? 'Suspended' : driverStatus === 'PENDING_APPROVAL' ? 'Under Review' : isOnline ? 'Online' : 'Offline'}
+          </Text>
         </View>
       </View>
+
+      {/* Offline Status Notice Banner */}
+      {driverStatus === 'ACTIVE' && !isOnline && (
+        <View style={{ backgroundColor: '#F8FAFC', borderBottomWidth: 1, borderColor: '#E2E8F0', paddingHorizontal: 16, paddingVertical: 9, flexDirection: 'row', alignItems: 'center' }}>
+          <Ionicons name="pause-circle-outline" size={16} color="#64748B" style={{ marginRight: 6 }} />
+          <Text style={{ fontSize: 12, color: '#64748B', flex: 1 }}>
+            You are currently Offline. Turn availability ON in Profile to receive new ride dispatches.
+          </Text>
+        </View>
+      )}
+
+      {/* Account Status Notice Banner */}
+      {driverStatus === 'PENDING_APPROVAL' && (
+        <View style={{ backgroundColor: '#FFFBEB', borderBottomWidth: 1, borderColor: '#FDE68A', paddingHorizontal: 16, paddingVertical: 10, flexDirection: 'row', alignItems: 'center' }}>
+          <Ionicons name="time-outline" size={18} color="#D97706" style={{ marginRight: 8 }} />
+          <Text style={{ fontSize: 13, color: '#92400E', flex: 1 }}>
+            Your driver profile is currently under review by StayRide. Once approved, you can receive trip dispatches and submit quotes.
+          </Text>
+        </View>
+      )}
+
+      {driverStatus === 'BLOCKED' && (
+        <View style={{ backgroundColor: '#FEF2F2', borderBottomWidth: 1, borderColor: '#FECACA', paddingHorizontal: 16, paddingVertical: 10, flexDirection: 'row', alignItems: 'center' }}>
+          <Ionicons name="alert-circle-outline" size={18} color="#DC2626" style={{ marginRight: 8 }} />
+          <Text style={{ fontSize: 13, color: '#991B1B', flex: 1 }}>
+            Account Suspended: {statusReason || 'Please contact StayRide admin support.'}
+          </Text>
+        </View>
+      )}
 
       {/* Segmented Tab Row */}
       <View style={styles.tabRow}>

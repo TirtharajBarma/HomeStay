@@ -19,12 +19,13 @@ export class BookingController {
 
   static async getBookings(req: Request, res: Response) {
     const user = (req as any).user;
+    const resolvedOwnerId = user?.role === "admin" && req.query.ownerId ? String(req.query.ownerId) : user?.id;
     const filters = {
       roomCode: req.query.roomCode as string,
       channel: req.query.channel as string,
       status: req.query.status as string,
       search: req.query.search as string,
-      ownerId: (req.query.ownerId as string) || (user?.role === "owner" ? user.id : undefined),
+      ownerId: resolvedOwnerId,
     };
     const bookings = await BookingService.getBookings(filters);
     res.json({
@@ -48,17 +49,32 @@ export class BookingController {
 
   static async cancelBooking(req: Request, res: Response) {
     const reference = (req.params.reference || req.params.id) as string;
-    const booking = await BookingService.cancelBooking(reference);
+    const user = (req as any).user;
+    const booking = await BookingService.getBookingByReference(reference);
     if (!booking) {
       return res.status(404).json({
         success: false,
         error: `Booking '${reference}' not found`,
       });
     }
+
+    const pin = req.body?.pin || req.headers["x-booking-pin"];
+    const isAuthorized =
+      (user && (user.role === "admin" || String(user.id) === String(booking.ownerId))) ||
+      (pin && String(pin) === String(booking.pin));
+
+    if (!isAuthorized) {
+      return res.status(403).json({
+        success: false,
+        error: "Cancellation requires valid booking PIN or property owner credentials.",
+      });
+    }
+
+    const cancelled = await BookingService.cancelBooking(reference);
     res.json({
       success: true,
       message: "Booking cancelled successfully",
-      data: booking,
+      data: cancelled,
     });
   }
 }

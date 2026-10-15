@@ -18,6 +18,7 @@ import { Pill } from '../components/Pill';
 import { Colors } from '../theme/colors';
 import { CabTrip } from '../types';
 import { api } from '../data/api';
+import { formatINR } from '../utils/format';
 
 export const CommissionScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
@@ -224,12 +225,12 @@ export const CommissionScreen: React.FC = () => {
                   {t.guestName} · {t.pickup} → {t.destination}
                 </Text>
                 <Text style={styles.tripMeta}>
-                  {fmtDate(t.date)} · {t.vehicleType} · Trip Fare: ₹{t.fare.toLocaleString()}
+                  {fmtDate(t.date)} · {t.vehicleType} · Trip Fare: {formatINR(t.fare)}
                 </Text>
               </View>
 
               <View style={{ alignItems: 'flex-end' }}>
-                <Text style={styles.commissionAmount}>+₹{t.commission.toLocaleString()}</Text>
+                <Text style={styles.commissionAmount}>+{formatINR(t.commission)}</Text>
                 <View style={{ marginTop: 4 }}>
                   <Pill type="payment" value={t.commissionPaid ? 'PAID' : t.advancePaid ? 'PENDING' : 'DIRECT'} />
                 </View>

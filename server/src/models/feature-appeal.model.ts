@@ -1,8 +1,12 @@
-import { Schema, model, Document } from "mongoose";
+import mongoose, { Schema, model, Document } from "mongoose";
 import { getISTTimestamp } from "../utils/date.js";
 
 export type FeatureKey =
   | "campaigns"
+  | "guestCabLinks"
+  | "platformDispatch"
+  | "payouts"
+  | "driverQuotes"
   | "whatsappCampaigns"
   | "networkDispatch"
   | "myDrivers"
@@ -32,14 +36,9 @@ const FeatureAppealSchema = new Schema<IFeatureAppeal>(
     ownerEmail: { type: String, required: true, index: true },
     featureKey: {
       type: String,
-      enum: [
-        "campaigns",
-        "whatsappCampaigns",
-        "networkDispatch",
-        "myDrivers",
-        "guestCabRequests",
-        "commissionAnalytics",
-      ],
+      enum: ["campaigns", "guestCabLinks", "platformDispatch", "payouts", "driverQuotes",
+        // legacy keys kept so existing documents still validate
+        "whatsappCampaigns", "networkDispatch", "myDrivers", "guestCabRequests", "commissionAnalytics"],
       required: true,
       index: true,
     },
@@ -67,3 +66,8 @@ FeatureAppealSchema.pre("save", function () {
 });
 
 export const FeatureAppeal = model<IFeatureAppeal>("FeatureAppeal", FeatureAppealSchema);
+
+export function getFeatureAppealModel(isDemo = false): mongoose.Model<IFeatureAppeal> {
+  const conn = mongoose.connection.useDb(isDemo ? "test" : "production", { useCache: true });
+  return (conn.models.FeatureAppeal || conn.model<IFeatureAppeal>("FeatureAppeal", FeatureAppealSchema)) as mongoose.Model<IFeatureAppeal>;
+}

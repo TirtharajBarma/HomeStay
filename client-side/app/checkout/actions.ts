@@ -141,62 +141,53 @@ export async function confirmReservation(
       cache: "no-store",
     });
 
-    if (res.ok) {
-      const result = await res.json();
-      if (result.success && result.data) {
-        const b = result.data;
-        return {
-          status: "confirmed",
-          reservation: {
-            reference: b.reference,
-            pin: b.pin,
-            stayName: b.roomName || stay.name,
-            staySlug: b.staySlug || stay.slug,
-            guestName: b.guestName,
-            email: b.email,
-            phone: b.phone,
-            arrivalWindow: b.arrivalWindow || arrivalWindows[0].label,
-            breakfasts: b.breakfasts || [],
-            dates: formatDateRange(booking),
-            nights: b.nights || booking.nights,
-            guests: formatGuests(b.party || booking.guests),
-            plan: b.plan,
-            settled: b.settled,
-            dueToday: formatMoney(b.dueToday),
-            balance: formatMoney(b.balanceDue),
-            total: formatMoney(b.totalAmount),
-            cancellationBy: b.cancellationBy || cancellationDeadline(booking.checkIn),
-          },
-        };
-      }
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      return {
+        status: "error",
+        message: err.error || err.message || "Reservation could not be completed. The room may already be booked for these dates.",
+        errors: {},
+      };
     }
-  } catch (apiErr) {
-    console.warn("Backend reservation sync notice:", apiErr);
+
+    const result = await res.json();
+    if (result.success && result.data) {
+      const b = result.data;
+      return {
+        status: "confirmed",
+        reservation: {
+          reference: b.reference,
+          pin: b.pin,
+          stayName: b.roomName || stay.name,
+          staySlug: b.staySlug || stay.slug,
+          guestName: b.guestName,
+          email: b.email,
+          phone: b.phone,
+          arrivalWindow: b.arrivalWindow || arrivalWindows[0].label,
+          breakfasts: b.breakfasts || [],
+          dates: formatDateRange(booking),
+          nights: b.nights || booking.nights,
+          guests: formatGuests(b.party || booking.guests),
+          plan: b.plan,
+          settled: b.settled,
+          dueToday: formatMoney(b.dueToday),
+          balance: formatMoney(b.balanceDue),
+          total: formatMoney(b.totalAmount),
+          cancellationBy: b.cancellationBy || cancellationDeadline(booking.checkIn),
+        },
+      };
+    }
+
+    return {
+      status: "error",
+      message: "The reservation server did not return confirmation data. Please try again.",
+      errors: {},
+    };
+  } catch (apiErr: any) {
+    return {
+      status: "error",
+      message: apiErr?.message || "Unable to reach reservation server. Please check your network and try again.",
+      errors: {},
+    };
   }
-
-  const ids = reference();
-
-  return {
-    status: "confirmed",
-    reservation: {
-      reference: ids.reference,
-      pin: ids.pin,
-      stayName: stay.name,
-      staySlug: stay.slug,
-      guestName: `${firstName} ${lastName}`,
-      email,
-      phone,
-      arrivalWindow: arrival?.label ?? arrivalWindows[0].label,
-      breakfasts,
-      dates: formatDateRange(booking),
-      nights: booking.nights,
-      guests: formatGuests(booking.guests),
-      plan,
-      settled: quote.total - dueToday <= 0,
-      dueToday: formatMoney(dueToday),
-      balance: formatMoney(quote.total - dueToday),
-      total: formatMoney(quote.total),
-      cancellationBy: cancellationDeadline(booking.checkIn),
-    },
-  };
 }

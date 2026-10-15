@@ -46,7 +46,7 @@ export default function AdminDashboardPage() {
   const [data, setData] = useState<OverviewData | null>(null);
   const [loading, setLoading] = useState(true);
   const [overviewError, setOverviewError] = useState("");
-  const [activeTab, setActiveTab] = useState<"payouts" | "properties" | "commissions" | "cab-requests" | "appeals" | "host-payouts">("payouts");
+  const [activeTab, setActiveTab] = useState<"payouts" | "properties" | "commissions" | "cab-requests" | "appeals" | "host-payouts" | "drivers">("payouts");
 
   // Payout settlement modal state
   const [settlingTrip, setSettlingTrip] = useState<any | null>(null);
@@ -153,6 +153,75 @@ export default function AdminDashboardPage() {
       alert(err.message || "Failed to settle payout.");
     } finally {
       setHostSettleLoading(false);
+    }
+  }
+
+  async function handleRejectHostPayout(payoutId: string) {
+    if (!token) return;
+    const reason = window.prompt("Reason for rejecting this payout request (trips will be unlocked):", "Disputed fares or mismatched bank details");
+    if (!reason) return;
+    try {
+      const res = await fetch(API_ENDPOINTS.rejectHostPayout(payoutId), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ reason }),
+      });
+      if (res.ok) {
+        alert("Payout request rejected and trips unlocked.");
+        fetchHostPayouts();
+      } else {
+        alert(await readApiError(res, "Failed to reject payout."));
+      }
+    } catch (e: any) {
+      alert(e?.message || "Failed to reject payout.");
+    }
+  }
+
+  // 5. Fleet Drivers Management State
+  const [driversList, setDriversList] = useState<any[]>([]);
+  const [driversLoading, setDriversLoading] = useState(false);
+  const [driverFilterStatus, setDriverFilterStatus] = useState<string>("");
+
+  async function fetchDrivers() {
+    if (!token) return;
+    setDriversLoading(true);
+    try {
+      const res = await fetch(API_ENDPOINTS.drivers(driverFilterStatus || undefined), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const body = await res.json();
+        setDriversList(body.data || body || []);
+      }
+    } catch (e: any) {
+      console.error("Could not fetch drivers:", e);
+    } finally {
+      setDriversLoading(false);
+    }
+  }
+
+  async function handleUpdateDriverStatus(driverId: string, status: "ACTIVE" | "PENDING_APPROVAL" | "BLOCKED") {
+    if (!token) return;
+    let reason = "";
+    if (status === "BLOCKED") {
+      const input = window.prompt("Reason for suspending this driver:", "Violation of mountain safety guidelines");
+      if (input === null) return;
+      reason = input;
+    }
+    try {
+      const res = await fetch(API_ENDPOINTS.driverStatus(driverId), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ status, reason }),
+      });
+      if (res.ok) {
+        alert(`Driver status updated to ${status}.`);
+        fetchDrivers();
+      } else {
+        alert(await readApiError(res, "Failed to update driver status."));
+      }
+    } catch (e: any) {
+      alert(e?.message || "Failed to update driver status.");
     }
   }
 
@@ -481,6 +550,8 @@ export default function AdminDashboardPage() {
       fetchAppeals();
     } else if (activeTab === "host-payouts") {
       fetchHostPayouts();
+    } else if (activeTab === "drivers") {
+      fetchDrivers();
     }
   }, [activeTab, token]);
 
@@ -594,7 +665,7 @@ export default function AdminDashboardPage() {
         </section>
 
         {/* 3. DESK TABS SWITCHER */}
-        <div className="flex border-b border-slate-800">
+        <div className="flex border-b border-slate-800 overflow-x-auto no-scrollbar">
           <button
             onClick={() => setActiveTab("payouts")}
             className={`flex items-center gap-2 border-b-2 px-5 py-3 text-sm font-bold transition ${
@@ -665,6 +736,18 @@ export default function AdminDashboardPage() {
           >
             <span className="material-symbols-outlined text-lg">account_balance_wallet</span>
             <span>Homestay Commission Payouts ({hostPayouts.filter((p) => p.status === 'PENDING').length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("drivers")}
+            className={`flex items-center gap-2 border-b-2 px-5 py-3 text-sm font-bold transition whitespace-nowrap ${
+              activeTab === "drivers"
+                ? "border-amber-500 text-amber-400"
+                : "border-transparent text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <span className="material-symbols-outlined text-lg">local_taxi</span>
+            <span>Fleet Drivers ({driversList.length})</span>
           </button>
         </div>
 
@@ -1303,18 +1386,26 @@ export default function AdminDashboardPage() {
                         </td>
                         <td className="p-3 text-right">
                           {p.status === "PENDING" ? (
-                            <button
-                              onClick={() => {
-                                setSettlingHostPayout(p);
-                                setHostUtrInput("");
-                              }}
-                              className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow hover:bg-emerald-500 transition"
-                            >
-                              Settle via UPI
-                            </button>
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                onClick={() => {
+                                  setSettlingHostPayout(p);
+                                  setHostUtrInput("");
+                                }}
+                                className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow hover:bg-emerald-500 transition"
+                              >
+                                Settle via UPI
+                              </button>
+                              <button
+                                onClick={() => handleRejectHostPayout(p._id || p.id)}
+                                className="rounded-lg bg-red-950 px-2.5 py-1.5 text-xs font-bold text-red-400 border border-red-800/40 hover:bg-red-900 transition"
+                              >
+                                Reject
+                              </button>
+                            </div>
                           ) : (
                             <span className="text-[11px] text-slate-500 font-mono">
-                              Settled ✓
+                              {p.status === "REJECTED" ? "Rejected ✕" : "Settled ✓"}
                             </span>
                           )}
                         </td>
@@ -1326,6 +1417,128 @@ export default function AdminDashboardPage() {
                         {hostPayoutsLoading
                           ? "Loading homestay commission payout requests..."
                           : "No homestay payout requests currently pending."}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+
+        {/* 8. TAB 7: FLEET DRIVERS MANAGEMENT */}
+        {activeTab === "drivers" && (
+          <section className="rounded-2xl border border-slate-800 bg-slate-950 p-6 shadow">
+            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-base font-bold text-white">
+                  Mountain Fleet Drivers Desk
+                </h2>
+                <p className="text-xs text-slate-400">
+                  Review hill driver profiles, verify commercial vehicle details, and approve or suspend driver access.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <select
+                  value={driverFilterStatus}
+                  onChange={(e) => setDriverFilterStatus(e.target.value)}
+                  className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-slate-200 outline-none"
+                >
+                  <option value="">All Statuses</option>
+                  <option value="PENDING_APPROVAL">Pending Approval</option>
+                  <option value="ACTIVE">Active / Approved</option>
+                  <option value="BLOCKED">Suspended / Blocked</option>
+                </select>
+                <button
+                  onClick={fetchDrivers}
+                  className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-700"
+                >
+                  <span className="material-symbols-outlined text-sm">sync</span>
+                  <span>Refresh</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto rounded-xl border border-slate-800/80">
+              <table className="w-full text-left text-xs text-slate-300">
+                <thead>
+                  <tr className="border-b border-slate-800 bg-slate-900/50 text-slate-400">
+                    <th className="p-3">Driver Name & Contact</th>
+                    <th className="p-3">Vehicle Details</th>
+                    <th className="p-3">Registration Plate</th>
+                    <th className="p-3">Seating & Region</th>
+                    <th className="p-3">Account Status</th>
+                    <th className="p-3 text-right">Approval Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60 font-sans">
+                  {driversList.length > 0 ? (
+                    driversList.map((d: any) => (
+                      <tr key={d._id || d.id} className="hover:bg-slate-900/30">
+                        <td className="p-3">
+                          <p className="font-bold text-white">{d.name || "Driver"}</p>
+                          <p className="text-[11px] text-slate-400 font-mono">
+                            {d.phone || "No phone"} • {d.email}
+                          </p>
+                        </td>
+                        <td className="p-3">
+                          <span className="font-semibold text-slate-200">
+                            {d.vehicle?.model || d.vehicle || "SUV"}
+                          </span>
+                          <span className="ml-1 text-[11px] text-slate-500">
+                            ({d.vehicle?.type || "Standard"})
+                          </span>
+                        </td>
+                        <td className="p-3 font-mono font-bold text-amber-300">
+                          {d.vehicle?.plate || d.plate || "Pending Plate"}
+                        </td>
+                        <td className="p-3 text-slate-300">
+                          {d.vehicle?.seats || d.seats || 4} Seats • {d.vehicle?.area || d.area || "Hill Circuit"}
+                        </td>
+                        <td className="p-3">
+                          {d.accountStatus === "ACTIVE" ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-950 px-2 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-800/40">
+                              <span className="material-symbols-outlined text-xs">check_circle</span>
+                              ACTIVE
+                            </span>
+                          ) : d.accountStatus === "BLOCKED" ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-red-950 px-2 py-0.5 text-[10px] font-bold text-red-400 border border-red-800/40">
+                              <span className="material-symbols-outlined text-xs">cancel</span>
+                              SUSPENDED
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-950 px-2 py-0.5 text-[10px] font-bold text-amber-400 border border-amber-800/40">
+                              <span className="material-symbols-outlined text-xs">pending</span>
+                              PENDING APPROVAL
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-3 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {d.accountStatus !== "ACTIVE" && (
+                              <button
+                                onClick={() => handleUpdateDriverStatus(d._id || d.id, "ACTIVE")}
+                                className="rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white shadow hover:bg-emerald-500 transition"
+                              >
+                                Approve
+                              </button>
+                            )}
+                            {d.accountStatus !== "BLOCKED" && (
+                              <button
+                                onClick={() => handleUpdateDriverStatus(d._id || d.id, "BLOCKED")}
+                                className="rounded-lg bg-red-950 px-2.5 py-1 text-[11px] font-bold text-red-400 border border-red-800/40 hover:bg-red-900 transition"
+                              >
+                                Suspend
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={6} className="p-8 text-center text-slate-500">
+                        {driversLoading ? "Loading drivers..." : "No drivers found for this filter."}
                       </td>
                     </tr>
                   )}

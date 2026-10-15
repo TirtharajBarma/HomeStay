@@ -4,14 +4,14 @@ import { PropertyService } from "../services/property.service.js";
 export class PropertyController {
   static async getProfile(req: Request, res: Response) {
     const user = (req as any).user;
-    const ownerId = (req.query.ownerId as string) || (user?.role === "owner" ? user.id : undefined);
+    const ownerId = user?.role === "admin" && req.query.ownerId ? String(req.query.ownerId) : user?.id;
     const profile = await PropertyService.getProfile(ownerId);
     res.json({ success: true, data: profile });
   }
 
   static async updateProfile(req: Request, res: Response) {
     const user = (req as any).user;
-    const ownerId = (req.query.ownerId as string) || (user?.role === "owner" ? user.id : undefined);
+    const ownerId = user?.role === "admin" && req.query.ownerId ? String(req.query.ownerId) : user?.id;
     const updated = await PropertyService.updateProfile(req.body, ownerId);
     res.json({ success: true, data: updated });
   }
