@@ -1539,7 +1539,45 @@ stayrideV1Router.post('/trips', ownerOnly, async (req: Request, res: Response) =
   const { store, tenantKey } = await getStoreForReq(req);
   const scheduleError = validateSchedule(req.body);
   if (scheduleError) return res.status(400).json({ error: { message: scheduleError } });
-  const created = store.createTrip(req.body);
+  const reference = newReference();
+  const created = store.createTrip({ ...req.body, reference });
+  created.reference = reference;
+
+  try {
+    const { getCabRequestModel } = await import('../models/cab-request.model.js');
+    const CabModel = getCabRequestModel(isDemoKey(tenantKey)) as any;
+    const destinations = Array.isArray(created.destinations) && created.destinations.length > 0
+      ? created.destinations
+      : [{ address: created.destination || 'Destination', order: 0 }];
+    await CabModel.create({
+      reference,
+      propertyId: tenantKey,
+      tripId: created.id,
+      clientRequestId: `owner-${created.id}-${Date.now()}`,
+      homestayName: store.homestay.name || 'Homestay',
+      guestId: created.guestId ?? null,
+      guestName: created.guestName || 'Guest',
+      guestPhone: created.phone || '',
+      pickupLocation: { address: created.pickup || store.homestay.location || 'Homestay' },
+      destinations,
+      isRoundTrip: Boolean(created.isRoundTrip),
+      returnDate: created.returnDate,
+      returnTime: created.returnTime || '',
+      date: created.date,
+      time: created.time,
+      passengers: created.passengers || 1,
+      vehicleType: created.vehicleType || 'SUV',
+      requestSource: 'MANUAL_OWNER',
+      status: cabStatusFor(created),
+      assignedDriverName: created.driverName || '',
+      agreedFare: created.fare || 0,
+      advanceAmount: created.advanceAmount || 0,
+      remainingCashAmount: created.remainingCashAmount || 0,
+    });
+  } catch (err: any) {
+    console.warn('[StayRide] Failed to create CabRequest mirror for owner trip:', err?.message);
+  }
+
   await tenantManager.persistTenant(tenantKey);
   res.status(201).json(created);
 });

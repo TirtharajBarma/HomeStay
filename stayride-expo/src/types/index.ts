@@ -96,6 +96,8 @@ export interface CabTrip {
   advanceAmount?: number;
   advancePaid?: boolean;
   remainingCashAmount?: number;
+  reference?: string;
+  payoutId?: string;
   quotes?: Array<{
     driverId: number | string;
     driverName: string;

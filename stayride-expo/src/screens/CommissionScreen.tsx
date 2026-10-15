@@ -29,7 +29,14 @@ export const CommissionScreen: React.FC = () => {
   const paid = completedTrips
     .filter((t) => t.commissionPaid)
     .reduce((acc, t) => acc + t.commission, 0);
-  const pending = Math.max(0, earned - paid);
+
+  // Trips eligible for platform payout (completed, advance collected in escrow, not settled)
+  const withdrawableTrips = completedTrips.filter((t) => !t.commissionPaid && t.advancePaid);
+  const pending = withdrawableTrips.reduce((acc, t) => acc + t.commission, 0);
+
+  // Trips where advance was not recorded through platform escrow
+  const awaitingAdvanceTrips = completedTrips.filter((t) => !t.commissionPaid && !t.advancePaid);
+  const awaitingAdvance = awaitingAdvanceTrips.reduce((acc, t) => acc + t.commission, 0);
 
   // Payout Request Modal State
   const [modalVisible, setModalVisible] = useState(false);
@@ -140,6 +147,7 @@ export const CommissionScreen: React.FC = () => {
 
           <Text style={styles.summaryMeta}>
             Lifetime Earned: ₹{earned.toLocaleString()} · Already Paid Out: ₹{paid.toLocaleString()}
+            {awaitingAdvance > 0 ? ` · Direct/Uncollected: ₹${awaitingAdvance.toLocaleString()}` : ''}
           </Text>
 
           {/* Withdraw Button */}
@@ -223,7 +231,7 @@ export const CommissionScreen: React.FC = () => {
               <View style={{ alignItems: 'flex-end' }}>
                 <Text style={styles.commissionAmount}>+₹{t.commission.toLocaleString()}</Text>
                 <View style={{ marginTop: 4 }}>
-                  <Pill type="payment" value={t.commissionPaid ? 'PAID' : 'PENDING'} />
+                  <Pill type="payment" value={t.commissionPaid ? 'PAID' : t.advancePaid ? 'PENDING' : 'DIRECT'} />
                 </View>
               </View>
             </View>

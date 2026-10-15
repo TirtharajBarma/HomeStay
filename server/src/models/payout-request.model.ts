@@ -25,7 +25,7 @@ export interface IPayoutRequest extends Document {
 
 const PayoutRequestSchema: Schema = new Schema(
   {
-    tenantId: { type: String, required: true, lowercase: true, trim: true, index: true },
+    tenantId: { type: String, required: true, lowercase: true, trim: true },
     homestayName: { type: String, required: true, trim: true },
     ownerName: { type: String, required: true, trim: true },
     ownerPhone: { type: String, default: '' },

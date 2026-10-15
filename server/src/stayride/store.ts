@@ -274,10 +274,10 @@ export class StayRideMemoryStore {
     ];
 
     this.trips = [
-      { id: 1, guestName: 'Ananya Roy', phone: '+91 98301 12345', pickup: 'Bagdogra Airport', destination: 'Mountain View Homestay', date: t - 2 * DAY, time: '12:00 PM', passengers: 2, vehicleType: 'SUV', estFare: 3200, status: 'COMPLETED', driverId: 1, driverName: 'Pemba Lepcha', ownerDriver: true, fare: 3200, commission: 384, commissionPaid: true },
-      { id: 2, guestName: 'Vikram Mehta', phone: '+91 98200 45678', pickup: 'NJP Station', destination: 'Mountain View Homestay', date: t - 1 * DAY, time: '09:00 AM', passengers: 4, vehicleType: 'SUV', estFare: 3000, status: 'COMPLETED', driverId: 2, driverName: 'Karma Bhutia', ownerDriver: true, fare: 3000, commission: 360, commissionPaid: false },
-      { id: 3, guestName: 'Pooja Chawla', phone: '+91 97110 88990', pickup: 'Mountain View Homestay', destination: 'Bagdogra Airport', date: t + 4 * DAY, time: '08:00 AM', passengers: 2, vehicleType: 'SUV', estFare: 3200, status: 'DRIVER_ASSIGNED', driverId: 201, driverName: 'Norbu Sherpa', ownerDriver: false, fare: 0, commission: 384, commissionPaid: false },
-      { id: 4, guestName: 'Rahul Verma', phone: '+91 98111 22334', pickup: 'Mountain View Homestay', destination: 'Tsomgo Lake & Baba Mandir', date: t + 1 * DAY, time: '07:30 AM', passengers: 4, vehicleType: 'SUV', estFare: 5500, status: 'NEW_REQUEST', driverId: null, driverName: null, ownerDriver: false, fare: 0, commission: 660, commissionPaid: false },
+      { id: 1, guestName: 'Ananya Roy', phone: '+91 98301 12345', pickup: 'Bagdogra Airport', destination: 'Mountain View Homestay', date: t - 2 * DAY, time: '12:00 PM', passengers: 2, vehicleType: 'SUV', estFare: 3200, status: 'COMPLETED', driverId: 1, driverName: 'Pemba Lepcha', ownerDriver: true, fare: 3200, commission: 384, commissionPaid: true, advancePaid: true, advanceAmount: 480, remainingCashAmount: 2720, reference: 'REQ-DEMO-001' },
+      { id: 2, guestName: 'Vikram Mehta', phone: '+91 98200 45678', pickup: 'NJP Station', destination: 'Mountain View Homestay', date: t - 1 * DAY, time: '09:00 AM', passengers: 4, vehicleType: 'SUV', estFare: 3000, status: 'COMPLETED', driverId: 2, driverName: 'Karma Bhutia', ownerDriver: true, fare: 3000, commission: 360, commissionPaid: false, advancePaid: true, advanceAmount: 450, remainingCashAmount: 2550, reference: 'REQ-DEMO-002' },
+      { id: 3, guestName: 'Pooja Chawla', phone: '+91 97110 88990', pickup: 'Mountain View Homestay', destination: 'Bagdogra Airport', date: t + 4 * DAY, time: '08:00 AM', passengers: 2, vehicleType: 'SUV', estFare: 3200, status: 'DRIVER_ASSIGNED', driverId: 201, driverName: 'Norbu Sherpa', ownerDriver: false, fare: 0, commission: 384, commissionPaid: false, advancePaid: true, advanceAmount: 480, remainingCashAmount: 2720, reference: 'REQ-DEMO-003' },
+      { id: 4, guestName: 'Rahul Verma', phone: '+91 98111 22334', pickup: 'Mountain View Homestay', destination: 'Tsomgo Lake & Baba Mandir', date: t + 1 * DAY, time: '07:30 AM', passengers: 4, vehicleType: 'SUV', estFare: 5500, status: 'NEW_REQUEST', driverId: null, driverName: null, ownerDriver: false, fare: 0, commission: 660, commissionPaid: false, reference: 'REQ-DEMO-004' },
     ];
 
     this.campaigns = [
@@ -469,6 +469,10 @@ export class StayRideMemoryStore {
       fare: 0,
       commission: 0,
       commissionPaid: false,
+      ...(data.reference ? { reference: data.reference } : {}),
+      ...(data.advancePaid !== undefined ? { advancePaid: data.advancePaid } : {}),
+      ...(data.advanceAmount !== undefined ? { advanceAmount: data.advanceAmount } : {}),
+      ...(data.remainingCashAmount !== undefined ? { remainingCashAmount: data.remainingCashAmount } : {}),
     };
     this.trips.unshift(t);
     return t;
