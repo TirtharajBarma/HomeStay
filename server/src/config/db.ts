@@ -2,9 +2,12 @@ import mongoose from "mongoose";
 import dns from "node:dns";
 import { config } from "./env.js";
 
-try {
-  dns.setServers(["8.8.8.8", "1.1.1.1"]);
-} catch {}
+// Local/standalone only: some ISPs and home routers block Atlas SRV lookups. Never override DNS on Vercel.
+if (!process.env.VERCEL) {
+  try {
+    dns.setServers(["8.8.8.8", "1.1.1.1"]);
+  } catch {}
+}
 
 let memoryServerInstance: any = null;
 
@@ -16,7 +19,7 @@ export async function connectDB(): Promise<typeof mongoose> {
   let uri = config.mongoUri;
 
   if (!uri) {
-    if (config.nodeEnv === "production") {
+    if (config.isDeployed) {
       throw new Error(
         "FATAL: MONGODB_URI environment variable is required in production. In-memory database fallback is strictly disabled to prevent catastrophic data loss."
       );
