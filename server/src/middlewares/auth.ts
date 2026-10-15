@@ -29,7 +29,9 @@ export function verifyToken(req: Request, res: Response, next: NextFunction) {
 
   const token = authHeader.split(" ")[1];
   try {
-    const decoded = jwt.verify(token, config.jwtSecret) as AuthUserPayload;
+    const decoded = jwt.verify(token, config.jwtSecret) as AuthUserPayload & { aud?: string };
+    // StayRide mobile tokens share the secret but are not valid for this API.
+    if (decoded.aud === "stayride") throw new Error("Wrong audience");
     req.user = decoded;
     next();
   } catch (err: any) {
@@ -67,8 +69,8 @@ export function optionalAuth(req: Request, _res: Response, next: NextFunction) {
   if (authHeader && authHeader.startsWith("Bearer ")) {
     const token = authHeader.split(" ")[1];
     try {
-      const decoded = jwt.verify(token, config.jwtSecret) as AuthUserPayload;
-      req.user = decoded;
+      const decoded = jwt.verify(token, config.jwtSecret) as AuthUserPayload & { aud?: string };
+      if (decoded.aud !== "stayride") req.user = decoded;
     } catch {
       // Silently proceed for optional auth
     }

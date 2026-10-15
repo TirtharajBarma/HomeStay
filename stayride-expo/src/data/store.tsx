@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Room,
@@ -12,6 +13,7 @@ import {
   BookingStatus,
   RoomStatus,
   VehicleType,
+  CommissionRates,
 } from '../types';
 import { generateSeedData, todayMidnight, DAY_MS } from './seeder';
 import { api } from './api';
@@ -26,6 +28,7 @@ interface StayRideContextType {
   trips: CabTrip[];
   campaigns: Campaign[];
   homestay: Homestay;
+  commissionRates: CommissionRates | null;
   session: UserSession | null;
   loading: boolean;
   syncing: boolean;
@@ -61,11 +64,9 @@ interface StayRideContextType {
   cancelBooking: (id: number) => Promise<void>;
   setBookingPaid: (id: number, paid: boolean) => Promise<void>;
   changeBookingRoom: (id: number, roomNumber: string) => Promise<void>;
-  deleteBooking: (id: number) => Promise<void>;
 
   createRoom: (data: Omit<Room, 'id'>) => Promise<Room>;
   updateRoom: (id: number, data: Partial<Room>) => Promise<void>;
-  setRoomStatus: (id: number, status: RoomStatus) => Promise<void>;
   deleteRoom: (id: number) => Promise<void>;
 
   createGuest: (data: Omit<Guest, 'id' | 'visits' | 'totalSpending' | 'firstVisit' | 'lastVisit'>) => Promise<Guest>;
@@ -79,12 +80,13 @@ interface StayRideContextType {
 
   createTrip: (data: Omit<CabTrip, 'id' | 'status' | 'driverId' | 'driverName' | 'ownerDriver' | 'fare' | 'commission' | 'commissionPaid' | 'estFare'>) => Promise<CabTrip>;
   assignTripDriver: (tripId: number, driverId: number) => Promise<void>;
+  quoteTrip: (tripId: number, driverId: number, quotedFare: number) => Promise<void>;
+  confirmTripQuote: (tripId: number, driverId: number, agreedFare: number) => Promise<CabTrip>;
   acceptTrip: (tripId: number) => Promise<void>;
   reassignTrip: (tripId: number) => Promise<void>;
   startTrip: (tripId: number) => Promise<void>;
   completeTrip: (tripId: number, finalFare?: number) => Promise<void>;
   cancelTrip: (tripId: number) => Promise<void>;
-  setCommissionPaid: (tripId: number, paid: boolean) => Promise<void>;
   payCommission: (tripId: number, paid: boolean) => Promise<void>;
   bookDriver: (data: {
     guestName: string;
@@ -96,6 +98,10 @@ interface StayRideContextType {
     passengers: number;
     vehicleType: VehicleType;
     driverId: number;
+    destinations?: CabTrip['destinations'];
+    isRoundTrip?: boolean;
+    returnDate?: number;
+    returnTime?: string;
   }) => Promise<CabTrip>;
 
   createCampaign: (
@@ -104,21 +110,30 @@ interface StayRideContextType {
     audience?: Campaign['audience']
   ) => Promise<Campaign>;
   sendCampaign: (id: number) => Promise<void>;
-  deleteCampaign: (id: number) => Promise<void>;
+  createGuestLink: (data: { guestId?: number; guestName: string; guestPhone: string }) => Promise<{ url: string; expiresAt: number }>;
 
   updateHomestay: (data: Partial<Homestay>) => Promise<void>;
-  resetDemo: () => Promise<void>;
-  loadDemoShowcase: () => Promise<void>;
-  resetToFreshWorkspace: () => Promise<void>;
   isDemoMode: boolean;
 
   login: (email: string, pass: string) => Promise<void>;
-  signup: (payload: { name: string; phone: string; email: string; pass: string; homestayName: string; location: string }) => Promise<void>;
   logout: () => Promise<void>;
   syncClerkUser: (
     clerkUser: any,
-    clerkToken?: string,
-    extras?: { homestayName?: string; location?: string; phone?: string; name?: string; email?: string }
+    clerkToken: string,
+    extras?: {
+      homestayName?: string;
+      location?: string;
+      phone?: string;
+      name?: string;
+      email?: string;
+      role?: 'owner' | 'driver';
+      vehicleType?: string;
+      vehicleNumber?: string;
+      area?: string;
+      latitude?: number;
+      longitude?: number;
+      mapQuery?: string;
+    }
   ) => Promise<void>;
 }
 
@@ -138,9 +153,21 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [trips, setTrips] = useState<CabTrip[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [homestay, setHomestay] = useState<Homestay>({} as Homestay);
+  const [commissionRates, setCommissionRates] = useState<CommissionRates | null>(null);
   const [nextIds, setNextIds] = useState({ room: 10, guest: 20, booking: 100, driver: 20, trip: 20, campaign: 10 });
 
   const [isDemoMode, setIsDemoMode] = useState(false);
+
+  // Refs so async code (persist, sync, timers) never reads a stale session from a closure
+  const sessionRef = useRef<UserSession | null>(null);
+  // Bumped on login/logout/clerk sync; async results from an older generation are dropped
+  const genRef = useRef(0);
+  const applySession = (s: UserSession | null) => {
+    sessionRef.current = s;
+    setSession(s);
+  };
+  // Offline demo session is fabricated locally; never send it to the server
+  const isOfflineDemo = () => Boolean(api.getSession()?.accessToken?.startsWith('demo-token-'));
 
   // Helper to isolate local cache by user email
   const getStorageKey = (email?: string) => {
@@ -153,7 +180,7 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     async function bootstrap() {
       await api.init();
       const currentSession = api.getSession();
-      setSession(currentSession);
+      applySession(currentSession);
 
       // Check backend server connectivity in background
       api.checkHealth().then((isLive) => {
@@ -200,10 +227,12 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
     }
     bootstrap();
+    return api.onSessionExpired(() => {
+      logout().catch(() => {});
+    });
   }, []);
 
   const initFreshWorkspace = async (info?: Partial<Homestay>) => {
-    const seed = generateSeedData();
     const freshHomestay: Homestay = {
       name: info?.name || 'My Homestay',
       description: info?.description || 'Peaceful mountain retreat nestled in the hills.',
@@ -222,10 +251,8 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setBookings([]);
     setDrivers([]);
     setNetworkDrivers([]);
-    const sharedNetwork = generateSeedData().networkDrivers;
     setTrips([]);
     setCampaigns([]);
-    setNetworkDrivers(sharedNetwork);
     setHomestay(freshHomestay);
     setIsDemoMode(false);
     setNextIds({ room: 1, guest: 1, booking: 1, driver: 1, trip: 1, campaign: 1 });
@@ -235,7 +262,7 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       guests: [],
       bookings: [],
       drivers: [],
-      networkDrivers: sharedNetwork,
+      networkDrivers: [],
       trips: [],
       campaigns: [],
       homestay: freshHomestay,
@@ -273,20 +300,9 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     );
   };
 
-  const resetToFreshWorkspace = async () => {
-    await initFreshWorkspace();
-  };
-
-  function seedState() {
-    loadDemoShowcase();
-  }
-
   async function persist(all: any, customEmail?: string) {
     try {
-      const email =
-        customEmail !== undefined
-          ? customEmail
-          : session?.owner?.email || (isDemoMode ? 'demo@stayride.in' : undefined);
+      const email = customEmail !== undefined ? customEmail : sessionRef.current?.owner?.email;
       const key = getStorageKey(email);
       await AsyncStorage.setItem(key, JSON.stringify(all));
     } catch {}
@@ -301,12 +317,15 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   // Sync with real backend using high-speed /snapshot aggregator
   const sync = async () => {
+    const gen = genRef.current;
     const isLive = await api.checkHealth();
+    if (gen !== genRef.current) return;
     setBackendStatus(isLive ? 'connected' : 'offline');
-    if (!isLive || !api.isLoggedIn()) return;
+    if (!isLive || !api.isLoggedIn() || isOfflineDemo()) return;
     setSyncing(true);
     try {
       const snap = await api.get('/snapshot');
+      if (gen !== genRef.current) return; // user changed while this sync was in flight
       if (snap) {
         if (snap.homestay) setHomestay(snap.homestay);
         if (Array.isArray(snap.rooms)) setRooms(snap.rooms);
@@ -316,14 +335,24 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         if (Array.isArray(snap.networkDrivers)) setNetworkDrivers(snap.networkDrivers);
         if (Array.isArray(snap.trips)) setTrips(snap.trips);
         if (Array.isArray(snap.campaigns)) setCampaigns(snap.campaigns);
+        if (snap.commissionRates) setCommissionRates(snap.commissionRates);
       }
       setBackendStatus('connected');
     } catch (e) {
       // Fallback silently to offline store
-      setBackendStatus('offline');
+      if (gen === genRef.current) setBackendStatus('offline');
     } finally {
       setSyncing(false);
     }
+  };
+
+  // Fire-and-forget server write: on failure tell the user and reload server truth
+  const remote = (call: () => Promise<any>) => {
+    if (isOfflineDemo()) return;
+    call().catch((e: any) => {
+      Alert.alert('Not saved', e?.message || 'Could not save your change. Please try again.');
+      sync().catch(() => {});
+    });
   };
 
   // ------------------------- Computed Metrics -------------------------
@@ -521,7 +550,7 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     // 6m and 1y periods
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const count = 6;
+    const count = period === '1y' ? 12 : 6;
     const labels: string[] = [];
     const values: number[] = [];
 
@@ -555,6 +584,7 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const createBooking = async (data: Omit<Booking, 'id' | 'status'> & { paid?: boolean }) => {
     const id = nextIds.booking;
     const newBk: Booking = { ...data, id, status: 'CONFIRMED', paid: Boolean(data.paid) };
+    const prevRoomStatus = rooms.find((r) => r.number === data.roomNumber)?.status;
     setBookings((prev) => [newBk, ...prev]);
     setNextIds((prev) => ({ ...prev, booking: prev.booking + 1 }));
 
@@ -563,15 +593,22 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       prev.map((r) => (r.number === data.roomNumber ? { ...r, status: 'RESERVED' } : r))
     );
 
-    // Call API and adopt authoritative server response
+    // Call API and adopt authoritative server response; on failure undo and re-throw
+    if (isOfflineDemo()) return newBk;
     try {
       const serverBk = await api.post('/bookings', data);
-      if (serverBk && serverBk.id) {
-        setBookings((prev) => prev.map((b) => (b.id === id ? serverBk : b)));
-        return serverBk;
+      if (!serverBk?.id) throw new Error('Server did not return the saved booking.');
+      setBookings((prev) => prev.map((b) => (b === newBk ? serverBk : b)));
+      return serverBk;
+    } catch (e) {
+      setBookings((prev) => prev.filter((b) => b !== newBk));
+      if (prevRoomStatus) {
+        setRooms((prev) =>
+          prev.map((r) => (r.number === data.roomNumber ? { ...r, status: prevRoomStatus } : r))
+        );
       }
-    } catch {}
-    return newBk;
+      throw e;
+    }
   };
 
   const checkInBooking = async (id: number) => {
@@ -590,7 +627,7 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         prev.map((r) => (r.number === targetRoom ? { ...r, status: 'OCCUPIED' } : r))
       );
     }
-    api.post(`/bookings/${id}/check-in`).catch(() => {});
+    remote(() => api.post(`/bookings/${id}/check-in`));
   };
 
   const checkOutBooking = async (id: number) => {
@@ -627,7 +664,7 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         )
       );
     }
-    api.post(`/bookings/${id}/check-out`).catch(() => {});
+    remote(() => api.post(`/bookings/${id}/check-out`));
   };
 
   const cancelBooking = async (id: number) => {
@@ -646,12 +683,12 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         prev.map((r) => (r.number === targetRoom ? { ...r, status: 'AVAILABLE' } : r))
       );
     }
-    api.post(`/bookings/${id}/cancel`).catch(() => {});
+    remote(() => api.post(`/bookings/${id}/cancel`));
   };
 
   const setBookingPaid = async (id: number, paid: boolean) => {
     setBookings((prev) => prev.map((b) => (b.id === id ? { ...b, paid } : b)));
-    api.patch(`/bookings/${id}/payment`, { paid }).catch(() => {});
+    remote(() => api.patch(`/bookings/${id}/payment`, { paid }));
   };
 
   const changeBookingRoom = async (id: number, roomNumber: string) => {
@@ -672,22 +709,7 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         return r;
       })
     );
-    api.post(`/bookings/${id}/room`, { roomNumber }).catch(() => {});
-  };
-
-  const deleteBooking = async (id: number) => {
-    let roomNum = '';
-    setBookings((prev) => {
-      const target = prev.find((b) => b.id === id);
-      if (target) roomNum = target.roomNumber;
-      return prev.filter((b) => b.id !== id);
-    });
-    if (roomNum) {
-      setRooms((prev) =>
-        prev.map((r) => (r.number === roomNum ? { ...r, status: 'AVAILABLE' } : r))
-      );
-    }
-    api.delete(`/bookings/${id}`).catch(() => {});
+    remote(() => api.post(`/bookings/${id}/room`, { roomNumber }));
   };
 
   // ------------------------- Rooms Actions -------------------------
@@ -697,29 +719,26 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const r: Room = { ...data, id };
     setRooms((prev) => [...prev, r]);
     setNextIds((prev) => ({ ...prev, room: prev.room + 1 }));
+    if (isOfflineDemo()) return r;
     try {
       const serverR = await api.post('/rooms', data);
-      if (serverR && serverR.id) {
-        setRooms((prev) => prev.map((item) => (item.id === id ? serverR : item)));
-        return serverR;
-      }
-    } catch {}
-    return r;
+      if (!serverR?.id) throw new Error('Server did not return the saved record.');
+      setRooms((prev) => prev.map((item) => (item === r ? serverR : item)));
+      return serverR;
+    } catch (e) {
+      setRooms((prev) => prev.filter((item) => item !== r));
+      throw e;
+    }
   };
 
   const updateRoom = async (id: number, data: Partial<Room>) => {
     setRooms((prev) => prev.map((r) => (r.id === id ? { ...r, ...data } : r)));
-    api.put(`/rooms/${id}`, data).catch(() => {});
-  };
-
-  const setRoomStatus = async (id: number, status: RoomStatus) => {
-    setRooms((prev) => prev.map((r) => (r.id === id ? { ...r, status } : r)));
-    api.patch(`/rooms/${id}/status`, { status }).catch(() => {});
+    remote(() => api.put(`/rooms/${id}`, data));
   };
 
   const deleteRoom = async (id: number) => {
     setRooms((prev) => prev.filter((r) => r.id !== id));
-    api.delete(`/rooms/${id}`).catch(() => {});
+    remote(() => api.delete(`/rooms/${id}`));
   };
 
   // ------------------------- Guest Actions -------------------------
@@ -736,19 +755,21 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     };
     setGuests((prev) => [g, ...prev]);
     setNextIds((prev) => ({ ...prev, guest: prev.guest + 1 }));
+    if (isOfflineDemo()) return g;
     try {
       const serverG = await api.post('/guests', data);
-      if (serverG && serverG.id) {
-        setGuests((prev) => prev.map((item) => (item.id === id ? serverG : item)));
-        return serverG;
-      }
-    } catch {}
-    return g;
+      if (!serverG?.id) throw new Error('Server did not return the saved record.');
+      setGuests((prev) => prev.map((item) => (item === g ? serverG : item)));
+      return serverG;
+    } catch (e) {
+      setGuests((prev) => prev.filter((item) => item !== g));
+      throw e;
+    }
   };
 
   const updateGuest = async (id: number, data: Partial<Guest>) => {
     setGuests((prev) => prev.map((g) => (g.id === id ? { ...g, ...data } : g)));
-    api.put(`/guests/${id}`, data).catch(() => {});
+    remote(() => api.put(`/guests/${id}`, data));
   };
 
   // ------------------------- Driver Actions -------------------------
@@ -758,34 +779,36 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const d: Driver = { ...data, id, available: true, active: true, ownerDriver: true };
     setDrivers((prev) => [...prev, d]);
     setNextIds((prev) => ({ ...prev, driver: prev.driver + 1 }));
+    if (isOfflineDemo()) return d;
     try {
       const serverD = await api.post('/drivers', data);
-      if (serverD && serverD.id) {
-        setDrivers((prev) => prev.map((item) => (item.id === id ? serverD : item)));
-        return serverD;
-      }
-    } catch {}
-    return d;
+      if (!serverD?.id) throw new Error('Server did not return the saved record.');
+      setDrivers((prev) => prev.map((item) => (item === d ? serverD : item)));
+      return serverD;
+    } catch (e) {
+      setDrivers((prev) => prev.filter((item) => item !== d));
+      throw e;
+    }
   };
 
   const updateDriver = async (id: number, data: Partial<Driver>) => {
     setDrivers((prev) => prev.map((d) => (d.id === id ? { ...d, ...data } : d)));
-    api.put(`/drivers/${id}`, data).catch(() => {});
+    remote(() => api.put(`/drivers/${id}`, data));
   };
 
   const setDriverAvailability = async (id: number, available: boolean) => {
     setDrivers((prev) => prev.map((d) => (d.id === id ? { ...d, available } : d)));
-    api.patch(`/drivers/${id}/availability`, { available }).catch(() => {});
+    remote(() => api.patch(`/drivers/${id}/availability`, { available }));
   };
 
   const setDriverActive = async (id: number, active: boolean) => {
     setDrivers((prev) => prev.map((d) => (d.id === id ? { ...d, active } : d)));
-    api.patch(`/drivers/${id}/active`, { active }).catch(() => {});
+    remote(() => api.patch(`/drivers/${id}/active`, { active }));
   };
 
   const deleteDriver = async (id: number) => {
     setDrivers((prev) => prev.filter((d) => d.id !== id));
-    api.delete(`/drivers/${id}`).catch(() => {});
+    remote(() => api.delete(`/drivers/${id}`));
   };
 
   // ------------------------- Trip Actions -------------------------
@@ -796,6 +819,24 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (vehicleType === '9-seater') return 4200;
     return 2200; // Sedan
   };
+
+  // POST /trips accepts only these fields; anything else (source, assignedDriver*) stays local
+  const tripRequestBody = (d: any) => ({
+    guestName: d.guestName,
+    phone: d.phone,
+    pickup: d.pickup,
+    destination: d.destination,
+    destinations: d.destinations,
+    isRoundTrip: d.isRoundTrip,
+    returnDate: d.returnDate,
+    returnTime: d.returnTime,
+    date: d.date,
+    time: d.time,
+    passengers: d.passengers,
+    vehicleType: d.vehicleType,
+    guestId: d.guestId,
+    bookingId: d.bookingId,
+  });
 
   const createTrip = async (data: any) => {
     const id = nextIds.trip;
@@ -814,14 +855,16 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     };
     setTrips((prev) => [t, ...prev]);
     setNextIds((prev) => ({ ...prev, trip: prev.trip + 1 }));
+    if (isOfflineDemo()) return t;
     try {
-      const serverT = await api.post('/trips', data);
-      if (serverT && serverT.id) {
-        setTrips((prev) => prev.map((item) => (item.id === id ? serverT : item)));
-        return serverT;
-      }
-    } catch {}
-    return t;
+      const serverT = await api.post('/trips', tripRequestBody(data));
+      if (!serverT?.id) throw new Error('Server did not return the saved record.');
+      setTrips((prev) => prev.map((item) => (item === t ? serverT : item)));
+      return serverT;
+    } catch (e) {
+      setTrips((prev) => prev.filter((item) => item !== t));
+      throw e;
+    }
   };
 
   const assignTripDriver = async (tripId: number, driverId: number) => {
@@ -840,12 +883,48 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           : t
       )
     );
-    api.post(`/trips/${tripId}/assign`, { driverId }).catch(() => {});
+    remote(() => api.post(`/trips/${tripId}/assign`, { driverId }));
+  };
+
+  const quoteTrip = async (tripId: number, driverId: number, quotedFare: number) => {
+    const allDrivers = [...drivers, ...networkDrivers];
+    const d = allDrivers.find((x) => x.id === driverId);
+    setTrips((prev) =>
+      prev.map((t) => {
+        if (t.id === tripId) {
+          const existingQuotes = t.quotes || [];
+          return {
+            ...t,
+            status: 'QUOTE_RECEIVED',
+            quotes: [
+              ...existingQuotes.filter((q) => q.driverId !== driverId),
+              {
+                driverId,
+                driverName: d?.name || `Driver #${driverId}`,
+                quotedFare,
+                status: 'PENDING',
+              },
+            ],
+          };
+        }
+        return t;
+      })
+    );
+    remote(() => api.post(`/trips/${tripId}/quote`, { driverId, quotedFare }));
+  };
+
+  // Awaits the server: fare split and advance come from the server's financialSnapshot
+  const confirmTripQuote = async (tripId: number, driverId: number, agreedFare: number) => {
+    if (isOfflineDemo()) throw new Error('Confirming a driver needs a server connection.');
+    const updated: CabTrip = await api.post(`/trips/${tripId}/confirm-quote`, { driverId, agreedFare });
+    if (!updated?.id) throw new Error('Server did not return the confirmed trip.');
+    setTrips((prev) => prev.map((t) => (t.id === tripId ? updated : t)));
+    return updated;
   };
 
   const acceptTrip = async (tripId: number) => {
     setTrips((prev) => prev.map((t) => (t.id === tripId ? { ...t, status: 'CONFIRMED' } : t)));
-    api.post(`/trips/${tripId}/accept`).catch(() => {});
+    remote(() => api.post(`/trips/${tripId}/accept`));
   };
 
   const reassignTrip = async (tripId: number) => {
@@ -854,12 +933,12 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         t.id === tripId ? { ...t, status: 'FINDING_DRIVER', driverId: null, driverName: null } : t
       )
     );
-    api.post(`/trips/${tripId}/reassign`).catch(() => {});
+    remote(() => api.post(`/trips/${tripId}/reassign`));
   };
 
   const startTrip = async (tripId: number) => {
     setTrips((prev) => prev.map((t) => (t.id === tripId ? { ...t, status: 'TRIP_STARTED' } : t)));
-    api.post(`/trips/${tripId}/start`).catch(() => {});
+    remote(() => api.post(`/trips/${tripId}/start`));
   };
 
   const completeTrip = async (tripId: number, finalFare?: number) => {
@@ -869,28 +948,32 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         if (t.id === tripId) {
           const fare = finalFare || t.fare || t.estFare || 3000;
           computedFare = fare;
-          const commission = Math.round(fare * 0.12);
-          return { ...t, status: 'COMPLETED', fare, commission };
+          // Commission is server-computed; the server response below replaces this trip
+          return { ...t, status: 'COMPLETED', fare };
         }
         return t;
       })
     );
+    if (isOfflineDemo()) return;
     try {
       const updated = await api.post(`/trips/${tripId}/complete`, { finalFare: computedFare });
       if (updated && updated.id) {
         setTrips((prev) => prev.map((t) => (t.id === tripId ? updated : t)));
       }
-    } catch {}
+    } catch (e: any) {
+      Alert.alert('Not saved', e?.message || 'Could not complete the trip. Please try again.');
+      sync().catch(() => {});
+    }
   };
 
   const cancelTrip = async (tripId: number) => {
     setTrips((prev) => prev.map((t) => (t.id === tripId ? { ...t, status: 'CANCELLED' } : t)));
-    api.post(`/trips/${tripId}/cancel`).catch(() => {});
+    remote(() => api.post(`/trips/${tripId}/cancel`));
   };
 
   const setCommissionPaid = async (tripId: number, paid: boolean) => {
     setTrips((prev) => prev.map((t) => (t.id === tripId ? { ...t, commissionPaid: paid } : t)));
-    api.post(`/trips/${tripId}/commission/pay`, { paid }).catch(() => {});
+    remote(() => api.post(`/trips/${tripId}/commission/pay`, { paid }));
   };
 
   const bookDriver = async (data: {
@@ -903,6 +986,10 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     passengers: number;
     vehicleType: VehicleType;
     driverId: number;
+    destinations?: CabTrip['destinations'];
+    isRoundTrip?: boolean;
+    returnDate?: number;
+    returnTime?: string;
   }) => {
     const d = drivers.find((drv) => drv.id === data.driverId) || networkDrivers.find((drv) => drv.id === data.driverId);
     const id = nextIds.trip;
@@ -913,6 +1000,10 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       phone: data.phone,
       pickup: data.pickup,
       destination: data.destination,
+      destinations: data.destinations,
+      isRoundTrip: data.isRoundTrip,
+      returnDate: data.returnDate,
+      returnTime: data.returnTime,
       date: data.date,
       time: data.time,
       passengers: data.passengers,
@@ -922,20 +1013,28 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       driverId: data.driverId,
       driverName: d ? d.name : null,
       ownerDriver: d ? d.ownerDriver : false,
-      fare: estFare,
-      commission: Math.round(estFare * 0.12),
+      fare: 0,
+      commission: 0,
       commissionPaid: false,
     };
     setTrips((prev) => [t, ...prev]);
     setNextIds((prev) => ({ ...prev, trip: prev.trip + 1 }));
+    if (isOfflineDemo()) return t;
+    // Create the request, then assign + accept on the SERVER id so the driver is kept
+    let created: CabTrip | null = null;
     try {
-      const serverT = await api.post('/trips', t);
-      if (serverT && serverT.id) {
-        setTrips((prev) => prev.map((item) => (item.id === id ? serverT : item)));
-        return serverT;
-      }
-    } catch {}
-    return t;
+      created = await api.post('/trips', tripRequestBody(data));
+      if (!created?.id) throw new Error('Server did not return the saved trip.');
+      await api.post(`/trips/${created.id}/assign`, { driverId: data.driverId });
+      const accepted = await api.post(`/trips/${created.id}/accept`);
+      const finalTrip: CabTrip = accepted?.id ? accepted : created;
+      setTrips((prev) => prev.map((item) => (item === t ? finalTrip : item)));
+      return finalTrip;
+    } catch (e) {
+      setTrips((prev) => prev.filter((item) => item !== t));
+      if (created?.id) sync().catch(() => {}); // partial server trip exists; show it
+      throw e;
+    }
   };
 
   // ------------------------- Campaign Actions -------------------------
@@ -981,63 +1080,93 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     };
     setCampaigns((prev) => [c, ...prev]);
     setNextIds((prev) => ({ ...prev, campaign: prev.campaign + 1 }));
+    if (isOfflineDemo()) return c;
     try {
       const serverC = await api.post('/campaigns', { title, message, audience });
-      if (serverC && serverC.id) {
-        setCampaigns((prev) => prev.map((item) => (item.id === id ? serverC : item)));
-        return serverC;
-      }
-    } catch {}
-    return c;
+      if (!serverC?.id) throw new Error('Server did not return the saved record.');
+      setCampaigns((prev) => prev.map((item) => (item === c ? serverC : item)));
+      return serverC;
+    } catch (e) {
+      setCampaigns((prev) => prev.filter((item) => item !== c));
+      throw e;
+    }
   };
 
+  // Server only marks the campaign as sent; no WhatsApp delivery happens yet
   const sendCampaign = async (id: number) => {
-    setCampaigns((prev) => prev.map((c) => (c.id === id ? { ...c, status: 'SENDING' } : c)));
-    setTimeout(() => {
-      setCampaigns((prev) =>
-        prev.map((c) =>
-          c.id === id
-            ? { ...c, status: 'COMPLETED', sent: Math.max(1, c.recipients - 1), failed: 1 }
-            : c
-        )
-      );
-    }, 1200);
-    api.post(`/campaigns/${id}/send`).catch(() => {});
+    if (isOfflineDemo()) throw new Error('Sending a campaign needs a server connection.');
+    const updated = await api.post(`/campaigns/${id}/send`);
+    setCampaigns((prev) => prev.map((c) => (c.id === id ? (updated?.id ? updated : { ...c, status: 'COMPLETED' }) : c)));
   };
 
-  const deleteCampaign = async (id: number) => {
-    setCampaigns((prev) => prev.filter((c) => c.id !== id));
-    api.delete(`/campaigns/${id}`).catch(() => {});
+  // Server issues an opaque, expiring link; never build guest links client-side
+  const createGuestLink = async (data: { guestId?: number; guestName: string; guestPhone: string }) => {
+    if (isOfflineDemo()) throw new Error('Guest links need a server connection.');
+    const res = await api.post('/guest-links', data);
+    if (!res?.url) throw new Error('Server did not return a guest link.');
+    return res as { url: string; expiresAt: number };
   };
 
   // ------------------------- Profile & Auth Actions -------------------------
 
+  // Awaits the server so callers can report success or failure honestly
   const updateHomestay = async (data: Partial<Homestay>) => {
+    if (!isOfflineDemo()) await api.put('/homestay', data);
     setHomestay((prev) => ({ ...prev, ...data }));
-    api.put('/homestay', data).catch(() => {});
-  };
-
-  const resetDemo = async () => {
-    seedState();
-    api.post('/dev/seed').catch(() => {});
   };
 
   const login = async (email: string, pass: string) => {
+    genRef.current++;
     const cleanEmail = email.toLowerCase().trim();
     const cleanPass = pass.trim();
-    const isDemoAccount =
+    const isDemoHost =
       cleanEmail === 'demo@stayride.in' && (cleanPass === 'demo123' || cleanPass === 'demo');
+    const isDemoDriver =
+      (cleanEmail === 'driver@stayride.in' || cleanEmail === 'demo-driver@stayride.in') &&
+      (cleanPass === 'demo123' || cleanPass === 'demo');
 
-    if (isDemoAccount) {
+    if (isDemoDriver) {
       try {
         const res = await api.post('/auth/login', { email: cleanEmail, password: cleanPass });
         await api.saveSession(res);
-        setSession(res);
+        applySession(res);
+      } catch {
+        const demoDriverSession: UserSession = {
+          accessToken: 'demo-driver-token-' + Date.now(),
+          refreshToken: 'demo-driver-refresh-' + Date.now(),
+          role: 'driver',
+          driver: {
+            id: 1,
+            name: 'Pemba Lepcha (Demo Driver)',
+            phone: '+91 98000 11223',
+            email: cleanEmail,
+            vehicle: 'Mahindra Scorpio (SUV)',
+            vehicleType: 'SUV',
+            plate: 'SK-01-A-4488',
+            rating: 4.9,
+            available: true,
+            active: true,
+            area: 'Gangtok & North Sikkim',
+          },
+        };
+        await api.saveSession(demoDriverSession);
+        applySession(demoDriverSession);
+      }
+      await loadDemoShowcase();
+      return;
+    }
+
+    if (isDemoHost) {
+      try {
+        const res = await api.post('/auth/login', { email: cleanEmail, password: cleanPass });
+        await api.saveSession(res);
+        applySession(res);
       } catch {
         // Safe offline demo session fallback for showcasing app without local server
         const demoSession: UserSession = {
           accessToken: 'demo-token-' + Date.now(),
           refreshToken: 'demo-refresh-' + Date.now(),
+          role: 'owner',
           owner: {
             id: 1,
             name: 'Tshering Bhutia (Demo)',
@@ -1051,7 +1180,7 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           },
         };
         await api.saveSession(demoSession);
-        setSession(demoSession);
+        applySession(demoSession);
       }
       await loadDemoShowcase();
       return;
@@ -1061,10 +1190,15 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     try {
       const res = await api.post('/auth/login', { email: cleanEmail, password: cleanPass });
       await api.saveSession(res);
-      setSession(res);
+      applySession(res);
       setIsDemoMode(false);
 
-      // Hydrate local state for this specific user
+      if (res?.role === 'driver') {
+        await sync();
+        return;
+      }
+
+      // Hydrate local state for this specific host user
       const key = getStorageKey(cleanEmail);
       const cached = await AsyncStorage.getItem(key);
       if (cached) {
@@ -1094,47 +1228,11 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
-  const signup = async (payload: {
-    name: string;
-    phone: string;
-    email: string;
-    pass: string;
-    homestayName: string;
-    location: string;
-  }) => {
-    try {
-      const res = await api.post('/auth/signup', {
-        name: payload.name,
-        phone: payload.phone,
-        email: payload.email,
-        password: payload.pass,
-        homestayName: payload.homestayName,
-        location: payload.location,
-      });
-      await api.saveSession(res);
-      setSession(res);
-      setIsDemoMode(false);
-      // Clean, fresh empty workspace for real user! (0 rooms, 0 guests, 0 bookings)
-      await initFreshWorkspace({
-        name: payload.homestayName,
-        ownerName: payload.name,
-        phone: payload.phone,
-        email: payload.email,
-        location: payload.location,
-      });
-      setBackendStatus('connected');
-    } catch (err: any) {
-      setBackendStatus('offline');
-      throw new Error(
-        err?.message ||
-          `Backend server is offline or unreachable at ${api.getBaseUrl()}. Please ensure the backend is running.`
-      );
-    }
-  };
-
   const logout = async () => {
+    genRef.current++;
+    // Clear the session ref first so nothing below persists into the outgoing user's cache
+    applySession(null);
     await api.clearSession();
-    setSession(null);
     setIsDemoMode(false);
     setRooms([]);
     setGuests([]);
@@ -1144,15 +1242,30 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setTrips([]);
     setCampaigns([]);
     setHomestay({} as Homestay);
+    setCommissionRates(null);
     await initFreshWorkspace();
   };
 
   const syncClerkUser = async (
     clerkUser: any,
-    clerkToken?: string,
-    extras?: { homestayName?: string; location?: string; phone?: string; name?: string; email?: string }
+    clerkToken: string,
+    extras?: {
+      homestayName?: string;
+      location?: string;
+      phone?: string;
+      name?: string;
+      email?: string;
+      role?: 'owner' | 'driver';
+      vehicleType?: string;
+      vehicleNumber?: string;
+      area?: string;
+      latitude?: number;
+      longitude?: number;
+      mapQuery?: string;
+    }
   ) => {
     if (!clerkUser) return;
+    genRef.current++;
     const email =
       clerkUser.primaryEmailAddress?.emailAddress ||
       clerkUser.emailAddresses?.[0]?.emailAddress ||
@@ -1168,23 +1281,35 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       clerkUser.phoneNumbers?.[0]?.phoneNumber ||
       extras?.phone ||
       '';
-    const avatar = clerkUser.imageUrl || '';
-    const clerkId = clerkUser.id || clerkUser.userId || '';
 
     try {
-      const res = await api.post('/auth/clerk-sync', {
-        email,
-        name,
-        phone,
-        avatar,
-        clerkId,
-        homestayName: extras?.homestayName,
-        location: extras?.location,
-      });
+      // Server derives identity from the verified Clerk token; body carries profile extras
+      const res = await api.post(
+        '/auth/clerk-sync',
+        {
+          phone,
+          homestayName: extras?.homestayName,
+          location: extras?.location,
+          role: extras?.role || 'owner',
+          vehicleType: extras?.vehicleType,
+          vehicleNumber: extras?.vehicleNumber,
+          area: extras?.area,
+          latitude: extras?.latitude,
+          longitude: extras?.longitude,
+          mapQuery: extras?.mapQuery,
+        },
+        clerkToken
+      );
 
       await api.saveSession(res);
-      setSession(res);
+      applySession(res);
       setIsDemoMode(false);
+
+      if (res?.role === 'driver') {
+        await sync();
+        setBackendStatus('connected');
+        return;
+      }
 
       if (res.isNew) {
         await initFreshWorkspace({
@@ -1195,7 +1320,7 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           location: extras?.location,
         });
       } else {
-        const key = getStorageKey(email);
+        const key = getStorageKey(res?.owner?.email || email);
         const cached = await AsyncStorage.getItem(key);
         if (cached) {
           try {
@@ -1238,6 +1363,7 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         trips,
         campaigns,
         homestay,
+        commissionRates,
         session,
         loading,
         syncing,
@@ -1267,11 +1393,9 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         cancelBooking,
         setBookingPaid,
         changeBookingRoom,
-        deleteBooking,
 
         createRoom,
         updateRoom,
-        setRoomStatus,
         deleteRoom,
 
         createGuest,
@@ -1285,26 +1409,23 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
         createTrip,
         assignTripDriver,
+        quoteTrip,
+        confirmTripQuote,
         acceptTrip,
         reassignTrip,
         startTrip,
         completeTrip,
         cancelTrip,
-        setCommissionPaid,
         payCommission: setCommissionPaid,
         bookDriver,
 
         createCampaign,
         sendCampaign,
-        deleteCampaign,
+        createGuestLink,
 
         updateHomestay,
-        resetDemo,
-        loadDemoShowcase,
-        resetToFreshWorkspace,
 
         login,
-        signup,
         logout,
         syncClerkUser,
       }}

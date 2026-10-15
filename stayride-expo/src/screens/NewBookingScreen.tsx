@@ -60,9 +60,9 @@ export const NewBookingScreen: React.FC = () => {
 
   // Modals for selection
   const [guestPickerVisible, setGuestPickerVisible] = useState(false);
-  const [roomPickerVisible, setRoomPickerVisible] = useState(false);
   const [sourcePickerVisible, setSourcePickerVisible] = useState(false);
   const [datesPickerVisible, setDatesPickerVisible] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (guestId) {
@@ -98,11 +98,6 @@ export const NewBookingScreen: React.FC = () => {
     setGuestPickerVisible(false);
   };
 
-  const handleSelectRoom = (r: Room) => {
-    setSelectedRoom(r);
-    setRoomPickerVisible(false);
-  };
-
   const handleAdjustDays = (inOffset: number, duration: number) => {
     const inDate = todayMs + inOffset * dayMs;
     const outDate = inDate + duration * dayMs;
@@ -112,6 +107,7 @@ export const NewBookingScreen: React.FC = () => {
   };
 
   const handleSave = async () => {
+    if (submitting) return;
     const trimmedName = guestName.trim();
     const trimmedPhone = phone.trim();
 
@@ -125,11 +121,19 @@ export const NewBookingScreen: React.FC = () => {
       return;
     }
 
-    const matchedGuest = guests.find(
+    // Match by phone when one is entered; by name only if no phone and the name is unique.
+    const digits = (p: string) => (p || '').replace(/\D/g, '').slice(-10);
+    const phoneDigits = digits(trimmedPhone);
+    const sameName = guests.filter(
       (g) => g.name.toLowerCase() === trimmedName.toLowerCase()
     );
+    const matchedGuest = phoneDigits
+      ? guests.find((g) => digits(g.phone) === phoneDigits)
+      : sameName.length === 1
+      ? sameName[0]
+      : undefined;
 
-    if (!matchedGuest && !trimmedPhone) {
+    if (!selectedGuest && !matchedGuest && !trimmedPhone) {
       Alert.alert('Required', 'Phone number is required for a new guest');
       return;
     }
@@ -142,40 +146,45 @@ export const NewBookingScreen: React.FC = () => {
 
     const parsedCount = Math.max(1, parseInt(guestsCount, 10) || 1);
 
-    let finalGuestId = selectedGuest ? selectedGuest.id : (matchedGuest ? matchedGuest.id : 0);
-    if (!finalGuestId && trimmedName) {
-      try {
+    const knownGuest = selectedGuest || matchedGuest;
+    setSubmitting(true);
+    try {
+      let finalGuestId = knownGuest ? knownGuest.id : 0;
+      if (!finalGuestId) {
         const newGuest = await createGuest({
           name: trimmedName,
           phone: trimmedPhone,
-          marketingConsent: true,
+          marketingConsent: false,
         });
-        if (newGuest && newGuest.id) {
-          finalGuestId = newGuest.id;
+        if (!newGuest || !newGuest.id) {
+          throw new Error('Could not create the guest record');
         }
-      } catch (err) {
-        console.warn('Could not auto-create guest:', err);
+        finalGuestId = newGuest.id;
       }
+
+      await createBooking({
+        guestId: finalGuestId,
+        guestName: trimmedName,
+        phone: trimmedPhone || knownGuest?.phone || '',
+        roomNumber: selectedRoom.number,
+        checkIn,
+        checkOut,
+        guests: parsedCount,
+        amount: parsedAmount,
+        source: source || 'Walk-in',
+        paid,
+      });
+
+      Alert.alert(
+        'Booking Created',
+        `Booking created for ${trimmedName} · Room ${selectedRoom.number}`,
+        [{ text: 'OK', onPress: () => navigation.goBack() }]
+      );
+    } catch (err: any) {
+      Alert.alert('Booking failed', err?.message || 'Could not save the booking. Please try again.');
+    } finally {
+      setSubmitting(false);
     }
-
-    await createBooking({
-      guestId: finalGuestId,
-      guestName: trimmedName,
-      phone: trimmedPhone || matchedGuest?.phone || '',
-      roomNumber: selectedRoom.number,
-      checkIn,
-      checkOut,
-      guests: parsedCount,
-      amount: parsedAmount,
-      source: source || 'Walk-in',
-      paid,
-    });
-
-    Alert.alert(
-      'Booking Created',
-      `Booking created for ${trimmedName} · Room ${selectedRoom.number}`,
-      [{ text: 'OK', onPress: () => navigation.goBack() }]
-    );
   };
 
   return (
@@ -291,8 +300,12 @@ export const NewBookingScreen: React.FC = () => {
         </View>
 
         {/* Save Button */}
-        <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
-          <Text style={styles.saveBtnText}>Create booking</Text>
+        <TouchableOpacity
+          style={[styles.saveBtn, submitting && { opacity: 0.6 }]}
+          onPress={handleSave}
+          disabled={submitting}
+        >
+          <Text style={styles.saveBtnText}>{submitting ? 'Saving…' : 'Create booking'}</Text>
         </TouchableOpacity>
       </ScrollView>
 

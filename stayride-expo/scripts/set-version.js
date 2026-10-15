@@ -54,7 +54,7 @@ for (const vPath of targetVersionFiles) {
       `export const CURRENT_RELEASE_VERSION = "${versionTag}";`
     );
     content = content.replace(
-      /export const RELEASE_DESCRIPTION = .*?;/,
+      /^export const RELEASE_DESCRIPTION = .*;[ \t]*$/m,
       `export const RELEASE_DESCRIPTION = ${JSON.stringify(description)};`
     );
 

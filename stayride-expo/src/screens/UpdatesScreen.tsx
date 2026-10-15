@@ -56,7 +56,8 @@ export const UpdatesScreen: React.FC = () => {
   } = useAppUpdateManager();
 
   const isChecking = manualStatus === 'checking';
-  const pct = Math.round(downloadProgress * 100);
+  const pct = downloadProgress != null ? Math.round(downloadProgress * 100) : null;
+  const isNativeRequired = manualStatus === 'native_required';
 
   const copyHash = async (hash: string) => {
     await Clipboard.setStringAsync(hash);
@@ -101,6 +102,8 @@ export const UpdatesScreen: React.FC = () => {
             <RotateCw size={44} color={Colors.statusGreen} style={styles.icon} />
           ) : isUpdateAvailable ? (
             <Download size={44} color={Colors.brandPrimary} style={styles.icon} />
+          ) : isNativeRequired ? (
+            <Smartphone size={44} color={Colors.statusOrange} style={styles.icon} />
           ) : manualStatus === 'error' ? (
             <AlertCircle size={44} color={Colors.statusRed} style={styles.icon} />
           ) : manualStatus === 'dev_mode' ? (
@@ -114,6 +117,8 @@ export const UpdatesScreen: React.FC = () => {
               ? `Ready to Install ${availableRelease?.version || 'Update'}`
               : isUpdateAvailable
               ? `Update Available: ${availableRelease?.version || 'New Version'}`
+              : isNativeRequired
+              ? 'A new app version is required'
               : manualStatus === 'dev_mode'
               ? `StayRide ${activeVersion} (Dev Mode)`
               : `StayRide ${activeVersion}`}
@@ -126,6 +131,8 @@ export const UpdatesScreen: React.FC = () => {
               ? 'Update downloaded and verified. Restart now to apply.'
               : isUpdateAvailable
               ? availableRelease?.summary || 'New improvements ready to download.'
+              : isNativeRequired
+              ? `${availableRelease?.version || 'The latest release'} needs a new app install (APK/IPA) and cannot be applied over the air.`
               : manualStatus === 'dev_mode'
               ? 'EAS Updates are active in standalone APK/IPA builds. Development mode running.'
               : 'Your app is up to date with the latest release.'}
@@ -149,7 +156,12 @@ export const UpdatesScreen: React.FC = () => {
               activeOpacity={0.8}
             >
               {isDownloading ? (
-                <Text style={styles.btnTextWhite}>Downloading {pct}%...</Text>
+                <>
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                  <Text style={styles.btnTextWhite}>
+                    {pct != null ? `Downloading ${pct}%...` : 'Downloading...'}
+                  </Text>
+                </>
               ) : (
                 <>
                   <Download size={18} color="#FFFFFF" />
@@ -157,6 +169,26 @@ export const UpdatesScreen: React.FC = () => {
                 </>
               )}
             </TouchableOpacity>
+          ) : isNativeRequired ? (
+            availableRelease?.buildUrl ? (
+              <TouchableOpacity
+                style={[styles.btn, styles.btnPrimary]}
+                onPress={() => openBuildUrl().catch(() => {})}
+                activeOpacity={0.8}
+              >
+                <ExternalLink size={18} color="#FFFFFF" />
+                <Text style={styles.btnTextWhite}>Download New App</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[styles.btn, styles.btnPrimary]}
+                onPress={() => contactAdmin(availableRelease?.version).catch(() => {})}
+                activeOpacity={0.8}
+              >
+                <ExternalLink size={18} color="#FFFFFF" />
+                <Text style={styles.btnTextWhite}>Contact Admin</Text>
+              </TouchableOpacity>
+            )
           ) : (
             <TouchableOpacity
               style={styles.btnOutline}

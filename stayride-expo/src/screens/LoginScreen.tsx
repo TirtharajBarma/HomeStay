@@ -10,6 +10,7 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
+  Modal,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -18,7 +19,8 @@ import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
 import * as Linking from 'expo-linking';
-import { useOAuth, useUser, useClerk } from '@clerk/expo';
+import * as Location from 'expo-location';
+import { useOAuth, useUser, useAuth } from '@clerk/expo';
 import { useSignIn, useSignUp } from '@clerk/expo/legacy';
 
 import { Colors, Radii, Shadows } from '../theme/colors';
@@ -49,10 +51,13 @@ export const LoginScreen: React.FC = () => {
   const { isLoaded: isSignUpLoaded, signUp } = useSignUp();
   const { startOAuthFlow } = useOAuth({ strategy: 'oauth_google' });
   const { user, isSignedIn } = useUser();
-  const clerk = useClerk();
+  const { isLoaded: isAuthLoaded, getToken, signOut } = useAuth();
+  // Clerk may still be loading (or unreachable offline); the app renders without waiting for it
+  const clerkReady = isAuthLoaded && isSignInLoaded && isSignUpLoaded;
 
   // Mode: 'signin' | 'signup' | 'verify'
   const [authMode, setAuthMode] = useState<'signin' | 'signup' | 'verify'>('signin');
+  const [signupRole, setSignupRole] = useState<'owner' | 'driver'>('owner');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
@@ -63,17 +68,90 @@ export const LoginScreen: React.FC = () => {
   const [phone, setPhone] = useState('');
   const [homestayName, setHomestayName] = useState('');
   const [location, setLocation] = useState('');
+  const [vehicleType, setVehicleType] = useState<'SUV' | 'Sedan' | '7-seater' | '9-seater'>('SUV');
+  const [vehicleNumber, setVehicleNumber] = useState('');
+  const [area, setArea] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
 
-  // Sync state tracking to prevent duplicate MongoDB sync runs
+  // Live GPS Coordinates for Homestay Pinning
+  const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [locating, setLocating] = useState(false);
+
+  const handleDetectGPS = async () => {
+    try {
+      setLocating(true);
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'Location Permission Required',
+          'Please allow location access so StayRide can pinpoint your exact homestay GPS location for cab pickups.'
+        );
+        return;
+      }
+
+      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const { latitude, longitude } = pos.coords;
+      setCoords({ latitude, longitude });
+
+      try {
+        const [geo] = await Location.reverseGeocodeAsync({ latitude, longitude });
+        if (geo) {
+          const parts = [
+            geo.name,
+            geo.street,
+            geo.district || geo.subregion,
+            geo.city || geo.region,
+            geo.postalCode,
+          ].filter(Boolean);
+          const formatted = parts.join(', ');
+          setLocation(formatted);
+        } else {
+          setLocation(`${latitude.toFixed(5)}, ${longitude.toFixed(5)}`);
+        }
+      } catch {
+        setLocation(`${latitude.toFixed(5)}, ${longitude.toFixed(5)}`);
+      }
+
+      Alert.alert(
+        'GPS Location Pinned!',
+        `Your homestay is pinned at:\n${latitude.toFixed(4)}° N, ${longitude.toFixed(4)}° E.\n\nAll future cab pickups will use this exact GPS location.`
+      );
+    } catch (err: any) {
+      Alert.alert('GPS Notice', 'Could not detect live GPS automatically. You can type your location manually.');
+    } finally {
+      setLocating(false);
+    }
+  };
+
+  // Role Selection Modal for Google Sign-In
+  const [showRoleSelectModal, setShowRoleSelectModal] = useState(false);
+  const [pendingGoogleUser, setPendingGoogleUser] = useState<any>(null);
+
+  const isDemoEmail =
+    email.trim().toLowerCase() === 'demo@stayride.in' ||
+    email.trim().toLowerCase() === 'driver@stayride.in' ||
+    email.trim().toLowerCase() === 'demo-driver@stayride.in';
+
+  // Sync state tracking to prevent duplicate backend sync runs
   const hasSyncedRef = useRef(false);
 
-  // Synchronize Clerk user with MongoDB Atlas whenever a user is authenticated
+  // Exchange the Clerk session for a StayRide session whenever a Clerk user is authenticated
   useEffect(() => {
     if (isSignedIn && user && !hasSyncedRef.current) {
+      const existingRole = (user.unsafeMetadata?.role as string) || '';
+
+      // If brand new Google OAuth user who hasn't chosen role yet, display role selection modal
+      if (!existingRole && !user.unsafeMetadata?.homestayName && !user.unsafeMetadata?.vehicleType && authMode !== 'signup') {
+        // The Clerk token is fetched fresh when the role is submitted
+        setPendingGoogleUser(user);
+        setShowRoleSelectModal(true);
+        return;
+      }
+
       hasSyncedRef.current = true;
       setLoading(true);
 
+      const determinedRole = (existingRole || signupRole || 'owner') as 'owner' | 'driver';
       const homestayMeta =
         (user.unsafeMetadata?.homestayName as string) ||
         homestayName.trim() ||
@@ -83,31 +161,46 @@ export const LoginScreen: React.FC = () => {
       const phoneMeta =
         (user.unsafeMetadata?.phone as string) || phone.trim() || '';
 
-      syncClerkUser(user, undefined, {
-        homestayName: homestayMeta,
-        location: locationMeta,
-        phone: phoneMeta,
-        name: user.fullName || user.firstName || name.trim() || 'Host',
-      })
-        .then(() => {
+      (async () => {
+        try {
+          const clerkToken = await getToken();
+          if (!clerkToken) throw new Error('Could not get your sign-in session. Please try again.');
+          await syncClerkUser(user, clerkToken, {
+            role: determinedRole,
+            homestayName: homestayMeta,
+            location: locationMeta,
+            phone: phoneMeta,
+            name: user.fullName || user.firstName || name.trim() || (determinedRole === 'driver' ? 'Driver' : 'Host'),
+            vehicleType: (user.unsafeMetadata?.vehicleType as string) || vehicleType,
+            vehicleNumber: (user.unsafeMetadata?.vehicleNumber as string) || vehicleNumber,
+            area: (user.unsafeMetadata?.area as string) || area,
+            latitude: (user.unsafeMetadata?.latitude as number) || coords?.latitude,
+            longitude: (user.unsafeMetadata?.longitude as number) || coords?.longitude,
+            mapQuery: (user.unsafeMetadata?.mapQuery as string) || (coords ? `${coords.latitude},${coords.longitude}` : locationMeta),
+          });
           setLoading(false);
-          navigation.replace('MainTabs');
-        })
-        .catch((err) => {
-          hasSyncedRef.current = false;
+          navigation.replace('Main');
+        } catch (err: any) {
+          console.error('[StayRide] Clerk account sync failed:', err);
+          try {
+            await signOut();
+            hasSyncedRef.current = false;
+          } catch (signOutErr) {
+            console.error('[StayRide] Clerk signOut failed:', signOutErr);
+          }
           setLoading(false);
-          console.error('[StayRide] Clerk MongoDB sync failed:', err);
           Alert.alert(
-            'Sync Warning',
-            'Signed in to Clerk, but database sync had an issue. Continuing to workspace.',
-            [{ text: 'Continue', onPress: () => navigation.replace('MainTabs') }]
+            'Sign In Failed',
+            err?.message || 'Could not connect your account to StayRide. Please try again.'
           );
-        });
+        }
+      })();
     }
-  }, [isSignedIn, user, homestayName, location, phone, name, navigation, syncClerkUser]);
+  }, [isSignedIn, user, homestayName, location, phone, name, signupRole, vehicleType, vehicleNumber, area, authMode, navigation, syncClerkUser, getToken, signOut]);
 
   // Google OAuth Flow with Clerk
   const handleGoogleAuth = useCallback(async () => {
+    if (!clerkReady) return;
     setGoogleLoading(true);
     try {
       const redirectUrl = Linking.createURL('/dashboard', { scheme: 'stayride' });
@@ -131,7 +224,63 @@ export const LoginScreen: React.FC = () => {
     } finally {
       setGoogleLoading(false);
     }
-  }, [startOAuthFlow, setActive]);
+  }, [startOAuthFlow, setActive, clerkReady]);
+
+  const handleSelectGoogleRole = async (chosenRole: 'owner' | 'driver') => {
+    setShowRoleSelectModal(false);
+    if (!pendingGoogleUser) return;
+
+    hasSyncedRef.current = true;
+    setLoading(true);
+
+    try {
+      if (pendingGoogleUser.update) {
+        await pendingGoogleUser.update({
+          unsafeMetadata: {
+            ...pendingGoogleUser.unsafeMetadata,
+            role: chosenRole,
+          },
+        });
+      }
+
+      const clerkToken = await getToken();
+      if (!clerkToken) throw new Error('Could not get your sign-in session. Please try again.');
+      await syncClerkUser(pendingGoogleUser, clerkToken, {
+        role: chosenRole,
+        name: pendingGoogleUser.fullName || pendingGoogleUser.firstName || (chosenRole === 'driver' ? 'Driver' : 'Host'),
+        homestayName: `${pendingGoogleUser.firstName || 'My'} Homestay`,
+        location: 'Gangtok, Sikkim',
+        vehicleType: 'SUV',
+        area: 'Darjeeling • Sikkim Hill Roads',
+      });
+      setLoading(false);
+      navigation.replace('Main');
+    } catch (err: any) {
+      try {
+        await signOut();
+        hasSyncedRef.current = false;
+      } catch (signOutErr) {
+        console.error('[StayRide] Clerk signOut failed:', signOutErr);
+      }
+      setLoading(false);
+      Alert.alert('Setup Error', err?.message || 'Could not complete registration.');
+    }
+  };
+
+  const handleDemoLogin = async (role: 'owner' | 'driver') => {
+    const demoEmail = role === 'driver' ? 'driver@stayride.in' : 'demo@stayride.in';
+    setEmail(demoEmail);
+    setPassword('demo123');
+    setLoading(true);
+    try {
+      await login(demoEmail, 'demo123');
+      navigation.replace('Main');
+    } catch (err: any) {
+      Alert.alert('Demo Login Error', err?.message || 'Could not log in as demo.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Email & Password Sign In
   const handleEmailSignIn = async () => {
@@ -147,12 +296,16 @@ export const LoginScreen: React.FC = () => {
       return;
     }
 
-    // Direct bypass for Demo Account
-    if (cleanEmail.toLowerCase() === 'demo@stayride.in') {
+    // Direct bypass for Demo Accounts
+    if (
+      cleanEmail.toLowerCase() === 'demo@stayride.in' ||
+      cleanEmail.toLowerCase() === 'driver@stayride.in' ||
+      cleanEmail.toLowerCase() === 'demo-driver@stayride.in'
+    ) {
       setLoading(true);
       try {
         await login(cleanEmail, cleanPass);
-        navigation.replace('MainTabs');
+        navigation.replace('Main');
       } catch (err: any) {
         Alert.alert('Demo Login Error', err.message);
       } finally {
@@ -182,6 +335,16 @@ export const LoginScreen: React.FC = () => {
         Alert.alert('Sign In', `Additional verification required (${result.status}).`);
       }
     } catch (err: any) {
+      // Legacy accounts (created before Clerk) only exist in StayRide: fall back to its login
+      if (err?.errors?.[0]?.code === 'form_identifier_not_found') {
+        try {
+          await login(cleanEmail, cleanPass);
+          navigation.replace('Main');
+        } catch (legacyErr: any) {
+          Alert.alert('Sign In Failed', legacyErr?.message || 'Invalid email or password.');
+        }
+        return;
+      }
       console.error('Clerk SignIn error:', err);
       const msg =
         err?.errors?.[0]?.longMessage ||
@@ -202,14 +365,21 @@ export const LoginScreen: React.FC = () => {
     const cleanPhone = phone.trim();
     const cleanHomestay = homestayName.trim();
     const cleanLocation = location.trim();
+    const cleanPlate = vehicleNumber.trim();
+    const cleanArea = area.trim();
 
-    if (!cleanName) return Alert.alert('Validation Error', 'Your name is required.');
+    if (!cleanName) return Alert.alert('Validation Error', 'Your full name is required.');
     if (!cleanPhone) return Alert.alert('Validation Error', 'Phone number is required.');
-    if (!cleanHomestay) return Alert.alert('Validation Error', 'Homestay name is required.');
     if (!cleanEmail) return Alert.alert('Validation Error', 'Email address is required.');
     if (!cleanPass) return Alert.alert('Validation Error', 'Password is required.');
     if (cleanPass.length < 8) {
       return Alert.alert('Weak Password', 'Password must be at least 8 characters long.');
+    }
+
+    if (signupRole === 'owner') {
+      if (!cleanHomestay) return Alert.alert('Validation Error', 'Homestay name is required.');
+    } else {
+      if (!cleanPlate) return Alert.alert('Validation Error', 'Vehicle plate number is required.');
     }
 
     if (!isSignUpLoaded || !signUp) {
@@ -219,15 +389,30 @@ export const LoginScreen: React.FC = () => {
 
     setLoading(true);
     try {
+      const metadata =
+        signupRole === 'owner'
+          ? {
+              phone: cleanPhone,
+              role: 'owner',
+              homestayName: cleanHomestay,
+              location: cleanLocation || 'Gangtok, Sikkim',
+              latitude: coords?.latitude,
+              longitude: coords?.longitude,
+              mapQuery: coords ? `${coords.latitude},${coords.longitude}` : cleanLocation,
+            }
+          : {
+              phone: cleanPhone,
+              role: 'driver',
+              vehicleType,
+              vehicleNumber: cleanPlate,
+              area: cleanArea || 'Darjeeling • Hill Roads',
+            };
+
       const result = await signUp.create({
         emailAddress: cleanEmail,
         password: cleanPass,
         firstName: cleanName,
-        unsafeMetadata: {
-          phone: cleanPhone,
-          homestayName: cleanHomestay,
-          location: cleanLocation || 'Gangtok, Sikkim',
-        },
+        unsafeMetadata: metadata,
       });
 
       if (result.status === 'complete') {
@@ -392,10 +577,10 @@ export const LoginScreen: React.FC = () => {
               <TouchableOpacity
                 style={styles.googleBtn}
                 onPress={handleGoogleAuth}
-                disabled={googleLoading || loading}
+                disabled={googleLoading || loading || !clerkReady}
                 activeOpacity={0.8}
               >
-                {googleLoading ? (
+                {googleLoading || !clerkReady ? (
                   <ActivityIndicator size="small" color={Colors.brandPrimary} />
                 ) : (
                   <>
@@ -445,8 +630,52 @@ export const LoginScreen: React.FC = () => {
                 </TouchableOpacity>
               </View>
 
-              {/* Signup Additional Fields */}
+              {/* Signup Role Switcher */}
               {authMode === 'signup' && (
+                <View style={styles.roleSelectorRow}>
+                  <TouchableOpacity
+                    style={[styles.roleSelectBtn, signupRole === 'owner' && styles.roleSelectBtnActive]}
+                    onPress={() => setSignupRole('owner')}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons
+                      name="home"
+                      size={16}
+                      color={signupRole === 'owner' ? Colors.brandPrimaryDark : Colors.textSecondary}
+                    />
+                    <Text
+                      style={[
+                        styles.roleSelectText,
+                        signupRole === 'owner' && styles.roleSelectTextActive,
+                      ]}
+                    >
+                      Homestay Host
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.roleSelectBtn, signupRole === 'driver' && styles.roleSelectBtnActiveDriver]}
+                    onPress={() => setSignupRole('driver')}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons
+                      name="car"
+                      size={16}
+                      color={signupRole === 'driver' ? '#2563EB' : Colors.textSecondary}
+                    />
+                    <Text
+                      style={[
+                        styles.roleSelectText,
+                        signupRole === 'driver' && styles.roleSelectTextActiveDriver,
+                      ]}
+                    >
+                      Cab Driver
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {/* Signup Fields for Homestay Host */}
+              {authMode === 'signup' && signupRole === 'owner' && (
                 <>
                   <Text style={styles.label}>Owner Full Name</Text>
                   <TextInput
@@ -476,12 +705,91 @@ export const LoginScreen: React.FC = () => {
                     placeholderTextColor={Colors.textSecondary}
                   />
 
-                  <Text style={styles.label}>Location / Town</Text>
+                  <Text style={styles.label}>Homestay Location / Town</Text>
                   <TextInput
                     style={styles.input}
-                    placeholder="e.g. Gangtok, Sikkim"
+                    placeholder="e.g. Upper Sichey, Gangtok, Sikkim"
                     value={location}
                     onChangeText={setLocation}
+                    placeholderTextColor={Colors.textSecondary}
+                  />
+
+                  <TouchableOpacity
+                    style={styles.gpsDetectBtn}
+                    onPress={handleDetectGPS}
+                    disabled={locating}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="navigate-circle" size={18} color="#2563EB" style={{ marginRight: 6 }} />
+                    <Text style={styles.gpsDetectBtnText}>
+                      {locating ? 'Acquiring GPS Satellite Pin…' : '📍 Auto-Pin Homestay Live GPS Location'}
+                    </Text>
+                  </TouchableOpacity>
+
+                  {coords && (
+                    <View style={styles.gpsBadge}>
+                      <Ionicons name="location" size={14} color="#16A34A" style={{ marginRight: 4 }} />
+                      <Text style={styles.gpsBadgeText}>
+                        GPS: {coords.latitude.toFixed(5)}, {coords.longitude.toFixed(5)} (Pinned on Google Maps)
+                      </Text>
+                    </View>
+                  )}
+                </>
+              )}
+
+              {/* Signup Fields for Cab Driver */}
+              {authMode === 'signup' && signupRole === 'driver' && (
+                <>
+                  <Text style={styles.label}>Driver Full Name</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="e.g. Pemba Lepcha"
+                    value={name}
+                    onChangeText={setName}
+                    placeholderTextColor={Colors.textSecondary}
+                  />
+
+                  <Text style={styles.label}>Driver Phone Number</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="+91 98000 11223"
+                    keyboardType="phone-pad"
+                    value={phone}
+                    onChangeText={setPhone}
+                    placeholderTextColor={Colors.textSecondary}
+                  />
+
+                  <Text style={styles.label}>Vehicle Type</Text>
+                  <View style={styles.vehicleTypeRow}>
+                    {(['SUV', 'Sedan', '7-seater', '9-seater'] as const).map((v) => (
+                      <TouchableOpacity
+                        key={v}
+                        style={[styles.vehicleChip, vehicleType === v && styles.vehicleChipActive]}
+                        onPress={() => setVehicleType(v)}
+                      >
+                        <Text style={[styles.vehicleChipText, vehicleType === v && styles.vehicleChipTextActive]}>
+                          {v}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  <Text style={styles.label}>Vehicle Plate / Reg Number</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="e.g. SK-01-A-4488"
+                    autoCapitalize="characters"
+                    value={vehicleNumber}
+                    onChangeText={setVehicleNumber}
+                    placeholderTextColor={Colors.textSecondary}
+                  />
+
+                  <Text style={styles.label}>Operating Base / Coverage</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="e.g. Gangtok & North Sikkim"
+                    value={area}
+                    onChangeText={setArea}
                     placeholderTextColor={Colors.textSecondary}
                   />
                 </>
@@ -491,7 +799,7 @@ export const LoginScreen: React.FC = () => {
               <Text style={styles.label}>Email Address</Text>
               <TextInput
                 style={styles.input}
-                placeholder="host@stayride.in"
+                placeholder={signupRole === 'driver' ? 'driver@stayride.in' : 'host@stayride.in'}
                 keyboardType="email-address"
                 autoCapitalize="none"
                 value={email}
@@ -509,24 +817,98 @@ export const LoginScreen: React.FC = () => {
                 placeholderTextColor={Colors.textSecondary}
               />
 
+              {/* Quick Demo Logins for Testing */}
+              {authMode === 'signin' && (
+                <View style={styles.demoSection}>
+                  <Text style={styles.demoSectionTitle}>One-Tap Demo Logins</Text>
+                  <View style={styles.demoBtnRow}>
+                    <TouchableOpacity
+                      style={styles.demoBtn}
+                      onPress={() => handleDemoLogin('owner')}
+                      disabled={loading}
+                    >
+                      <Ionicons name="home" size={14} color="#0F172A" />
+                      <Text style={styles.demoBtnText}>Demo Host</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.demoBtn, styles.demoBtnDriver]}
+                      onPress={() => handleDemoLogin('driver')}
+                      disabled={loading}
+                    >
+                      <Ionicons name="car" size={14} color="#2563EB" />
+                      <Text style={[styles.demoBtnText, { color: '#1D4ED8' }]}>Demo Driver</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+
               {/* Submit Button */}
               <TouchableOpacity
-                style={styles.submitBtn}
+                style={[styles.submitBtn, !clerkReady && !isDemoEmail && { opacity: 0.6 }]}
                 onPress={authMode === 'signin' ? handleEmailSignIn : handleEmailSignUp}
-                disabled={loading || googleLoading}
+                disabled={loading || googleLoading || (!clerkReady && !isDemoEmail)}
                 activeOpacity={0.8}
               >
                 {loading ? (
                   <ActivityIndicator color={Colors.white} />
                 ) : (
                   <Text style={styles.submitBtnText}>
-                    {authMode === 'signin' ? 'Sign In to StayRide' : 'Create Homestay Account'}
+                    {authMode === 'signin'
+                      ? 'Sign In to StayRide'
+                      : signupRole === 'owner'
+                      ? 'Create Homestay Account'
+                      : 'Register as Cab Driver'}
                   </Text>
                 )}
               </TouchableOpacity>
             </View>
           )}
         </View>
+
+        {/* Google OAuth Role Selection Modal */}
+        <Modal visible={showRoleSelectModal} transparent animationType="fade">
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalCard}>
+              <View style={styles.modalHeaderIcon}>
+                <Ionicons name="sparkles" size={28} color="#2563EB" />
+              </View>
+              <Text style={styles.modalTitle}>Welcome to StayRide!</Text>
+              <Text style={styles.modalSubtitle}>
+                Choose how you want to use StayRide with your account:
+              </Text>
+
+              <TouchableOpacity
+                style={styles.modalChoiceCard}
+                onPress={() => handleSelectGoogleRole('owner')}
+              >
+                <View style={styles.modalChoiceIconWrap}>
+                  <Ionicons name="home" size={24} color="#0F172A" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.modalChoiceTitle}>Homestay Host / Owner</Text>
+                  <Text style={styles.modalChoiceDesc}>
+                    Manage rooms, bookings, guests, and dispatch mountain cabs for homestay riders.
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalChoiceCard, { borderColor: '#BFDBFE', backgroundColor: '#F0F9FF' }]}
+                onPress={() => handleSelectGoogleRole('driver')}
+              >
+                <View style={[styles.modalChoiceIconWrap, { backgroundColor: '#DBEAFE' }]}>
+                  <Ionicons name="car" size={24} color="#2563EB" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.modalChoiceTitle, { color: '#1E40AF' }]}>Cab Driver / Operator</Text>
+                  <Text style={styles.modalChoiceDesc}>
+                    Receive nearby ride requests, quote fares, navigate routes, and collect cash.
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -710,5 +1092,208 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: Colors.brandPrimary,
+  },
+  roleSelectorRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 14,
+  },
+  roleSelectBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F8FAFC',
+  },
+  roleSelectBtnActive: {
+    borderColor: Colors.brandPrimaryDark,
+    backgroundColor: '#EFF6FF',
+  },
+  roleSelectBtnActiveDriver: {
+    borderColor: '#2563EB',
+    backgroundColor: '#EFF6FF',
+  },
+  roleSelectText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+  },
+  roleSelectTextActive: {
+    color: Colors.brandPrimaryDark,
+    fontWeight: '700',
+  },
+  roleSelectTextActiveDriver: {
+    color: '#2563EB',
+    fontWeight: '700',
+  },
+  vehicleTypeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 4,
+  },
+  vehicleChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    backgroundColor: '#F8FAFC',
+  },
+  vehicleChipActive: {
+    borderColor: '#2563EB',
+    backgroundColor: '#EFF6FF',
+  },
+  vehicleChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  vehicleChipTextActive: {
+    color: '#1D4ED8',
+    fontWeight: '700',
+  },
+  demoSection: {
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  demoSectionTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748B',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  demoBtnRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  demoBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 9,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    backgroundColor: '#F8FAFC',
+  },
+  demoBtnDriver: {
+    borderColor: '#93C5FD',
+    backgroundColor: '#EFF6FF',
+  },
+  demoBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 400,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 24,
+    ...Shadows.md,
+  },
+  modalHeaderIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  modalSubtitle: {
+    fontSize: 13,
+    color: '#64748B',
+    marginTop: 4,
+    marginBottom: 18,
+    lineHeight: 18,
+  },
+  modalChoiceCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+    marginBottom: 12,
+  },
+  modalChoiceIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalChoiceTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  modalChoiceDesc: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  gpsDetectBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginTop: 8,
+  },
+  gpsDetectBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1D4ED8',
+  },
+  gpsBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#DCFCE7',
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginTop: 6,
+  },
+  gpsBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#15803D',
   },
 });

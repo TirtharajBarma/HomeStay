@@ -30,6 +30,17 @@ export interface IProperty extends Document {
   currency: string;
   status: "active" | "pending" | "paused";
   commissionRate: number;
+  platformFeePercent?: number | null;
+  homestayCommissionPercent?: number | null;
+  coordinates?: {
+    latitude: number | null;
+    longitude: number | null;
+  };
+  featureAccess?: {
+    campaigns: boolean;
+    networkDispatch: boolean;
+    guestCabLinks: boolean;
+  };
   icalFeeds?: {
     airbnbUrl?: string;
     bookingUrl?: string;
@@ -80,6 +91,17 @@ const PropertySchema = new Schema<IProperty>(
       index: true,
     },
     commissionRate: { type: Number, default: 0.18 },
+    platformFeePercent: { type: Number, default: null },
+    homestayCommissionPercent: { type: Number, default: null },
+    coordinates: {
+      latitude: { type: Number, default: null },
+      longitude: { type: Number, default: null },
+    },
+    featureAccess: {
+      campaigns: { type: Boolean, default: true },
+      networkDispatch: { type: Boolean, default: true },
+      guestCabLinks: { type: Boolean, default: true },
+    },
     icalFeeds: {
       airbnbUrl: { type: String, default: "" },
       bookingUrl: { type: String, default: "" },

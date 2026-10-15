@@ -10,6 +10,7 @@ export const Colors = {
   bgCard: '#FFFFFF',
   textPrimary: '#1E1B2E',
   textSecondary: '#6E6A80',
+  textTertiary: '#94A3B8',
   divider: '#ECE9F5',
   iconDefault: '#6E6A80',
   shadow: '#5B21B6',
@@ -52,5 +53,19 @@ export const Shadows = {
     shadowOpacity: 0.12,
     shadowRadius: 10,
     elevation: 5,
+  },
+  sm: {
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  md: {
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
 };

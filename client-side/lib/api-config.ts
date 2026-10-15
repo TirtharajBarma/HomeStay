@@ -37,6 +37,14 @@ export const API_ENDPOINTS = {
     quote: () => `${API_BASE_URL}/cabs/quote`,
     book: () => `${API_BASE_URL}/cabs/bookings`,
   },
+  cabRequests: {
+    guestLink: (token: string) =>
+      `${API_BASE_URL}/stayride/public/guest-links/${encodeURIComponent(token)}`,
+    submit: (token: string) =>
+      `${API_BASE_URL}/stayride/public/guest-links/${encodeURIComponent(token)}/cab-requests`,
+    status: (reference: string, token: string) =>
+      `${API_BASE_URL}/stayride/public/cab-requests/${encodeURIComponent(reference)}?t=${encodeURIComponent(token)}`,
+  },
   newsletter: {
     subscribe: () => `${API_BASE_URL}/newsletter/subscribe`,
   },
@@ -62,8 +70,10 @@ export async function apiFetch<T>(
 
   if (!res.ok) {
     const errorBody = await res.json().catch(() => ({}));
+    const err = errorBody.error;
     throw new Error(
-      errorBody.error || `API request failed with status ${res.status}`
+      (typeof err === "string" ? err : err?.message) ||
+        `API request failed with status ${res.status}`
     );
   }
 

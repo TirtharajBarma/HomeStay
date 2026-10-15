@@ -6,6 +6,7 @@ import morgan from "morgan";
 import rateLimit from "express-rate-limit";
 import { config } from "./config/env.js";
 import apiRouter from "./routes/index.js";
+import adminRoutes from "./routes/admin.routes.js";
 import stayrideV1Router from "./stayride/routes.js";
 import { errorHandler, notFoundHandler } from "./middlewares/error-handler.js";
 
@@ -35,7 +36,21 @@ const limiter = rateLimit({
     error: "Too many requests from this IP, please try again after 15 minutes",
   },
 });
-app.use("/api", limiter);
+app.use(["/api", "/v1"], limiter);
+
+// Stricter limit for login/signup and the public guest endpoints (brute force / spam).
+const strictLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: { message: "Too many attempts, please try again after 15 minutes" } },
+});
+app.use(
+  ["/v1/auth/login", "/v1/auth/signup", "/api/v1/stayride/auth/login", "/api/v1/stayride/auth/signup"],
+  strictLimiter
+);
+app.post(["/v1/public/*path", "/api/v1/stayride/public/*path"], strictLimiter);
 
 // 5. CORS Configuration
 app.use(
@@ -59,9 +74,15 @@ app.use(
   })
 );
 
-// 6. Body Parsing
+// 6. Body Parsing (Clerk webhook needs the raw body for signature verification)
+app.use(["/v1/auth/clerk-webhook", "/api/v1/stayride/auth/clerk-webhook"], express.raw({ type: "application/json" }));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+// Express 5 leaves req.body undefined when there is no body; handlers destructure it.
+app.use((req, _res, next) => {
+  req.body ??= {};
+  next();
+});
 
 // 7. Health Check Endpoints
 app.get("/", (_req, res) => {
@@ -95,6 +116,7 @@ app.get("/api/v1/health", (_req, res) => {
 
 // 8. Mount Main API Router & StayRide Mobile Adapter Router
 app.use("/api/v1", apiRouter);
+app.use("/v1/admin", adminRoutes);
 app.use("/v1", stayrideV1Router);
 app.use("/api/v1/stayride", stayrideV1Router);
 

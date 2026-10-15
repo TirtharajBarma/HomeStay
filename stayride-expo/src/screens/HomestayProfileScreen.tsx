@@ -8,12 +8,9 @@ import {
   Modal,
   TextInput,
   Alert,
-  Share,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import * as Clipboard from 'expo-clipboard';
-import Svg, { Rect } from 'react-native-svg';
 import { useStayRide } from '../data/store';
 import { Header } from '../components/Header';
 import { Colors } from '../theme/colors';
@@ -57,7 +54,6 @@ export const HomestayProfileScreen: React.FC = () => {
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [photoPickerVisible, setPhotoPickerVisible] = useState(false);
   const [amenityPickerVisible, setAmenityPickerVisible] = useState(false);
-  const [qrModalVisible, setQrModalVisible] = useState(false);
 
   // Edit fields
   const [name, setName] = useState(homestay.name);
@@ -82,54 +78,53 @@ export const HomestayProfileScreen: React.FC = () => {
       Alert.alert('Required', 'Name cannot be empty');
       return;
     }
-    await updateHomestay({
-      ...homestay,
-      name: name.trim(),
-      ownerName: owner.trim(),
-      phone: phone.trim(),
-      email: email.trim(),
-      location: location.trim(),
-      description: description.trim(),
-    });
+    try {
+      await updateHomestay({
+        ...homestay,
+        name: name.trim(),
+        ownerName: owner.trim(),
+        phone: phone.trim(),
+        email: email.trim(),
+        location: location.trim(),
+        description: description.trim(),
+      });
+    } catch (e: any) {
+      Alert.alert('Not saved', e?.message || 'Could not save your profile. Please try again.');
+      return;
+    }
     setEditModalVisible(false);
     Alert.alert('Profile Updated', 'Homestay profile saved successfully');
   };
 
-  const handleCopyLink = async () => {
-    await Clipboard.setStringAsync(homestay.link);
-    Alert.alert('Copied', 'Booking link copied to clipboard');
-  };
-
-  const handleShareLink = async () => {
+  // Photo/amenity edits: report server failures instead of leaving an unhandled rejection
+  const save = async (data: Parameters<typeof updateHomestay>[0]) => {
     try {
-      await Share.share({
-        message: `Book your stay and cabs here: ${homestay.link}`,
-      });
-    } catch (e) {
-      // Ignore dismiss
+      await updateHomestay(data);
+    } catch (e: any) {
+      Alert.alert('Not saved', e?.message || 'Could not save your change. Please try again.');
     }
   };
 
   const handleRemovePhoto = async (photo: string) => {
     const updated = homestay.photos.filter((p) => p !== photo);
-    await updateHomestay({ ...homestay, photos: updated });
+    await save({ ...homestay, photos: updated });
   };
 
   const handleAddPhoto = async (photo: string) => {
     setPhotoPickerVisible(false);
     if (homestay.photos.includes(photo)) return;
-    await updateHomestay({ ...homestay, photos: [...homestay.photos, photo] });
+    await save({ ...homestay, photos: [...homestay.photos, photo] });
   };
 
   const handleRemoveAmenity = async (amenity: string) => {
     const updated = homestay.amenities.filter((a) => a !== amenity);
-    await updateHomestay({ ...homestay, amenities: updated });
+    await save({ ...homestay, amenities: updated });
   };
 
   const handleAddAmenity = async (amenity: string) => {
     setAmenityPickerVisible(false);
     if (homestay.amenities.includes(amenity)) return;
-    await updateHomestay({ ...homestay, amenities: [...homestay.amenities, amenity] });
+    await save({ ...homestay, amenities: [...homestay.amenities, amenity] });
   };
 
   const remainingPhotos = PHOTO_PRESETS.filter((p) => !homestay.photos.includes(p));
@@ -158,32 +153,7 @@ export const HomestayProfileScreen: React.FC = () => {
           <Text style={styles.contact}>
             {homestay.phone}  ·  {homestay.email}
           </Text>
-          <Text style={styles.linkText}>{homestay.link}</Text>
         </View>
-
-        {/* Quick Share Buttons */}
-        <View style={styles.actionRow}>
-          <TouchableOpacity style={styles.actionBtn} onPress={handleCopyLink}>
-            <Text style={styles.actionBtnText}>Copy Link</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionBtn} onPress={handleShareLink}>
-            <Text style={styles.actionBtnText}>Share Link</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.actionBtn}
-            onPress={() => setQrModalVisible(true)}
-          >
-            <Text style={styles.actionBtnText}>QR Code</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Preview Guest Portal Button */}
-        <TouchableOpacity
-          style={styles.guestPageBtn}
-          onPress={() => navigation.navigate('GuestPage')}
-        >
-          <Text style={styles.guestPageBtnText}>Open Guest Booking Portal ↗</Text>
-        </TouchableOpacity>
 
         {/* Photos Section */}
         <View style={styles.sectionCard}>
@@ -366,64 +336,6 @@ export const HomestayProfileScreen: React.FC = () => {
         </TouchableOpacity>
       </Modal>
 
-      {/* QR Code Modal */}
-      <Modal
-        visible={qrModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setQrModalVisible(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setQrModalVisible(false)}
-        >
-          <View style={[styles.modalCard, { alignItems: 'center' }]}>
-            <Text style={styles.modalTitle}>Booking QR Code</Text>
-            <Text style={styles.qrPrompt}>
-              Guests can scan this at reception to open the booking & cab portal.
-            </Text>
-
-            {/* Stylized QR Code Graphic */}
-            <View style={styles.qrContainer}>
-              <Svg width={180} height={180} viewBox="0 0 180 180">
-                <Rect x="0" y="0" width="180" height="180" fill="#FFFFFF" />
-                {/* Corners */}
-                <Rect x="15" y="15" width="45" height="45" fill={Colors.brandPrimary} />
-                <Rect x="23" y="23" width="29" height="29" fill="#FFFFFF" />
-                <Rect x="30" y="30" width="15" height="15" fill={Colors.brandPrimary} />
-
-                <Rect x="120" y="15" width="45" height="45" fill={Colors.brandPrimary} />
-                <Rect x="128" y="23" width="29" height="29" fill="#FFFFFF" />
-                <Rect x="135" y="30" width="15" height="15" fill={Colors.brandPrimary} />
-
-                <Rect x="15" y="120" width="45" height="45" fill={Colors.brandPrimary} />
-                <Rect x="23" y="128" width="29" height="29" fill="#FFFFFF" />
-                <Rect x="30" y="135" width="15" height="15" fill={Colors.brandPrimary} />
-
-                {/* Pattern Data points */}
-                <Rect x="70" y="20" width="12" height="12" fill={Colors.brandPrimary} />
-                <Rect x="90" y="30" width="12" height="12" fill={Colors.brandPrimary} />
-                <Rect x="75" y="75" width="30" height="30" fill={Colors.brandPrimary} />
-                <Rect x="25" y="75" width="15" height="15" fill={Colors.brandPrimary} />
-                <Rect x="135" y="80" width="20" height="15" fill={Colors.brandPrimary} />
-                <Rect x="80" y="125" width="25" height="15" fill={Colors.brandPrimary} />
-                <Rect x="120" y="135" width="15" height="15" fill={Colors.brandPrimary} />
-                <Rect x="145" y="120" width="18" height="18" fill={Colors.brandPrimary} />
-              </Svg>
-            </View>
-
-            <Text style={styles.qrLinkText}>{homestay.link}</Text>
-
-            <TouchableOpacity
-              style={styles.closeBtn}
-              onPress={() => setQrModalVisible(false)}
-            >
-              <Text style={styles.closeBtnText}>Close</Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </Modal>
     </View>
   );
 };
@@ -491,44 +403,6 @@ const styles = StyleSheet.create({
   contact: {
     fontSize: 13,
     color: Colors.textSecondary,
-  },
-  linkText: {
-    fontSize: 12,
-    color: Colors.brandPrimary,
-    marginTop: 4,
-  },
-  actionRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 12,
-  },
-  actionBtn: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 11,
-    borderRadius: 10,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: Colors.divider,
-  },
-  actionBtnText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: Colors.brandPrimary,
-  },
-  guestPageBtn: {
-    backgroundColor: Colors.brandPrimaryLight,
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: 'center',
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: Colors.brandPrimary,
-  },
-  guestPageBtnText: {
-    color: Colors.brandPrimaryDark,
-    fontWeight: 'bold',
-    fontSize: 14,
   },
   sectionCard: {
     backgroundColor: '#FFFFFF',
@@ -640,33 +514,5 @@ const styles = StyleSheet.create({
   presetItemText: {
     fontSize: 14,
     color: Colors.textPrimary,
-  },
-  qrPrompt: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  qrContainer: {
-    padding: 16,
-    borderWidth: 1,
-    borderColor: Colors.divider,
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
-  },
-  qrLinkText: {
-    fontSize: 12,
-    color: Colors.brandPrimary,
-    marginTop: 14,
-    textAlign: 'center',
-  },
-  closeBtn: {
-    marginTop: 14,
-    paddingVertical: 8,
-  },
-  closeBtnText: {
-    color: Colors.brandPrimary,
-    fontWeight: 'bold',
-    fontSize: 15,
   },
 });

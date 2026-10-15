@@ -1,5 +1,13 @@
 import mongoose from "mongoose";
+import dns from "node:dns";
 import { config } from "./env.js";
+
+// Dev-only: some local routers block SRV lookups. Never override DNS in deployed environments.
+if (config.nodeEnv !== "production") {
+  try {
+    dns.setServers(["8.8.8.8", "1.1.1.1"]);
+  } catch {}
+}
 
 let memoryServerInstance: any = null;
 

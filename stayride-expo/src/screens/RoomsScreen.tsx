@@ -105,14 +105,19 @@ export const RoomsScreen: React.FC = () => {
         note: editNote.trim(),
       });
     } else {
-      await createRoom({
-        number: editNumber.trim(),
-        type: editType,
-        floor: editFloor.trim(),
-        price: priceNum,
-        status: editStatus,
-        note: editNote.trim(),
-      });
+      try {
+        await createRoom({
+          number: editNumber.trim(),
+          type: editType,
+          floor: editFloor.trim(),
+          price: priceNum,
+          status: editStatus,
+          note: editNote.trim(),
+        });
+      } catch (e: any) {
+        Alert.alert('Not saved', e?.message || 'Please try again.');
+        return;
+      }
     }
     setModalVisible(false);
   };

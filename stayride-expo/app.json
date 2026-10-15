@@ -30,14 +30,13 @@
       "favicon": "./assets/favicon.png"
     },
     "owner": "tirtharaj_barma",
-    "runtimeVersion": "1",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "updates": {
       "url": "https://u.expo.dev/0bdb67a8-8671-40a4-93e5-925504d907ee",
-      "requestHeaders": {
-        "expo-channel-name": "preview"
-      },
-      "checkAutomatically": "ON_LOAD",
-      "fallbackToCacheTimeout": 3000
+      "checkAutomatically": "NEVER",
+      "fallbackToCacheTimeout": 0
     },
     "extra": {
       "eas": {

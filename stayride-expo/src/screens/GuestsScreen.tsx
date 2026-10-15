@@ -7,6 +7,8 @@ import {
   TextInput,
   TouchableOpacity,
   Platform,
+  Alert,
+  Linking,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,6 +18,7 @@ import { useStayRide } from '../data/store';
 import { GuestItem } from '../components/GuestItem';
 import { PlatformSelect } from '../components/PlatformSelect';
 import { Header } from '../components/Header';
+import { Guest } from '../types';
 
 const PERIOD_OPTIONS = [
   { label: 'All time', value: '0', icon: 'calendar-outline' as const },
@@ -27,13 +30,40 @@ const PERIOD_OPTIONS = [
 
 export const GuestsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
-  const { guests, searchGuests, countGuests } = useStayRide();
+  const { guests, bookings, searchGuests, countGuests, homestay, createGuestLink } = useStayRide();
 
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<'ALL' | 'NEW' | 'REPEAT'>('ALL');
   const [periodDays, setPeriodDays] = useState(0);
 
   const filteredGuests = searchGuests(query, filter, periodDays);
+
+  // Ask-for-cab is only offered to guests currently checked in
+  const isCheckedIn = (g: Guest) =>
+    bookings.some((b) => b.status === 'CHECKED_IN' && (b.guestId === g.id || b.phone === g.phone));
+
+  const handleAskCab = async (guest: Guest) => {
+    const cleanPhone = guest.phone.replace(/[^0-9]/g, '');
+    const phoneWithCountry = cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone;
+    const homestayName = homestay.name || 'our homestay';
+    let link: string;
+    try {
+      link = (await createGuestLink({ guestId: guest.id, guestName: guest.name, guestPhone: guest.phone })).url;
+    } catch (e: any) {
+      Alert.alert('Could not create link', e?.message || 'Please try again.');
+      return;
+    }
+    const msg =
+      `*Namaste ${guest.name}!* 🏔️\n` +
+      `Hope you are having a wonderful mountain stay at *${homestayName}*.\n\n` +
+      `Need a verified local cab or sightseeing transfer? You can pick your mountain stops and submit your itinerary directly here:\n` +
+      `${link}\n\n` +
+      `We'll instantly match you with verified mountain drivers!`;
+
+    Linking.openURL(`https://wa.me/${phoneWithCountry}?text=${encodeURIComponent(msg)}`).catch(() => {
+      Alert.alert('Notice', 'Could not open WhatsApp on this device.');
+    });
+  };
 
   return (
     <View style={styles.container}>
@@ -97,6 +127,7 @@ export const GuestsScreen: React.FC = () => {
               key={g.id}
               guest={g}
               onPress={() => navigation.navigate('GuestDetail', { guestId: g.id })}
+              onAskCab={isCheckedIn(g) ? handleAskCab : undefined}
             />
           ))
         )}

@@ -6,3 +6,7 @@ export * from "./driver.model.js";
 export * from "./cab-trip.model.js";
 export * from "./newsletter.model.js";
 export * from "./user.model.js";
+export * from "./commission-settings.model.js";
+export * from "./cab-request.model.js";
+export * from "./feature-appeal.model.js";
+export * from "./payout-request.model.js";

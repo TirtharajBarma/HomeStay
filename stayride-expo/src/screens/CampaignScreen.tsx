@@ -57,14 +57,19 @@ export const CampaignScreen: React.FC = () => {
     if (c.status === 'CREATED') {
       Alert.alert(
         'Send campaign?',
-        `Send “${c.title}” to ${c.recipients} ${c.audience.toLowerCase()} on WhatsApp?`,
+        `Mark “${c.title}” as sent? Automatic WhatsApp delivery is not connected yet, so no messages will go out.`,
         [
           { text: 'Not now', style: 'cancel' },
           {
-            text: 'Send now',
+            text: 'Mark as sent',
             onPress: async () => {
-              await sendCampaign(c.id);
-              Alert.alert('Campaign Dispatched', `Campaign sent to ${c.recipients} guests`);
+              try {
+                await sendCampaign(c.id);
+              } catch (e: any) {
+                Alert.alert('Not saved', e?.message || 'Please try again.');
+                return;
+              }
+              Alert.alert('Campaign Updated', 'Campaign marked as sent. Automatic WhatsApp delivery is not connected yet.');
             },
           },
         ]
@@ -93,12 +98,17 @@ export const CampaignScreen: React.FC = () => {
       return;
     }
 
-    await createCampaign({
-      title: trimmedTitle,
-      message: trimmedMsg,
-      audience: selectedAudience as any,
-      recipients: countForAudience(selectedAudience),
-    });
+    try {
+      await createCampaign({
+        title: trimmedTitle,
+        message: trimmedMsg,
+        audience: selectedAudience as any,
+        recipients: countForAudience(selectedAudience),
+      });
+    } catch (e: any) {
+      Alert.alert('Not saved', e?.message || 'Please try again.');
+      return;
+    }
 
     setCreateModalVisible(false);
     Alert.alert('Campaign Created', 'Tap it to start sending');

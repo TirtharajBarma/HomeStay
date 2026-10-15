@@ -14,12 +14,14 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useClerk } from '@clerk/expo';
+import { useClerk, useUser } from '@clerk/expo';
+import * as Updates from 'expo-updates';
 import { Colors, Radii, Shadows } from '../theme/colors';
 import { useStayRide } from '../data/store';
 import { api, DEFAULT_BASE_URL } from '../data/api';
 import { Header } from '../components/Header';
 import { CURRENT_RELEASE_VERSION } from '../constants/version';
+import { getActiveAppVersion } from '../services/updates/updateManager';
 
 export const MoreScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -36,15 +38,36 @@ export const MoreScreen: React.FC = () => {
   } = useStayRide();
 
   const { signOut } = useClerk();
+  const { user: clerkUser, isLoaded: isClerkUserLoaded } = useUser();
   const [backendLive, setBackendLive] = useState<boolean | null>(null);
+  const [activeVersion, setActiveVersion] = useState(CURRENT_RELEASE_VERSION);
+
+  // Clerk users without a password yet (e.g. Google sign-in) set one without entering a current password
+  const needsCurrentPassword = !clerkUser || clerkUser.passwordEnabled;
 
   // Password management modal
   const [passwordModalVisible, setPasswordModalVisible] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [savingPassword, setSavingPassword] = useState(false);
 
+  const closePasswordModal = () => {
+    setPasswordModalVisible(false);
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+  };
+
   const handleSavePassword = async () => {
+    if (!isClerkUserLoaded) {
+      Alert.alert('Please Wait', 'Account service is still loading. Try again in a moment.');
+      return;
+    }
+    if (needsCurrentPassword && !currentPassword) {
+      Alert.alert('Validation Error', 'Please enter your current password.');
+      return;
+    }
     if (!newPassword || newPassword.trim().length < 8) {
       Alert.alert('Validation Error', 'Password must be at least 8 characters long.');
       return;
@@ -56,15 +79,29 @@ export const MoreScreen: React.FC = () => {
 
     setSavingPassword(true);
     try {
-      const res = await api.post('/auth/set-password', {
-        newPassword: newPassword.trim(),
-      });
-      setPasswordModalVisible(false);
-      setNewPassword('');
-      setConfirmPassword('');
-      Alert.alert('Success', res?.message || 'Password updated successfully across Clerk and MongoDB!');
+      if (clerkUser) {
+        // Clerk-managed account: Clerk owns the password
+        await clerkUser.updatePassword({
+          newPassword: newPassword.trim(),
+          ...(clerkUser.passwordEnabled ? { currentPassword } : {}),
+          signOutOfOtherSessions: true,
+        });
+        closePasswordModal();
+        Alert.alert('Success', 'Password updated successfully.');
+      } else {
+        // Legacy StayRide-only account
+        const res = await api.post('/auth/set-password', {
+          currentPassword,
+          newPassword: newPassword.trim(),
+        });
+        closePasswordModal();
+        Alert.alert('Success', res?.message || 'Password updated successfully.');
+      }
     } catch (err: any) {
-      Alert.alert('Error', err?.message || 'Failed to update password.');
+      Alert.alert(
+        'Error',
+        err?.errors?.[0]?.longMessage || err?.errors?.[0]?.message || err?.message || 'Failed to update password.'
+      );
     } finally {
       setSavingPassword(false);
     }
@@ -74,10 +111,14 @@ export const MoreScreen: React.FC = () => {
     session?.owner?.email?.toLowerCase().trim() === 'demo@stayride.in';
 
   useEffect(() => {
-    if (isDemoAccount) {
-      api.checkHealth().then((live) => setBackendLive(live));
-    }
-  }, [isDemoAccount]);
+    api.checkHealth().then((live) => setBackendLive(live));
+  }, []);
+
+  // Show the version actually running (OTA-aware), mirroring the Updates screen
+  useEffect(() => {
+    if (Updates.isEmbeddedLaunch || !Updates.updateId) return;
+    getActiveAppVersion().then(setActiveVersion).catch(() => {});
+  }, []);
 
   const handleShowFlow = () => {
     Alert.alert(
@@ -102,8 +143,7 @@ export const MoreScreen: React.FC = () => {
           } catch (e) {
             console.log('[Clerk] signOut note:', e);
           }
-          await logout();
-          navigation.replace('Login');
+          await logout(); // App-level session watcher resets navigation to Login
         },
       },
     ]);
@@ -205,7 +245,7 @@ export const MoreScreen: React.FC = () => {
           {renderRow(
             'home',
             'Homestay profile',
-            'Photos, amenities, booking link and QR',
+            'Photos, amenities and location',
             () => navigation.navigate('HomestayProfile')
           )}
         </View>
@@ -231,12 +271,6 @@ export const MoreScreen: React.FC = () => {
             'The complete homestay + cab referral flow',
             handleShowFlow
           )}
-          {renderRow(
-            'globe-outline',
-            'Guest booking page',
-            'Preview your public traveler web page',
-            () => navigation.navigate('GuestPage')
-          )}
         </View>
 
         {/* System & App Updates Group */}
@@ -245,7 +279,7 @@ export const MoreScreen: React.FC = () => {
           {renderRow(
             'cloud-download-outline',
             'Software Updates',
-            `Version ${CURRENT_RELEASE_VERSION} · Check & install OTA updates`,
+            `Version ${activeVersion} · Check & install OTA updates`,
             () => navigation.navigate('Updates')
           )}
         </View>
@@ -256,7 +290,7 @@ export const MoreScreen: React.FC = () => {
           {renderRow(
             'key-outline',
             'Change / Set Password',
-            'Update password for Clerk & MongoDB Atlas',
+            'Update your account password',
             () => setPasswordModalVisible(true)
           )}
           {renderRow(
@@ -289,14 +323,30 @@ export const MoreScreen: React.FC = () => {
         visible={passwordModalVisible}
         transparent
         animationType="fade"
-        onRequestClose={() => setPasswordModalVisible(false)}
+        onRequestClose={closePasswordModal}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Change Account Password</Text>
             <Text style={styles.modalSubtitle}>
-              Enter your new password below. It will sync automatically across Clerk and MongoDB Atlas.
+              {needsCurrentPassword
+                ? 'Enter your current password and choose a new one.'
+                : 'Set a password so you can also sign in with your email.'}
             </Text>
+
+            {needsCurrentPassword && (
+              <>
+                <Text style={styles.modalLabel}>Current Password</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="Your current password"
+                  secureTextEntry
+                  value={currentPassword}
+                  onChangeText={setCurrentPassword}
+                  placeholderTextColor={Colors.textSecondary}
+                />
+              </>
+            )}
 
             <Text style={styles.modalLabel}>New Password</Text>
             <TextInput
@@ -321,11 +371,7 @@ export const MoreScreen: React.FC = () => {
             <View style={styles.modalBtnRow}>
               <TouchableOpacity
                 style={styles.modalCancelBtn}
-                onPress={() => {
-                  setPasswordModalVisible(false);
-                  setNewPassword('');
-                  setConfirmPassword('');
-                }}
+                onPress={closePasswordModal}
                 disabled={savingPassword}
                 activeOpacity={0.7}
               >

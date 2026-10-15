@@ -8,9 +8,10 @@ import { Pill } from './Pill';
 interface GuestItemProps {
   guest: Guest;
   onPress: () => void;
+  onAskCab?: (guest: Guest) => void;
 }
 
-export const GuestItem: React.FC<GuestItemProps> = ({ guest, onPress }) => {
+export const GuestItem: React.FC<GuestItemProps> = ({ guest, onPress, onAskCab }) => {
   const isRepeat = guest.visits > 1;
   const lastVisitFormatted = new Date(guest.lastVisit).toLocaleDateString('en-GB', {
     day: 'numeric',
@@ -33,6 +34,19 @@ export const GuestItem: React.FC<GuestItemProps> = ({ guest, onPress }) => {
         <Text style={styles.meta}>
           {guest.visits} {guest.visits === 1 ? 'visit' : 'visits'} • ₹{guest.totalSpending.toLocaleString()} spent • Last: {lastVisitFormatted}
         </Text>
+
+        {onAskCab && (
+          <View style={styles.actionsRow}>
+            <TouchableOpacity
+              style={styles.askCabBtn}
+              onPress={() => onAskCab(guest)}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="logo-whatsapp" size={14} color="#16A34A" style={{ marginRight: 4 }} />
+              <Text style={styles.askCabBtnText}>Ask for Cab (WhatsApp)</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       <Ionicons name="chevron-forward" size={16} color={Colors.textSecondary} />
@@ -78,5 +92,24 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.textSecondary,
     marginTop: 5,
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    marginTop: 8,
+  },
+  askCabBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+  },
+  askCabBtnText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#15803D',
   },
 });

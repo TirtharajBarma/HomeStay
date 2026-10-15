@@ -57,6 +57,10 @@ export interface StayRideTrip {
   phone: string;
   pickup: string;
   destination: string;
+  destinations?: Array<{ address: string; lat?: number; lng?: number; order: number }>;
+  isRoundTrip?: boolean;
+  returnDate?: number;
+  returnTime?: string;
   date: number;
   time: string;
   passengers: number;
@@ -65,6 +69,8 @@ export interface StayRideTrip {
   status:
     | 'NEW_REQUEST'
     | 'FINDING_DRIVER'
+    | 'QUOTE_RECEIVED'
+    | 'AWAITING_ADVANCE'
     | 'DRIVER_ASSIGNED'
     | 'CONFIRMED'
     | 'TRIP_STARTED'
@@ -76,6 +82,22 @@ export interface StayRideTrip {
   fare: number;
   commission: number;
   commissionPaid: boolean;
+  platformFee?: number;
+  advanceAmount?: number;
+  advancePaid?: boolean;
+  remainingCashAmount?: number;
+  quotes?: Array<{
+    driverId: number | string;
+    driverName: string;
+    quotedFare: number;
+    status: string;
+  }>;
+  financialSnapshot?: any;
+  source?: string;
+  reference?: string; // CabRequest reference (admin queue mirror)
+  guestId?: number;
+  bookingId?: number;
+  payoutId?: string; // set once the commission is settled through a platform payout
 }
 
 export interface StayRideCampaign {
@@ -104,6 +126,23 @@ export interface StayRideHomestay {
 }
 
 const DAY = 86400000;
+
+// Client-writable fields per entity. Everything else (ids, money, status) is server-owned.
+export const WRITABLE = {
+  room: ['number', 'type', 'floor', 'price', 'status', 'note'],
+  guest: ['name', 'phone', 'email', 'notes', 'marketingConsent'],
+  booking: ['guestId', 'guestName', 'phone', 'checkIn', 'checkOut', 'roomNumber', 'guests', 'amount', 'source', 'paid'],
+  driver: ['name', 'phone', 'vehicle', 'vehicleType', 'seats', 'rating', 'area', 'trips', 'available', 'active', 'plate'],
+  trip: ['guestName', 'phone', 'pickup', 'destination', 'destinations', 'isRoundTrip', 'returnDate', 'returnTime', 'date', 'time', 'passengers', 'vehicleType', 'guestId', 'bookingId'],
+  homestay: ['name', 'description', 'location', 'phone', 'ownerName', 'mapQuery', 'amenities', 'photos'],
+} as const;
+
+export function pick(obj: any, keys: readonly string[]): any {
+  const out: any = {};
+  if (!obj || typeof obj !== 'object') return out;
+  for (const k of keys) if (Object.prototype.hasOwnProperty.call(obj, k)) out[k] = obj[k];
+  return out;
+}
 const today = () => {
   const d = new Date();
   return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
@@ -176,7 +215,7 @@ export class StayRideMemoryStore {
       this.drivers = [];
       this.trips = [];
       this.campaigns = [];
-      this.seedNetworkDrivers();
+      this.networkDrivers = [];
     }
   }
 
@@ -258,7 +297,7 @@ export class StayRideMemoryStore {
   // Mutations
   createRoom(data: Omit<StayRideRoom, 'id'>) {
     const id = ++this.nextRoomId;
-    const r: StayRideRoom = { ...data, id };
+    const r: StayRideRoom = { ...pick(data, WRITABLE.room), id };
     this.rooms.push(r);
     return r;
   }
@@ -266,7 +305,7 @@ export class StayRideMemoryStore {
   updateRoom(id: number, data: Partial<StayRideRoom>) {
     const r = this.room(id);
     if (!r) return null;
-    Object.assign(r, data);
+    Object.assign(r, pick(data, WRITABLE.room));
     return r;
   }
 
@@ -277,7 +316,7 @@ export class StayRideMemoryStore {
   createGuest(data: Omit<StayRideGuest, 'id' | 'visits' | 'totalSpending' | 'firstVisit' | 'lastVisit'>) {
     const id = ++this.nextGuestId;
     const g: StayRideGuest = {
-      ...data,
+      ...pick(data, WRITABLE.guest),
       id,
       visits: 1,
       totalSpending: 0,
@@ -291,14 +330,14 @@ export class StayRideMemoryStore {
   updateGuest(id: number, data: Partial<StayRideGuest>) {
     const g = this.guest(id);
     if (!g) return null;
-    Object.assign(g, data);
+    Object.assign(g, pick(data, WRITABLE.guest));
     return g;
   }
 
   createBooking(data: Omit<StayRideBooking, 'id' | 'status'> & { paid?: boolean }) {
     const id = ++this.nextBookingId;
     const b: StayRideBooking = {
-      ...data,
+      ...pick(data, WRITABLE.booking),
       id,
       status: 'CONFIRMED',
       paid: Boolean(data.paid),
@@ -380,7 +419,7 @@ export class StayRideMemoryStore {
 
   createDriver(data: Omit<StayRideDriver, 'id' | 'ownerDriver' | 'active'>) {
     const id = ++this.nextDriverId;
-    const d: StayRideDriver = { ...data, id, ownerDriver: true, active: true };
+    const d: StayRideDriver = { ...pick(data, WRITABLE.driver), id, ownerDriver: true, active: true };
     this.drivers.push(d);
     return d;
   }
@@ -388,7 +427,7 @@ export class StayRideMemoryStore {
   updateDriver(id: number, data: Partial<StayRideDriver>) {
     const d = this.driver(id);
     if (!d) return null;
-    Object.assign(d, data);
+    Object.assign(d, pick(data, WRITABLE.driver));
     return d;
   }
 
@@ -396,11 +435,13 @@ export class StayRideMemoryStore {
     this.drivers = this.drivers.filter((d) => d.id !== id);
   }
 
-  createTrip(data: Omit<StayRideTrip, 'id' | 'status' | 'driverId' | 'driverName' | 'ownerDriver' | 'fare' | 'commission' | 'commissionPaid' | 'estFare'>) {
+  // `source` is set by the server (e.g. GUEST_WEB_LINK), never taken from the client body.
+  createTrip(data: Partial<StayRideTrip>, source?: string) {
     const id = ++this.nextTripId;
     const estFare = data.vehicleType === 'SUV' ? 3000 : data.vehicleType === '7-seater' ? 3200 : data.vehicleType === '9-seater' ? 4200 : 2200;
     const t: StayRideTrip = {
-      ...data,
+      ...pick(data, WRITABLE.trip),
+      ...(source ? { source } : {}),
       id,
       estFare,
       status: 'NEW_REQUEST',
@@ -433,6 +474,37 @@ export class StayRideMemoryStore {
     return t;
   }
 
+  quoteTrip(tripId: number, driverId: number, quotedFare: number) {
+    const t = this.trip(tripId);
+    if (!t) return null;
+    const d = this.driver(driverId) || this.networkDrivers.find((nd) => nd.id === driverId);
+    t.quotes = t.quotes || [];
+    t.quotes.push({
+      driverId,
+      driverName: d ? d.name : `Driver #${driverId}`,
+      quotedFare,
+      status: 'PENDING',
+    });
+    t.status = 'QUOTE_RECEIVED';
+    return t;
+  }
+
+  confirmTripQuote(tripId: number, driverId: number, agreedFare: number, financialSnapshot?: any) {
+    const t = this.trip(tripId);
+    if (!t) return null;
+    const d = this.driver(driverId) || this.networkDrivers.find((nd) => nd.id === driverId);
+    t.driverId = driverId;
+    t.driverName = d ? d.name : 'Assigned Driver';
+    t.ownerDriver = d ? d.ownerDriver : false;
+    t.fare = agreedFare;
+    t.status = 'CONFIRMED';
+    t.financialSnapshot = financialSnapshot;
+    t.commission = financialSnapshot?.homestayCommissionAmount ?? Math.round(agreedFare * 0.10);
+    t.advanceAmount = financialSnapshot?.advanceAmount ?? Math.round(agreedFare * 0.15);
+    t.remainingCashAmount = financialSnapshot?.remainingCashToDriver ?? Math.max(0, agreedFare - (t.advanceAmount || 0));
+    return t;
+  }
+
   reassignTrip(tripId: number) {
     const t = this.trip(tripId);
     if (!t) return null;
@@ -449,12 +521,19 @@ export class StayRideMemoryStore {
     return t;
   }
 
-  completeTrip(tripId: number, finalFare?: number) {
+  completeTrip(tripId: number, finalFare?: number, hcRate = 0.10) {
     const t = this.trip(tripId);
     if (!t) return null;
     t.status = 'COMPLETED';
-    t.fare = finalFare || t.estFare || 3000;
-    t.commission = Math.round(t.fare * 0.12);
+    if (t.financialSnapshot) {
+      // Platform-arranged trip: fare and commission are locked by the snapshot.
+      t.fare = t.financialSnapshot.agreedFare;
+      t.commission = t.financialSnapshot.homestayCommissionAmount;
+    } else {
+      const f = Number(finalFare);
+      t.fare = Number.isFinite(f) && f > 0 ? Math.round(f) : t.estFare || 3000;
+      t.commission = Math.round(t.fare * hcRate);
+    }
     return t;
   }
 
@@ -468,6 +547,7 @@ export class StayRideMemoryStore {
   payCommission(tripId: number, paid: boolean) {
     const t = this.trip(tripId);
     if (!t) return null;
+    if (t.payoutId) return t; // settled by a platform payout; owner can't reopen it
     t.commissionPaid = paid;
     return t;
   }
@@ -603,8 +683,12 @@ export const StayRideTenantModel =
   mongoose.models.StayRideTenant ||
   model('StayRideTenant', StayRideTenantSchema);
 
+const DEMO_KEYS = new Set(['demo', 'demo@stayride.in', 'stay@mountainviewgangtok.com', 'stay@mountainview.in']);
+export const isDemoKey = (key: string) => DEMO_KEYS.has((key || '').toLowerCase().trim());
+
 export class StayRideTenantManager {
   private stores = new Map<string, StayRideMemoryStore>();
+  private loading = new Map<string, Promise<StayRideMemoryStore>>();
 
   constructor() {
     // Demo store is always initialized with Mountain View Homestay showcase data
@@ -646,7 +730,7 @@ export class StayRideTenantManager {
 
   getStore(tenantId: string = 'demo'): StayRideMemoryStore {
     const key = (tenantId || 'demo').toLowerCase().trim();
-    if (key.includes('demo') || key.includes('mountainview')) {
+    if (isDemoKey(key)) {
       return this.stores.get('demo')!;
     }
     if (!this.stores.has(key)) {
@@ -658,7 +742,7 @@ export class StayRideTenantManager {
 
   async getStoreAsync(tenantId: string = 'demo'): Promise<StayRideMemoryStore> {
     const key = (tenantId || 'demo').toLowerCase().trim();
-    if (key.includes('demo') || key.includes('mountainview')) {
+    if (isDemoKey(key)) {
       return this.stores.get('demo')!;
     }
 
@@ -666,26 +750,40 @@ export class StayRideTenantManager {
       return this.stores.get(key)!;
     }
 
-    // Attempt to hydrate from MongoDB Atlas 'production' database if connected
-    if (mongoose.connection.readyState === 1) {
-      try {
-        const prodModel = getStayRideTenantModel(false);
-        const existing = await prodModel.findOne({ tenantId: key }).lean();
-        if (existing && (existing as any).data) {
-          const store = new StayRideMemoryStore(false);
-          store.fromJSON((existing as any).data);
-          this.stores.set(key, store);
-          return store;
-        }
-      } catch (err) {
-        console.warn(`[StayRide] MongoDB production hydration fallback for tenant ${key}:`, err);
-      }
+    // Hydrate from MongoDB. On DB errors/disconnects we throw instead of caching an
+    // empty store, otherwise the next persistTenant would overwrite the real data.
+    if (mongoose.connection.readyState !== 1) throw new Error('Database unavailable');
+    // Single-flight per tenant so concurrent first requests share one store instance.
+    let pending = this.loading.get(key);
+    if (!pending) {
+      pending = this.loadPersisted(key)
+        .then((persisted) => {
+          if (persisted) return persisted;
+          const fresh = new StayRideMemoryStore(false);
+          this.stores.set(key, fresh);
+          return fresh;
+        })
+        .finally(() => this.loading.delete(key));
+      this.loading.set(key, pending);
     }
+    return pending;
+  }
 
-    // Default: fresh empty workspace for real user
-    const fresh = new StayRideMemoryStore(false);
-    this.stores.set(key, fresh);
-    return fresh;
+  private async loadPersisted(key: string): Promise<StayRideMemoryStore | null> {
+    if (mongoose.connection.readyState !== 1) return null;
+    const existing = await getStayRideTenantModel(false).findOne({ tenantId: key }).lean();
+    if (!existing || !(existing as any).data) return null;
+    const store = new StayRideMemoryStore(false);
+    store.fromJSON((existing as any).data);
+    this.stores.set(key, store);
+    return store;
+  }
+
+  // Never replaces existing tenant data; DB errors propagate instead of wiping.
+  async createTenantIfMissing(tenantId: string, homestayInfo?: Partial<StayRideHomestay>): Promise<StayRideMemoryStore> {
+    const key = tenantId.toLowerCase().trim();
+    const existing = this.stores.get(key) || (await this.loadPersisted(key));
+    return existing || this.createFreshTenant(key, homestayInfo);
   }
 
   createFreshTenant(tenantId: string, homestayInfo?: Partial<StayRideHomestay>): StayRideMemoryStore {
@@ -700,7 +798,7 @@ export class StayRideTenantManager {
     const key = (tenantId || 'demo').toLowerCase().trim();
     if (mongoose.connection.readyState !== 1) return;
 
-    const isDemo = key.includes('demo') || key.includes('mountainview');
+    const isDemo = isDemoKey(key);
     const store = isDemo ? (this.stores.get('demo') || this.stores.get(key)) : this.stores.get(key);
     if (!store) return;
 

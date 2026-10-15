@@ -16,6 +16,7 @@
     "expo-haptics": "~57.0.3",
     "expo-linear-gradient": "~57.0.2",
     "expo-linking": "^57.0.13",
+    "expo-location": "~57.0.21",
     "expo-secure-store": "~57.0.4",
     "expo-status-bar": "~57.0.1",
     "expo-updates": "~57.0.26",
@@ -35,6 +36,8 @@
   "devDependencies": {
     "@types/react": "~19.2.2",
     "@types/react-dom": "~19.2.2",
+    "eslint": "^9.0.0",
+    "eslint-config-expo": "~57.0.2",
     "typescript": "~6.0.3"
   },
   "scripts": {
@@ -43,7 +46,8 @@
     "ios": "EXPO_ROUTER_DISABLE_RN_NAVIGATION_CHECK=1 expo start --ios",
     "web": "EXPO_ROUTER_DISABLE_RN_NAVIGATION_CHECK=1 expo start --web",
     "update": "node scripts/publish-update.js",
-    "set-version": "node scripts/set-version.js"
+    "set-version": "node scripts/set-version.js",
+    "lint": "expo lint"
   },
   "private": true
 }

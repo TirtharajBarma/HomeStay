@@ -48,7 +48,8 @@ export interface AppUpdateInfo {
   isUpdateAvailable: boolean;
   isUpdatePending: boolean;
   isDownloading: boolean;
-  downloadProgress: number;
+  /** 0..1 while downloading if expo-updates reports it, otherwise null (indeterminate). */
+  downloadProgress: number | null;
   activeVersion: string;
   activeRelease: ParsedRelease;
   availableRelease: ParsedRelease | null;
@@ -285,7 +286,9 @@ export async function recordAppliedRelease(release: ParsedRelease): Promise<void
 
 export async function getActiveAppVersion(): Promise<string> {
   try {
-    const manifestVer = (Updates.manifest as any)?.extra?.expoClient?.version;
+    // Prefer extra.updateVersion: expo.version is the runtime (binary) version and
+    // is no longer bumped per OTA.
+    const manifestVer = extractManifestVersion(Updates.manifest);
     if (manifestVer) {
       return `v${String(manifestVer).replace(/^v/i, '')}`;
     }
@@ -330,20 +333,23 @@ export async function checkAndAutoApplyUpdates(): Promise<void> {
 
       if (msg) await AsyncStorage.setItem(PENDING_MESSAGE_KEY, msg);
 
-      const fetchResult = await Updates.fetchUpdateAsync();
       const autoApplyVal = await AsyncStorage.getItem(AUTO_APPLY_48H_KEY);
       const isAutoApplyEnabled = autoApplyVal !== 'false';
 
-      // 48-hour silent auto-apply
-      if (fetchResult.isNew && isAutoApplyEnabled && now - firstSeen >= TWO_DAYS_MS) {
-        if (msg) {
-          await AsyncStorage.setItem(ACTIVE_MESSAGE_KEY, msg);
-          await AsyncStorage.setItem(ACTIVE_VERSION_KEY, parsed.version);
-          await recordAppliedRelease(parsed);
+      // 48-hour silent auto-apply: only download once the grace period has passed
+      // (a fetched update is applied by expo-updates on the next launch). Never
+      // reloadAsync() here — that would restart the app mid-session and lose input.
+      if (isAutoApplyEnabled && now - firstSeen >= TWO_DAYS_MS) {
+        const fetchResult = await Updates.fetchUpdateAsync();
+        if (fetchResult.isNew) {
+          if (msg) {
+            await AsyncStorage.setItem(ACTIVE_MESSAGE_KEY, msg);
+            await AsyncStorage.setItem(ACTIVE_VERSION_KEY, parsed.version);
+            await recordAppliedRelease(parsed);
+          }
+          await AsyncStorage.removeItem(DISCOVERED_KEY);
+          await AsyncStorage.removeItem(PENDING_MESSAGE_KEY);
         }
-        await AsyncStorage.removeItem(DISCOVERED_KEY);
-        await AsyncStorage.removeItem(PENDING_MESSAGE_KEY);
-        await Updates.reloadAsync();
       }
     } else {
       await AsyncStorage.removeItem(DISCOVERED_KEY);
@@ -376,6 +382,7 @@ export function useAppUpdateManager(): AppUpdateInfo {
     isUpdateAvailable: hookAvailable,
     isUpdatePending: hookPending,
     isDownloading: hookDownloading,
+    downloadProgress: hookDownloadProgress,
   } = Updates.useUpdates();
 
   useEffect(() => {
@@ -400,6 +407,11 @@ export function useAppUpdateManager(): AppUpdateInfo {
       const pendMsg = await AsyncStorage.getItem(PENDING_MESSAGE_KEY);
       const activeMsg = await AsyncStorage.getItem(ACTIVE_MESSAGE_KEY);
       setStoredMessage(isEmbedded ? RELEASE_DESCRIPTION : (pendMsg || activeMsg));
+
+      const autoOtaVal = await AsyncStorage.getItem(AUTO_OTA_KEY);
+      const autoApplyVal = await AsyncStorage.getItem(AUTO_APPLY_48H_KEY);
+      setAutoOtaEnabledState(autoOtaVal !== 'false');
+      setAutoApply48hEnabledState(autoApplyVal !== 'false');
     }
     loadData();
   }, [currentlyRunning]);
@@ -407,7 +419,8 @@ export function useAppUpdateManager(): AppUpdateInfo {
   const isUpdatePending = hookPending || manualStatus === 'downloaded';
   const isUpdateAvailable = hookAvailable || manualStatus === 'available';
   const isDownloading = hookDownloading || isManualDownloading;
-  const downloadProgress = isDownloading ? 0.6 : 0;
+  const downloadProgress =
+    isDownloading && typeof hookDownloadProgress === 'number' ? hookDownloadProgress : null;
 
   const activeRelease = useMemo(() => {
     return parseReleasePayload(storedMessage, activeVersion);
@@ -477,10 +490,13 @@ export function useAppUpdateManager(): AppUpdateInfo {
 
   const handleRestartToApply = useCallback(async () => {
     try {
-      if (storedMessage) {
-        await AsyncStorage.setItem(ACTIVE_MESSAGE_KEY, storedMessage);
-        const parsed = parseReleasePayload(storedMessage, activeVersion);
-        await recordAppliedRelease(parsed);
+      // Record the downloaded (pending) update, not the currently active one.
+      if (availableRelease) {
+        if (availableRelease.rawMessage) {
+          await AsyncStorage.setItem(ACTIVE_MESSAGE_KEY, availableRelease.rawMessage);
+        }
+        await AsyncStorage.setItem(ACTIVE_VERSION_KEY, availableRelease.version);
+        await recordAppliedRelease(availableRelease);
       }
       await AsyncStorage.removeItem(PENDING_MESSAGE_KEY);
       await AsyncStorage.removeItem(DISCOVERED_KEY);
@@ -488,7 +504,7 @@ export function useAppUpdateManager(): AppUpdateInfo {
     } catch {
       Updates.reloadAsync().catch(() => {});
     }
-  }, [storedMessage, activeVersion]);
+  }, [availableRelease]);
 
   return {
     isEnabled: Updates.isEnabled,
@@ -512,8 +528,14 @@ export function useAppUpdateManager(): AppUpdateInfo {
     errorMessage,
     autoOtaEnabled,
     autoApply48hEnabled,
-    setAutoOtaEnabled: async (val) => setAutoOtaEnabledState(val),
-    setAutoApply48hEnabled: async (val) => setAutoApply48hEnabledState(val),
+    setAutoOtaEnabled: async (val) => {
+      setAutoOtaEnabledState(val);
+      await AsyncStorage.setItem(AUTO_OTA_KEY, String(val)).catch(() => {});
+    },
+    setAutoApply48hEnabled: async (val) => {
+      setAutoApply48hEnabledState(val);
+      await AsyncStorage.setItem(AUTO_APPLY_48H_KEY, String(val)).catch(() => {});
+    },
     checkForUpdates: handleCheckForUpdates,
     downloadUpdate: handleDownloadUpdate,
     restartToApply: handleRestartToApply,

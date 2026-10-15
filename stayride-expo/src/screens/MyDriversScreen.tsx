@@ -29,7 +29,6 @@ export const MyDriversScreen: React.FC = () => {
     updateDriver,
     deleteDriver,
     setDriverActive,
-    setDriverAvailability,
   } = useStayRide();
 
   const [formVisible, setFormVisible] = useState(false);
@@ -115,17 +114,22 @@ export const MyDriversScreen: React.FC = () => {
       });
       Alert.alert('Success', `${trimmedName} updated`);
     } else {
-      await createDriver({
-        name: trimmedName,
-        phone: trimmedPhone,
-        vehicle: trimmedVehicle,
-        vehicleType: vehicleType as any,
-        seats: parsedSeats,
-        area: area.trim() || 'Gangtok',
-        trips: selectedRoutes,
-        rating: 4.8,
-        available,
-      });
+      try {
+        await createDriver({
+          name: trimmedName,
+          phone: trimmedPhone,
+          vehicle: trimmedVehicle,
+          vehicleType: vehicleType as any,
+          seats: parsedSeats,
+          area: area.trim() || 'Gangtok',
+          trips: selectedRoutes,
+          rating: 4.8,
+          available,
+        });
+      } catch (e: any) {
+        Alert.alert('Not saved', e?.message || 'Please try again.');
+        return;
+      }
       Alert.alert('Success', `${trimmedName} added to your driver team`);
     }
     setFormVisible(false);

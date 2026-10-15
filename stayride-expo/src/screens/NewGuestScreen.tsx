@@ -65,13 +65,18 @@ export const NewGuestScreen: React.FC = () => {
         { text: 'OK', onPress: () => navigation.goBack() },
       ]);
     } else {
-      await createGuest({
-        name: trimmedName,
-        phone: trimmedPhone,
-        email: email.trim(),
-        notes: notes.trim(),
-        marketingConsent: consent,
-      });
+      try {
+        await createGuest({
+          name: trimmedName,
+          phone: trimmedPhone,
+          email: email.trim(),
+          notes: notes.trim(),
+          marketingConsent: consent,
+        });
+      } catch (e: any) {
+        Alert.alert('Not saved', e?.message || 'Please try again.');
+        return;
+      }
       Alert.alert('Success', `${trimmedName} added to guest database`, [
         { text: 'OK', onPress: () => navigation.goBack() },
       ]);

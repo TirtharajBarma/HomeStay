@@ -56,11 +56,14 @@ export interface Driver {
   available: boolean;
   active: boolean;
   ownerDriver: boolean;
+  plate?: string;
 }
 
 export type CabTripStatus =
   | 'NEW_REQUEST'
   | 'FINDING_DRIVER'
+  | 'QUOTE_RECEIVED'
+  | 'AWAITING_ADVANCE'
   | 'DRIVER_ASSIGNED'
   | 'CONFIRMED'
   | 'TRIP_STARTED'
@@ -73,6 +76,10 @@ export interface CabTrip {
   phone: string;
   pickup: string;
   destination: string;
+  destinations?: Array<{ address: string; lat?: number; lng?: number; order: number }>;
+  isRoundTrip?: boolean;
+  returnDate?: number;
+  returnTime?: string;
   date: number; // epoch ms
   time: string; // "10:30 AM"
   passengers: number;
@@ -85,6 +92,26 @@ export interface CabTrip {
   fare: number;
   commission: number;
   commissionPaid: boolean;
+  platformFee?: number;
+  advanceAmount?: number;
+  advancePaid?: boolean;
+  remainingCashAmount?: number;
+  quotes?: Array<{
+    driverId: number | string;
+    driverName: string;
+    quotedFare: number;
+    status: string;
+  }>;
+  financialSnapshot?: any;
+  source?: 'MANUAL_OWNER' | 'NEARBY_BROADCAST' | 'GUEST_WEB_LINK' | 'ADMIN_DISPATCH';
+  assignedDriverId?: number | string;
+  assignedDriverName?: string;
+}
+
+export interface CommissionRates {
+  pfPercent: number;
+  hcPercent: number;
+  advancePercent: number;
 }
 
 export type CampaignAudience = 'All guests' | 'Repeat guests' | 'Recent guests' | 'Inactive guests';
@@ -115,16 +142,35 @@ export interface Homestay {
   photos: string[];
 }
 
+export type UserRole = 'owner' | 'driver';
+
+export interface DriverSessionProfile {
+  id: number | string;
+  name: string;
+  phone: string;
+  email: string;
+  vehicle: string;
+  vehicleType: VehicleType;
+  plate: string;
+  rating?: number;
+  area?: string;
+  available?: boolean;
+  active?: boolean;
+}
+
 export interface UserSession {
   accessToken: string;
   refreshToken: string;
-  owner: {
+  role?: UserRole;
+  owner?: {
     id: number;
     name: string;
     phone: string;
     email: string;
+    avatar?: string;
   };
-  homestay: {
+  driver?: DriverSessionProfile;
+  homestay?: {
     id: number;
     name: string;
     link: string;

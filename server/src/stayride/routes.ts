@@ -1,8 +1,11 @@
 import { Router, Request, Response } from 'express';
 import mongoose from 'mongoose';
-import { tenantManager, StayRideMemoryStore, StayRideTenantModel } from './store.js';
+import crypto from 'node:crypto';
+import { tenantManager, StayRideMemoryStore, StayRideTenantModel, isDemoKey, pick, WRITABLE } from './store.js';
 import { User } from '../models/user.model.js';
 import { Property } from '../models/property.model.js';
+import { Driver } from '../models/driver.model.js';
+import { getPayoutRequestModel } from '../models/payout-request.model.js';
 
 export function getUserModel(isDemo: boolean = false): mongoose.Model<any> {
   const dbName = isDemo ? 'test' : 'production';
@@ -22,10 +25,18 @@ export function getPropertyModel(isDemo: boolean = false): mongoose.Model<any> {
   return Property as mongoose.Model<any>;
 }
 
+export function getDriverModel(isDemo: boolean = false): mongoose.Model<any> {
+  const dbName = isDemo ? 'test' : 'production';
+  if (mongoose.connection.readyState === 1) {
+    const db = mongoose.connection.useDb(dbName, { useCache: true });
+    return (db.models.Driver || db.model('Driver', Driver.schema)) as mongoose.Model<any>;
+  }
+  return Driver as mongoose.Model<any>;
+}
+
 import jwt from 'jsonwebtoken';
 import { verifyToken, clerkClient } from '@clerk/express';
-import bcrypt from 'bcryptjs';
-import { getISTTimestamp } from '../utils/date.js';
+import { verifyWebhook } from '@clerk/express/webhooks';
 import { config } from '../config/env.js';
 
 interface StayRideAuthPayload {
@@ -38,35 +49,33 @@ interface StayRideAuthPayload {
 
 const stayrideV1Router = Router();
 
+// Typed + audience-scoped tokens: access and refresh are not interchangeable,
+// and /api/v1 rejects aud=stayride (see middlewares/auth.ts).
+const TOKEN_AUDIENCE = 'stayride';
+function issueTokens(payload: StayRideAuthPayload) {
+  return {
+    accessToken: jwt.sign({ ...payload, type: 'access' }, config.jwtSecret, { expiresIn: '1d', audience: TOKEN_AUDIENCE }),
+    refreshToken: jwt.sign({ ...payload, type: 'refresh' }, config.jwtSecret, { expiresIn: '60d', audience: TOKEN_AUDIENCE }),
+  };
+}
+function verifyStayRideToken(token: string, type: 'access' | 'refresh'): StayRideAuthPayload {
+  const decoded = jwt.verify(token, config.jwtSecret, { audience: TOKEN_AUDIENCE }) as StayRideAuthPayload & { type?: string };
+  if (decoded.type !== type || !decoded.tenantKey) throw new Error('Wrong token type');
+  return decoded;
+}
+const bearer = (req: Request) => {
+  const h = req.headers.authorization;
+  return h && h.startsWith('Bearer ') ? h.slice(7) : '';
+};
+
 // ==========================================
 // Tenant Resolution & Auth Middleware
 // ==========================================
 async function getStoreForReq(req: Request): Promise<{ store: StayRideMemoryStore; tenantKey: string; isDemo: boolean }> {
-  // If authenticateStayRide ran, user is in (req as any).stayrideUser
   const authUser = (req as any).stayrideUser as StayRideAuthPayload | undefined;
-  if (authUser && authUser.tenantKey) {
-    const store = await tenantManager.getStoreAsync(authUser.tenantKey);
-    return { store, tenantKey: authUser.tenantKey, isDemo: Boolean(authUser.isDemo) };
-  }
-
-  // Fallback: verify header if called directly
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.split(' ')[1];
-    try {
-      const decoded = jwt.verify(token, config.jwtSecret) as StayRideAuthPayload;
-      if (decoded && decoded.tenantKey) {
-        const store = await tenantManager.getStoreAsync(decoded.tenantKey);
-        return { store, tenantKey: decoded.tenantKey, isDemo: Boolean(decoded.isDemo) };
-      }
-    } catch {
-      // Invalid token
-    }
-  }
-
-  // Default demo fallback for unauthenticated development queries
-  const store = await tenantManager.getStoreAsync('demo@stayride.in');
-  return { store, tenantKey: 'demo@stayride.in', isDemo: true };
+  if (!authUser?.tenantKey) throw new Error('Unauthenticated request reached a protected route');
+  const store = await tenantManager.getStoreAsync(authUser.tenantKey);
+  return { store, tenantKey: authUser.tenantKey, isDemo: Boolean(authUser.isDemo) };
 }
 
 // Middleware that enforces valid JWT (StayRide or Clerk) on protected routes
@@ -78,13 +87,10 @@ async function authenticateStayRide(req: Request, res: Response, next: () => voi
 
   const token = authHeader.split(' ')[1];
 
-  // 1. Try StayRide custom JWT verification first
+  // 1. Try StayRide access token first (refresh tokens are rejected here)
   try {
-    const decoded = jwt.verify(token, config.jwtSecret) as StayRideAuthPayload;
-    if (decoded && decoded.tenantKey) {
-      (req as any).stayrideUser = decoded;
-      return next();
-    }
+    (req as any).stayrideUser = verifyStayRideToken(token, 'access');
+    return next();
   } catch {
     // Custom JWT check failed, fallback to Clerk check
   }
@@ -125,11 +131,14 @@ stayrideV1Router.post('/auth/login', async (req: Request, res: Response) => {
     return res.status(400).json({ error: { message: 'Email address is required.' } });
   }
 
-  const isDemoAccount =
+  const isDemoHost =
     cleanEmail === 'demo@stayride.in' && (cleanPass === 'demo123' || cleanPass === 'demo');
+  const isDemoDriver =
+    (cleanEmail === 'demo-driver@stayride.in' || cleanEmail === 'driver@stayride.in') &&
+    (cleanPass === 'demo123' || cleanPass === 'demo');
 
-  // 1. DEMO ACCOUNT LOGIN
-  if (isDemoAccount) {
+  // 1A. DEMO HOST LOGIN
+  if (isDemoHost) {
     const tenantKey = 'demo@stayride.in';
     const store = await tenantManager.getStoreAsync(tenantKey);
 
@@ -141,12 +150,12 @@ stayrideV1Router.post('/auth/login', async (req: Request, res: Response) => {
       isDemo: true,
     };
 
-    const accessToken = jwt.sign(tokenPayload, config.jwtSecret, { expiresIn: '30d' });
-    const refreshToken = jwt.sign({ ...tokenPayload, type: 'refresh' }, config.jwtSecret, { expiresIn: '60d' });
+    const { accessToken, refreshToken } = issueTokens(tokenPayload);
 
     return res.json({
       accessToken,
       refreshToken,
+      role: 'owner',
       owner: {
         id: 1,
         name: store.homestay.ownerName || 'Tshering Bhutia (Demo Host)',
@@ -157,6 +166,38 @@ stayrideV1Router.post('/auth/login', async (req: Request, res: Response) => {
         id: 1,
         name: store.homestay.name || 'Mountain View Homestay',
         link: store.homestay.link || 'https://stayride.in/h/mountain-view-gangtok',
+      },
+    });
+  }
+
+  // 1B. DEMO DRIVER LOGIN
+  if (isDemoDriver) {
+    const tokenPayload: StayRideAuthPayload = {
+      id: 'demo-driver-1',
+      email: cleanEmail,
+      role: 'driver',
+      tenantKey: 'demo@stayride.in',
+      isDemo: true,
+    };
+
+    const { accessToken, refreshToken } = issueTokens(tokenPayload);
+
+    return res.json({
+      accessToken,
+      refreshToken,
+      role: 'driver',
+      driver: {
+        id: 1,
+        name: 'Pemba Lepcha (Demo Driver)',
+        phone: '+91 98000 11223',
+        email: cleanEmail,
+        vehicle: 'Mahindra Scorpio (SUV)',
+        vehicleType: 'SUV',
+        plate: 'SK-01-A-4488',
+        rating: 4.9,
+        available: true,
+        active: true,
+        area: 'Gangtok & North Sikkim',
       },
     });
   }
@@ -179,6 +220,44 @@ stayrideV1Router.post('/auth/login', async (req: Request, res: Response) => {
       return res.status(401).json({ error: { message: 'Invalid password. Please check your credentials.' } });
     }
 
+    const userRole = (user.role || 'owner') as 'owner' | 'driver';
+
+    // 2A. DRIVER USER LOGIN
+    if (userRole === 'driver') {
+      const DriverModel = getDriverModel(false);
+      const driverDoc = await DriverModel.findOne({ email: cleanEmail });
+
+      const tokenPayload: StayRideAuthPayload = {
+        id: user._id.toString(),
+        email: user.email,
+        role: 'driver',
+        tenantKey: user.email,
+        isDemo: false,
+      };
+
+      const { accessToken, refreshToken } = issueTokens(tokenPayload);
+
+      return res.json({
+        accessToken,
+        refreshToken,
+        role: 'driver',
+        driver: {
+          id: driverDoc ? driverDoc._id.toString() : user._id.toString(),
+          name: user.name,
+          phone: user.phone || '',
+          email: user.email,
+          vehicle: driverDoc?.vehicle || 'Mahindra Scorpio (SUV)',
+          vehicleType: (driverDoc?.vehicle?.includes('Sedan') ? 'Sedan' : 'SUV'),
+          plate: driverDoc?.plate || 'SK-01-A-9999',
+          rating: driverDoc?.rating || 5.0,
+          area: driverDoc?.coverage || 'Darjeeling • Hill Roads',
+          available: driverDoc?.status !== 'Paused',
+          active: true,
+        },
+      });
+    }
+
+    // 2B. HOMESTAY OWNER LOGIN
     const tenantKey = cleanEmail;
     const store = await tenantManager.getStoreAsync(tenantKey);
 
@@ -192,17 +271,17 @@ stayrideV1Router.post('/auth/login', async (req: Request, res: Response) => {
     const tokenPayload: StayRideAuthPayload = {
       id: user._id.toString(),
       email: user.email,
-      role: user.role || 'owner',
+      role: 'owner',
       tenantKey,
       isDemo: false,
     };
 
-    const accessToken = jwt.sign(tokenPayload, config.jwtSecret, { expiresIn: '30d' });
-    const refreshToken = jwt.sign({ ...tokenPayload, type: 'refresh' }, config.jwtSecret, { expiresIn: '60d' });
+    const { accessToken, refreshToken } = issueTokens(tokenPayload);
 
     return res.json({
       accessToken,
       refreshToken,
+      role: 'owner',
       owner: {
         id: 1,
         name: store.homestay.ownerName || user.name,
@@ -222,13 +301,12 @@ stayrideV1Router.post('/auth/login', async (req: Request, res: Response) => {
 });
 
 stayrideV1Router.post('/auth/signup', async (req: Request, res: Response) => {
-  const { name, phone, email, password, homestayName, location } = req.body;
+  const { name, phone, email, password, homestayName, location, role, vehicleType, vehicleNumber, area } = req.body;
   const cleanEmail = (email || '').toLowerCase().trim();
   const cleanPhone = (phone || '').trim();
-  const cleanName = (name || 'Host').trim();
-  const cleanHomestay = (homestayName || 'My Homestay').trim();
-  const cleanLocation = (location || '').trim();
   const cleanPass = (password || '').trim();
+  const userRole = (role === 'driver' ? 'driver' : 'owner') as 'owner' | 'driver';
+  const cleanName = (name || (userRole === 'driver' ? 'Driver' : 'Host')).trim();
 
   if (!cleanEmail) {
     return res.status(400).json({ error: { message: 'Email address is required.' } });
@@ -237,7 +315,7 @@ stayrideV1Router.post('/auth/signup', async (req: Request, res: Response) => {
     return res.status(400).json({ error: { message: 'Password is required.' } });
   }
 
-  // Prevent duplicate signup wiping existing account! (P0 #2)
+  // Prevent duplicate signup wiping existing account!
   try {
     const UserModel = getUserModel(false);
     const existingUser = await UserModel.findOne({ email: cleanEmail });
@@ -247,6 +325,69 @@ stayrideV1Router.post('/auth/signup', async (req: Request, res: Response) => {
       });
     }
 
+    const userDoc = await UserModel.create({
+      name: cleanName,
+      email: cleanEmail,
+      password: cleanPass,
+      phone: cleanPhone,
+      role: userRole,
+    });
+
+    // DRIVER SIGNUP FLOW
+    if (userRole === 'driver') {
+      const DriverModel = getDriverModel(false);
+      const vehicle = vehicleType || 'SUV';
+      const plate = vehicleNumber || `SK-01-A-${Math.floor(1000 + Math.random() * 9000)}`;
+      const coverage = area || 'Darjeeling • Hill Roads';
+
+      const driverDoc = await DriverModel.create({
+        ownerId: (userDoc as any)._id,
+        id: `DRV-${Date.now().toString().slice(-4)}`,
+        name: cleanName,
+        phone: cleanPhone,
+        email: cleanEmail,
+        vehicle,
+        plate,
+        coverage,
+        status: 'Active',
+      } as any);
+
+      const tokenPayload: StayRideAuthPayload = {
+        id: userDoc._id.toString(),
+        email: cleanEmail,
+        role: 'driver',
+        tenantKey: cleanEmail,
+        isDemo: false,
+      };
+
+      const { accessToken, refreshToken } = issueTokens(tokenPayload);
+
+      return res.status(201).json({
+        accessToken,
+        refreshToken,
+        role: 'driver',
+        driver: {
+          id: driverDoc._id.toString(),
+          name: cleanName,
+          phone: cleanPhone,
+          email: cleanEmail,
+          vehicle,
+          vehicleType: vehicle,
+          plate,
+          rating: 5.0,
+          area: coverage,
+          available: true,
+          active: true,
+        },
+      });
+    }
+
+    // HOMESTAY OWNER SIGNUP FLOW
+    const cleanHomestay = (homestayName || 'My Homestay').trim();
+    const cleanLocation = (location || 'Gangtok, Sikkim').trim();
+    const cleanLat = req.body.latitude ? Number(req.body.latitude) : null;
+    const cleanLng = req.body.longitude ? Number(req.body.longitude) : null;
+    const cleanMapQuery = req.body.mapQuery || (cleanLat && cleanLng ? `${cleanLat},${cleanLng}` : cleanLocation);
     const tenantKey = cleanEmail;
     const store = tenantManager.createFreshTenant(tenantKey, {
       name: cleanHomestay,
@@ -255,15 +396,7 @@ stayrideV1Router.post('/auth/signup', async (req: Request, res: Response) => {
       email: cleanEmail,
       location: cleanLocation,
       link: `https://stayride.in/h/${cleanHomestay.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
-      mapQuery: cleanLocation,
-    });
-
-    const userDoc = await UserModel.create({
-      name: cleanName,
-      email: cleanEmail,
-      password: cleanPass,
-      phone: cleanPhone,
-      role: 'owner',
+      mapQuery: cleanMapQuery,
     });
 
     const PropertyModel = getPropertyModel(false);
@@ -273,10 +406,11 @@ stayrideV1Router.post('/auth/signup', async (req: Request, res: Response) => {
         ownerId: (userDoc as any)._id,
         name: cleanHomestay,
         email: cleanEmail,
-        phone: cleanPhone,
-        address: cleanLocation || 'Gangtok, Sikkim',
-        town: cleanLocation || 'Gangtok',
+        phone: cleanPhone || 'not provided',
+        address: cleanLocation,
+        town: cleanLocation.split(',')[0].trim() || 'Gangtok',
         region: 'Sikkim',
+        coordinates: cleanLat && cleanLng ? { latitude: cleanLat, longitude: cleanLng } : undefined,
         status: 'active',
       } as any);
       (userDoc as any).propertyId = (propDoc as any)?._id;
@@ -294,12 +428,12 @@ stayrideV1Router.post('/auth/signup', async (req: Request, res: Response) => {
       isDemo: false,
     };
 
-    const accessToken = jwt.sign(tokenPayload, config.jwtSecret, { expiresIn: '30d' });
-    const refreshToken = jwt.sign({ ...tokenPayload, type: 'refresh' }, config.jwtSecret, { expiresIn: '60d' });
+    const { accessToken, refreshToken } = issueTokens(tokenPayload);
 
-    res.status(201).json({
+    return res.status(201).json({
       accessToken,
       refreshToken,
+      role: 'owner',
       owner: {
         id: 1,
         name: store.homestay.ownerName,
@@ -328,27 +462,49 @@ stayrideV1Router.post('/auth/refresh', async (req: Request, res: Response) => {
   }
 
   try {
-    const decoded = jwt.verify(token, config.jwtSecret) as StayRideAuthPayload & { type?: string };
-    if (!decoded || !decoded.tenantKey) {
-      return res.status(401).json({ error: { message: 'Invalid refresh token.' } });
-    }
+    const decoded = verifyStayRideToken(token, 'refresh');
+    const userRole = (decoded.role || 'owner') as 'owner' | 'driver';
 
     const tokenPayload: StayRideAuthPayload = {
       id: decoded.id,
       email: decoded.email,
-      role: decoded.role || 'owner',
+      role: userRole,
       tenantKey: decoded.tenantKey,
       isDemo: Boolean(decoded.isDemo),
     };
 
-    const newAccessToken = jwt.sign(tokenPayload, config.jwtSecret, { expiresIn: '30d' });
-    const newRefreshToken = jwt.sign({ ...tokenPayload, type: 'refresh' }, config.jwtSecret, { expiresIn: '60d' });
+    const { accessToken: newAccessToken, refreshToken: newRefreshToken } = issueTokens(tokenPayload);
+
+    if (userRole === 'driver') {
+      const DriverModel = getDriverModel(Boolean(decoded.isDemo));
+      const driverDoc = await DriverModel.findOne({ email: decoded.email });
+
+      return res.json({
+        accessToken: newAccessToken,
+        refreshToken: newRefreshToken,
+        role: 'driver',
+        driver: {
+          id: driverDoc ? driverDoc._id.toString() : decoded.id,
+          name: driverDoc?.name || 'Driver',
+          phone: driverDoc?.phone || '',
+          email: decoded.email,
+          vehicle: driverDoc?.vehicle || 'Mahindra Scorpio (SUV)',
+          vehicleType: driverDoc?.vehicle?.includes('Sedan') ? 'Sedan' : 'SUV',
+          plate: driverDoc?.plate || 'SK-01-A-9999',
+          rating: driverDoc?.rating || 5.0,
+          area: driverDoc?.coverage || 'Darjeeling • Hill Roads',
+          available: driverDoc?.status !== 'Paused',
+          active: true,
+        },
+      });
+    }
 
     const store = await tenantManager.getStoreAsync(decoded.tenantKey);
 
     return res.json({
       accessToken: newAccessToken,
       refreshToken: newRefreshToken,
+      role: 'owner',
       owner: {
         id: 1,
         name: store.homestay.ownerName,
@@ -370,83 +526,98 @@ stayrideV1Router.post('/auth/refresh', async (req: Request, res: Response) => {
 // Clerk Sync & Webhook (Google + Password + MongoDB Sync)
 // ==========================================
 stayrideV1Router.post('/auth/clerk-sync', async (req: Request, res: Response) => {
-  const { email, name, phone, avatar, clerkId, homestayName, location } = req.body;
-  const cleanEmail = (email || '').toLowerCase().trim();
-  const cleanName = (name || 'Host').trim();
-  const cleanPhone = (phone || '').trim();
-  const cleanAvatar = (avatar || '').trim();
-  const cleanHomestay = (homestayName || `${cleanName}'s Homestay`).trim();
-  const cleanLocation = (location || 'Gangtok, Sikkim').trim();
-
-  if (!cleanEmail) {
-    return res.status(400).json({ error: { message: 'Email address is required from Clerk profile.' } });
+  if (!config.clerkSecretKey) {
+    return res.status(503).json({ error: { message: 'Clerk sign-in is not configured on the server.' } });
   }
 
-  // Verify Clerk Bearer token if provided
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ') && config.clerkSecretKey) {
-    const token = authHeader.split(' ')[1];
-    try {
-      await verifyToken(token, { secretKey: config.clerkSecretKey });
-    } catch (err: any) {
-      console.warn('[StayRide] Clerk token verification notice:', err.message);
-    }
+  // Identity comes ONLY from a verified Clerk session token, never from the body.
+  let clerkUserId = '';
+  try {
+    const payload = await verifyToken(bearer(req), { secretKey: config.clerkSecretKey });
+    clerkUserId = payload.sub;
+  } catch {
+    return res.status(401).json({ error: { message: 'Invalid or missing Clerk session. Please sign in again.' } });
   }
 
   try {
+    const clerkUser = await clerkClient.users.getUser(clerkUserId);
+    const primary = clerkUser.emailAddresses.find((e) => e.id === clerkUser.primaryEmailAddressId);
+    if (!primary || primary.verification?.status !== 'verified') {
+      return res.status(403).json({ error: { message: 'A verified email address is required.' } });
+    }
+
+    const cleanEmail = primary.emailAddress.toLowerCase().trim();
+    const cleanAvatar = clerkUser.imageUrl || '';
+    const clerkId = clerkUser.id;
+
+    // Profile hints from client
+    const { phone, homestayName, location, role, vehicleType, vehicleNumber, area } = req.body;
+    const requestedRole = (role === 'driver' ? 'driver' : 'owner') as 'owner' | 'driver';
+    const cleanPhone = String(phone || '').trim();
+    const cleanName = (clerkUser.fullName || clerkUser.firstName || (requestedRole === 'driver' ? 'Driver' : 'Host')).trim();
+
     const UserModel = getUserModel(false); // Production DB
-    let user = await UserModel.findOne({
-      $or: [{ email: cleanEmail }, ...(clerkId ? [{ clerkId }] : [])],
-    });
+    let user = await UserModel.findOne({ $or: [{ clerkId }, { email: cleanEmail }] });
+
+    if (user && user.clerkId && user.clerkId !== clerkId) {
+      return res.status(409).json({ error: { message: 'This email is already linked to a different sign-in account.' } });
+    }
 
     const isNew = !user;
+    const userRole = (user?.role || requestedRole) as 'owner' | 'driver';
+
     if (!user) {
-      // 1. Create new MongoDB User
       user = await UserModel.create({
         name: cleanName,
         email: cleanEmail,
-        clerkId: clerkId || '',
-        password: `clerk_oauth_${Date.now()}_${Math.random().toString(36)}`,
+        clerkId,
+        password: crypto.randomBytes(32).toString('hex'), // unusable; Clerk handles sign-in
         phone: cleanPhone,
         avatar: cleanAvatar,
-        role: 'owner',
+        role: userRole,
       });
 
-      // 2. Create Property
-      const PropertyModel = getPropertyModel(false);
-      let propDoc = await PropertyModel.findOne({ email: cleanEmail });
-      if (!propDoc) {
-        propDoc = await PropertyModel.create({
+      if (userRole === 'driver') {
+        const DriverModel = getDriverModel(false);
+        const vehicle = vehicleType || 'SUV';
+        const plate = vehicleNumber || `SK-01-A-${Math.floor(1000 + Math.random() * 9000)}`;
+        const coverage = area || 'Darjeeling • Hill Roads';
+
+        await DriverModel.create({
           ownerId: (user as any)._id,
-          name: cleanHomestay,
-          email: cleanEmail,
+          id: `DRV-${Date.now().toString().slice(-4)}`,
+          name: cleanName,
           phone: cleanPhone,
-          address: cleanLocation,
-          town: cleanLocation.split(',')[0].trim() || 'Gangtok',
-          region: 'Sikkim',
-          status: 'active',
+          email: cleanEmail,
+          vehicle,
+          plate,
+          coverage,
+          status: 'Active',
         } as any);
+      } else {
+        const cleanHomestay = String(homestayName || `${cleanName}'s Homestay`).trim();
+        const cleanLocation = String(location || 'Gangtok, Sikkim').trim();
+        const PropertyModel = getPropertyModel(false);
+        let propDoc = await PropertyModel.findOne({ email: cleanEmail });
+        if (!propDoc) {
+          propDoc = await PropertyModel.create({
+            ownerId: (user as any)._id,
+            name: cleanHomestay,
+            email: cleanEmail,
+            phone: cleanPhone || 'not provided',
+            address: cleanLocation,
+            town: cleanLocation.split(',')[0].trim() || 'Gangtok',
+            region: 'Sikkim',
+            status: 'active',
+          } as any);
+        }
+        (user as any).propertyId = propDoc._id;
+        await user.save();
       }
-
-      (user as any).propertyId = propDoc._id;
-      await user.save();
-
-      // 3. Create fresh tenant workspace
-      tenantManager.createFreshTenant(cleanEmail, {
-        name: cleanHomestay,
-        ownerName: cleanName,
-        phone: cleanPhone,
-        email: cleanEmail,
-        location: cleanLocation,
-        link: `https://stayride.in/h/${cleanHomestay.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
-        mapQuery: cleanLocation,
-      });
-
-      console.log(`✅ [Clerk Sync] New user registered & synced to MongoDB: ${cleanEmail}`);
     } else {
-      // Update existing user with Clerk ID or avatar if missing
+      // Clerk verified ownership of this email, so linking is safe.
       let modified = false;
-      if (clerkId && user.clerkId !== clerkId) {
+      if (!user.clerkId) {
         user.clerkId = clerkId;
         modified = true;
       }
@@ -455,26 +626,86 @@ stayrideV1Router.post('/auth/clerk-sync', async (req: Request, res: Response) =>
         modified = true;
       }
       if (modified) await user.save();
-      console.log(`✅ [Clerk Sync] Existing user verified & synced: ${cleanEmail}`);
     }
-
-    const tenantKey = cleanEmail;
-    const store = await tenantManager.getStoreAsync(tenantKey);
 
     const tokenPayload: StayRideAuthPayload = {
       id: user._id.toString(),
       email: cleanEmail,
-      role: user.role || 'owner',
-      tenantKey,
+      role: userRole,
+      tenantKey: cleanEmail,
       isDemo: false,
     };
 
-    const accessToken = jwt.sign(tokenPayload, config.jwtSecret, { expiresIn: '30d' });
-    const refreshToken = jwt.sign({ ...tokenPayload, type: 'refresh' }, config.jwtSecret, { expiresIn: '60d' });
+    const { accessToken, refreshToken } = issueTokens(tokenPayload);
+
+    if (userRole === 'driver') {
+      const DriverModel = getDriverModel(false);
+      const driverDoc = await DriverModel.findOne({ email: cleanEmail });
+
+      return res.json({
+        accessToken,
+        refreshToken,
+        role: 'driver',
+        driver: {
+          id: driverDoc ? driverDoc._id.toString() : user._id.toString(),
+          name: user.name,
+          phone: user.phone || '',
+          email: user.email,
+          vehicle: driverDoc?.vehicle || 'Mahindra Scorpio (SUV)',
+          vehicleType: driverDoc?.vehicle?.includes('Sedan') ? 'Sedan' : 'SUV',
+          plate: driverDoc?.plate || 'SK-01-A-9999',
+          rating: driverDoc?.rating || 5.0,
+          area: driverDoc?.coverage || 'Darjeeling • Hill Roads',
+          available: driverDoc?.status !== 'Paused',
+          active: true,
+        },
+        isNew,
+      });
+    }
+
+    // Owner role return
+    const cleanHomestay = String(homestayName || `${cleanName}'s Homestay`).trim();
+    const cleanLocation = String(location || 'Gangtok, Sikkim').trim();
+    const cleanLat = req.body.latitude ? Number(req.body.latitude) : null;
+    const cleanLng = req.body.longitude ? Number(req.body.longitude) : null;
+    const cleanMapQuery = req.body.mapQuery || (cleanLat && cleanLng ? `${cleanLat},${cleanLng}` : cleanLocation);
+    const tenantKey = cleanEmail;
+    const store = await tenantManager.createTenantIfMissing(tenantKey, {
+      name: cleanHomestay,
+      ownerName: cleanName,
+      phone: cleanPhone,
+      email: cleanEmail,
+      location: cleanLocation,
+      link: `https://stayride.in/h/${cleanHomestay.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+      mapQuery: cleanMapQuery,
+    });
+
+    const PropertyModel = getPropertyModel(false);
+    let propDoc = await PropertyModel.findOne({ email: cleanEmail });
+    if (!propDoc) {
+      propDoc = await PropertyModel.create({
+        ownerId: (user as any)._id,
+        name: cleanHomestay,
+        email: cleanEmail,
+        phone: cleanPhone || 'not provided',
+        address: cleanLocation,
+        town: cleanLocation.split(',')[0].trim() || 'Gangtok',
+        region: 'Sikkim',
+        coordinates: cleanLat && cleanLng ? { latitude: cleanLat, longitude: cleanLng } : undefined,
+        status: 'active',
+      } as any);
+      (user as any).propertyId = (propDoc as any)?._id;
+      await (user as any).save();
+    } else if (cleanLat && cleanLng) {
+      propDoc.coordinates = { latitude: cleanLat, longitude: cleanLng };
+      await propDoc.save();
+    }
+    console.log(`✅ [Clerk Sync] ${isNew ? 'New' : 'Existing'} user synced (clerk ${clerkId}) with GPS`);
 
     return res.json({
       accessToken,
       refreshToken,
+      role: 'owner',
       owner: {
         id: 1,
         name: store.homestay.ownerName || user.name,
@@ -490,15 +721,265 @@ stayrideV1Router.post('/auth/clerk-sync', async (req: Request, res: Response) =>
       isNew,
     });
   } catch (err: any) {
-    console.error('[StayRide] Clerk sync error:', err);
-    return res.status(500).json({ error: { message: err.message || 'Clerk synchronization failed.' } });
+    console.error('[StayRide] Clerk sync error:', err?.message);
+    return res.status(500).json({ error: { message: 'Clerk synchronization failed.' } });
   }
 });
 
+// ==========================================
+// Trip schedule validation + admin-queue mirror (CabRequest collection)
+// ==========================================
+const IST_OFFSET_MS = 330 * 60000;
+const DAY_MS = 86400000;
+const VEHICLE_TYPES = ['SUV', 'Sedan', '7-seater', '9-seater'];
+
+function parseTime12(t: unknown): number | null {
+  const m = typeof t === 'string' ? t.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i) : null;
+  if (!m) return null;
+  const h = Number(m[1]), min = Number(m[2]);
+  if (h < 1 || h > 12 || min > 59) return null;
+  return ((h % 12) + (m[3].toUpperCase() === 'PM' ? 12 : 0)) * 60 + min;
+}
+
+// `date` is any instant on the chosen calendar day (IST); `time` is "hh:mm AM".
+function istDateTime(date: unknown, time: unknown): number | null {
+  const d = Number(date);
+  const mins = parseTime12(time);
+  if (!Number.isFinite(d) || d <= 0 || mins === null) return null;
+  const dayStart = Math.floor((d + IST_OFFSET_MS) / DAY_MS) * DAY_MS - IST_OFFSET_MS;
+  return dayStart + mins * 60000;
+}
+
+export function validateSchedule(body: any): string | null {
+  const pickupAt = istDateTime(body.date, body.time);
+  if (pickupAt === null) return 'A valid pickup date and time (hh:mm AM/PM) are required.';
+  if (pickupAt < Date.now() - 10 * 60000) return 'Pickup date and time cannot be in the past.';
+  if (body.isRoundTrip) {
+    const returnAt = istDateTime(body.returnDate, body.returnTime);
+    if (returnAt === null) return 'Round trips need a return date and time.';
+    if (returnAt <= pickupAt) return 'Return must be after the pickup date and time.';
+  }
+  return null;
+}
+
+export const isPayoutEligible = (t: any) =>
+  t.status === 'COMPLETED' && t.advancePaid === true && t.commission > 0 && !t.commissionPaid && !t.payoutId;
+
+const newReference = () => `REQ-${crypto.randomBytes(5).toString('hex').toUpperCase()}`;
+const hashToken = (t: string) => crypto.createHash('sha256').update(t).digest('hex');
+
+// Trip status (owner app) -> CabRequest status (admin queue)
+function cabStatusFor(trip: any): string {
+  switch (trip.status) {
+    case 'QUOTE_RECEIVED': return 'QUOTE_RECEIVED';
+    case 'AWAITING_ADVANCE': return 'AWAITING_ADVANCE_PAYMENT';
+    case 'CONFIRMED': return trip.advancePaid ? 'CONFIRMED' : 'AWAITING_ADVANCE_PAYMENT';
+    case 'DRIVER_ASSIGNED': return 'CONFIRMED'; // owner's own driver, handled by the homestay
+    case 'TRIP_STARTED': return 'TRIP_STARTED';
+    case 'COMPLETED': return 'COMPLETED';
+    case 'CANCELLED': return 'CANCELLED';
+    default: return 'FINDING_DRIVER';
+  }
+}
+
+// Keep the admin-queue copy in step after the owner changes a mirrored trip.
+async function syncMirror(tenantKey: string, trip: any) {
+  if (!trip?.reference) return;
+  try {
+    const { getCabRequestModel } = await import('../models/cab-request.model.js');
+    await (getCabRequestModel(isDemoKey(tenantKey)) as any).updateOne(
+      { reference: trip.reference, propertyId: tenantKey },
+      {
+        status: cabStatusFor(trip),
+        assignedDriverName: trip.driverName || '',
+        agreedFare: trip.fare || 0,
+        advanceAmount: trip.advanceAmount || 0,
+        remainingCashAmount: trip.remainingCashAmount || 0,
+        ...(trip.financialSnapshot ? { financialSnapshot: trip.financialSnapshot } : {}),
+      }
+    );
+  } catch (err: any) {
+    console.warn('[StayRide] Admin queue sync failed:', err?.message);
+  }
+}
+
+async function findGuestLink(token: unknown) {
+  if (typeof token !== 'string' || token.length < 20 || token.length > 100) return null;
+  const { getGuestLinkModel } = await import('../models/guest-link.model.js');
+  const tokenHash = hashToken(token);
+  for (const isDemo of [false, true]) {
+    const link = await getGuestLinkModel(isDemo).findOne({ tokenHash, expiresAt: { $gt: new Date() } }).lean();
+    if (link) return link as any;
+  }
+  return null;
+}
+
+const str = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+
+// ==========================================
+// Public Guest Web Cab Requests (secure token link, no login)
+// ==========================================
+stayrideV1Router.get('/public/guest-links/:token', async (req: Request, res: Response) => {
+  const link = await findGuestLink(req.params.token);
+  if (!link) return res.status(404).json({ error: { message: 'This link is invalid or has expired.' } });
+  const store = await tenantManager.getStoreAsync(link.tenantKey);
+  return res.json({
+    homestayName: store.homestay.name,
+    pickup: store.homestay.location || store.homestay.name,
+    guestName: link.guestName,
+    guestPhone: link.guestPhone,
+    expiresAt: new Date(link.expiresAt).getTime(),
+  });
+});
+
+stayrideV1Router.post('/public/guest-links/:token/cab-requests', async (req: Request, res: Response) => {
+  const link = await findGuestLink(req.params.token);
+  if (!link) return res.status(404).json({ error: { message: 'This link is invalid or has expired.' } });
+
+  const b = req.body;
+  const guestName = str(b.guestName, 100);
+  const guestPhone = str(b.guestPhone, 20);
+  const clientRequestId = str(b.clientRequestId, 64);
+  const destinations = Array.isArray(b.destinations)
+    ? b.destinations.map((d: unknown) => str(typeof d === 'object' && d ? (d as any).address : d, 200)).filter(Boolean)
+    : [];
+  if (!guestName || !guestPhone) return res.status(400).json({ error: { message: 'Guest name and phone number are required.' } });
+  if (!clientRequestId) return res.status(400).json({ error: { message: 'clientRequestId is required.' } });
+  if (destinations.length < 1 || destinations.length > 6) return res.status(400).json({ error: { message: 'Add between 1 and 6 destinations.' } });
+  const vehicleType = VEHICLE_TYPES.includes(b.vehicleType) ? b.vehicleType : 'SUV';
+  const passengers = Math.min(20, Math.max(1, Math.round(Number(b.passengers) || 1)));
+  const isRoundTrip = b.isRoundTrip === true;
+  const scheduleError = validateSchedule({ ...b, isRoundTrip });
+  if (scheduleError) return res.status(400).json({ error: { message: scheduleError } });
+
+  const tenantKey = link.tenantKey as string;
+  const isDemo = isDemoKey(tenantKey);
+  const { getCabRequestModel } = await import('../models/cab-request.model.js');
+  const CabModel = getCabRequestModel(isDemo) as any;
+
+  // Idempotent retries: same clientRequestId returns the original request.
+  const existing = await CabModel.findOne({ clientRequestId, propertyId: tenantKey }).lean();
+  if (existing) return res.status(201).json({ reference: existing.reference, status: existing.status });
+
+  const store = await tenantManager.getStoreAsync(tenantKey);
+  const pickup = str(b.pickup, 200) || store.homestay.location || store.homestay.name || 'Homestay';
+  const reference = newReference();
+  const trip = store.createTrip(
+    {
+      guestName,
+      phone: guestPhone,
+      pickup,
+      destination: destinations.join(' ➔ '),
+      destinations: destinations.map((address: string, order: number) => ({ address, order })),
+      isRoundTrip,
+      returnDate: isRoundTrip ? Number(b.returnDate) : undefined,
+      returnTime: isRoundTrip ? str(b.returnTime, 10) : undefined,
+      date: Number(b.date),
+      time: str(b.time, 10),
+      passengers,
+      vehicleType,
+      guestId: link.guestId ?? undefined,
+    },
+    'GUEST_WEB_LINK'
+  );
+  trip.reference = reference;
+
+  try {
+    await CabModel.create({
+      reference,
+      propertyId: tenantKey,
+      tripId: trip.id,
+      clientRequestId,
+      homestayName: store.homestay.name || 'Homestay',
+      guestId: link.guestId ?? null,
+      guestName,
+      guestPhone,
+      pickupLocation: { address: pickup },
+      destinations: trip.destinations,
+      isRoundTrip,
+      returnDate: trip.returnDate,
+      returnTime: trip.returnTime || '',
+      date: trip.date,
+      time: trip.time,
+      passengers,
+      vehicleType,
+      requestSource: 'GUEST_WEB_LINK',
+      status: 'FINDING_DRIVER',
+      guestNotes: str(b.notes, 500),
+    });
+  } catch (err: any) {
+    store.trips = store.trips.filter((t) => t !== trip);
+    if (err?.code === 11000) {
+      const dup = await CabModel.findOne({ clientRequestId, propertyId: tenantKey }).lean();
+      if (dup) return res.status(201).json({ reference: dup.reference, status: dup.status });
+    }
+    throw err;
+  }
+
+  await tenantManager.persistTenant(tenantKey);
+  return res.status(201).json({ reference, status: 'FINDING_DRIVER' });
+});
+
+stayrideV1Router.get('/public/cab-requests/:reference', async (req: Request, res: Response) => {
+  const link = await findGuestLink(req.query.t);
+  if (!link) return res.status(404).json({ error: { message: 'This link is invalid or has expired.' } });
+  const { getCabRequestModel } = await import('../models/cab-request.model.js');
+  const doc = await (getCabRequestModel(isDemoKey(link.tenantKey)) as any)
+    .findOne({ reference: String(req.params.reference), propertyId: link.tenantKey })
+    .lean();
+  if (!doc) return res.status(404).json({ error: { message: 'Cab request not found.' } });
+  return res.json({
+    reference: doc.reference,
+    status: doc.status,
+    agreedFare: doc.agreedFare,
+    advanceAmount: doc.advanceAmount,
+    advancePaid: doc.advancePaid,
+    remainingCashAmount: doc.remainingCashAmount,
+    driverName: doc.assignedDriverName || '',
+    vehicle: [doc.vehicleDetails?.model, doc.vehicleDetails?.plate].filter(Boolean).join(' '),
+  });
+});
+
+// Advance payments are recorded only by an admin (audited reconciliation) until a
+// payment gateway with signed webhooks is integrated. There is no public pay endpoint.
+
+// Driver app: only trips assigned to this driver (matched by phone), never other tenants' requests.
+stayrideV1Router.get('/driver/trips', authenticateStayRide, async (req: Request, res: Response) => {
+  const authUser = (req as any).stayrideUser as StayRideAuthPayload;
+
+  if (authUser.isDemo) {
+    const store = await tenantManager.getStoreAsync('demo@stayride.in');
+    return res.json(store.trips.filter((t) => t.status !== 'CANCELLED'));
+  }
+  if (authUser.role !== 'driver') {
+    return res.status(403).json({ error: { message: 'Driver account required.' } });
+  }
+
+  const user = await getUserModel(false).findById(authUser.id).select('phone').lean();
+  const digits = String((user as any)?.phone || '').replace(/\D/g, '').slice(-10);
+  if (digits.length < 10) return res.json([]);
+
+  const { getCabRequestModel } = await import('../models/cab-request.model.js');
+  const trips = await (getCabRequestModel(false) as any)
+    .find({ assignedDriverPhone: { $regex: `${digits}$` } })
+    .select('reference homestayName pickupLocation destinations isRoundTrip returnDate returnTime date time passengers vehicleType status agreedFare advanceAmount advancePaid remainingCashAmount guestName guestPhone')
+    .sort({ createdAt: -1 })
+    .limit(50)
+    .lean();
+  return res.json(trips);
+});
+
+// Raw body is required for the svix signature check (see app.ts).
 stayrideV1Router.post('/auth/clerk-webhook', async (req: Request, res: Response) => {
-  const event = req.body;
-  if (!event || !event.type) {
-    return res.status(400).json({ error: { message: 'Invalid Clerk webhook payload.' } });
+  if (!config.clerkWebhookSecret) {
+    return res.status(503).json({ error: { message: 'Webhook signing secret is not configured.' } });
+  }
+
+  let event: any;
+  try {
+    event = await verifyWebhook(req, { signingSecret: config.clerkWebhookSecret });
+  } catch {
+    return res.status(400).json({ error: { message: 'Webhook signature verification failed.' } });
   }
 
   try {
@@ -507,25 +988,27 @@ stayrideV1Router.post('/auth/clerk-webhook', async (req: Request, res: Response)
 
     if (type === 'user.created' || type === 'user.updated') {
       const clerkId = data.id;
-      const primaryEmail =
-        data.email_addresses?.find((e: any) => e.id === data.primary_email_address_id)?.email_address ||
-        data.email_addresses?.[0]?.email_address;
+      const primary =
+        data.email_addresses?.find((e: any) => e.id === data.primary_email_address_id) || data.email_addresses?.[0];
       const name = [data.first_name, data.last_name].filter(Boolean).join(' ') || data.username || 'Host';
       const avatar = data.image_url || '';
 
-      if (primaryEmail) {
-        const cleanEmail = primaryEmail.toLowerCase().trim();
-        let user = await UserModel.findOne({ $or: [{ clerkId }, { email: cleanEmail }] });
+      if (primary?.email_address && primary.verification?.status === 'verified') {
+        const cleanEmail = primary.email_address.toLowerCase().trim();
+        // Match by Clerk id, or by email only if that account isn't linked to another Clerk user.
+        let user =
+          (await UserModel.findOne({ clerkId })) ||
+          (await UserModel.findOne({ email: cleanEmail, $or: [{ clerkId: { $exists: false } }, { clerkId: '' }] }));
         if (!user && type === 'user.created') {
           user = await UserModel.create({
             name,
             email: cleanEmail,
             clerkId,
-            password: `clerk_${Date.now()}_${Math.random().toString(36)}`,
+            password: crypto.randomBytes(32).toString('hex'),
             role: 'owner',
             avatar,
           });
-          tenantManager.createFreshTenant(cleanEmail, {
+          await tenantManager.createTenantIfMissing(cleanEmail, {
             name: `${name}'s Homestay`,
             ownerName: name,
             email: cleanEmail,
@@ -546,7 +1029,7 @@ stayrideV1Router.post('/auth/clerk-webhook', async (req: Request, res: Response)
 
     return res.json({ received: true });
   } catch (err: any) {
-    console.error('[StayRide] Webhook handling error:', err);
+    console.error('[StayRide] Webhook handling error:', err?.message);
     return res.status(500).json({ error: { message: 'Webhook processing failed.' } });
   }
 });
@@ -554,8 +1037,17 @@ stayrideV1Router.post('/auth/clerk-webhook', async (req: Request, res: Response)
 // Enforce JWT authentication on all data routes
 stayrideV1Router.use(authenticateStayRide);
 
+// Everything below is the homestay-owner API; driver accounts only get /driver/*.
+stayrideV1Router.use((req: Request, res: Response, next: () => void) => {
+  if ((req as any).stayrideUser?.role === 'driver') {
+    return res.status(403).json({ error: { message: 'This action is for homestay owners only.' } });
+  }
+  next();
+});
+
 // ==========================================
-// Set / Update Password (Bidirectional Clerk & MongoDB)
+// Change password for email/password (non-Clerk) accounts.
+// Clerk users change their password through Clerk on the client.
 // ==========================================
 stayrideV1Router.post('/auth/set-password', async (req: Request, res: Response) => {
   try {
@@ -563,69 +1055,33 @@ stayrideV1Router.post('/auth/set-password', async (req: Request, res: Response) 
     if (!authUser || !authUser.email) {
       return res.status(401).json({ error: { message: 'Authentication required.' } });
     }
+    if (authUser.isDemo) {
+      return res.status(403).json({ error: { message: 'The demo account password cannot be changed.' } });
+    }
 
-    const { newPassword } = req.body;
+    const { currentPassword, newPassword } = req.body;
     if (!newPassword || typeof newPassword !== 'string' || newPassword.trim().length < 8) {
       return res.status(400).json({ error: { message: 'Password must be at least 8 characters long.' } });
     }
 
-    const cleanPass = newPassword.trim();
-    const cleanEmail = authUser.email.toLowerCase().trim();
-    const UserModel = getUserModel(authUser.isDemo);
-
-    let user = null;
-    if (authUser.id && mongoose.Types.ObjectId.isValid(authUser.id)) {
-      user = await UserModel.findById(authUser.id);
-    }
-    if (!user) {
-      user = await UserModel.findOne({ email: cleanEmail });
-    }
-
+    const UserModel = getUserModel(false);
+    const user = mongoose.Types.ObjectId.isValid(authUser.id) ? await UserModel.findById(authUser.id) : null;
     if (!user) {
       return res.status(404).json({ error: { message: 'User account not found.' } });
     }
 
-    // 1. Update in Clerk if user is linked to Clerk
-    let clerkId = user.clerkId;
-    if (!clerkId && config.clerkSecretKey) {
-      try {
-        const clerkUsers = await clerkClient.users.getUserList({ emailAddress: [cleanEmail] });
-        if (clerkUsers.data && clerkUsers.data.length > 0) {
-          clerkId = clerkUsers.data[0].id;
-          user.clerkId = clerkId;
-        }
-      } catch (e) {
-        console.warn('[Clerk User Lookup Note]:', e);
-      }
+    if (typeof currentPassword !== 'string' || !(await user.comparePassword(currentPassword.trim()))) {
+      return res.status(401).json({ error: { message: 'Current password is incorrect.' } });
     }
 
-    if (clerkId && config.clerkSecretKey) {
-      try {
-        await clerkClient.users.updateUser(clerkId, {
-          password: cleanPass,
-        });
-        console.log(`✅ [Clerk Password Sync] Successfully updated password for Clerk user ${clerkId}`);
-      } catch (clerkErr: any) {
-        console.error('[Clerk Password Update Error]:', clerkErr);
-        const errMsg = clerkErr?.errors?.[0]?.longMessage || clerkErr?.errors?.[0]?.message || clerkErr.message;
-        return res.status(400).json({ error: { message: `Clerk password update failed: ${errMsg}` } });
-      }
-    }
-
-    // 2. Hash and update in MongoDB Atlas
-    const salt = await bcrypt.genSalt(10);
-    user.password = await bcrypt.hash(cleanPass, salt);
-    user.updatedAtIST = getISTTimestamp();
+    // Plain value: the User pre-save hook hashes it exactly once.
+    user.password = newPassword.trim();
     await user.save();
-    console.log(`✅ [MongoDB Password Sync] Updated hashed password in Atlas for ${user.email} (IST: ${user.updatedAtIST})`);
 
-    return res.json({
-      success: true,
-      message: 'Password set successfully! You can now log in using either Google or your email and password.',
-    });
+    return res.json({ success: true, message: 'Password updated successfully.' });
   } catch (err: any) {
-    console.error('[Set-Password Error]:', err);
-    return res.status(500).json({ error: { message: err.message || 'Failed to update password.' } });
+    console.error('[Set-Password Error]:', err?.message);
+    return res.status(500).json({ error: { message: 'Failed to update password.' } });
   }
 });
 
@@ -633,8 +1089,11 @@ stayrideV1Router.post('/auth/set-password', async (req: Request, res: Response) 
 // Snapshot (Single high-speed aggregator)
 // ==========================================
 stayrideV1Router.get('/snapshot', async (req: Request, res: Response) => {
-  const { store } = await getStoreForReq(req);
+  const { store, tenantKey } = await getStoreForReq(req);
+  const { CommissionService } = await import('../services/commission.service.js');
+  const { pfPercent, hcPercent, advancePercent } = await CommissionService.getEffectiveRates(tenantKey);
   res.json({
+    commissionRates: { pfPercent, hcPercent, advancePercent },
     homestay: store.homestay,
     rooms: store.rooms,
     guests: store.guests,
@@ -656,7 +1115,7 @@ stayrideV1Router.get('/homestay', async (req: Request, res: Response) => {
 
 stayrideV1Router.put('/homestay', async (req: Request, res: Response) => {
   const { store, tenantKey } = await getStoreForReq(req);
-  Object.assign(store.homestay, req.body);
+  Object.assign(store.homestay, pick(req.body, WRITABLE.homestay));
   tenantManager.persistTenant(tenantKey).catch(() => {});
   res.json(store.homestay);
 });
@@ -802,7 +1261,7 @@ stayrideV1Router.post('/drivers', async (req: Request, res: Response) => {
   const created = store.createDriver(req.body);
 
   // Determine if this is demo or production database
-  const isDemo = tenantKey.includes('demo') || tenantKey.includes('mountainview');
+  const isDemo = isDemoKey(tenantKey);
   const UserModel = getUserModel(isDemo);
 
   // Automatically create account in MongoDB with role: "driver"
@@ -818,7 +1277,7 @@ stayrideV1Router.post('/drivers', async (req: Request, res: Response) => {
       await UserModel.create({
         name: cleanName,
         email: driverEmail,
-        password: 'driver-default-pass',
+        password: crypto.randomBytes(32).toString('hex'), // no host-app login for drivers
         phone: cleanPhone,
         role: 'driver',
       });
@@ -873,6 +1332,8 @@ stayrideV1Router.get('/trips', async (req: Request, res: Response) => {
 
 stayrideV1Router.post('/trips', async (req: Request, res: Response) => {
   const { store, tenantKey } = await getStoreForReq(req);
+  const scheduleError = validateSchedule(req.body);
+  if (scheduleError) return res.status(400).json({ error: { message: scheduleError } });
   const created = store.createTrip(req.body);
   tenantManager.persistTenant(tenantKey).catch(() => {});
   res.status(201).json(created);
@@ -883,6 +1344,7 @@ stayrideV1Router.post('/trips/:id/assign', async (req: Request, res: Response) =
   const updated = store.assignTrip(Number(req.params.id), Number(req.body?.driverId));
   if (!updated) return res.status(404).json({ error: { message: 'Trip not found' } });
   tenantManager.persistTenant(tenantKey).catch(() => {});
+  await syncMirror(tenantKey, updated);
   res.json(updated);
 });
 
@@ -891,6 +1353,7 @@ stayrideV1Router.post('/trips/:id/accept', async (req: Request, res: Response) =
   const updated = store.acceptTrip(Number(req.params.id));
   if (!updated) return res.status(404).json({ error: { message: 'Trip not found' } });
   tenantManager.persistTenant(tenantKey).catch(() => {});
+  await syncMirror(tenantKey, updated);
   res.json(updated);
 });
 
@@ -899,6 +1362,7 @@ stayrideV1Router.post('/trips/:id/reassign', async (req: Request, res: Response)
   const updated = store.reassignTrip(Number(req.params.id));
   if (!updated) return res.status(404).json({ error: { message: 'Trip not found' } });
   tenantManager.persistTenant(tenantKey).catch(() => {});
+  await syncMirror(tenantKey, updated);
   res.json(updated);
 });
 
@@ -907,14 +1371,70 @@ stayrideV1Router.post('/trips/:id/start', async (req: Request, res: Response) =>
   const updated = store.startTrip(Number(req.params.id));
   if (!updated) return res.status(404).json({ error: { message: 'Trip not found' } });
   tenantManager.persistTenant(tenantKey).catch(() => {});
+  await syncMirror(tenantKey, updated);
+  res.json(updated);
+});
+
+stayrideV1Router.post('/trips/:id/quote', async (req: Request, res: Response) => {
+  const { store, tenantKey } = await getStoreForReq(req);
+  const driverId = Number(req.body?.driverId);
+  const quotedFare = Number(req.body?.quotedFare);
+  if (!driverId || !quotedFare || quotedFare <= 0) {
+    return res.status(400).json({ error: { message: 'Valid driverId and numeric quotedFare are required' } });
+  }
+  const updated = store.quoteTrip(Number(req.params.id), driverId, quotedFare);
+  if (!updated) return res.status(404).json({ error: { message: 'Trip not found' } });
+  tenantManager.persistTenant(tenantKey).catch(() => {});
+  res.json(updated);
+});
+
+stayrideV1Router.post('/trips/:id/confirm-quote', async (req: Request, res: Response) => {
+  const { store, tenantKey } = await getStoreForReq(req);
+  const driverId = Number(req.body?.driverId);
+  const agreedFare = Number(req.body?.agreedFare);
+  if (!driverId || !agreedFare || agreedFare <= 0) {
+    return res.status(400).json({ error: { message: 'Valid driverId and numeric agreedFare are required' } });
+  }
+
+  // Calculate dynamic financial snapshot
+  const { CommissionService } = await import('../services/commission.service.js');
+  if (store.trip(Number(req.params.id))?.advancePaid) {
+    return res.status(409).json({ error: { message: 'Advance already paid; the fare is locked.' } });
+  }
+  if (!store.driver(driverId) && !store.networkDrivers.some((d) => d.id === driverId)) {
+    return res.status(400).json({ error: { message: 'Unknown driver.' } });
+  }
+  const split = await CommissionService.calculateSplit(agreedFare, tenantKey);
+
+  const snapshot = {
+    agreedFare: split.agreedFare,
+    advanceAmount: split.advanceAmount,
+    advancePaid: false,
+    platformFeeRate: split.platformFeeRate,
+    platformFeeAmount: split.platformFeeAmount,
+    homestayCommissionRate: split.homestayCommissionRate,
+    homestayCommissionAmount: split.homestayCommissionAmount,
+    driverPayoutAmount: split.driverPayoutAmount,
+    remainingCashToDriver: split.remainingCashToDriver,
+    calculatedAt: new Date(),
+  };
+
+  const updated = store.confirmTripQuote(Number(req.params.id), driverId, agreedFare, snapshot);
+  if (!updated) return res.status(404).json({ error: { message: 'Trip not found' } });
+  tenantManager.persistTenant(tenantKey).catch(() => {});
+  await syncMirror(tenantKey, updated);
   res.json(updated);
 });
 
 stayrideV1Router.post('/trips/:id/complete', async (req: Request, res: Response) => {
   const { store, tenantKey } = await getStoreForReq(req);
-  const updated = store.completeTrip(Number(req.params.id), req.body?.finalFare);
+  const { CommissionService } = await import('../services/commission.service.js');
+  const rates = await CommissionService.getEffectiveRates(tenantKey);
+  const hcRate = rates.hcPercent / 100;
+  const updated = store.completeTrip(Number(req.params.id), req.body?.finalFare, hcRate);
   if (!updated) return res.status(404).json({ error: { message: 'Trip not found' } });
   tenantManager.persistTenant(tenantKey).catch(() => {});
+  await syncMirror(tenantKey, updated);
   res.json(updated);
 });
 
@@ -923,6 +1443,7 @@ stayrideV1Router.post('/trips/:id/cancel', async (req: Request, res: Response) =
   const updated = store.cancelTrip(Number(req.params.id));
   if (!updated) return res.status(404).json({ error: { message: 'Trip not found' } });
   tenantManager.persistTenant(tenantKey).catch(() => {});
+  await syncMirror(tenantKey, updated);
   res.json(updated);
 });
 
@@ -932,6 +1453,31 @@ stayrideV1Router.post('/trips/:id/commission/pay', async (req: Request, res: Res
   if (!updated) return res.status(404).json({ error: { message: 'Trip not found' } });
   tenantManager.persistTenant(tenantKey).catch(() => {});
   res.json(updated);
+});
+
+// ==========================================
+// Guest "Ask for Cab" secure links
+// ==========================================
+stayrideV1Router.post('/guest-links', async (req: Request, res: Response) => {
+  const { tenantKey } = await getStoreForReq(req);
+  const guestName = str(req.body.guestName, 100);
+  const guestPhone = str(req.body.guestPhone, 20);
+  if (!guestName || !guestPhone) {
+    return res.status(400).json({ error: { message: 'Guest name and phone are required.' } });
+  }
+  const guestId = Number(req.body.guestId);
+  const token = crypto.randomBytes(32).toString('base64url');
+  const expiresAt = new Date(Date.now() + 7 * DAY_MS);
+  const { getGuestLinkModel } = await import('../models/guest-link.model.js');
+  await getGuestLinkModel(isDemoKey(tenantKey)).create({
+    tokenHash: hashToken(token),
+    tenantKey,
+    guestId: Number.isFinite(guestId) ? guestId : null,
+    guestName,
+    guestPhone,
+    expiresAt,
+  });
+  res.status(201).json({ url: `${config.guestWebUrl}/cab-request?t=${token}`, expiresAt: expiresAt.getTime() });
 });
 
 // ==========================================
@@ -966,14 +1512,107 @@ stayrideV1Router.delete('/campaigns/:id', async (req: Request, res: Response) =>
 });
 
 // ==========================================
+// Homestay Owner Commission Payouts / Redemptions
+// ==========================================
+
+// 1. Owner requests commission payout (UPI or Bank)
+stayrideV1Router.post('/payouts/request', async (req: Request, res: Response) => {
+  try {
+    const authUser = (req as any).stayrideUser as StayRideAuthPayload;
+    const { amount, payoutMethod, upiId, bankDetails } = req.body;
+    const withdrawAmount = Number(amount);
+
+    if (!withdrawAmount || withdrawAmount <= 0) {
+      return res.status(400).json({ error: { message: 'A positive payout amount is required.' } });
+    }
+
+    if (payoutMethod === 'BANK_TRANSFER') {
+      if (!bankDetails?.accountNumber || !bankDetails?.ifscCode) {
+        return res.status(400).json({ error: { message: 'Bank account number and IFSC code are required.' } });
+      }
+    } else {
+      if (!upiId || typeof upiId !== 'string' || !upiId.includes('@')) {
+        return res.status(400).json({ error: { message: 'A valid UPI ID (e.g. yourname@okhdfcbank) is required.' } });
+      }
+    }
+
+    const { store, tenantKey } = await getStoreForReq(req);
+    // Only commission the platform actually collected (admin-recorded advance) is payable.
+    const availablePending = store.trips
+      .filter(isPayoutEligible)
+      .reduce((acc, t) => acc + t.commission, 0);
+
+    // Double-spending prevention: deduct payouts that have been requested but not yet settled
+    const PayoutModel = getPayoutRequestModel(authUser.isDemo);
+    const pendingPayoutDocs = await (PayoutModel as any).find({
+      tenantId: tenantKey,
+      status: 'PENDING',
+    });
+    const alreadyRequestedPending = pendingPayoutDocs.reduce((acc: number, p: any) => acc + (p.amount || 0), 0);
+    const trulyAvailable = Math.max(0, availablePending - alreadyRequestedPending);
+
+    if (withdrawAmount > trulyAvailable) {
+      return res.status(400).json({
+        error: {
+          message: `Requested payout (₹${withdrawAmount.toLocaleString()}) exceeds your withdrawable balance of ₹${trulyAvailable.toLocaleString()}. (Note: ₹${alreadyRequestedPending.toLocaleString()} is already pending disbursement).`,
+        },
+      });
+    }
+    const payoutReq = await PayoutModel.create({
+      tenantId: tenantKey,
+      homestayName: store.homestay.name || 'My Homestay',
+      ownerName: store.homestay.ownerName || authUser.email,
+      ownerPhone: store.homestay.phone || '',
+      amount: withdrawAmount,
+      payoutMethod: payoutMethod || 'UPI',
+      upiId: upiId ? upiId.trim() : undefined,
+      bankDetails: bankDetails || undefined,
+      status: 'PENDING',
+      isDemo: authUser.isDemo,
+      requestedAt: new Date(),
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: `Payout request of ₹${withdrawAmount.toLocaleString()} submitted for admin UPI transfer.`,
+      payout: payoutReq,
+    });
+  } catch (err: any) {
+    if (err?.code === 11000) {
+      return res.status(409).json({ error: { message: 'You already have a payout request pending. Wait until it is settled.' } });
+    }
+    console.error('[StayRide] Payout request error:', err);
+    return res.status(500).json({ error: { message: err?.message || 'Failed to submit payout request.' } });
+  }
+});
+
+// 2. Owner checks their own payout history
+stayrideV1Router.get('/payouts/history', async (req: Request, res: Response) => {
+  try {
+    const authUser = (req as any).stayrideUser as StayRideAuthPayload;
+    const { tenantKey } = await getStoreForReq(req);
+    const PayoutModel = getPayoutRequestModel(authUser.isDemo);
+    const history = await PayoutModel.find({ tenantId: tenantKey }).sort({ requestedAt: -1 }).limit(50);
+    return res.json(history);
+  } catch (err: any) {
+    return res.status(500).json({ error: { message: 'Failed to fetch payout history.' } });
+  }
+});
+
+// Admin payout listing/settlement lives only in /api/v1/admin (admin role required).
+
+// ==========================================
 // Demo Controls
 // ==========================================
-stayrideV1Router.post('/demo/reset', (_req: Request, res: Response) => {
+const demoOnly = (req: Request, res: Response, next: () => void) =>
+  (req as any).stayrideUser?.isDemo ? next() : res.status(403).json({ error: { message: 'Demo accounts only.' } });
+
+stayrideV1Router.post('/demo/reset', demoOnly, (_req: Request, res: Response) => {
   tenantManager.resetDemoStore();
   res.json({ success: true, message: 'Mountain View Homestay demo showcase reseeded' });
 });
 
-stayrideV1Router.post('/dev/seed', (_req: Request, res: Response) => {
+stayrideV1Router.post('/dev/seed', demoOnly, (_req: Request, res: Response) => {
   tenantManager.resetDemoStore();
   res.json({ success: true, message: 'StayRide demo dataset reseeded' });
 });
