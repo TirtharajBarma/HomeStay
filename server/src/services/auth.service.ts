@@ -62,9 +62,15 @@ export class AuthService {
     phone?: string;
     homestayName?: string;
   }) {
-    const existing = await User.findOne({ email: data.email.toLowerCase().trim() });
+    const cleanEmail = data.email.toLowerCase().trim();
+    const reservedEmails = ['demo@stayride.in', 'driver@stayride.in', 'stay@mountainviewgangtok.com', 'stay@mountainview.in'];
+    if (reservedEmails.includes(cleanEmail)) {
+      throw new Error(`The email '${cleanEmail}' is reserved for demo showcase accounts and cannot be registered.`);
+    }
+
+    const existing = await User.findOne({ email: cleanEmail });
     if (existing) {
-      throw new Error(`User with email '${data.email}' already exists.`);
+      throw new Error(`User with email '${cleanEmail}' already exists.`);
     }
 
     const assignedRole = data.role === "guest" ? "guest" : "owner";

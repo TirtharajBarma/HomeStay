@@ -334,7 +334,25 @@ export class StayRideMemoryStore {
     return g;
   }
 
+  deleteGuest(id: number) {
+    this.guests = this.guests.filter((g) => g.id !== id);
+  }
+
   createBooking(data: Omit<StayRideBooking, 'id' | 'status'> & { paid?: boolean }) {
+    // Prevent overlapping bookings on the same room
+    const requestedCheckIn = Number(data.checkIn);
+    const requestedCheckOut = Number(data.checkOut);
+    const hasCollision = this.bookings.some((b) => {
+      if (b.roomNumber !== data.roomNumber || b.status === 'CANCELLED') return false;
+      return requestedCheckIn < b.checkOut && requestedCheckOut > b.checkIn;
+    });
+
+    if (hasCollision) {
+      throw new Error(
+        `Room ${data.roomNumber} is already booked for these dates (${new Date(requestedCheckIn).toLocaleDateString()} to ${new Date(requestedCheckOut).toLocaleDateString()}). Please select different dates or a different room.`
+      );
+    }
+
     const id = ++this.nextBookingId;
     const b: StayRideBooking = {
       ...pick(data, WRITABLE.booking),
@@ -517,6 +535,9 @@ export class StayRideMemoryStore {
   startTrip(tripId: number) {
     const t = this.trip(tripId);
     if (!t) return null;
+    if (t.status !== 'CONFIRMED' && t.status !== 'DRIVER_ASSIGNED') {
+      throw new Error(`Cannot start trip in status '${t.status}'. Only CONFIRMED or DRIVER_ASSIGNED trips can be started.`);
+    }
     t.status = 'TRIP_STARTED';
     return t;
   }
@@ -524,6 +545,9 @@ export class StayRideMemoryStore {
   completeTrip(tripId: number, finalFare?: number, hcRate = 0.10) {
     const t = this.trip(tripId);
     if (!t) return null;
+    if (t.status !== 'TRIP_STARTED' && t.status !== 'CONFIRMED' && t.status !== 'DRIVER_ASSIGNED') {
+      throw new Error(`Cannot complete trip in status '${t.status}'. Only active trips (TRIP_STARTED, CONFIRMED, or DRIVER_ASSIGNED) can be completed.`);
+    }
     t.status = 'COMPLETED';
     if (t.financialSnapshot) {
       // Platform-arranged trip: fare and commission are locked by the snapshot.
@@ -540,6 +564,12 @@ export class StayRideMemoryStore {
   cancelTrip(tripId: number) {
     const t = this.trip(tripId);
     if (!t) return null;
+    if (t.status === 'COMPLETED') {
+      throw new Error(`Cannot cancel a trip that is already COMPLETED.`);
+    }
+    if (t.status === 'CANCELLED') {
+      return t;
+    }
     t.status = 'CANCELLED';
     return t;
   }
@@ -823,7 +853,7 @@ export class StayRideTenantManager {
           lastActiveAtIST: getISTTimestamp(),
           updatedAtIST: getISTTimestamp(),
         },
-        { upsert: true, new: true }
+        { upsert: true, returnDocument: 'after' }
       );
     } catch (err) {
       console.warn(`[StayRide] Error persisting tenant ${key} to MongoDB:`, err);

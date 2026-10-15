@@ -434,14 +434,25 @@ export class AdminController {
       );
       if (!payout) return res.status(409).json({ error: "Payout not found or already settled." });
 
-      // Mark eligible trips (oldest first) as paid by this payout, never more than its amount.
+      // Mark eligible trips (locked in payout.tripIds) as paid by this payout.
       const store = await tenantManager.getStoreAsync(payout.tenantId);
-      let remaining = payout.amount;
-      for (const trip of [...store.trips].reverse()) {
-        if (isPayoutEligible(trip) && trip.commission <= remaining) {
-          trip.commissionPaid = true;
-          trip.payoutId = String(payout._id);
-          remaining -= trip.commission;
+      if (Array.isArray(payout.tripIds) && payout.tripIds.length > 0) {
+        for (const tripId of payout.tripIds) {
+          const trip = store.trip(tripId);
+          if (trip) {
+            trip.commissionPaid = true;
+            trip.payoutId = String(payout._id);
+          }
+        }
+      } else {
+        // Fallback for legacy payouts without locked tripIds
+        let remaining = payout.amount;
+        for (const trip of [...store.trips].reverse()) {
+          if (isPayoutEligible(trip) && trip.commission <= remaining) {
+            trip.commissionPaid = true;
+            trip.payoutId = String(payout._id);
+            remaining -= trip.commission;
+          }
         }
       }
       await tenantManager.persistTenant(payout.tenantId);

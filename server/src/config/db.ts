@@ -2,12 +2,9 @@ import mongoose from "mongoose";
 import dns from "node:dns";
 import { config } from "./env.js";
 
-// Dev-only: some local routers block SRV lookups. Never override DNS in deployed environments.
-if (config.nodeEnv !== "production") {
-  try {
-    dns.setServers(["8.8.8.8", "1.1.1.1"]);
-  } catch {}
-}
+try {
+  dns.setServers(["8.8.8.8", "1.1.1.1"]);
+} catch {}
 
 let memoryServerInstance: any = null;
 
@@ -19,6 +16,11 @@ export async function connectDB(): Promise<typeof mongoose> {
   let uri = config.mongoUri;
 
   if (!uri) {
+    if (config.nodeEnv === "production") {
+      throw new Error(
+        "FATAL: MONGODB_URI environment variable is required in production. In-memory database fallback is strictly disabled to prevent catastrophic data loss."
+      );
+    }
     console.warn("⚠️  No MONGODB_URI found in environment.");
     console.log("ℹ️  Starting local in-memory MongoDB instance for development & testing...");
     try {
@@ -51,7 +53,10 @@ export async function connectDB(): Promise<typeof mongoose> {
     console.warn("⚠️  MongoDB disconnected");
   });
 
+  const defaultDbName = process.env.MONGODB_DATABASE || "production";
+
   return await mongoose.connect(uri, {
+    dbName: defaultDbName,
     autoIndex: true,
     serverSelectionTimeoutMS: 15000,
   });

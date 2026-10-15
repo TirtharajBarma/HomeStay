@@ -8,10 +8,11 @@ import { Pill } from './Pill';
 interface GuestItemProps {
   guest: Guest;
   onPress: () => void;
+  onLongPress?: () => void;
   onAskCab?: (guest: Guest) => void;
 }
 
-export const GuestItem: React.FC<GuestItemProps> = ({ guest, onPress, onAskCab }) => {
+export const GuestItem: React.FC<GuestItemProps> = ({ guest, onPress, onLongPress, onAskCab }) => {
   const isRepeat = guest.visits > 1;
   const lastVisitFormatted = new Date(guest.lastVisit).toLocaleDateString('en-GB', {
     day: 'numeric',
@@ -20,7 +21,12 @@ export const GuestItem: React.FC<GuestItemProps> = ({ guest, onPress, onAskCab }
   });
 
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.75}>
+    <TouchableOpacity
+      style={styles.card}
+      onPress={onPress}
+      onLongPress={onLongPress}
+      activeOpacity={0.75}
+    >
       <View style={styles.content}>
         <View style={styles.topRow}>
           <Text style={styles.name} numberOfLines={1}>

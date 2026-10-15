@@ -71,6 +71,7 @@ interface StayRideContextType {
 
   createGuest: (data: Omit<Guest, 'id' | 'visits' | 'totalSpending' | 'firstVisit' | 'lastVisit'>) => Promise<Guest>;
   updateGuest: (id: number, data: Partial<Guest>) => Promise<void>;
+  deleteGuest: (id: number) => Promise<void>;
 
   createDriver: (data: Omit<Driver, 'id' | 'ownerDriver' | 'active'>) => Promise<Driver>;
   updateDriver: (id: number, data: Partial<Driver>) => Promise<void>;
@@ -582,6 +583,20 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   // ------------------------- Booking Actions -------------------------
 
   const createBooking = async (data: Omit<Booking, 'id' | 'status'> & { paid?: boolean }) => {
+    // Prevent overlapping bookings on the same room
+    const requestedCheckIn = Number(data.checkIn);
+    const requestedCheckOut = Number(data.checkOut);
+    const hasCollision = bookings.some((b) => {
+      if (b.roomNumber !== data.roomNumber || b.status === 'CANCELLED') return false;
+      return requestedCheckIn < b.checkOut && requestedCheckOut > b.checkIn;
+    });
+
+    if (hasCollision) {
+      throw new Error(
+        `Room ${data.roomNumber} is already booked for these dates (${new Date(requestedCheckIn).toLocaleDateString()} to ${new Date(requestedCheckOut).toLocaleDateString()}). Please select different dates or a different room.`
+      );
+    }
+
     const id = nextIds.booking;
     const newBk: Booking = { ...data, id, status: 'CONFIRMED', paid: Boolean(data.paid) };
     const prevRoomStatus = rooms.find((r) => r.number === data.roomNumber)?.status;
@@ -770,6 +785,11 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const updateGuest = async (id: number, data: Partial<Guest>) => {
     setGuests((prev) => prev.map((g) => (g.id === id ? { ...g, ...data } : g)));
     remote(() => api.put(`/guests/${id}`, data));
+  };
+
+  const deleteGuest = async (id: number) => {
+    setGuests((prev) => prev.filter((g) => g.id !== id));
+    remote(() => api.delete(`/guests/${id}`));
   };
 
   // ------------------------- Driver Actions -------------------------
@@ -1400,6 +1420,7 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
         createGuest,
         updateGuest,
+        deleteGuest,
 
         createDriver,
         updateDriver,

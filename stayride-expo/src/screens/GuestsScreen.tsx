@@ -30,13 +30,34 @@ const PERIOD_OPTIONS = [
 
 export const GuestsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
-  const { guests, bookings, searchGuests, countGuests, homestay, createGuestLink } = useStayRide();
+  const { guests, bookings, searchGuests, countGuests, homestay, createGuestLink, deleteGuest } = useStayRide();
 
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<'ALL' | 'NEW' | 'REPEAT'>('ALL');
   const [periodDays, setPeriodDays] = useState(0);
 
   const filteredGuests = searchGuests(query, filter, periodDays);
+
+  const handleDeleteGuest = (g: Guest) => {
+    Alert.alert(
+      'Delete Guest Record',
+      `Are you sure you want to remove ${g.name} from your homestay database?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteGuest(g.id);
+            } catch (err: any) {
+              Alert.alert('Error', err?.message || 'Could not delete guest.');
+            }
+          },
+        },
+      ]
+    );
+  };
 
   // Ask-for-cab is only offered to guests currently checked in
   const isCheckedIn = (g: Guest) =>
@@ -127,6 +148,7 @@ export const GuestsScreen: React.FC = () => {
               key={g.id}
               guest={g}
               onPress={() => navigation.navigate('GuestDetail', { guestId: g.id })}
+              onLongPress={() => handleDeleteGuest(g)}
               onAskCab={isCheckedIn(g) ? handleAskCab : undefined}
             />
           ))

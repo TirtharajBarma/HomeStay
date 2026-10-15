@@ -15,6 +15,7 @@ export interface IPayoutRequest extends Document {
     bankName?: string;
   };
   status: 'PENDING' | 'SETTLED' | 'REJECTED';
+  tripIds: number[];
   utrNumber?: string;
   notes?: string;
   requestedAt: Date;
@@ -37,6 +38,7 @@ const PayoutRequestSchema: Schema = new Schema(
       accountHolderName: { type: String, trim: true },
       bankName: { type: String, trim: true },
     },
+    tripIds: { type: [Number], default: [] },
     status: {
       type: String,
       enum: ['PENDING', 'SETTLED', 'REJECTED'],
