@@ -13,7 +13,10 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useStayRide } from '../data/store';
 import { Header } from '../components/Header';
+import { PlatformSelect } from '../components/PlatformSelect';
 import { Colors } from '../theme/colors';
+import { FormScroll } from '../components/FormScroll';
+import { KeyboardAwareOverlay } from '../components/KeyboardAwareOverlay';
 
 const PHOTO_PRESETS = [
   'Front elevation',
@@ -47,6 +50,14 @@ const AMENITY_PRESETS = [
   'Travel Desk',
 ];
 
+// House check-in / check-out times (half-hour steps), shown on bookings and receipts
+const HOUSE_TIMES = Array.from({ length: 40 }, (_, i) => {
+  const m = 4 * 60 + i * 30; // 04:00 AM … 11:30 PM
+  const h = Math.floor(m / 60);
+  const label = `${String(h % 12 === 0 ? 12 : h % 12).padStart(2, '0')}:${String(m % 60).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
+  return { label, value: label, icon: 'time-outline' as const };
+});
+
 export const HomestayProfileScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
   const { homestay, updateHomestay } = useStayRide();
@@ -62,6 +73,8 @@ export const HomestayProfileScreen: React.FC = () => {
   const [email, setEmail] = useState(homestay.email);
   const [location, setLocation] = useState(homestay.location);
   const [description, setDescription] = useState(homestay.description);
+  const [checkInTime, setCheckInTime] = useState(homestay.checkInTime || '12:00 PM');
+  const [checkOutTime, setCheckOutTime] = useState(homestay.checkOutTime || '11:00 AM');
 
   const openEditModal = () => {
     setName(homestay.name);
@@ -70,6 +83,8 @@ export const HomestayProfileScreen: React.FC = () => {
     setEmail(homestay.email);
     setLocation(homestay.location);
     setDescription(homestay.description);
+    setCheckInTime(homestay.checkInTime || '12:00 PM');
+    setCheckOutTime(homestay.checkOutTime || '11:00 AM');
     setEditModalVisible(true);
   };
 
@@ -78,18 +93,19 @@ export const HomestayProfileScreen: React.FC = () => {
       Alert.alert('Required', 'Name cannot be empty');
       return;
     }
-    try {
-      await updateHomestay({
-        ...homestay,
-        name: name.trim(),
-        ownerName: owner.trim(),
-        phone: phone.trim(),
-        email: email.trim(),
-        location: location.trim(),
-        description: description.trim(),
-      });
-    } catch (e: any) {
-      Alert.alert('Not saved', e?.message || 'Could not save your profile. Please try again.');
+    const outcome = await updateHomestay({
+      ...homestay,
+      name: name.trim(),
+      ownerName: owner.trim(),
+      phone: phone.trim(),
+      email: email.trim(),
+      location: location.trim(),
+      description: description.trim(),
+      checkInTime,
+      checkOutTime,
+    });
+    if (!outcome.ok) {
+      Alert.alert('Not saved', outcome.error || 'Could not save your profile. Please try again.');
       return;
     }
     setEditModalVisible(false);
@@ -98,10 +114,9 @@ export const HomestayProfileScreen: React.FC = () => {
 
   // Photo/amenity edits: report server failures instead of leaving an unhandled rejection
   const save = async (data: Parameters<typeof updateHomestay>[0]) => {
-    try {
-      await updateHomestay(data);
-    } catch (e: any) {
-      Alert.alert('Not saved', e?.message || 'Could not save your change. Please try again.');
+    const outcome = await updateHomestay(data);
+    if (!outcome.ok) {
+      Alert.alert('Not saved', outcome.error || 'Could not save your change. Please try again.');
     }
   };
 
@@ -134,7 +149,7 @@ export const HomestayProfileScreen: React.FC = () => {
     <View style={styles.container}>
       <Header title="Homestay Profile" onBack={() => navigation.goBack()} />
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <FormScroll contentContainerStyle={styles.scrollContent}>
         {/* Info Card */}
         <View style={styles.card}>
           <View style={styles.rowBetween}>
@@ -198,7 +213,7 @@ export const HomestayProfileScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
         </View>
-      </ScrollView>
+      </FormScroll>
 
       {/* Edit Profile Modal */}
       <Modal
@@ -207,6 +222,7 @@ export const HomestayProfileScreen: React.FC = () => {
         animationType="slide"
         onRequestClose={() => setEditModalVisible(false)}
       >
+        <KeyboardAwareOverlay style={{ flex: 1 }}>
         <TouchableOpacity
           style={styles.modalOverlay}
           activeOpacity={1}
@@ -253,6 +269,9 @@ export const HomestayProfileScreen: React.FC = () => {
                 onChangeText={setLocation}
               />
 
+              <PlatformSelect label="Check-in from" value={checkInTime} options={HOUSE_TIMES} onSelect={setCheckInTime} />
+              <PlatformSelect label="Check-out by" value={checkOutTime} options={HOUSE_TIMES} onSelect={setCheckOutTime} />
+
               <Text style={styles.label}>Description</Text>
               <TextInput
                 style={[styles.input, styles.textArea]}
@@ -268,6 +287,7 @@ export const HomestayProfileScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
+        </KeyboardAwareOverlay>
       </Modal>
 
       {/* Add Photo Preset Modal */}
@@ -277,6 +297,7 @@ export const HomestayProfileScreen: React.FC = () => {
         animationType="fade"
         onRequestClose={() => setPhotoPickerVisible(false)}
       >
+        <KeyboardAwareOverlay style={{ flex: 1 }}>
         <TouchableOpacity
           style={styles.modalOverlay}
           activeOpacity={1}
@@ -301,6 +322,7 @@ export const HomestayProfileScreen: React.FC = () => {
             </ScrollView>
           </View>
         </TouchableOpacity>
+        </KeyboardAwareOverlay>
       </Modal>
 
       {/* Add Amenity Preset Modal */}
@@ -310,6 +332,7 @@ export const HomestayProfileScreen: React.FC = () => {
         animationType="fade"
         onRequestClose={() => setAmenityPickerVisible(false)}
       >
+        <KeyboardAwareOverlay style={{ flex: 1 }}>
         <TouchableOpacity
           style={styles.modalOverlay}
           activeOpacity={1}
@@ -334,6 +357,7 @@ export const HomestayProfileScreen: React.FC = () => {
             </ScrollView>
           </View>
         </TouchableOpacity>
+        </KeyboardAwareOverlay>
       </Modal>
 
     </View>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,38 +8,22 @@ import {
   TextInput,
   Modal,
   Alert,
-  Linking,
-  Switch,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useStayRide } from '../data/store';
+import { api } from '../data/api';
 import { Header } from '../components/Header';
-import { RadarView } from '../components/RadarView';
-import { DriverItem } from '../components/DriverItem';
+import { FeatureLocked } from '../components/FeatureLocked';
 import { Pill } from '../components/Pill';
 import { PlatformSelect } from '../components/PlatformSelect';
 import { Colors } from '../theme/colors';
+import { FormScroll } from '../components/FormScroll';
+import { vehicleOptions, vehicleLabel } from '../utils/vehicle';
+import { RangeCalendar } from '../components/RangeCalendar';
+import { ownFleetFeeFor } from '../data/platformConfig';
 import { Driver, Guest, VehicleType } from '../types';
-
-const TIMES = [
-  '06:00 AM',
-  '07:30 AM',
-  '09:00 AM',
-  '10:30 AM',
-  '12:00 PM',
-  '02:00 PM',
-  '04:30 PM',
-  '06:00 PM',
-  '08:00 PM',
-];
-
-const TIME_OPTIONS = TIMES.map((t) => ({
-  label: t,
-  value: t,
-  icon: 'time-outline' as const,
-}));
 
 // "hh:mm AM" on a local-midnight day -> epoch ms
 // ponytail: uses device timezone; assumes the device is on IST like the server's check
@@ -54,60 +38,44 @@ const atTime = (dayMs: number, time: string) => {
 
 const isFuture = (ms: number) => ms > Date.now();
 
-const VEHICLE_TYPES: Array<{ label: string; value: VehicleType }> = [
-  { label: 'Sedan (4 Seater)', value: 'Sedan' },
-  { label: 'SUV (Bolero / Innova)', value: 'SUV' },
-  { label: '7-Seater Maxi', value: '7-seater' },
-  { label: '9-Seater Cruiser', value: '9-seater' },
-];
-
-const POPULAR_DESTINATIONS = [
-  'Gangtok MG Marg',
-  'Tsomgo Lake & Baba Mandir',
-  'Nathula Pass Border',
-  'Rumtek Monastery',
-  'Bagdogra Airport (IXB)',
-  'NJP Railway Station',
-  'Darjeeling Mall Road',
-  'Pelling Skywalk',
-];
-
 export const FindDriverScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
-  const { homestay, drivers, networkDrivers, guests, bookings, trips, bookDriver, createTrip } = useStayRide();
+  const { homestay, drivers, guests, bookings, trips, bookDriver, createTrip, features, config } = useStayRide();
+  // Pickup times, booking window, presets and vehicle classes are the admin's settings (from the server)
+  const timeOptions = config.pickupTimes.map((t) => ({ label: t, value: t, icon: 'time-outline' as const }));
+  // Leaving this form ends the submission: a reopened form gets a fresh Idempotency-Key
+  useEffect(() => () => api.clearIdempotencyKeys('/trips'), []);
+  const platformLocked = features?.platformDispatch === false;
 
   // Mode: Nearby Mountain Pool vs My Private Fleet
   const [bookingMode, setBookingMode] = useState<'NEARBY' | 'MY_DRIVERS'>('NEARBY');
 
+  // Pickup is the homestay as saved on the backend; the owner can override it with free text
   const homestayTitle = homestay.name || homestay.location || 'My Homestay';
-  const pickupOptions = useMemo(
-    () => [
-      { label: `${homestayTitle} (Homestay)`, value: homestayTitle, icon: 'home-outline' as const },
-      { label: 'Current GPS location', value: 'Current GPS location', icon: 'navigate-outline' as const },
-      { label: 'NJP Railway Station', value: 'NJP Railway Station', icon: 'train-outline' as const },
-      { label: 'Bagdogra Airport (IXB)', value: 'Bagdogra Airport', icon: 'airplane-outline' as const },
-      { label: 'Gangtok MG Marg Stand', value: 'Gangtok MG Marg', icon: 'location-outline' as const },
-      { label: 'Darjeeling Mall Stand', value: 'Darjeeling Mall Stand', icon: 'location-outline' as const },
-      { label: 'Pelling Market Stand', value: 'Pelling Market', icon: 'location-outline' as const },
-    ],
-    [homestayTitle]
-  );
+  const homestayPickup = [homestay.name, homestay.location].filter(Boolean).join(', ') || homestayTitle;
 
   const [panel, setPanel] = useState<'INPUT' | 'SEARCHING' | 'RESULTS'>('INPUT');
-  const [pickup, setPickup] = useState(homestayTitle);
+  const [customPickup, setCustomPickup] = useState('');
+  const pickup = customPickup.trim() || homestayPickup;
 
-  // Multi-stop destination list
-  const [destinations, setDestinations] = useState<string[]>(['Gangtok MG Marg']);
-
-  // Round trip state
-  const [isRoundTrip, setIsRoundTrip] = useState(false);
-  const [returnDateIdx, setReturnDateIdx] = useState(1);
-  const [returnTime, setReturnTime] = useState(TIMES[6]); // 04:30 PM default
+  // Multi-stop destination list (starts empty: no pre-filled places)
+  const [destinations, setDestinations] = useState<string[]>(['']);
 
   // Schedule & Vehicle
-  const [selectedTime, setSelectedTime] = useState(TIMES[2]); // 09:00 AM default
-  const [selectedDateIdx, setSelectedDateIdx] = useState(1);
-  const [vehicleType, setVehicleType] = useState<VehicleType>('SUV');
+  const [selectedTime, setSelectedTime] = useState(() =>
+    config.pickupTimes.includes('09:00 AM') ? '09:00 AM' : config.pickupTimes[0]
+  );
+  // Pickup day (local midnight); defaults to tomorrow
+  const [pickupDate, setPickupDate] = useState(() => {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime();
+  });
+  const [datePickerVisible, setDatePickerVisible] = useState(false);
+  const [vehicleType, setVehicleType] = useState<VehicleType>(() =>
+    vehicleOptions().some((v) => v.value === 'SUV') ? 'SUV' : vehicleOptions()[0].value
+  );
+  // Fare the owner agreed with their own driver; StayRide's own-fleet fee is taken from it as the advance
+  const [ownFare, setOwnFare] = useState('');
   const [passengers, setPassengers] = useState(2);
 
   // Passenger selection
@@ -124,33 +92,22 @@ export const FindDriverScreen: React.FC = () => {
 
   // Driver modals
   const [selectedDriver, setSelectedDriver] = useState<Driver | null>(null);
-  const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [broadcastSuccessModalVisible, setBroadcastSuccessModalVisible] = useState(false);
   const [bookedSuccessModalVisible, setBookedSuccessModalVisible] = useState(false);
   const [lastCreatedTrip, setLastCreatedTrip] = useState<any>(null);
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false); // blocks double taps before the re-render
 
-  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => () => {
-    if (searchTimer.current) clearTimeout(searchTimer.current);
-  }, []);
-
-  const dates = Array.from({ length: 8 }, (_, i) => {
+  const fmtDay = (ms: number) => {
+    const today = new Date();
+    const t0 = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+    const label = new Date(ms).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+    return ms === t0 ? `Today · ${label}` : ms === t0 + 86400000 ? `Tomorrow · ${label}` : label;
+  };
+  const horizonEnd = (() => {
     const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    d.setDate(d.getDate() + i);
-    return {
-      ms: d.getTime(),
-      label:
-        i === 0
-          ? `Today · ${d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`
-          : i === 1
-          ? `Tomorrow · ${d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`
-          : d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
-    };
-  });
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate() + config.bookingHorizonDays).getTime();
+  })();
 
   // Multi-stop handlers
   const handleAddDestination = () => {
@@ -215,13 +172,8 @@ export const FindDriverScreen: React.FC = () => {
     if (!passenger.name) return 'Please select a guest or enter the passenger name.';
     if (passenger.phone.replace(/[^0-9]/g, '').length < 10) return 'Please enter a valid passenger mobile number.';
     if (destinations.every((d) => !d.trim())) return 'Please add at least one drop location or sightseeing spot.';
-    const pickupAt = atTime(dates[selectedDateIdx].ms, selectedTime);
+    const pickupAt = atTime(pickupDate, selectedTime);
     if (!isFuture(pickupAt)) return 'Pickup date and time is in the past. Please choose a later time.';
-    if (isRoundTrip) {
-      const returnAt = atTime(dates[returnDateIdx].ms, returnTime);
-      if (!returnAt) return 'Please choose a return date and time for the round trip.';
-      if (!(returnAt > pickupAt)) return 'Return date and time must be after the pickup.';
-    }
     return null;
   };
 
@@ -235,11 +187,12 @@ export const FindDriverScreen: React.FC = () => {
     }
     submittingRef.current = true;
     const digits = getPassengerInfo().phone.replace(/[^0-9]/g, '').slice(-10);
-    const day = dates[selectedDateIdx].ms;
+    const day = pickupDate;
     const duplicate = trips.some(
       (t) =>
         t.status !== 'COMPLETED' &&
         t.status !== 'CANCELLED' &&
+        t.status !== 'EXPIRED' &&
         t.phone.replace(/[^0-9]/g, '').slice(-10) === digits &&
         new Date(t.date).toDateString() === new Date(day).toDateString()
     );
@@ -269,22 +222,7 @@ export const FindDriverScreen: React.FC = () => {
     setSubmitting(false);
   };
 
-  // Searching Nearby Drivers
-  const handleStartSearch = () => {
-    const error = validateRequest();
-    if (error) {
-      Alert.alert('Check Trip Details', error);
-      return;
-    }
-
-    setPanel('SEARCHING');
-    if (searchTimer.current) clearTimeout(searchTimer.current);
-    searchTimer.current = setTimeout(() => {
-      setPanel('RESULTS');
-    }, 2400);
-  };
-
-  // Broadcast to all nearby drivers
+  // Send to StayRide drivers/admin (platform dispatch); quotes arrive from the server
   const handleBroadcastToAll = async () => {
     if (!(await beginSubmit())) return;
     const passenger = getPassengerInfo();
@@ -296,17 +234,15 @@ export const FindDriverScreen: React.FC = () => {
       const trip = await createTrip({
         guestName: passenger.name,
         phone: passenger.phone,
-        pickup: pickup === 'Current GPS location' ? homestay.location || homestay.name : pickup,
+        pickup,
         destination: cleanDestinationSummary(),
         destinations: formattedDestinations,
-        isRoundTrip,
-        returnDate: isRoundTrip ? dates[returnDateIdx].ms : undefined,
-        returnTime: isRoundTrip ? returnTime : undefined,
-        date: dates[selectedDateIdx].ms,
+        date: pickupDate,
         time: selectedTime,
         passengers,
         vehicleType,
         source: 'NEARBY_BROADCAST',
+        dispatchMode: 'PLATFORM',
       });
       setLastCreatedTrip(trip);
       setBroadcastSuccessModalVisible(true);
@@ -317,45 +253,15 @@ export const FindDriverScreen: React.FC = () => {
     }
   };
 
-  // Request quote from specific nearby driver
-  const handleRequestQuoteFromDriver = async (driver: Driver) => {
-    if (!(await beginSubmit())) return;
-    const passenger = getPassengerInfo();
-    const formattedDestinations = destinations
-      .filter((d) => d.trim())
-      .map((addr, order) => ({ address: addr, order }));
-
-    try {
-      const trip = await createTrip({
-        guestName: passenger.name,
-        phone: passenger.phone,
-        pickup: pickup === 'Current GPS location' ? homestay.location || homestay.name : pickup,
-        destination: cleanDestinationSummary(),
-        destinations: formattedDestinations,
-        isRoundTrip,
-        returnDate: isRoundTrip ? dates[returnDateIdx].ms : undefined,
-        returnTime: isRoundTrip ? returnTime : undefined,
-        date: dates[selectedDateIdx].ms,
-        time: selectedTime,
-        passengers,
-        vehicleType,
-        assignedDriverId: driver.id,
-        assignedDriverName: driver.name,
-        source: 'MANUAL_OWNER',
-      });
-      setSelectedDriver(driver);
-      setLastCreatedTrip(trip);
-      setProfileModalVisible(false);
-      setBroadcastSuccessModalVisible(true);
-    } catch (err: any) {
-      Alert.alert('Request Failed', err?.message || 'Could not send quote request to driver.');
-    } finally {
-      endSubmit();
-    }
-  };
-
   // Direct assign to host's private driver (My Drivers)
+  const fareNum = Math.round(Number(ownFare));
+  const ownFee = fareNum > 0 ? ownFleetFeeFor(config, fareNum) : 0;
+
   const handleDirectAssignMyDriver = async (driver: Driver) => {
+    if (!(fareNum > 0)) {
+      Alert.alert('Enter the fare', 'Type the fare you agreed with your driver. StayRide takes its fee from it as the guest advance.');
+      return;
+    }
     if (!(await beginSubmit())) return;
     const passenger = getPassengerInfo();
     const formattedDestinations = destinations
@@ -365,17 +271,15 @@ export const FindDriverScreen: React.FC = () => {
       const trip = await bookDriver({
         guestName: passenger.name,
         phone: passenger.phone,
-        pickup: pickup === 'Current GPS location' ? homestay.location || homestay.name : pickup,
+        pickup,
         destination: cleanDestinationSummary(),
         destinations: formattedDestinations,
-        isRoundTrip,
-        returnDate: isRoundTrip ? dates[returnDateIdx].ms : undefined,
-        returnTime: isRoundTrip ? returnTime : undefined,
-        date: dates[selectedDateIdx].ms,
+        date: pickupDate,
         time: selectedTime,
         passengers,
         vehicleType: driver.vehicleType || vehicleType,
         driverId: driver.id,
+        fare: fareNum,
       });
       setSelectedDriver(driver);
       setLastCreatedTrip(trip);
@@ -385,35 +289,6 @@ export const FindDriverScreen: React.FC = () => {
     } finally {
       endSubmit();
     }
-  };
-
-  const shareWhatsappSlip = () => {
-    const passenger = getPassengerInfo();
-    const cleanPhone = passenger.phone.replace(/[^0-9]/g, '');
-    const phoneWithCountry = cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone;
-    const dateText = dates[selectedDateIdx].label;
-    const destText = cleanDestinationSummary();
-    const driverName = selectedDriver?.name || 'Assigned Driver';
-    const vehicle = selectedDriver ? `${selectedDriver.vehicle} (${selectedDriver.plate || 'Hill Permit'})` : vehicleType;
-
-    const msg =
-      `*STAYRIDE MOUNTAIN CAB CONFIRMATION*\n` +
-      `--------------------------------\n` +
-      `Namaste ${passenger.name},\n` +
-      `Your cab from *${homestay.name}* is booked.\n\n` +
-      `🚗 *Driver:* ${driverName}\n` +
-      `🚙 *Vehicle:* ${vehicle}\n` +
-      `📍 *Pickup:* ${pickup}\n` +
-      `🎯 *Route:* ${destText}\n` +
-      `🔄 *Round Trip:* ${isRoundTrip ? `Yes (Return: ${dates[returnDateIdx].label} ${returnTime})` : 'One-way'}\n` +
-      `📅 *Date & Time:* ${dateText} at ${selectedTime}\n\n` +
-      `Your host will share the fare and advance details once confirmed.\n` +
-      `Have a safe mountain journey! 🏔️`;
-
-    const url = `whatsapp://send?phone=${phoneWithCountry}&text=${encodeURIComponent(msg)}`;
-    Linking.openURL(url).catch(() => {
-      Alert.alert('Notice', 'WhatsApp is not installed on this device');
-    });
   };
 
   return (
@@ -436,7 +311,7 @@ export const FindDriverScreen: React.FC = () => {
             style={{ marginRight: 6 }}
           />
           <Text style={[styles.modeToggleText, bookingMode === 'NEARBY' && styles.modeToggleTextActive]}>
-            Nearby Mountain Pool
+            StayRide Drivers
           </Text>
         </TouchableOpacity>
 
@@ -461,25 +336,34 @@ export const FindDriverScreen: React.FC = () => {
 
       {/* PANEL 1: INPUT FORM */}
       {panel === 'INPUT' && (
-        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+        <FormScroll contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
           <View style={styles.card}>
             <Text style={styles.cardTitle}>
               {bookingMode === 'NEARBY' ? 'Mountain Driver Network' : 'Homestay Private Fleet'}
             </Text>
             <Text style={styles.cardSubtitle}>
               {bookingMode === 'NEARBY'
-                ? 'Send your itinerary to 50+ vetted mountain drivers. Drivers quote their best fare; you confirm and earn commission.'
+                ? 'Send your itinerary to StayRide. Driver quotes will appear in Cabs for you to confirm.'
                 : 'Directly dispatch one of your registered homestay drivers without bidding.'}
             </Text>
 
             {/* Pickup Point */}
             <Text style={styles.label}>1. Start / Pickup Location</Text>
-            <PlatformSelect
-              label="Select pickup"
-              value={pickup}
-              options={pickupOptions}
-              onSelect={setPickup}
-            />
+            <View style={styles.stopInputRow}>
+              <View style={styles.stopBadge}>
+                <Ionicons name="home-outline" size={14} color={Colors.brandPrimaryDark} />
+              </View>
+              <TextInput
+                style={styles.stopTextInput}
+                placeholder={homestayPickup}
+                value={customPickup}
+                onChangeText={setCustomPickup}
+                placeholderTextColor={Colors.textSecondary}
+              />
+            </View>
+            <Text style={styles.roundTripSubtitle}>
+              Pickup is your homestay. Type here only if the guest is picked up elsewhere.
+            </Text>
 
             {/* Multi-Destination Builder */}
             <View style={styles.destHeaderRow}>
@@ -497,7 +381,7 @@ export const FindDriverScreen: React.FC = () => {
                 </View>
                 <TextInput
                   style={styles.stopTextInput}
-                  placeholder={idx === 0 ? 'e.g. Gangtok MG Marg or Tsomgo Lake' : 'e.g. Baba Mandir or Rumtek'}
+                  placeholder={idx === 0 ? 'Where to? Type a place or tap one below' : 'Next stop'}
                   value={dest}
                   onChangeText={(text) => handleUpdateDestination(idx, text)}
                   placeholderTextColor={Colors.textSecondary}
@@ -516,7 +400,7 @@ export const FindDriverScreen: React.FC = () => {
             {/* Quick Destination Pills */}
             <Text style={styles.quickPresetTitle}>Quick Sightseeing Presets:</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.presetScroll}>
-              {POPULAR_DESTINATIONS.map((dest, i) => (
+              {config.sightseeingPresets.map((dest, i) => (
                 <TouchableOpacity
                   key={i}
                   style={styles.presetChip}
@@ -528,88 +412,25 @@ export const FindDriverScreen: React.FC = () => {
               ))}
             </ScrollView>
 
-            {/* Round Trip Toggle */}
-            <View style={styles.roundTripRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.roundTripTitle}>Round Trip Return?</Text>
-                <Text style={styles.roundTripSubtitle}>
-                  Includes waiting and same-day or multi-day return transfer
-                </Text>
-              </View>
-              <Switch
-                value={isRoundTrip}
-                onValueChange={(on) => {
-                  setIsRoundTrip(on);
-                  if (on && returnDateIdx < selectedDateIdx) setReturnDateIdx(selectedDateIdx);
-                }}
-                trackColor={{ false: '#CBD5E1', true: Colors.brandPrimaryLight }}
-                thumbColor={isRoundTrip ? Colors.brandPrimaryDark : '#F8FAFC'}
-              />
-            </View>
-
-            {/* Return Date/Time fields if Round Trip */}
-            {isRoundTrip && (
-              <View style={styles.returnSection}>
-                <Text style={styles.label}>Return Date</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginVertical: 6 }}>
-                  {dates.map((d, idx) => {
-                    const active = returnDateIdx === idx;
-                    return (
-                      <TouchableOpacity
-                        key={idx}
-                        style={[styles.dateChip, active && styles.chipActive]}
-                        onPress={() => setReturnDateIdx(idx)}
-                      >
-                        <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                          {d.label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-
-                <PlatformSelect
-                  label="Estimated Return Time"
-                  value={returnTime}
-                  options={TIME_OPTIONS}
-                  onSelect={setReturnTime}
-                />
-              </View>
-            )}
-
             {/* Start Ride Date */}
             <Text style={styles.label}>3. Start Date</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginVertical: 6 }}>
-              {dates.map((d, idx) => {
-                const active = selectedDateIdx === idx;
-                return (
-                  <TouchableOpacity
-                    key={idx}
-                    style={[styles.dateChip, active && styles.chipActive]}
-                    onPress={() => {
-                      setSelectedDateIdx(idx);
-                      if (returnDateIdx < idx) setReturnDateIdx(idx);
-                    }}
-                  >
-                    <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                      {d.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
+            <TouchableOpacity style={styles.datePickBtn} onPress={() => setDatePickerVisible(true)}>
+              <Ionicons name="calendar-outline" size={18} color={Colors.brandPrimaryDark} style={{ marginRight: 8 }} />
+              <Text style={styles.datePickText}>{fmtDay(pickupDate)}</Text>
+              <Ionicons name="chevron-down" size={16} color={Colors.textSecondary} />
+            </TouchableOpacity>
 
             <PlatformSelect
               label="Pickup Time"
               value={selectedTime}
-              options={TIME_OPTIONS}
+              options={timeOptions}
               onSelect={setSelectedTime}
             />
 
             {/* Vehicle Type */}
             <Text style={styles.label}>4. Vehicle Preference & Seats</Text>
             <View style={styles.vehicleTypeGrid}>
-              {VEHICLE_TYPES.map((v) => {
+              {vehicleOptions().map((v) => {
                 const active = vehicleType === v.value;
                 return (
                   <TouchableOpacity
@@ -700,19 +521,41 @@ export const FindDriverScreen: React.FC = () => {
 
             {/* Main Action Button */}
             {bookingMode === 'NEARBY' ? (
-              <TouchableOpacity style={styles.searchBtn} onPress={handleStartSearch}>
-                <Ionicons name="search" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
-                <Text style={styles.searchBtnText}>Search Nearby Mountain Drivers</Text>
-              </TouchableOpacity>
+              platformLocked ? (
+                <FeatureLocked feature="platformDispatch" title="Send to StayRide drivers" />
+              ) : (
+                <TouchableOpacity
+                  style={[styles.searchBtn, submitting && { opacity: 0.6 }]}
+                  onPress={handleBroadcastToAll}
+                  disabled={submitting}
+                >
+                  <Ionicons name="paper-plane" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
+                  <Text style={styles.searchBtnText}>{submitting ? 'Sending…' : 'Send to StayRide drivers'}</Text>
+                </TouchableOpacity>
+              )
             ) : (
               <View style={{ marginTop: 20 }}>
-                <Text style={styles.subheadText}>Select Driver from Your Fleet ({drivers.length}):</Text>
+                <Text style={styles.label}>Fare agreed with your driver (₹)</Text>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="e.g. 3000"
+                  value={ownFare}
+                  onChangeText={(t) => setOwnFare(t.replace(/[^0-9]/g, ''))}
+                  keyboardType="number-pad"
+                  placeholderTextColor={Colors.textSecondary}
+                />
+                <Text style={styles.roundTripSubtitle}>
+                  {fareNum > 0
+                    ? `Guest pays StayRide ₹${ownFee.toLocaleString('en-IN')} advance · ₹${(fareNum - ownFee).toLocaleString('en-IN')} cash to your driver`
+                    : `StayRide fee: ${config.ownFleetFeePercent}% of the fare (min ₹${config.ownFleetMinFee}), paid by the guest as the advance.`}
+                </Text>
+                <Text style={[styles.subheadText, { marginTop: 14 }]}>Select Driver from Your Fleet ({drivers.length}):</Text>
                 {drivers.length === 0 ? (
                   <View style={styles.emptyFleetCard}>
                     <Ionicons name="car-outline" size={36} color="#94A3B8" />
                     <Text style={styles.emptyFleetTitle}>No Private Drivers Added Yet</Text>
                     <Text style={styles.emptyFleetDesc}>
-                      You haven't added private drivers to your homestay fleet yet. Switch to "Nearby Mountain Pool" or add your driver now.
+                      {`You haven't added private drivers to your homestay fleet yet. Switch to "StayRide Drivers" or add your driver now.`}
                     </Text>
                     <TouchableOpacity
                       style={styles.addDriverFleetBtn}
@@ -727,7 +570,7 @@ export const FindDriverScreen: React.FC = () => {
                       <View style={{ flex: 1 }}>
                         <Text style={styles.privateDriverName}>{drv.name}</Text>
                         <Text style={styles.privateDriverVehicle}>
-                          {drv.vehicle} · {drv.vehicleType} · {drv.phone}
+                          {drv.vehicle} · {vehicleLabel(drv.vehicleType)} · {drv.phone}
                         </Text>
                         <Pill
                           type="driver"
@@ -749,143 +592,25 @@ export const FindDriverScreen: React.FC = () => {
               </View>
             )}
           </View>
-        </ScrollView>
+        </FormScroll>
       )}
 
-      {/* PANEL 2: RADAR SEARCHING ANIMATION */}
-      {panel === 'SEARCHING' && (
-        <View style={styles.radarContainer}>
-          <RadarView size={240} />
-          <Text style={styles.radarTitle}>Searching 50+ Mountain Drivers…</Text>
-          <Text style={styles.radarSubtitle}>
-            Matching vehicle types, ratings, and mountain permits along {cleanDestinationSummary()}
-          </Text>
-        </View>
-      )}
-
-      {/* PANEL 3: RESULTS (BROADCAST + INDIVIDUAL DRIVERS) */}
-      {panel === 'RESULTS' && (
-        <ScrollView contentContainerStyle={styles.scrollContent}>
-          <View style={styles.resultsBanner}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.resultsCount}>
-                {networkDrivers.length} verified drivers in mountain pool
-              </Text>
-              <Text style={styles.resultsSort}>Nearest first · Vetted mountain hill routes</Text>
-            </View>
-            <TouchableOpacity style={styles.searchAgainBtn} onPress={() => setPanel('INPUT')}>
-              <Text style={styles.searchAgainText}>Edit Route</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Broadcast to All Card */}
-          <View style={styles.broadcastCard}>
-            <View style={styles.broadcastHeader}>
-              <View style={styles.broadcastIconBadge}>
-                <Ionicons name="flash" size={20} color="#D97706" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.broadcastTitle}>Broadcast to All Nearby Drivers</Text>
-                <Text style={styles.broadcastSubtitle}>
-                  5-minute response window · Drivers submit quotes immediately
-                </Text>
-              </View>
-            </View>
-
-            <TouchableOpacity
-              style={[styles.broadcastActionBtn, submitting && { opacity: 0.6 }]}
-              onPress={handleBroadcastToAll}
-              disabled={submitting}
-            >
-              <Ionicons name="radio" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
-              <Text style={styles.broadcastActionBtnText}>
-                {submitting ? 'Broadcasting...' : '⚡ Broadcast Request to Pool'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Section: Individual Drivers */}
-          <Text style={styles.individualDriversHeader}>Or Select a Specific Driver to Request Quote:</Text>
-
-          {networkDrivers.length === 0 && (
-            <View style={styles.card}>
-              <Text style={styles.cardTitle}>No pool drivers available right now</Text>
-              <Text style={styles.cardSubtitle}>
-                You can still broadcast the itinerary or use your own private drivers.
-              </Text>
-            </View>
-          )}
-
-          {networkDrivers.map((driver) => (
-            <DriverItem
-              key={driver.id}
-              driver={driver}
-              onPress={() => {
-                setSelectedDriver(driver);
-                setProfileModalVisible(true);
+      {/* Pickup date: a calendar limited to the admin's booking window */}
+      <Modal visible={datePickerVisible} transparent animationType="fade" onRequestClose={() => setDatePickerVisible(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setDatePickerVisible(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.modalCard}>
+            <Text style={styles.successTitle}>Pickup date</Text>
+            <RangeCalendar
+              mode="single"
+              checkIn={pickupDate}
+              checkOut={pickupDate}
+              maxDate={horizonEnd}
+              onChange={(day) => {
+                setPickupDate(day);
+                setDatePickerVisible(false);
               }}
-              onBook={() => handleRequestQuoteFromDriver(driver)}
             />
-          ))}
-        </ScrollView>
-      )}
-
-      {/* MODAL 1: Driver Profile */}
-      <Modal
-        visible={profileModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setProfileModalVisible(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setProfileModalVisible(false)}
-        >
-          <View style={styles.profileCard}>
-            {selectedDriver && (
-              <>
-                <View style={styles.profileAvatar}>
-                  <Text style={styles.avatarInitials}>
-                    {selectedDriver.name.slice(0, 2).toUpperCase()}
-                  </Text>
-                </View>
-                <Text style={styles.profileName}>{selectedDriver.name}</Text>
-                <Text style={styles.profileRating}>★ {selectedDriver.rating} rating · Verified Driver</Text>
-                <Text style={styles.profileVehicle}>
-                  {selectedDriver.vehicle} · {selectedDriver.vehicleType} · {selectedDriver.seats} seats
-                </Text>
-                <Text style={styles.profileArea}>{selectedDriver.area}</Text>
-                <Text style={styles.profileTrips}>
-                  Hill Routes: {selectedDriver.trips?.join(' · ') || 'Sikkim & Darjeeling'}
-                </Text>
-
-                <View style={{ marginVertical: 12 }}>
-                  <Pill
-                    type="driver"
-                    value={selectedDriver.available ? 'AVAILABLE NOW' : 'ON A TRIP'}
-                  />
-                </View>
-
-                <TouchableOpacity
-                  style={styles.bookNowBtn}
-                  onPress={() => handleRequestQuoteFromDriver(selectedDriver)}
-                  disabled={submitting}
-                >
-                  <Text style={styles.bookNowBtnText}>
-                    {submitting ? 'Sending...' : `Request Quote from ${selectedDriver.name}`}
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.closeBtn}
-                  onPress={() => setProfileModalVisible(false)}
-                >
-                  <Text style={styles.closeBtnText}>Close</Text>
-                </TouchableOpacity>
-              </>
-            )}
-          </View>
+          </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
 
@@ -901,13 +626,10 @@ export const FindDriverScreen: React.FC = () => {
             <View style={styles.successIconCircle}>
               <Ionicons name="paper-plane" size={32} color="#2563EB" />
             </View>
-            <Text style={styles.successTitle}>Cab Request Broadcasted!</Text>
+            <Text style={styles.successTitle}>Request sent to StayRide</Text>
             <Text style={styles.successMessage}>
-              Your itinerary has been dispatched to {selectedDriver ? selectedDriver.name : 'all nearby mountain drivers'}.
-              {'\n\n'}
-              ⏱ <Text style={{ fontWeight: 'bold' }}>5-minute quote response window.</Text>
-              {'\n'}
-              When drivers quote their fare, it will appear under <Text style={{ fontWeight: 'bold' }}>Cabs ➔ Requested</Text> with your dynamic homestay commission automatically calculated.
+              Request sent to StayRide. Driver quotes will appear here, under{' '}
+              <Text style={{ fontWeight: 'bold' }}>Cabs ➔ Requested</Text>.
             </Text>
 
             <TouchableOpacity
@@ -935,19 +657,18 @@ export const FindDriverScreen: React.FC = () => {
             <View style={[styles.successIconCircle, { backgroundColor: '#DCFCE7' }]}>
               <Ionicons name="checkmark-circle" size={36} color="#16A34A" />
             </View>
-            <Text style={[styles.successTitle, { color: '#16A34A' }]}>Cab Booked Successfully!</Text>
+            <Text style={[styles.successTitle, { color: '#16A34A' }]}>Driver assigned</Text>
             <Text style={styles.successMessage}>
-              Driver <Text style={{ fontWeight: 'bold' }}>{selectedDriver?.name}</Text> is confirmed for {getPassengerInfo().name}.
+              <Text style={{ fontWeight: 'bold' }}>{selectedDriver?.name}</Text> will drive {getPassengerInfo().name}.
               {'\n\n'}
               Route: {cleanDestinationSummary()}
               {'\n'}
-              {dates[selectedDateIdx].label} at {selectedTime}
+              {fmtDay(pickupDate)} at {selectedTime}
+              {'\n\n'}
+              {lastCreatedTrip?.status === 'CONFIRMED'
+                ? 'StayRide sent the trip details to your driver and the guest on WhatsApp.'
+                : `StayRide sent the guest a WhatsApp link to pay the ₹${(lastCreatedTrip?.advanceAmount ?? ownFee).toLocaleString('en-IN')} advance. Phone numbers are shared with your driver and the guest once it is paid.`}
             </Text>
-
-            <TouchableOpacity style={styles.whatsappBtn} onPress={shareWhatsappSlip}>
-              <Ionicons name="logo-whatsapp" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
-              <Text style={styles.whatsappBtnText}>Send WhatsApp Ticket to Guest</Text>
-            </TouchableOpacity>
 
             <TouchableOpacity
               style={styles.doneBtn}
@@ -1157,6 +878,23 @@ const styles = StyleSheet.create({
   chipTextActive: {
     color: '#FFFFFF',
     fontWeight: 'bold',
+  },
+  datePickBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: Colors.divider,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginVertical: 6,
+  },
+  datePickText: {
+    flex: 1,
+    fontSize: 15,
+    color: Colors.textPrimary,
+    fontWeight: '600',
   },
   vehicleTypeGrid: {
     flexDirection: 'row',

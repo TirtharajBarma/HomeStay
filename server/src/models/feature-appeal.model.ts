@@ -1,5 +1,6 @@
 import mongoose, { Schema, model, Document } from "mongoose";
 import { getISTTimestamp } from "../utils/date.js";
+import { dbNameFor } from "../config/env.js";
 
 export type FeatureKey =
   | "campaigns"
@@ -68,6 +69,6 @@ FeatureAppealSchema.pre("save", function () {
 export const FeatureAppeal = model<IFeatureAppeal>("FeatureAppeal", FeatureAppealSchema);
 
 export function getFeatureAppealModel(isDemo = false): mongoose.Model<IFeatureAppeal> {
-  const conn = mongoose.connection.useDb(isDemo ? "test" : "production", { useCache: true });
+  const conn = mongoose.connection.useDb(dbNameFor(isDemo), { useCache: true });
   return (conn.models.FeatureAppeal || conn.model<IFeatureAppeal>("FeatureAppeal", FeatureAppealSchema)) as mongoose.Model<IFeatureAppeal>;
 }

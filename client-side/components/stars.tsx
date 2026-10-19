@@ -3,13 +3,15 @@ import { cn } from "@/lib/cn";
 import { Icon } from "./icon";
 
 type StarsProps = {
-  rating: number;
+  /** null = no real reviews yet; nothing is rendered. */
+  rating: number | null;
   count?: number;
   className?: string;
   size?: "sm" | "md";
 };
 
 export function Stars({ rating, count, className, size = "sm" }: StarsProps) {
+  if (rating === null) return null;
   return (
     <span className={cn("inline-flex items-center gap-1.5", className)}>
       <span className="flex text-secondary">

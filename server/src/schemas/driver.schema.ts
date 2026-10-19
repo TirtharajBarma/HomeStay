@@ -27,6 +27,10 @@ export const DriverStatusSchema = z.object({
   ]),
 });
 
+export const TripStatusSchema = z.object({
+  status: z.enum(["scheduled", "in_progress", "completed", "cancelled"]),
+});
+
 export const CabQuoteSchema = z
   .object({
     fromLat: z.coerce.number().optional(),

@@ -55,15 +55,6 @@ function bookingParams(formData: FormData): RawParams {
   };
 }
 
-function reference(): { reference: string; pin: string } {
-  const values = new Uint32Array(2);
-  crypto.getRandomValues(values);
-  return {
-    reference: `MF-${(values[0] % 1_000_000).toString().padStart(6, "0")}`,
-    pin: String((values[1] % 9000) + 1000),
-  };
-}
-
 export async function confirmReservation(
   _previous: CheckoutState,
   formData: FormData,
@@ -72,7 +63,7 @@ export async function confirmReservation(
   if (!stay) {
     return {
       status: "error",
-      message: "That stay is no longer available for these dates.",
+      message: "We couldn't load that stay right now, or it is no longer available. Nothing was booked.",
       errors: { stay: "Choose a stay from the accommodations page to continue." },
     };
   }
@@ -142,17 +133,30 @@ export async function confirmReservation(
     });
 
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
+      const body = await res.json().catch(() => ({}));
+      const err = body?.error;
       return {
         status: "error",
-        message: err.error || err.message || "Reservation could not be completed. The room may already be booked for these dates.",
+        message:
+          (typeof err === "string" ? err : err?.message) ||
+          body?.message ||
+          "Reservation could not be completed. The room may already be booked for these dates. Nothing was charged.",
         errors: {},
       };
     }
 
     const result = await res.json();
-    if (result.success && result.data) {
-      const b = result.data;
+    const b = result?.data;
+    // Only a server-issued reference, PIN and amounts count as a confirmed booking.
+    const isNum = (v: unknown) => typeof v === "number" && Number.isFinite(v);
+    if (
+      result?.success &&
+      b?.reference &&
+      b?.pin &&
+      isNum(b.dueToday) &&
+      isNum(b.balanceDue) &&
+      isNum(b.totalAmount)
+    ) {
       return {
         status: "confirmed",
         reservation: {
@@ -163,7 +167,7 @@ export async function confirmReservation(
           guestName: b.guestName,
           email: b.email,
           phone: b.phone,
-          arrivalWindow: b.arrivalWindow || arrivalWindows[0].label,
+          arrivalWindow: b.arrivalWindow || arrival?.label || "",
           breakfasts: b.breakfasts || [],
           dates: formatDateRange(booking),
           nights: b.nights || booking.nights,
@@ -180,13 +184,14 @@ export async function confirmReservation(
 
     return {
       status: "error",
-      message: "The reservation server did not return confirmation data. Please try again.",
+      message:
+        "The reservation server did not return a confirmation, so this booking is NOT confirmed. Please contact the homestay before trying again.",
       errors: {},
     };
   } catch (apiErr: any) {
     return {
       status: "error",
-      message: apiErr?.message || "Unable to reach reservation server. Please check your network and try again.",
+      message: `Unable to reach the reservation server (${apiErr?.message || "network error"}). Your booking is NOT confirmed.`,
       errors: {},
     };
   }

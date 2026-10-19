@@ -204,8 +204,29 @@ const DriverTabs: React.FC = () => {
 };
 
 const UnifiedAppTabs: React.FC = () => {
-  const { session, logout } = useStayRide();
+  const { session, logout, sync, syncing } = useStayRide();
   if (session?.role === 'driver') {
+    if (session.driver?.status === 'PENDING_APPROVAL') {
+      return (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: '#0F172A' }}>
+          <Ionicons name="time-outline" size={40} color="#FBBF24" />
+          <Text style={{ fontSize: 20, fontWeight: '800', color: '#FFFFFF', textAlign: 'center', marginTop: 12 }}>Awaiting StayRide approval</Text>
+          <Text style={{ fontSize: 14, color: '#94A3B8', textAlign: 'center', marginTop: 8, lineHeight: 20, maxWidth: 300 }}>
+            StayRide is reviewing your driver account. Trip requests will appear here once you are approved.
+          </Text>
+          <TouchableOpacity
+            onPress={() => sync().catch(() => {})}
+            disabled={syncing}
+            style={{ marginTop: 24, backgroundColor: '#2563EB', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 }}
+          >
+            <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 14 }}>{syncing ? 'Checking…' : 'Check again'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={logout} style={{ marginTop: 12, paddingHorizontal: 24, paddingVertical: 12 }}>
+            <Text style={{ color: '#EF4444', fontWeight: '700', fontSize: 14 }}>Sign Out</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
     return <DriverTabs />;
   }
   if (session?.role === 'admin') {

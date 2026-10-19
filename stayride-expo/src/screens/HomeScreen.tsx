@@ -20,6 +20,7 @@ import { BookingItem } from '../components/BookingItem';
 import { TripItem } from '../components/TripItem';
 import { PlatformSelect } from '../components/PlatformSelect';
 import { Header } from '../components/Header';
+import { SyncBanner } from '../components/SyncBanner';
 
 const HOME_PERIOD_OPTIONS = [
   { label: 'Last 7 days', value: '7d', icon: 'time-outline' as const },
@@ -38,7 +39,7 @@ export const HomeScreen: React.FC = () => {
     monthRevenue,
     occupancyPercent,
     commissionEarned,
-    commissionPending,
+    payoutSummary,
     totalBookings,
     recentBookings,
     upcomingCheckIns,
@@ -64,29 +65,30 @@ export const HomeScreen: React.FC = () => {
   return (
     <View style={styles.container}>
       <Header title={homestay.name || 'My Homestay'} />
+      <SyncBanner />
       <ScrollView
         contentContainerStyle={[styles.scrollContent, { paddingTop: 12 }]}
         refreshControl={<RefreshControl refreshing={syncing} onRefresh={sync} colors={[Colors.brandPrimary]} />}
         showsVerticalScrollIndicator={false}
       >
         <GradientHeader
-          greeting={`${greeting()}, ${(homestay.ownerName || 'Host').split(' ')[0]}`}
+          greeting={homestay.ownerName ? `${greeting()}, ${homestay.ownerName.split(' ')[0]}` : greeting()}
           homestayName={homestay.name || 'My Homestay'}
           tagline="Cosy stays in the clouds. Mountain cabs, zero hassle."
-          location={(homestay.location || 'Gangtok, Sikkim').split(',')[0]}
+          location={(homestay.location || '').split(',')[0]}
           ratingText={
             isDemoMode
               ? `4.9 • ${totalBookings()} stays`
               : totalBookings() === 0
               ? 'New Homestay • 0 stays'
-              : `5.0 • ${totalBookings()} stays`
+              : `${totalBookings()} stays`
           }
           badgeText={
             isDemoMode
               ? 'GOLD HOST'
-              : totalBookings() > 5
-              ? 'SUPER HOST'
-              : 'NEW HOST'
+              : totalBookings() === 0
+              ? 'NEW HOST'
+              : 'HOST'
           }
         />
 
@@ -97,7 +99,7 @@ export const HomeScreen: React.FC = () => {
             <StatCard
               icon="calendar"
               value={todayBookings().length}
-              label="Today's bookings"
+              label="Arrivals today"
               onPress={() => navigation.navigate('Rooms' as any)}
             />
             <StatCard
@@ -144,8 +146,8 @@ export const HomeScreen: React.FC = () => {
             />
             <StatCard
               icon="time"
-              value={`₹${commissionPending().toLocaleString()}`}
-              label="Pending commissions"
+              value={payoutSummary ? `₹${payoutSummary.available.toLocaleString()}` : '—'}
+              label="Commission to withdraw"
               onPress={() => navigation.navigate('Commission')}
             />
           </View>
@@ -177,10 +179,11 @@ export const HomeScreen: React.FC = () => {
               label="Cab Requests"
               onPress={() => navigation.navigate('Cabs' as any)}
             />
+            {/* Adding a booking already adds the guest; asking checked-in guests for a cab earns commission */}
             <QuickActionCard
-              icon="person-add"
-              label="Add Guest"
-              onPress={() => navigation.navigate('NewGuest')}
+              icon="car"
+              label="Ask for Cab"
+              onPress={() => navigation.navigate('Guests' as any)}
             />
             <QuickActionCard
               icon="send"
@@ -257,9 +260,7 @@ export const HomeScreen: React.FC = () => {
               <Text style={[styles.kpiValue, { color: Colors.statusGreen }]}>
                 {isDemoMode
                   ? '+14.2%'
-                  : chartData.values.reduce((a, b) => a + b, 0) === 0
-                  ? '—'
-                  : '+5.0%'}
+                  : '—'}
               </Text>
             </View>
           </View>

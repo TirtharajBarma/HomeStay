@@ -21,7 +21,7 @@
 
 The Admin Application serves as the executive **Control Tower** for the network:
 - **Macro Marketplace Visibility**: Real-time aggregation of total Gross Booking Volume (GBV) across room reservations and mountain cab transit fares.
-- **Platform Commission Tally**: Real-time tracking of the network's 18% cut on transit dispatches.
+- **Platform Commission Tally**: Real-time tracking of the platform's cut on transit dispatches (rates come from Platform Settings, not a hardcoded figure).
 - **Homestay Moderation Desk**: Review incoming property registrations, inspect room counts and owner profiles, and toggle approval statuses (`Approved`, `Pending`, `Suspended`).
 - **Driver Settlement Desk**: Settle completed cab trip payouts to drivers via UPI and attach transaction reference numbers to ensure complete financial auditability.
 
@@ -32,7 +32,7 @@ The Admin Application serves as the executive **Control Tower** for the network:
 | Route | File | Screen Functionality & Admin Experience |
 |:---|:---|:---|
 | `/login` | `app/login/page.tsx` | **Admin Secure Gate**: Role-enforced authentication screen. Validates credentials and verifies `admin` privileges before granting dashboard access. |
-| `/` | `app/page.tsx` | **Platform Control Tower**: <br>• **Executive KPI Bar**: Gross Platform Volume (GBV), Net Platform Cut (18%), Active Drivers, and Pending Payouts.<br>• **Property Moderation Table**: Overview of all host estates, room inventories, and status toggle buttons.<br>• **Transit Dispatches Audit**: Complete feed of mountain cab trips, passenger details, gross fare, and net driver take-home.<br>• **UPI Settlement Modal**: Interactive modal to record UPI reference (`UPI/20261013/...`) and reconcile driver disbursements. |
+| `/` | `app/page.tsx` | **Platform Control Tower**: <br>• **Executive KPI Bar**: Gross Platform Volume (GBV), Net Platform Cut (live % from Platform Settings), Active Drivers, and Pending Payouts.<br>• **Property Moderation Table**: Overview of all host estates, room inventories, and status toggle buttons.<br>• **Transit Dispatches Audit**: Complete feed of mountain cab trips, passenger details, gross fare, and net driver take-home.<br>• **UPI Settlement Modal**: Interactive modal to record UPI reference (`UPI/20261013/...`) and reconcile driver disbursements. |
 
 ---
 

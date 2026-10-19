@@ -14,12 +14,15 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Radii, Shadows } from '../theme/colors';
+import { KeyboardAwareOverlay } from '../components/KeyboardAwareOverlay';
 import { useStayRide } from '../data/store';
 import { RoomItem } from '../components/RoomItem';
+import { OccupancyGrid } from '../components/OccupancyGrid';
+import { RoomCalendarSync } from '../components/RoomCalendarSync';
 import { BookingItem } from '../components/BookingItem';
 import { PlatformSelect } from '../components/PlatformSelect';
 import { Header } from '../components/Header';
-import { Room, RoomStatus } from '../types';
+import { Booking, Room, RoomStatus } from '../types';
 
 const ROOM_TYPE_OPTIONS = [
   { label: 'Standard Room', value: 'Standard', icon: 'bed-outline' as const },
@@ -39,11 +42,10 @@ const FLOOR_OPTIONS = [
   { label: 'Cottage Wing', value: 'Cottage Wing', icon: 'leaf-outline' as const },
 ];
 
+// Occupied / Reserved come from bookings automatically; the owner only blocks a room for maintenance
 const ROOM_STATUS_OPTIONS = [
-  { label: 'Available (Clean & vacant)', value: 'AVAILABLE', icon: 'checkmark-circle-outline' as const },
-  { label: 'Occupied (Guest checked in)', value: 'OCCUPIED', icon: 'person-outline' as const },
-  { label: 'Reserved (Booked upcoming)', value: 'RESERVED', icon: 'calendar-outline' as const },
-  { label: 'Maintenance (Cleaning/Repairs)', value: 'MAINTENANCE', icon: 'construct-outline' as const },
+  { label: 'Open for bookings', value: 'AVAILABLE', icon: 'checkmark-circle-outline' as const },
+  { label: 'Maintenance (cleaning / repairs, no bookings)', value: 'MAINTENANCE', icon: 'construct-outline' as const },
 ];
 
 export const RoomsScreen: React.FC = () => {
@@ -51,8 +53,8 @@ export const RoomsScreen: React.FC = () => {
   const route = useRoute<any>();
   const { rooms, bookings, countRooms, createRoom, updateRoom, deleteRoom } = useStayRide();
 
-  const [activeTab, setActiveTab] = useState<'rooms' | 'bookings'>(
-    route.params?.initialTab === 'bookings' ? 'bookings' : 'rooms'
+  const [activeTab, setActiveTab] = useState<'rooms' | 'bookings' | 'calendar'>(
+    route.params?.initialTab === 'bookings' ? 'bookings' : route.params?.initialTab === 'calendar' ? 'calendar' : 'rooms'
   );
   const [roomFilter, setRoomFilter] = useState<string>('ALL');
   const [bookingFilter, setBookingFilter] = useState<string>('ALL');
@@ -74,7 +76,7 @@ export const RoomsScreen: React.FC = () => {
       setEditType(room.type);
       setEditFloor(room.floor);
       setEditPrice(String(room.price));
-      setEditStatus(room.status);
+      setEditStatus(room.status === 'MAINTENANCE' ? 'MAINTENANCE' : 'AVAILABLE');
       setEditNote(room.note || '');
     } else {
       setSelectedRoom(null);
@@ -93,10 +95,14 @@ export const RoomsScreen: React.FC = () => {
       Alert.alert('Validation Error', 'Room number is required');
       return;
     }
-    const priceNum = parseInt(editPrice, 10) || 1800;
+    const priceNum = /^\d+$/.test(editPrice.trim()) ? parseInt(editPrice.trim(), 10) : 0;
+    if (priceNum <= 0) {
+      Alert.alert('Validation Error', 'Enter the room price per night in whole rupees.');
+      return;
+    }
 
     if (selectedRoom) {
-      await updateRoom(selectedRoom.id, {
+      const outcome = await updateRoom(selectedRoom.id, {
         number: editNumber.trim(),
         type: editType,
         floor: editFloor.trim(),
@@ -104,6 +110,10 @@ export const RoomsScreen: React.FC = () => {
         status: editStatus,
         note: editNote.trim(),
       });
+      if (!outcome.ok) {
+        Alert.alert("Couldn't save", outcome.error || 'Please try again.');
+        return;
+      }
     } else {
       try {
         await createRoom({
@@ -133,7 +143,11 @@ export const RoomsScreen: React.FC = () => {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            await deleteRoom(selectedRoom.id);
+            const outcome = await deleteRoom(selectedRoom.id);
+            if (!outcome.ok) {
+              Alert.alert("Couldn't delete", outcome.error || 'Please try again.');
+              return;
+            }
             setModalVisible(false);
           },
         },
@@ -146,12 +160,28 @@ export const RoomsScreen: React.FC = () => {
     return r.status === roomFilter;
   });
 
+  // Bookings ordered the way a front desk works: in-house first, then upcoming (soonest first), then past
+  const dayStart = (() => {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  })();
+  const isToday = (b: Booking) =>
+    b.status !== 'CANCELLED' &&
+    ((b.checkIn >= dayStart && b.checkIn < dayStart + 86400000) || (b.status === 'CHECKED_IN' && b.checkOut < dayStart + 86400000));
+  const rank: Record<string, number> = { CHECKED_IN: 0, CONFIRMED: 1, CHECKED_OUT: 2, CANCELLED: 3 };
   const filteredBookings = bookings
     .filter((b) => {
       if (bookingFilter === 'ALL') return true;
+      if (bookingFilter === 'TODAY') return isToday(b);
       return b.status === bookingFilter;
     })
-    .sort((a, b) => b.checkIn - a.checkIn);
+    .sort((a, b) =>
+      rank[a.status] !== rank[b.status]
+        ? rank[a.status] - rank[b.status]
+        : a.status === 'CONFIRMED' || a.status === 'CHECKED_IN'
+        ? a.checkIn - b.checkIn
+        : b.checkIn - a.checkIn
+    );
 
   return (
     <View style={styles.container}>
@@ -176,9 +206,19 @@ export const RoomsScreen: React.FC = () => {
             Bookings
           </Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.toggleBtn, activeTab === 'calendar' && styles.toggleBtnActive]}
+          onPress={() => setActiveTab('calendar')}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.toggleBtnText, activeTab === 'calendar' && styles.toggleBtnTextActive]}>
+            Calendar
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {/* Filter Chips */}
+      {activeTab !== 'calendar' && (
       <View style={styles.chipsContainer}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsScroll}>
           {activeTab === 'rooms' ? (
@@ -194,33 +234,49 @@ export const RoomsScreen: React.FC = () => {
               </TouchableOpacity>
             ))
           ) : (
-            ['ALL', 'CONFIRMED', 'CHECKED_IN', 'CHECKED_OUT', 'CANCELLED'].map((f) => (
+            (
+              [
+                ['ALL', 'All'],
+                ['TODAY', 'Today'],
+                ['CHECKED_IN', 'In-house'],
+                ['CONFIRMED', 'Upcoming'],
+                ['CHECKED_OUT', 'Past'],
+                ['CANCELLED', 'Cancelled'],
+              ] as const
+            ).map(([f, label]) => (
               <TouchableOpacity
                 key={f}
                 style={[styles.chip, bookingFilter === f && styles.chipActive]}
                 onPress={() => setBookingFilter(f)}
               >
-                <Text style={[styles.chipText, bookingFilter === f && styles.chipTextActive]}>
-                  {f === 'ALL'
-                    ? 'All'
-                    : f.replace('_', ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())}
-                </Text>
+                <Text style={[styles.chipText, bookingFilter === f && styles.chipTextActive]}>{label}</Text>
               </TouchableOpacity>
             ))
           )}
         </ScrollView>
       </View>
 
+      )}
+
       {/* Counter subheader */}
+      {activeTab !== 'calendar' && (
       <Text style={styles.countText}>
         {activeTab === 'rooms'
           ? `${filteredRooms.length} of ${rooms.length} rooms • ${countRooms('AVAILABLE')} available`
           : `${filteredBookings.length} of ${bookings.length} bookings`}
       </Text>
+      )}
 
       {/* Main List */}
       <ScrollView contentContainerStyle={styles.listContent}>
-        {activeTab === 'rooms' ? (
+        {activeTab === 'calendar' ? (
+          <OccupancyGrid
+            rooms={rooms}
+            bookings={bookings}
+            onOpenBooking={(b) => navigation.navigate('BookingDetail', { bookingId: b.id })}
+            onNewBooking={(room, day) => navigation.navigate('NewBooking', { roomId: room.id, checkIn: day })}
+          />
+        ) : activeTab === 'rooms' ? (
           filteredRooms.length === 0 ? (
             <View style={styles.emptyBox}>
               <Text style={styles.emptyText}>No rooms match this filter.</Text>
@@ -256,6 +312,7 @@ export const RoomsScreen: React.FC = () => {
 
       {/* Add / Edit Room Modal */}
       <Modal visible={modalVisible} transparent animationType="slide" onRequestClose={() => setModalVisible(false)}>
+        <KeyboardAwareOverlay style={{ flex: 1 }}>
         <View style={styles.modalOverlay}>
           <View style={styles.sheetContent}>
             <View style={styles.sheetHeader}>
@@ -300,11 +357,16 @@ export const RoomsScreen: React.FC = () => {
               />
 
               <PlatformSelect
-                label="Status"
+                label="Availability"
                 value={editStatus}
                 options={ROOM_STATUS_OPTIONS}
                 onSelect={(val) => setEditStatus(val as RoomStatus)}
               />
+              {selectedRoom && selectedRoom.status !== 'MAINTENANCE' && (
+                <Text style={styles.modalLabel}>
+                  Right now: {selectedRoom.status.toLowerCase()} (set automatically from bookings)
+                </Text>
+              )}
 
               <Text style={styles.modalLabel}>Note</Text>
               <TextInput
@@ -314,6 +376,9 @@ export const RoomsScreen: React.FC = () => {
                 value={editNote}
                 onChangeText={setEditNote}
               />
+
+              {/* Calendar sync is per saved room */}
+              {selectedRoom && <RoomCalendarSync roomId={selectedRoom.id} />}
 
               <View style={styles.modalButtonsRow}>
                 {selectedRoom && (
@@ -328,6 +393,7 @@ export const RoomsScreen: React.FC = () => {
             </ScrollView>
           </View>
         </View>
+        </KeyboardAwareOverlay>
       </Modal>
     </View>
   );

@@ -14,37 +14,30 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Shadows } from '../theme/colors';
 import { useStayRide } from '../data/store';
+import { reportOutcome, confirmLogoutAll } from '../utils/report';
 
 export const DriverProfileScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
-  const { session, logout, setDriverOnline } = useStayRide();
+  const { session, logout, logoutAllDevices, setDriverOnline, pushEnabled } = useStayRide();
 
   const isOnline = session?.driver?.available !== false;
 
-  const driver = session?.driver || {
-    name: 'Pemba Lepcha',
-    phone: '+91 98000 11223',
-    email: 'driver@stayride.in',
-    vehicle: 'Mahindra Scorpio (SUV)',
-    vehicleType: 'SUV' as const,
-    plate: 'SK-01-A-4488',
-    rating: 4.9,
-    area: 'Gangtok & North Sikkim',
-  };
+  // Only what the server returned for this driver; '—' when a field is missing
+  const driver = session?.driver;
+  const show = (v?: string | number | null) => (v === undefined || v === null || v === '' ? '—' : String(v));
 
   const handleToggleOnline = async (val: boolean) => {
-    try {
-      await setDriverOnline(val);
-      Alert.alert(
-        val ? 'You are Online' : 'You are Offline',
-        val
-          ? 'Homestays and guests nearby can now dispatch ride requests and quote requests to you.'
-          : 'You will not receive any new ride requests until you go online again.'
-      );
-    } catch (e: any) {
-      Alert.alert('Status Error', e?.message || 'Could not update availability.');
-    }
+    const outcome = await setDriverOnline(val);
+    reportOutcome(
+      outcome,
+      val ? 'You are Online' : 'You are Offline',
+      val
+        ? pushEnabled
+          ? 'New StayRide ride requests will reach you here and as notifications.'
+          : 'New StayRide ride requests will appear in My Rides.'
+        : 'You will not receive any new ride requests until you go online again.'
+    );
   };
 
   const handleLogout = () => {
@@ -72,13 +65,15 @@ export const DriverProfileScreen: React.FC = () => {
         {/* Profile Card */}
         <View style={styles.profileCard}>
           <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{driver.name.charAt(0).toUpperCase()}</Text>
+            <Text style={styles.avatarText}>{(driver?.name || '—').charAt(0).toUpperCase()}</Text>
           </View>
-          <Text style={styles.driverName}>{driver.name}</Text>
-          <Text style={styles.driverContact}>{driver.phone} • {driver.email}</Text>
+          <Text style={styles.driverName}>{show(driver?.name)}</Text>
+          <Text style={styles.driverContact}>{show(driver?.phone)} • {show(driver?.email)}</Text>
           <View style={styles.ratingBadge}>
-            <Ionicons name="star" size={14} color="#F59E0B" />
-            <Text style={styles.ratingText}>{driver.rating || 5.0} Rating</Text>
+            <Ionicons name="shield-checkmark" size={14} color="#F59E0B" />
+            <Text style={styles.ratingText}>
+              {driver?.status === 'ACTIVE' ? 'Approved by StayRide' : driver?.status === 'BLOCKED' ? 'Blocked' : driver?.status === 'PENDING_APPROVAL' ? 'Awaiting approval' : '—'}
+            </Text>
           </View>
         </View>
 
@@ -107,19 +102,19 @@ export const DriverProfileScreen: React.FC = () => {
           <Text style={styles.cardSectionTitle}>Vehicle Details</Text>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Vehicle Model:</Text>
-            <Text style={styles.infoVal}>{driver.vehicle}</Text>
+            <Text style={styles.infoVal}>{show(driver?.vehicle)}</Text>
           </View>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Registration / Plate:</Text>
-            <Text style={[styles.infoVal, styles.plateText]}>{driver.plate}</Text>
+            <Text style={[styles.infoVal, styles.plateText]}>{show(driver?.plate)}</Text>
           </View>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Operating Base:</Text>
-            <Text style={styles.infoVal}>{driver.area || 'Darjeeling • Sikkim Hill Roads'}</Text>
+            <Text style={styles.infoVal}>{show(driver?.area)}</Text>
           </View>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Vehicle Type:</Text>
-            <Text style={styles.infoVal}>{driver.vehicleType || 'SUV'}</Text>
+            <Text style={styles.infoVal}>{show(driver?.vehicleType)}</Text>
           </View>
         </View>
 
@@ -131,14 +126,18 @@ export const DriverProfileScreen: React.FC = () => {
             <Text style={styles.infoVal}>StayRide Driver v2.0</Text>
           </View>
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Commission Rate:</Text>
-            <Text style={styles.infoVal}>5% Platform • 10% Host</Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Free Mountain Dispatches:</Text>
-            <Text style={styles.infoVal}>Unlimited Free</Text>
+            <Text style={styles.infoLabel}>Seats:</Text>
+            <Text style={styles.infoVal}>{show(driver?.seats)}</Text>
           </View>
         </View>
+
+        <TouchableOpacity
+          style={styles.logoutBtn}
+          onPress={() => confirmLogoutAll(logoutAllDevices, () => navigation.replace('Login'))}
+        >
+          <Ionicons name="phone-portrait-outline" size={20} color="#DC2626" />
+          <Text style={styles.logoutText}>Sign out of all devices</Text>
+        </TouchableOpacity>
 
         {/* Sign Out Button */}
         <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>

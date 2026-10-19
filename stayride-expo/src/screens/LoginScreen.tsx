@@ -25,6 +25,9 @@ import { useSignIn, useSignUp } from '@clerk/expo/legacy';
 
 import { Colors, Radii, Shadows } from '../theme/colors';
 import { useStayRide } from '../data/store';
+import { DEMO_ENABLED } from '../data/api';
+import { vehicleLabel } from '../utils/vehicle';
+import { KeyboardAwareOverlay } from '../components/KeyboardAwareOverlay';
 
 // Complete any pending auth session (required for Clerk OAuth in Expo)
 WebBrowser.maybeCompleteAuthSession();
@@ -132,10 +135,10 @@ export const LoginScreen: React.FC = () => {
   // Form inputs for Google onboarding
   const [googlePhone, setGooglePhone] = useState('');
   const [googleHomestayName, setGoogleHomestayName] = useState('');
-  const [googleLocation, setGoogleLocation] = useState('Gangtok, Sikkim');
+  const [googleLocation, setGoogleLocation] = useState('');
   const [googleVehicleType, setGoogleVehicleType] = useState<'SUV' | 'Sedan' | '7-seater' | '9-seater'>('SUV');
   const [googleVehicleNumber, setGoogleVehicleNumber] = useState('');
-  const [googleArea, setGoogleArea] = useState('Gangtok & North Sikkim');
+  const [googleArea, setGoogleArea] = useState('');
 
   // Mountain GPS Fine-Tuner & Pin Modal
   const [showGpsModal, setShowGpsModal] = useState(false);
@@ -144,10 +147,18 @@ export const LoginScreen: React.FC = () => {
     longitude: 88.6065,
   });
 
-  const isDemoEmail =
-    email.trim().toLowerCase() === 'demo@stayride.in' ||
-    email.trim().toLowerCase() === 'driver@stayride.in' ||
-    email.trim().toLowerCase() === 'demo-driver@stayride.in';
+  // One-tap demo sign-in (dev builds or EXPO_PUBLIC_ENABLE_DEMO=true only)
+  const handleDemoLogin = async (demoEmail: string) => {
+    setLoading(true);
+    try {
+      await login(demoEmail, 'demo123');
+      navigation.replace('Main');
+    } catch (err: any) {
+      Alert.alert('Demo Login Error', err?.message || 'Could not open the demo.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Sync state tracking to prevent duplicate backend sync runs
   const hasSyncedRef = useRef(false);
@@ -178,8 +189,8 @@ export const LoginScreen: React.FC = () => {
         setGoogleHomestayName(`${user.firstName || 'My'} Homestay`);
         const p = user.primaryPhoneNumber?.phoneNumber || user.phoneNumbers?.[0]?.phoneNumber || '';
         setGooglePhone(p);
-        setGoogleLocation('Gangtok, Sikkim');
-        setGoogleArea('Gangtok & North Sikkim');
+        setGoogleLocation('');
+        setGoogleArea('');
         setGoogleOnboardingStep('role');
         setShowRoleSelectModal(true);
         return;
@@ -194,7 +205,7 @@ export const LoginScreen: React.FC = () => {
         homestayName.trim() ||
         `${user.firstName || 'My'} Homestay`;
       const locationMeta =
-        (user.unsafeMetadata?.location as string) || location.trim() || 'Gangtok, Sikkim';
+        (user.unsafeMetadata?.location as string) || location.trim();
       const phoneMeta =
         (user.unsafeMetadata?.phone as string) || phone.trim() || '';
 
@@ -207,7 +218,7 @@ export const LoginScreen: React.FC = () => {
             homestayName: homestayMeta,
             location: locationMeta,
             phone: phoneMeta,
-            name: user.fullName || user.firstName || name.trim() || (determinedRole === 'driver' ? 'Driver' : 'Host'),
+            name: user.fullName || user.firstName || name.trim() || undefined,
             vehicleType: (user.unsafeMetadata?.vehicleType as string) || vehicleType,
             vehicleNumber: (user.unsafeMetadata?.vehicleNumber as string) || vehicleNumber,
             area: (user.unsafeMetadata?.area as string) || area,
@@ -281,6 +292,10 @@ export const LoginScreen: React.FC = () => {
         Alert.alert('Vehicle Plate Required', 'Please enter your vehicle registration / plate number (e.g. SK-01-A-4488).');
         return;
       }
+      if (!googleArea.trim()) {
+        Alert.alert('Operating Area Required', 'Please enter the area where you drive (e.g. your town or route).');
+        return;
+      }
     } else {
       if (!googleHomestayName.trim()) {
         Alert.alert('Homestay Name Required', 'Please enter your homestay or property name.');
@@ -297,13 +312,13 @@ export const LoginScreen: React.FC = () => {
         role: googleRole,
         phone: cleanPhone,
         homestayName: googleHomestayName.trim(),
-        location: googleLocation.trim() || 'Gangtok, Sikkim',
+        location: googleLocation.trim(),
         vehicleType: googleVehicleType,
         vehicleNumber: googleVehicleNumber.trim().toUpperCase(),
-        area: googleArea.trim() || 'Gangtok & North Sikkim',
+        area: googleArea.trim(),
         latitude: coords?.latitude,
         longitude: coords?.longitude,
-        mapQuery: coords ? `${coords.latitude},${coords.longitude}` : (googleLocation.trim() || 'Gangtok, Sikkim'),
+        mapQuery: coords ? `${coords.latitude},${coords.longitude}` : googleLocation.trim(),
       };
 
       if (pendingGoogleUser.update) {
@@ -319,7 +334,7 @@ export const LoginScreen: React.FC = () => {
       if (!clerkToken) throw new Error('Could not get your sign-in session. Please try again.');
 
       await syncClerkUser(pendingGoogleUser, clerkToken, {
-        name: pendingGoogleUser.fullName || pendingGoogleUser.firstName || (googleRole === 'driver' ? 'Driver' : 'Host'),
+        name: pendingGoogleUser.fullName || pendingGoogleUser.firstName || undefined,
         ...metadataPayload,
       });
 
@@ -391,11 +406,12 @@ export const LoginScreen: React.FC = () => {
       return;
     }
 
-    // Direct bypass for Demo Accounts
+    // Direct bypass for Demo Accounts (demo-enabled builds only)
     if (
-      cleanEmail.toLowerCase() === 'demo@stayride.in' ||
+      DEMO_ENABLED &&
+      (cleanEmail.toLowerCase() === 'demo@stayride.in' ||
       cleanEmail.toLowerCase() === 'driver@stayride.in' ||
-      cleanEmail.toLowerCase() === 'demo-driver@stayride.in'
+      cleanEmail.toLowerCase() === 'demo-driver@stayride.in')
     ) {
       setLoading(true);
       try {
@@ -475,6 +491,7 @@ export const LoginScreen: React.FC = () => {
       if (!cleanHomestay) return Alert.alert('Validation Error', 'Homestay name is required.');
     } else {
       if (!cleanPlate) return Alert.alert('Validation Error', 'Vehicle plate number is required.');
+      if (!cleanArea) return Alert.alert('Validation Error', 'Please enter the area where you drive.');
     }
 
     if (!isSignUpLoaded || !signUp) {
@@ -490,7 +507,7 @@ export const LoginScreen: React.FC = () => {
               phone: cleanPhone,
               role: 'owner',
               homestayName: cleanHomestay,
-              location: cleanLocation || 'Gangtok, Sikkim',
+              location: cleanLocation,
               latitude: coords?.latitude,
               longitude: coords?.longitude,
               mapQuery: coords ? `${coords.latitude},${coords.longitude}` : cleanLocation,
@@ -500,7 +517,7 @@ export const LoginScreen: React.FC = () => {
               role: 'driver',
               vehicleType,
               vehicleNumber: cleanPlate,
-              area: cleanArea || 'Darjeeling • Hill Roads',
+              area: cleanArea,
             };
 
       const result = await signUp.create({
@@ -594,7 +611,8 @@ export const LoginScreen: React.FC = () => {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      // Android 15+ is edge-to-edge: the system no longer resizes the window, so the view must
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <StatusBar style="dark" />
       <ScrollView
@@ -603,6 +621,8 @@ export const LoginScreen: React.FC = () => {
           { paddingTop: topPad, paddingBottom: bottomPad },
         ]}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        automaticallyAdjustKeyboardInsets
         showsVerticalScrollIndicator={false}
       >
         {/* Brand Header */}
@@ -863,7 +883,7 @@ export const LoginScreen: React.FC = () => {
                         onPress={() => setVehicleType(v)}
                       >
                         <Text style={[styles.vehicleChipText, vehicleType === v && styles.vehicleChipTextActive]}>
-                          {v}
+                          {vehicleLabel(v)}
                         </Text>
                       </TouchableOpacity>
                     ))}
@@ -879,7 +899,7 @@ export const LoginScreen: React.FC = () => {
                     placeholderTextColor={Colors.textSecondary}
                   />
 
-                  <Text style={styles.label}>Operating Base / Coverage</Text>
+                  <Text style={styles.label}>Operating Area *</Text>
                   <TextInput
                     style={styles.input}
                     placeholder="e.g. Gangtok & North Sikkim"
@@ -931,13 +951,32 @@ export const LoginScreen: React.FC = () => {
                   </Text>
                 )}
               </TouchableOpacity>
+
+              {DEMO_ENABLED && authMode === 'signin' && (
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+                  <TouchableOpacity
+                    style={[styles.submitBtn, { flex: 1, backgroundColor: '#F1F5F9' }]}
+                    disabled={loading}
+                    onPress={() => handleDemoLogin('demo@stayride.in')}
+                  >
+                    <Text style={[styles.submitBtnText, { color: '#475569' }]}>Demo Host</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.submitBtn, { flex: 1, backgroundColor: '#F1F5F9' }]}
+                    disabled={loading}
+                    onPress={() => handleDemoLogin('driver@stayride.in')}
+                  >
+                    <Text style={[styles.submitBtnText, { color: '#475569' }]}>Demo Driver</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
           )}
         </View>
 
         {/* Google OAuth Multi-Step Onboarding Modal */}
         <Modal visible={showRoleSelectModal} transparent animationType="fade">
-          <View style={styles.modalOverlay}>
+          <KeyboardAwareOverlay style={styles.modalOverlay}>
             <View style={[styles.modalCard, googleOnboardingStep === 'details' && { maxHeight: '88%' }]}>
               {googleOnboardingStep === 'role' ? (
                 <>
@@ -982,7 +1021,7 @@ export const LoginScreen: React.FC = () => {
                   </TouchableOpacity>
                 </>
               ) : (
-                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 10 }}>
+                <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 10 }}>
                   <TouchableOpacity
                     style={styles.onboardingBackBtn}
                     onPress={() => setGoogleOnboardingStep('role')}
@@ -1067,7 +1106,7 @@ export const LoginScreen: React.FC = () => {
                             onPress={() => setGoogleVehicleType(v)}
                           >
                             <Text style={[styles.vehicleChipText, googleVehicleType === v && styles.vehicleChipTextActive]}>
-                              {v}
+                              {vehicleLabel(v)}
                             </Text>
                           </TouchableOpacity>
                         ))}
@@ -1083,7 +1122,7 @@ export const LoginScreen: React.FC = () => {
                         placeholderTextColor={Colors.textSecondary}
                       />
 
-                      <Text style={styles.label}>Operating Base / Valley Route</Text>
+                      <Text style={styles.label}>Operating Area *</Text>
                       <TextInput
                         style={styles.input}
                         placeholder="e.g. Gangtok & North Sikkim"
@@ -1104,12 +1143,12 @@ export const LoginScreen: React.FC = () => {
                 </ScrollView>
               )}
             </View>
-          </View>
+          </KeyboardAwareOverlay>
         </Modal>
 
         {/* Mountain GPS Fine-Tuner & Pin Modal */}
         <Modal visible={showGpsModal} transparent animationType="slide">
-          <View style={styles.modalOverlay}>
+          <KeyboardAwareOverlay style={styles.modalOverlay}>
             <View style={[styles.modalCard, { maxWidth: 420 }]}>
               <View style={[styles.modalHeaderIcon, { backgroundColor: '#DCFCE7' }]}>
                 <Ionicons name="location" size={28} color="#16A34A" />
@@ -1203,7 +1242,7 @@ export const LoginScreen: React.FC = () => {
                 </TouchableOpacity>
               </View>
             </View>
-          </View>
+          </KeyboardAwareOverlay>
         </Modal>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -1218,7 +1257,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 20,
     justifyContent: 'center',
-    minHeight: '100%',
+    flexGrow: 1, // grows to center short forms, but scrolls instead of overflowing when the keyboard is up
   },
   headerBox: {
     alignItems: 'center',

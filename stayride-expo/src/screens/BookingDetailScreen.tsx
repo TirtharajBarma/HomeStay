@@ -7,6 +7,8 @@ import {
   TouchableOpacity,
   Alert,
   Modal,
+  TextInput,
+  Share,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -15,7 +17,13 @@ import { useStayRide } from '../data/store';
 import { Header } from '../components/Header';
 import { Pill } from '../components/Pill';
 import { Colors } from '../theme/colors';
-import { Room } from '../types';
+import { PaymentMethod, Room } from '../types';
+import { reportOutcome } from '../utils/report';
+import { bookingClash, canCheckInNow, isPast, checkoutDueAt } from '../utils/rooms';
+import { paidOf, balanceOf, PAYMENT_METHODS, methodLabel, receiptText } from '../utils/payments';
+import { askGuestForCab as askForCab } from '../utils/askCab';
+import { RangeCalendar } from '../components/RangeCalendar';
+import { KeyboardAwareOverlay } from '../components/KeyboardAwareOverlay';
 
 export const BookingDetailScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
@@ -28,11 +36,29 @@ export const BookingDetailScreen: React.FC = () => {
     checkInBooking,
     checkOutBooking,
     cancelBooking,
-    setBookingPaid,
     changeBookingRoom,
+    editBooking,
+    addPayment,
+    removePayment,
+    homestay,
+    guests,
+    askGuestForCab,
+    features,
   } = useStayRide();
 
   const [assignModalVisible, setAssignModalVisible] = useState(false);
+  // Edit stay: draft dates/amount/party size until Save
+  const [editVisible, setEditVisible] = useState(false);
+  const [draftIn, setDraftIn] = useState(0);
+  const [draftOut, setDraftOut] = useState(0);
+  const [draftAmount, setDraftAmount] = useState('');
+  const [draftGuests, setDraftGuests] = useState('');
+  const [saving, setSaving] = useState(false);
+  // Record payment
+  const [payVisible, setPayVisible] = useState(false);
+  const [payAmount, setPayAmount] = useState('');
+  const [payMethod, setPayMethod] = useState<PaymentMethod>('UPI');
+  const [payNote, setPayNote] = useState('');
   const insets = useSafeAreaInsets();
 
   const booking = bookings.find((b) => b.id === bookingId);
@@ -60,8 +86,12 @@ export const BookingDetailScreen: React.FC = () => {
   const getStatusNote = () => {
     switch (booking.status) {
       case 'CONFIRMED':
-        return 'Next step: check the guest in when they arrive. You can also assign a different room.';
+        if (isPast(booking.checkOut)) return 'The stay dates have passed and the guest never checked in. Cancel the booking if it was a no-show.';
+        return 'Next step: check the guest in when they arrive. For an early arrival, use Edit stay to move the check-in to today.';
       case 'CHECKED_IN':
+        if (isPast(checkoutDueAt(booking, homestay.checkOutTime))) {
+          return `Check-out was due ${fmtLong(booking.checkOut)}${homestay.checkOutTime ? ` at ${homestay.checkOutTime}` : ''}. Check the guest out, or use Edit stay to extend.`;
+        }
         return 'Guest is currently in-house. Remember to settle the payment at check-out.';
       case 'CHECKED_OUT':
         return booking.paid
@@ -81,8 +111,17 @@ export const BookingDetailScreen: React.FC = () => {
         {
           text: 'Check in',
           onPress: async () => {
-            await checkInBooking(booking.id);
-            Alert.alert('Success', `${booking.guestName} checked in to room ${booking.roomNumber}`);
+            const outcome = await checkInBooking(booking.id);
+            if (!outcome.ok) return reportOutcome(outcome, '', '');
+            // Right moment to offer a cab: the guest just arrived and will need rides (StayRide earns on cabs)
+            const guest = guests.find((g) => g.id === booking.guestId);
+            if (!guest?.phone || features?.guestCabLinks === false) {
+              return Alert.alert('Checked in', `${booking.guestName} checked in to room ${booking.roomNumber}`);
+            }
+            Alert.alert('Checked in', `${booking.guestName} is in room ${booking.roomNumber}. Ask if they need a cab during their stay?`, [
+              { text: 'Not now', style: 'cancel' },
+              { text: 'Send cab link', onPress: () => askForCab(askGuestForCab, guest) },
+            ]);
           },
         },
       ]
@@ -98,8 +137,8 @@ export const BookingDetailScreen: React.FC = () => {
         {
           text: 'Check out',
           onPress: async () => {
-            await checkOutBooking(booking.id);
-            Alert.alert('Success', `${booking.guestName} checked out`);
+            const outcome = await checkOutBooking(booking.id);
+            reportOutcome(outcome, 'Success', `${booking.guestName} checked out`);
           },
         },
       ]
@@ -109,30 +148,102 @@ export const BookingDetailScreen: React.FC = () => {
   const handleCancelBooking = () => {
     Alert.alert(
       'Cancel this booking?',
-      `Room ${booking.roomNumber} will be released and the guest will be notified (demo).`,
+      `Room ${booking.roomNumber} will be free again for these dates. Let the guest know yourself; StayRide does not message them.`,
       [
         { text: 'Keep booking', style: 'cancel' },
         {
           text: 'Cancel booking',
           style: 'destructive',
           onPress: async () => {
-            await cancelBooking(booking.id);
-            Alert.alert('Notice', 'Booking cancelled');
+            const outcome = await cancelBooking(booking.id);
+            reportOutcome(outcome, 'Notice', 'Booking cancelled');
           },
         },
       ]
     );
   };
 
-  const handleMarkPaid = async () => {
-    await setBookingPaid(booking.id, true);
-    Alert.alert('Payment Settled', `Payment of ₹${booking.amount.toLocaleString()} marked as paid`);
+  const received = paidOf(booking);
+  const balance = balanceOf(booking);
+
+  const openPayment = () => {
+    setPayAmount(String(balance));
+    setPayMethod('UPI');
+    setPayNote('');
+    setPayVisible(true);
+  };
+
+  const handleRecordPayment = async () => {
+    const amountNum = parseInt(payAmount, 10);
+    if (!(amountNum > 0)) return Alert.alert('Enter amount', 'Type the amount received.');
+    if (amountNum > balance) return Alert.alert('Too much', `Only ₹${balance.toLocaleString('en-IN')} is due.`);
+    setSaving(true);
+    const outcome = await addPayment(booking.id, { amount: amountNum, method: payMethod, note: payNote.trim() });
+    setSaving(false);
+    if (outcome.ok) setPayVisible(false);
+    reportOutcome(
+      outcome,
+      'Payment recorded',
+      amountNum >= balance ? 'Booking is fully paid.' : `₹${(balance - amountNum).toLocaleString('en-IN')} still due.`
+    );
+  };
+
+  const handleRemovePayment = (paymentId: number, amountNum: number) =>
+    Alert.alert('Remove this payment?', `₹${amountNum.toLocaleString('en-IN')} will no longer count as received.`, [
+      { text: 'Keep', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: async () => reportOutcome(await removePayment(booking.id, paymentId), 'Removed', 'Payment removed'),
+      },
+    ]);
+
+  // Sent from the owner's own phone (WhatsApp, SMS…): a receipt is between owner and guest
+  const handleShareReceipt = () => Share.share({ message: receiptText(booking, homestay) }).catch(() => {});
+
+  const roomPrice = rooms.find((r) => r.number === booking.roomNumber)?.price ?? 0;
+  const draftNights = Math.max(1, Math.round((draftOut - draftIn) / 86400000));
+  const today = (() => {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  })();
+
+  const openEdit = () => {
+    setDraftIn(booking.checkIn);
+    setDraftOut(booking.checkOut);
+    setDraftAmount(String(booking.amount));
+    setDraftGuests(String(booking.guests));
+    setEditVisible(true);
+  };
+
+  // New dates suggest a new total (room price × nights); the owner can still change it
+  const setDates = (inMs: number, outMs: number) => {
+    setDraftIn(inMs);
+    setDraftOut(outMs);
+    if (roomPrice > 0) setDraftAmount(String(roomPrice * Math.max(1, Math.round((outMs - inMs) / 86400000))));
+  };
+
+  const handleSaveEdit = async () => {
+    const amountNum = Number(draftAmount);
+    const guestsNum = Number(draftGuests);
+    if (!Number.isFinite(amountNum) || amountNum < 0) return Alert.alert('Invalid', 'Enter a valid amount.');
+    if (!Number.isInteger(guestsNum) || guestsNum < 1) return Alert.alert('Invalid', 'Enter the number of guests.');
+    setSaving(true);
+    const outcome = await editBooking(booking.id, {
+      ...(booking.status === 'CONFIRMED' ? { checkIn: draftIn } : {}),
+      checkOut: draftOut,
+      amount: Math.round(amountNum),
+      guests: guestsNum,
+    });
+    setSaving(false);
+    if (outcome.ok) setEditVisible(false);
+    reportOutcome(outcome, 'Stay updated', `${fmtLong(draftIn)} → ${fmtLong(draftOut)} · ₹${Math.round(amountNum).toLocaleString()}`);
   };
 
   const handleSelectRoom = async (room: Room) => {
     setAssignModalVisible(false);
-    await changeBookingRoom(booking.id, room.number);
-    Alert.alert('Room Assigned', `Room ${room.number} assigned`);
+    const outcome = await changeBookingRoom(booking.id, room.number);
+    reportOutcome(outcome, 'Room Assigned', `Room ${room.number} assigned`);
   };
 
   return (
@@ -154,7 +265,21 @@ export const BookingDetailScreen: React.FC = () => {
           <Text style={styles.detailText}>
             {fmtLong(booking.checkIn)}  →  {fmtLong(booking.checkOut)}
           </Text>
-          <Text style={styles.detailText}>{booking.phone}</Text>
+          {(homestay.checkInTime || homestay.checkOutTime) && (
+            <Text style={styles.detailText}>
+              Check-in from {homestay.checkInTime || '—'} · Check-out by {homestay.checkOutTime || '—'}
+            </Text>
+          )}
+          {booking.phone ? <Text style={styles.detailText}>{booking.phone}</Text> : null}
+          {booking.external && (
+            <View style={[styles.externalBox, booking.external.conflict && styles.externalConflict]}>
+              <Text style={styles.externalText}>
+                {booking.external.conflict
+                  ? `⚠ Possible double booking: this ${booking.external.source} stay overlaps another booking in room ${booking.roomNumber}. Move or cancel one of them.`
+                  : `Imported from your ${booking.external.source} calendar. Guest details are on ${booking.external.source}; dates update on each sync.`}
+              </Text>
+            </View>
+          )}
 
           <View style={styles.divider} />
 
@@ -165,7 +290,30 @@ export const BookingDetailScreen: React.FC = () => {
                 {nights} nights · {booking.roomNumber}
               </Text>
             </View>
-            <Pill type="payment" value={booking.paid ? 'PAID' : 'UNPAID'} />
+            <Pill type="payment" value={balance === 0 && booking.amount > 0 ? 'PAID' : received > 0 ? 'PENDING' : 'UNPAID'} label={balance === 0 && booking.amount > 0 ? 'PAID' : received > 0 ? 'PART PAID' : 'UNPAID'} />
+          </View>
+          <View style={styles.payRow}>
+            <Text style={styles.payStat}>Received ₹{received.toLocaleString('en-IN')}</Text>
+            <Text style={[styles.payStat, balance > 0 && { color: Colors.statusOrange }]}>Balance ₹{balance.toLocaleString('en-IN')}</Text>
+          </View>
+          {(booking.payments || []).map((p) => (
+            <TouchableOpacity key={p.id} onLongPress={() => handleRemovePayment(p.id, p.amount)} delayLongPress={400}>
+              <Text style={styles.payLine}>
+                + ₹{p.amount.toLocaleString('en-IN')} · {methodLabel(p.method)} · {new Date(p.at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                {p.note ? ` · ${p.note}` : ''}
+              </Text>
+            </TouchableOpacity>
+          ))}
+          {(booking.payments || []).length > 0 && <Text style={styles.payHint}>Long-press a payment to remove it</Text>}
+          <View style={styles.payActions}>
+            {booking.status !== 'CANCELLED' && balance > 0 && (
+              <TouchableOpacity style={styles.payBtn} onPress={openPayment}>
+                <Text style={styles.payBtnText}>Record payment</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={[styles.payBtn, styles.payBtnOutline]} onPress={handleShareReceipt}>
+              <Text style={[styles.payBtnText, { color: Colors.brandPrimaryDark }]}>Share receipt</Text>
+            </TouchableOpacity>
           </View>
 
           <Text style={styles.sourceText}>Source: {booking.source}</Text>
@@ -191,17 +339,32 @@ export const BookingDetailScreen: React.FC = () => {
 
       {/* Action Buttons Footer */}
       <View style={[styles.footerActions, { paddingBottom: Math.max(insets.bottom, 16) + 8 }]}>
+        {(booking.status === 'CONFIRMED' || booking.status === 'CHECKED_IN') && !booking.external && (
+          <TouchableOpacity style={styles.outlineBtn} onPress={openEdit}>
+            <Text style={styles.outlineBtnText}>
+              {booking.status === 'CHECKED_IN' ? 'Extend / change check-out' : 'Edit stay (dates, amount, guests)'}
+            </Text>
+          </TouchableOpacity>
+        )}
         {booking.status === 'CONFIRMED' && (
           <>
-            <TouchableOpacity
-              style={styles.outlineBtn}
-              onPress={() => setAssignModalVisible(true)}
-            >
-              <Text style={styles.outlineBtnText}>Assign / change room</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.solidBtn} onPress={handleCheckIn}>
-              <Text style={styles.solidBtnText}>Check in guest</Text>
-            </TouchableOpacity>
+            {!booking.external && (
+              <TouchableOpacity style={styles.outlineBtn} onPress={() => setAssignModalVisible(true)}>
+                <Text style={styles.outlineBtnText}>Assign / change room</Text>
+              </TouchableOpacity>
+            )}
+
+            {canCheckInNow(booking) ? (
+              <TouchableOpacity style={styles.solidBtn} onPress={handleCheckIn}>
+                <Text style={styles.solidBtnText}>Check in guest</Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={[styles.solidBtn, { opacity: 0.5 }]}>
+                <Text style={styles.solidBtnText}>
+                  Check-in opens {new Date(booking.checkIn).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                </Text>
+              </View>
+            )}
             <TouchableOpacity
               style={[styles.outlineBtn, { borderColor: Colors.statusRed }]}
               onPress={handleCancelBooking}
@@ -218,20 +381,114 @@ export const BookingDetailScreen: React.FC = () => {
             <TouchableOpacity style={styles.solidBtn} onPress={handleCheckOut}>
               <Text style={styles.solidBtnText}>Check out guest</Text>
             </TouchableOpacity>
-            {!booking.paid && (
-              <TouchableOpacity style={styles.outlineBtn} onPress={handleMarkPaid}>
-                <Text style={styles.outlineBtnText}>Mark payment as paid</Text>
+            {balance > 0 && (
+              <TouchableOpacity style={styles.outlineBtn} onPress={openPayment}>
+                <Text style={styles.outlineBtnText}>Record payment (₹{balance.toLocaleString('en-IN')} due)</Text>
               </TouchableOpacity>
             )}
           </>
         )}
 
-        {booking.status === 'CHECKED_OUT' && !booking.paid && (
-          <TouchableOpacity style={styles.solidBtn} onPress={handleMarkPaid}>
-            <Text style={styles.solidBtnText}>Mark payment as paid</Text>
+        {booking.status === 'CHECKED_OUT' && balance > 0 && (
+          <TouchableOpacity style={styles.solidBtn} onPress={openPayment}>
+            <Text style={styles.solidBtnText}>Record payment (₹{balance.toLocaleString('en-IN')} due)</Text>
           </TouchableOpacity>
         )}
       </View>
+
+      {/* Record Payment Modal */}
+      <Modal visible={payVisible} transparent animationType="slide" onRequestClose={() => setPayVisible(false)}>
+        <KeyboardAwareOverlay style={{ flex: 1 }}>
+          <View style={styles.editOverlay}>
+            <View style={[styles.editSheet, { paddingBottom: 24 }]}>
+              <Text style={styles.modalTitle}>Record payment</Text>
+              <Text style={styles.editSummary}>
+                Total ₹{booking.amount.toLocaleString('en-IN')} · received ₹{received.toLocaleString('en-IN')} · due ₹{balance.toLocaleString('en-IN')}
+              </Text>
+              <Text style={styles.editLabel}>Amount received (₹)</Text>
+              <TextInput
+                style={styles.editInput}
+                value={payAmount}
+                onChangeText={(t) => setPayAmount(t.replace(/[^0-9]/g, ''))}
+                keyboardType="number-pad"
+              />
+              <Text style={styles.editLabel}>Paid by</Text>
+              <View style={styles.payActions}>
+                {PAYMENT_METHODS.map((m) => (
+                  <TouchableOpacity
+                    key={m.value}
+                    style={[styles.methodChip, payMethod === m.value && styles.methodChipActive]}
+                    onPress={() => setPayMethod(m.value)}
+                  >
+                    <Text style={[styles.methodChipText, payMethod === m.value && { color: '#FFFFFF' }]}>{m.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <Text style={styles.editLabel}>Note (optional)</Text>
+              <TextInput style={styles.editInput} value={payNote} onChangeText={setPayNote} placeholder="e.g. UPI ref 4821" placeholderTextColor={Colors.textSecondary} />
+              <TouchableOpacity style={[styles.solidBtn, { marginTop: 14 }]} disabled={saving} onPress={handleRecordPayment}>
+                <Text style={styles.solidBtnText}>{saving ? 'Saving…' : 'Save payment'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.outlineBtn} onPress={() => setPayVisible(false)}>
+                <Text style={styles.outlineBtnText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAwareOverlay>
+      </Modal>
+
+      {/* Edit Stay Modal */}
+      <Modal visible={editVisible} transparent animationType="slide" onRequestClose={() => setEditVisible(false)}>
+        <KeyboardAwareOverlay style={{ flex: 1 }}>
+          <View style={styles.editOverlay}>
+            <ScrollView style={styles.editSheet} contentContainerStyle={{ paddingBottom: 16 }} keyboardShouldPersistTaps="handled">
+              <Text style={styles.modalTitle}>
+                {booking.status === 'CHECKED_IN' ? 'Change check-out' : 'Edit stay'}
+              </Text>
+              {booking.status === 'CHECKED_IN' ? (
+                <RangeCalendar
+                  key={`out-${editVisible}`}
+                  mode="single"
+                  checkIn={draftOut}
+                  checkOut={draftOut}
+                  minDate={Math.max(today, booking.checkIn + 86400000)}
+                  onChange={(day) => setDates(booking.checkIn, day)}
+                />
+              ) : (
+                <RangeCalendar
+                  key={`range-${editVisible}`}
+                  checkIn={draftIn}
+                  checkOut={draftOut}
+                  onChange={(inMs, outMs) => setDates(inMs, outMs)}
+                />
+              )}
+              <Text style={styles.editSummary}>
+                {fmtLong(draftIn)} → {fmtLong(draftOut)} · {draftNights} night(s)
+              </Text>
+              <Text style={styles.editLabel}>Total amount (₹)</Text>
+              <TextInput
+                style={styles.editInput}
+                value={draftAmount}
+                onChangeText={(t) => setDraftAmount(t.replace(/[^0-9]/g, ''))}
+                keyboardType="number-pad"
+              />
+              <Text style={styles.editLabel}>Number of guests</Text>
+              <TextInput
+                style={styles.editInput}
+                value={draftGuests}
+                onChangeText={(t) => setDraftGuests(t.replace(/[^0-9]/g, ''))}
+                keyboardType="number-pad"
+              />
+              <TouchableOpacity style={[styles.solidBtn, { marginTop: 14 }]} disabled={saving} onPress={handleSaveEdit}>
+                <Text style={styles.solidBtnText}>{saving ? 'Saving…' : 'Save changes'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.outlineBtn} onPress={() => setEditVisible(false)}>
+                <Text style={styles.outlineBtnText}>Close</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </KeyboardAwareOverlay>
+      </Modal>
 
       {/* Assign Room Modal */}
       <Modal
@@ -250,11 +507,15 @@ export const BookingDetailScreen: React.FC = () => {
             <ScrollView style={{ maxHeight: 300 }}>
               {rooms.map((r) => {
                 const isCurrent = r.number === booking.roomNumber;
+                // free for THIS stay's dates (not today's status)
+                const clash = isCurrent ? undefined : bookingClash(bookings, r.number, booking.checkIn, booking.checkOut, booking.id);
+                const blocked = !isCurrent && (r.status === 'MAINTENANCE' || !!clash);
                 return (
                   <TouchableOpacity
                     key={r.id}
-                    style={[styles.roomChoice, isCurrent && styles.roomChoiceActive]}
+                    style={[styles.roomChoice, isCurrent && styles.roomChoiceActive, blocked && { opacity: 0.45 }]}
                     onPress={() => handleSelectRoom(r)}
+                    disabled={blocked}
                   >
                     <Text
                       style={[
@@ -262,7 +523,8 @@ export const BookingDetailScreen: React.FC = () => {
                         isCurrent && styles.roomChoiceTextActive,
                       ]}
                     >
-                      Room {r.number} · {r.type} · ₹{r.price.toLocaleString()} · {r.status}
+                      Room {r.number} · {r.type} · ₹{r.price.toLocaleString()}
+                      {isCurrent ? ' · current' : r.status === 'MAINTENANCE' ? ' · maintenance' : clash ? ` · booked by ${clash.guestName}` : ' · free'}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -411,6 +673,111 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     padding: 24,
+  },
+  payRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
+  payStat: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+  },
+  payLine: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginTop: 4,
+  },
+  payHint: {
+    fontSize: 11,
+    color: Colors.textTertiary,
+    marginTop: 4,
+  },
+  payActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 10,
+  },
+  payBtn: {
+    backgroundColor: Colors.brandPrimary,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 10,
+  },
+  payBtnOutline: {
+    backgroundColor: Colors.brandPrimaryLight,
+  },
+  payBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  methodChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 16,
+    backgroundColor: '#F1F5F9',
+  },
+  methodChipActive: {
+    backgroundColor: Colors.brandPrimary,
+  },
+  methodChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+  },
+  externalBox: {
+    marginTop: 10,
+    padding: 10,
+    borderRadius: 10,
+    backgroundColor: Colors.statusBlueBg,
+  },
+  externalConflict: {
+    backgroundColor: Colors.statusRedBg,
+  },
+  externalText: {
+    fontSize: 12,
+    color: Colors.textPrimary,
+    lineHeight: 17,
+  },
+  editOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  editSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 18,
+    paddingTop: 20,
+    maxHeight: '92%',
+  },
+  editSummary: {
+    marginTop: 10,
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+    textAlign: 'center',
+  },
+  editLabel: {
+    marginTop: 12,
+    marginBottom: 6,
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: Colors.textSecondary,
+  },
+  editInput: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: Colors.divider,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    fontSize: 15,
+    color: Colors.textPrimary,
   },
   modalCard: {
     backgroundColor: '#FFFFFF',

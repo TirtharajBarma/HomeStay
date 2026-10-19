@@ -1,5 +1,6 @@
 import mongoose, { Schema, model, Document } from "mongoose";
 import { getISTTimestamp } from "../utils/date.js";
+import { tenantDbModel } from "../utils/tenant-model.js";
 
 export interface ITripDestination {
   address: string;
@@ -32,6 +33,7 @@ export interface IFinancialSnapshot {
   homestayCommissionAmount: number; // e.g. 300
   driverPayoutAmount: number; // e.g. 2550
   remainingCashToDriver: number; // e.g. 2550 or agreedFare - advanceAmount
+  driverShareOfAdvance?: number; // advance minus PF minus HC, owed by the platform to the driver
   calculatedAt: Date;
 }
 
@@ -59,6 +61,9 @@ export interface ICabRequest extends Document {
   passengers: number;
   vehicleType: "SUV" | "Sedan" | "7-seater" | "9-seater";
   requestSource: "MANUAL_OWNER" | "NEARBY_BROADCAST" | "GUEST_WEB_LINK" | "ADMIN_DISPATCH";
+  // Done by one of the homestay's own drivers (tenant driver id); StayRide charges its own-fleet fee
+  ownFleet?: boolean;
+  ownDriverId?: number | null;
   assignedDriverId?: string | number;
   assignedDriverName?: string;
   assignedDriverPhone?: string;
@@ -78,8 +83,12 @@ export interface ICabRequest extends Document {
     | "ARRIVED_HOMESTAY"
     | "TRIP_STARTED"
     | "COMPLETED"
-    | "CANCELLED";
+    | "CANCELLED"
+    | "EXPIRED";
   cancellationReason?: string;
+  needsReassignment: boolean; // paid trip whose driver was removed (blocked); admin must assign a new one
+  previousDriverUserIds: string[]; // drivers this trip was taken away from (shown to them as REASSIGNED)
+  rating?: { stars: number; comment: string; ratedAt: Date; ratedBy: string } | null;
   agreedFare: number;
   advanceAmount: number;
   advancePaid: boolean;
@@ -104,6 +113,17 @@ export interface ICabRequest extends Document {
   financialSnapshot?: IFinancialSnapshot;
   guestNotes?: string;
   adminNotes?: string;
+  // false = a guest inquiry the owner has not yet sent to drivers; drivers cannot see or quote it
+  dispatched?: boolean;
+  // advance must be paid by then or the confirmed driver is released (lazy, see releaseUnpaidAdvances)
+  advanceDueAt?: Date | null;
+  // Razorpay link for the current advance (replaced if the trip is released and confirmed again)
+  paymentLinkId?: string;
+  paymentLinkUrl?: string;
+  // Gateway payments that arrived when the request was no longer waiting for them: admin must refund
+  unmatchedPayments?: Array<{ paymentId: string; amount: number; status: string; at: Date }>;
+  // Homestay coordinates at request time: "nearby" is measured from here
+  homestayLocation?: { lat: number; lng: number } | null;
   createdAtIST?: string;
   updatedAtIST?: string;
   createdAt: Date;
@@ -152,6 +172,7 @@ const FinancialSnapshotSchema = new Schema<IFinancialSnapshot>(
     homestayCommissionAmount: { type: Number, required: true },
     driverPayoutAmount: { type: Number, required: true },
     remainingCashToDriver: { type: Number, required: true },
+    driverShareOfAdvance: { type: Number, default: 0 },
     calculatedAt: { type: Date, default: Date.now },
   },
   { _id: false }
@@ -162,7 +183,7 @@ const CabRequestSchema = new Schema<ICabRequest>(
     reference: { type: String, required: true, unique: true, index: true },
     propertyId: { type: Schema.Types.Mixed, required: true, index: true },
     tripId: { type: Number, default: null },
-    clientRequestId: { type: String, unique: true, sparse: true },
+    clientRequestId: { type: String },
     homestayName: { type: String, required: true },
     guestId: { type: Schema.Types.Mixed, default: null },
     guestName: { type: String, required: true },
@@ -199,6 +220,17 @@ const CabRequestSchema = new Schema<ICabRequest>(
       plate: { type: String, default: "" },
     },
     quotes: { type: [DriverQuoteSchema], default: [] },
+    dispatched: { type: Boolean, default: true },
+    advanceDueAt: { type: Date, default: null },
+    ownFleet: { type: Boolean, default: false },
+    ownDriverId: { type: Number, default: null },
+    paymentLinkId: { type: String, default: "", index: true },
+    paymentLinkUrl: { type: String, default: "" },
+    unmatchedPayments: {
+      type: [{ paymentId: String, amount: Number, status: String, at: Date, _id: false }],
+      default: [],
+    },
+    homestayLocation: { type: { lat: Number, lng: Number, _id: false }, default: null },
     broadcastExpiresAt: { type: Date, default: null },
     status: {
       type: String,
@@ -213,11 +245,18 @@ const CabRequestSchema = new Schema<ICabRequest>(
         "TRIP_STARTED",
         "COMPLETED",
         "CANCELLED",
+        "EXPIRED",
       ],
       default: "FINDING_DRIVER",
       index: true,
     },
     cancellationReason: { type: String, default: "" },
+    needsReassignment: { type: Boolean, default: false },
+    previousDriverUserIds: { type: [String], default: [] },
+    rating: {
+      type: new Schema({ stars: Number, comment: String, ratedAt: Date, ratedBy: String }, { _id: false }),
+      default: null,
+    },
     agreedFare: { type: Number, default: 0 },
     advanceAmount: { type: Number, default: 0 },
     advancePaid: { type: Boolean, default: false },
@@ -262,6 +301,11 @@ CabRequestSchema.index(
   { name: "unique_advance_payment_id", unique: true, partialFilterExpression: { advancePaymentId: { $type: "string", $gt: "" } } }
 );
 CabRequestSchema.index({ propertyId: 1, status: 1 }, { name: "property_status" });
+// Idempotency keys are per homestay (the old global unique "clientRequestId_1" is dropped by scripts/migrate-indexes.ts).
+CabRequestSchema.index(
+  { propertyId: 1, clientRequestId: 1 },
+  { name: "tenant_client_request_id", unique: true, partialFilterExpression: { clientRequestId: { $type: "string" } } }
+);
 
 CabRequestSchema.pre("save", function () {
   this.updatedAtIST = getISTTimestamp();
@@ -271,12 +315,9 @@ CabRequestSchema.pre("save", function () {
 });
 
 export function getCabRequestModel(isDemo: boolean = false) {
-  const dbName = isDemo ? "test" : "production";
-  if (mongoose.connection.readyState === 1) {
-    const db = mongoose.connection.useDb(dbName, { useCache: true });
-    return db.models.CabRequest || db.model("CabRequest", CabRequestSchema);
-  }
-  return CabRequest;
+  // Demo data lives only in "test", everything else only in "production"; the previous fallback to
+  // the default connection (production) on a not-ready DB could leak demo requests into production.
+  return tenantDbModel(isDemo, "CabRequest", CabRequestSchema) as mongoose.Model<any>;
 }
 
 export const CabRequest = model<ICabRequest>("CabRequest", CabRequestSchema);

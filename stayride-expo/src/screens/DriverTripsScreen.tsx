@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import * as Location from 'expo-location';
 import {
   View,
   Text,
@@ -9,65 +10,62 @@ import {
   Alert,
   Linking,
   Platform,
+  RefreshControl,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Radii, Shadows } from '../theme/colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useStayRide } from '../data/store';
-import { CabTrip } from '../types';
+import { DriverTrip } from '../types';
+import { reportOutcome } from '../utils/report';
 
 export const DriverTripsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
-  const { trips, session, quoteTrip, startTrip } = useStayRide();
+  const { driverTrips, session, driverQuote, driverStartTrip, sync, syncing, pushEnabled, reportDriverLocation } = useStayRide();
 
   const [activeTab, setActiveTab] = useState<'requests' | 'assigned' | 'completed'>('requests');
-  const [quoteInputs, setQuoteInputs] = useState<Record<number, string>>({});
-  const [submittingId, setSubmittingId] = useState<number | null>(null);
+  const [quoteInputs, setQuoteInputs] = useState<Record<string, string>>({});
+  const [submittingId, setSubmittingId] = useState<string | null>(null);
+  // References whose quote the driver is revising (allowed while the request is still open)
+  const [revising, setRevising] = useState<Record<string, boolean>>({});
 
-  const driverId = Number(session?.driver?.id) || 1;
-  const driverName = session?.driver?.name || 'Local Driver';
+  const driverName = session?.driver?.name || '—';
 
-  // Available requests in the mountain pool
-  const incomingRequests = trips.filter(
-    (t) => t.status === 'NEW_REQUEST' || t.status === 'FINDING_DRIVER' || t.status === 'QUOTE_RECEIVED'
-  );
-
-  // Rides assigned or confirmed for this specific driver
-  const assignedRides = trips.filter(
+  // The server decides what this driver sees: open requests (no guest details) and trips assigned to them
+  // driverView (when the server sends it) is authoritative; lost trips (CANCELLED/REASSIGNED/EXPIRED) go to history.
+  const isLost = (t: DriverTrip) =>
+    t.driverView === 'CANCELLED' || t.driverView === 'REASSIGNED' || t.driverView === 'EXPIRED' ||
+    (!t.driverView && (t.status === 'CANCELLED' || t.status === 'EXPIRED'));
+  const incomingRequests = driverTrips.filter(
     (t) =>
-      (t.driverId === driverId || (t.driverName && t.driverName.toLowerCase().includes(driverName.toLowerCase()))) &&
-      (t.status === 'DRIVER_ASSIGNED' || t.status === 'CONFIRMED' || t.status === 'TRIP_STARTED')
+      !isLost(t) &&
+      !t.assignedToMe &&
+      (t.status === 'NEW_REQUEST' || t.status === 'FINDING_DRIVER' || t.status === 'QUOTE_RECEIVED')
   );
-
-  // Completed rides
-  const completedRides = trips.filter(
-    (t) =>
-      (t.driverId === driverId || (t.driverName && t.driverName.toLowerCase().includes(driverName.toLowerCase()))) &&
-      t.status === 'COMPLETED'
+  const assignedRides = driverTrips.filter(
+    (t) => !isLost(t) && t.assignedToMe && (t.status === 'AWAITING_ADVANCE' || t.status === 'CONFIRMED' || t.status === 'TRIP_STARTED')
   );
+  const completedRides = driverTrips.filter((t) => !isLost(t) && t.assignedToMe && t.status === 'COMPLETED');
+  const lostRides = driverTrips.filter(isLost);
 
-  const handleQuoteChange = (tripId: number, val: string) => {
-    setQuoteInputs((prev) => ({ ...prev, [tripId]: val }));
+  const handleQuoteChange = (reference: string, val: string) => {
+    setQuoteInputs((prev) => ({ ...prev, [reference]: val }));
   };
 
-  const handleSendQuote = async (trip: CabTrip) => {
-    const rawVal = quoteInputs[trip.id] || String(trip.estFare || 3000);
-    const amount = parseInt(rawVal.replace(/[^0-9]/g, ''), 10);
-    if (!amount || amount < 500) {
-      Alert.alert('Invalid Fare', 'Please enter a valid quoted fare of at least ₹500.');
+  const handleSendQuote = async (trip: DriverTrip) => {
+    const raw = (quoteInputs[trip.reference] || '').replace(/[₹,\s]/g, '');
+    const amount = /^\d+$/.test(raw) ? parseInt(raw, 10) : 0;
+    if (!amount || amount <= 0) {
+      Alert.alert('Invalid Fare', 'Please enter your quoted fare.');
       return;
     }
 
-    setSubmittingId(trip.id);
-    try {
-      await quoteTrip(trip.id, driverId, amount);
-      Alert.alert('Quote Submitted', `Your quote of ₹${amount.toLocaleString()} was sent to the homestay host!`);
-    } catch (e: any) {
-      Alert.alert('Error', e?.message || 'Could not send quote. Please try again.');
-    } finally {
-      setSubmittingId(null);
-    }
+    setSubmittingId(trip.reference);
+    const outcome = await driverQuote(trip.reference, amount);
+    setSubmittingId(null);
+    if (outcome.ok) setRevising((prev) => ({ ...prev, [trip.reference]: false }));
+    reportOutcome(outcome, 'Quote Submitted', `Your quote of ₹${amount.toLocaleString()} was sent.`);
   };
 
   const handleCallPassenger = (phone: string) => {
@@ -85,13 +83,13 @@ export const DriverTripsScreen: React.FC = () => {
     });
   };
 
-  const handleStartRide = async (tripId: number) => {
-    try {
-      await startTrip(tripId);
-      Alert.alert('Trip Started', 'Ride is now active! Drive safely through the mountain roads.');
-    } catch (e: any) {
-      Alert.alert('Error', e?.message || 'Could not start trip.');
-    }
+  // Queues offline and reports honestly: server-confirmed shows success, queued shows "saved offline"
+  const handleStartRide = async (reference: string) => {
+    if (submittingId) return;
+    setSubmittingId(reference);
+    const outcome = await driverStartTrip(reference);
+    setSubmittingId(null);
+    reportOutcome(outcome, 'Trip Started', 'Ride is now active! Drive safely through the mountain roads.');
   };
 
   const insets = useSafeAreaInsets();
@@ -99,13 +97,36 @@ export const DriverTripsScreen: React.FC = () => {
   const statusReason = session?.driver?.statusReason || '';
   const isOnline = session?.driver?.available !== false;
 
+  // While online, tell StayRide where the driver is so only nearby requests reach them.
+  // Asked once, foreground only, refreshed every 10 minutes while this screen is open.
+  useEffect(() => {
+    if (!isOnline || driverStatus !== 'ACTIVE') return;
+    let cancelled = false;
+    const report = async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted' || cancelled) return;
+        const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        if (!cancelled) await reportDriverLocation(pos.coords.latitude, pos.coords.longitude);
+      } catch {
+        // no GPS fix in a valley is normal: the last known position stays on the server
+      }
+    };
+    report();
+    const timer = setInterval(report, 10 * 60000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [isOnline, driverStatus, reportDriverLocation]);
+
   return (
     <View style={styles.container}>
       {/* Top Banner */}
       <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) }]}>
         <View>
           <Text style={styles.headerTitle}>Driver Console</Text>
-          <Text style={styles.headerSubtitle}>{driverName} • {session?.driver?.vehicle || 'SUV'}</Text>
+          <Text style={styles.headerSubtitle}>{driverName} • {session?.driver?.vehicle || '—'}</Text>
         </View>
         <View style={[
           styles.statusBadge,
@@ -194,12 +215,15 @@ export const DriverTripsScreen: React.FC = () => {
           onPress={() => setActiveTab('completed')}
         >
           <Text style={[styles.tabText, activeTab === 'completed' && styles.tabTextActive]}>
-            History ({completedRides.length})
+            History ({completedRides.length + lostRides.length})
           </Text>
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.listContainer}>
+      <ScrollView
+        contentContainerStyle={styles.listContainer}
+        refreshControl={<RefreshControl refreshing={syncing} onRefresh={sync} />}
+      >
         {/* TAB 1: INCOMING REQUESTS TO QUOTE */}
         {activeTab === 'requests' && (
           <>
@@ -207,23 +231,29 @@ export const DriverTripsScreen: React.FC = () => {
               <View style={styles.emptyCard}>
                 <Ionicons name="car-sport-outline" size={48} color={Colors.textTertiary} />
                 <Text style={styles.emptyTitle}>No pending ride requests</Text>
-                <Text style={styles.emptySubtitle}>You will be notified as soon as homestays or guests request a cab nearby.</Text>
+                <Text style={styles.emptySubtitle}>
+                  {pushEnabled
+                    ? 'You will be notified as soon as a new cab request comes in.'
+                    : 'Check back here for new cab requests. Pull down to refresh.'}
+                </Text>
               </View>
             ) : (
               incomingRequests.map((t) => {
-                const myQuote = t.quotes?.find((q) => Number(q.driverId) === driverId);
+                const myQuote = t.myQuote;
                 const hasQuoted = !!myQuote;
-                const inputValue = quoteInputs[t.id] ?? (t.estFare ? String(t.estFare) : '3200');
+                const canRevise = hasQuoted && myQuote?.status !== 'REJECTED';
+                const showInput = !hasQuoted || !!revising[t.reference];
+                const inputValue = quoteInputs[t.reference] ?? '';
 
                 return (
-                  <View key={t.id} style={styles.card}>
+                  <View key={t.reference} style={styles.card}>
                     <View style={styles.cardHeader}>
                       <View style={styles.badgeNew}>
                         <Text style={styles.badgeNewText}>
                           {t.isRoundTrip ? '🔄 Round Trip' : '🚗 One-Way'}
                         </Text>
                       </View>
-                      <Text style={styles.fareEst}>Est. ₹{t.estFare || 3000}</Text>
+                      <Text style={styles.fareEst}>{t.homestayName || ''}</Text>
                     </View>
 
                     <View style={styles.routeContainer}>
@@ -261,12 +291,22 @@ export const DriverTripsScreen: React.FC = () => {
                     </View>
 
                     {/* Quotation Section */}
-                    {hasQuoted ? (
+                    {!showInput ? (
                       <View style={styles.quotedBox}>
                         <Ionicons name="checkmark-circle" size={18} color="#059669" />
                         <Text style={styles.quotedText}>
-                          Quoted ₹{myQuote?.quotedFare.toLocaleString()} — Awaiting Host Confirmation
+                          Quoted ₹{myQuote?.quotedFare.toLocaleString()} — {myQuote?.status === 'REJECTED' ? 'Not selected' : 'Awaiting Host Confirmation'}
                         </Text>
+                        {canRevise && (
+                          <TouchableOpacity
+                            onPress={() => {
+                              handleQuoteChange(t.reference, String(myQuote?.quotedFare ?? ''));
+                              setRevising((prev) => ({ ...prev, [t.reference]: true }));
+                            }}
+                          >
+                            <Text style={styles.reviseText}>Revise</Text>
+                          </TouchableOpacity>
+                        )}
                       </View>
                     ) : (
                       <View style={styles.quoteRow}>
@@ -276,19 +316,24 @@ export const DriverTripsScreen: React.FC = () => {
                             style={styles.quoteInput}
                             keyboardType="numeric"
                             value={inputValue}
-                            onChangeText={(val) => handleQuoteChange(t.id, val)}
+                            onChangeText={(val) => handleQuoteChange(t.reference, val)}
                             placeholder="Fare"
                           />
                         </View>
                         <TouchableOpacity
                           style={styles.quoteBtn}
                           onPress={() => handleSendQuote(t)}
-                          disabled={submittingId === t.id}
+                          disabled={submittingId === t.reference}
                         >
                           <Text style={styles.quoteBtnText}>
-                            {submittingId === t.id ? 'Sending…' : 'Send Quote'}
+                            {submittingId === t.reference ? 'Sending…' : hasQuoted ? 'Update' : 'Send Quote'}
                           </Text>
                         </TouchableOpacity>
+                        {hasQuoted && (
+                          <TouchableOpacity onPress={() => setRevising((prev) => ({ ...prev, [t.reference]: false }))}>
+                            <Text style={styles.reviseText}>Cancel</Text>
+                          </TouchableOpacity>
+                        )}
                       </View>
                     )}
                   </View>
@@ -309,51 +354,66 @@ export const DriverTripsScreen: React.FC = () => {
               </View>
             ) : (
               assignedRides.map((t) => (
-                <View key={t.id} style={styles.card}>
+                <View key={t.reference} style={styles.card}>
                   <View style={styles.cardHeader}>
                     <View style={styles.badgeConfirmed}>
                       <Text style={styles.badgeConfirmedText}>
-                        {t.status === 'TRIP_STARTED' ? '🟢 TRIP IN PROGRESS' : 'CONFIRMED RIDE'}
+                        {t.status === 'TRIP_STARTED'
+                          ? '🟢 TRIP IN PROGRESS'
+                          : t.status === 'AWAITING_ADVANCE'
+                          ? 'AWAITING GUEST ADVANCE'
+                          : 'CONFIRMED RIDE'}
                       </Text>
                     </View>
-                    <Text style={styles.fareConfirmed}>Fare: ₹{t.fare || t.estFare}</Text>
+                    <Text style={styles.fareConfirmed}>Fare: {t.fare ? `₹${t.fare.toLocaleString()}` : '—'}</Text>
                   </View>
+                  {typeof t.driverNetPayout === 'number' && (
+                    <Text style={styles.netPayout}>Your net payout: ₹{t.driverNetPayout.toLocaleString()}</Text>
+                  )}
 
-                  <Text style={styles.passengerName}>Passenger: {t.guestName}</Text>
+                  {t.guestName ? (
+                    <Text style={styles.passengerName}>Passenger: {t.guestName}</Text>
+                  ) : (
+                    <Text style={styles.metaText}>Guest contact shared after advance is paid</Text>
+                  )}
                   <Text style={styles.pickupDetail}>Pickup: {t.pickup}</Text>
                   <Text style={styles.dropDetail}>Destination: {t.destination}</Text>
                   <Text style={styles.timeDetail}>
                     📅 {new Date(t.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} at {t.time}
                   </Text>
 
-                  {/* Cash breakdown */}
-                  <View style={styles.cashBox}>
-                    <Text style={styles.cashLabel}>Collect Cash from Passenger:</Text>
-                    <Text style={styles.cashValue}>₹{Math.max(0, (t.fare || 0) - (t.advancePaid ? t.advanceAmount || 0 : 0))}</Text>
-                  </View>
+                  {/* Cash breakdown (server sends it only after the advance is paid) */}
+                  {typeof t.remainingCashAmount === 'number' && (
+                    <View style={styles.cashBox}>
+                      <Text style={styles.cashLabel}>Collect Cash from Passenger:</Text>
+                      <Text style={styles.cashValue}>₹{t.remainingCashAmount.toLocaleString()}</Text>
+                    </View>
+                  )}
 
                   {/* Action buttons */}
                   <View style={styles.actionBtnRow}>
-                    <TouchableOpacity
-                      style={styles.callBtn}
-                      onPress={() => handleCallPassenger(t.phone)}
-                    >
-                      <Ionicons name="call" size={16} color="#FFFFFF" />
-                      <Text style={styles.callBtnText}>Call</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.wpBtn}
-                      onPress={() => handleWhatsAppPassenger(t.phone, t.guestName)}
-                    >
-                      <Ionicons name="logo-whatsapp" size={16} color="#FFFFFF" />
-                      <Text style={styles.wpBtnText}>WhatsApp</Text>
-                    </TouchableOpacity>
-                    {t.status !== 'TRIP_STARTED' && (
+                    {!!t.phone && (
+                      <>
+                        <TouchableOpacity style={styles.callBtn} onPress={() => handleCallPassenger(t.phone!)}>
+                          <Ionicons name="call" size={16} color="#FFFFFF" />
+                          <Text style={styles.callBtnText}>Call</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.wpBtn}
+                          onPress={() => handleWhatsAppPassenger(t.phone!, t.guestName || '')}
+                        >
+                          <Ionicons name="logo-whatsapp" size={16} color="#FFFFFF" />
+                          <Text style={styles.wpBtnText}>WhatsApp</Text>
+                        </TouchableOpacity>
+                      </>
+                    )}
+                    {t.status === 'CONFIRMED' && t.advancePaid && (
                       <TouchableOpacity
                         style={styles.startBtn}
-                        onPress={() => handleStartRide(t.id)}
+                        disabled={submittingId === t.reference}
+                        onPress={() => handleStartRide(t.reference)}
                       >
-                        <Text style={styles.startBtnText}>Start Ride</Text>
+                        <Text style={styles.startBtnText}>{submittingId === t.reference ? 'Starting…' : 'Start Ride'}</Text>
                       </TouchableOpacity>
                     )}
                   </View>
@@ -366,7 +426,7 @@ export const DriverTripsScreen: React.FC = () => {
         {/* TAB 3: COMPLETED RIDES */}
         {activeTab === 'completed' && (
           <>
-            {completedRides.length === 0 ? (
+            {completedRides.length === 0 && lostRides.length === 0 ? (
               <View style={styles.emptyCard}>
                 <Ionicons name="time-outline" size={48} color={Colors.textTertiary} />
                 <Text style={styles.emptyTitle}>No completed trips yet</Text>
@@ -374,19 +434,40 @@ export const DriverTripsScreen: React.FC = () => {
               </View>
             ) : (
               completedRides.map((t) => (
-                <View key={t.id} style={styles.card}>
+                <View key={t.reference} style={styles.card}>
                   <View style={styles.cardHeader}>
                     <Text style={styles.completedTag}>COMPLETED</Text>
-                    <Text style={styles.fareEst}>₹{t.fare || t.estFare}</Text>
+                    <Text style={styles.fareEst}>{t.fare ? `₹${t.fare.toLocaleString()}` : '—'}</Text>
                   </View>
-                  <Text style={styles.passengerName}>{t.guestName}</Text>
+                  {!!t.guestName && <Text style={styles.passengerName}>{t.guestName}</Text>}
                   <Text style={styles.routeSubText}>{t.pickup} ➔ {t.destination}</Text>
                   <Text style={styles.metaText}>
                     {new Date(t.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                    {typeof t.driverNetPayout === 'number' ? ` • Net payout ₹${t.driverNetPayout.toLocaleString()}` : ''}
                   </Text>
                 </View>
               ))
             )}
+            {lostRides.length > 0 && <Text style={styles.sectionLabel}>Cancelled</Text>}
+            {lostRides.map((t) => (
+              <View key={t.reference} style={styles.card}>
+                <View style={styles.cardHeader}>
+                  <Text style={[styles.completedTag, { color: '#B91C1C' }]}>
+                    {t.driverView === 'REASSIGNED'
+                      ? 'REASSIGNED TO ANOTHER DRIVER'
+                      : t.driverView === 'EXPIRED' || t.status === 'EXPIRED'
+                      ? 'EXPIRED'
+                      : 'CANCELLED'}
+                  </Text>
+                  <Text style={styles.metaText}>{t.homestayName || ''}</Text>
+                </View>
+                <Text style={styles.routeSubText}>{t.pickup} ➔ {t.destination}</Text>
+                <Text style={styles.metaText}>
+                  {new Date(t.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} at {t.time}
+                </Text>
+                {!!t.cancellationReason && <Text style={styles.metaText}>Reason: {t.cancellationReason}</Text>}
+              </View>
+            ))}
           </>
         )}
       </ScrollView>
@@ -694,6 +775,25 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '700',
     fontSize: 12,
+  },
+  reviseText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#2563EB',
+    paddingHorizontal: 4,
+  },
+  netPayout: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#047857',
+    marginBottom: 6,
+  },
+  sectionLabel: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#64748B',
+    marginTop: 8,
+    marginBottom: 8,
   },
   completedTag: {
     fontSize: 11,

@@ -41,8 +41,9 @@ export class IcalController {
       const result = await IcalService.syncInboundIcal(
         codeOrSlug,
         icalUrl,
-        user?.id,
-        user?.propertyId
+        // Owners are scoped to their own rooms; admins (no ownerId/propertyId) may sync any room.
+        user?.role === "owner" ? user.id : undefined,
+        user?.role === "owner" ? user.propertyId : undefined
       );
 
       res.json({

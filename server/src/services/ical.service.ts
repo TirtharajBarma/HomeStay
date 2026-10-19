@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { Booking } from "../models/booking.model.js";
 import { Room } from "../models/room.model.js";
 
@@ -67,9 +68,18 @@ export class IcalService {
     ownerId?: string,
     propertyId?: string
   ): Promise<{ syncedCount: number; events: any[] }> {
-    const room = await Room.findOne({
+    const roomQuery: any = {
       $or: [{ code: roomCodeOrSlug }, { slug: roomCodeOrSlug.toLowerCase() }],
-    });
+    };
+    // Scope the lookup to the caller's own rooms when an owner id / property id is supplied, so an
+    // owner can never sync into (or probe) another homestay's room. The system cron passes neither.
+    if (ownerId || propertyId) {
+      const scope: any[] = [];
+      if (ownerId) scope.push({ ownerId });
+      if (propertyId) scope.push({ propertyId });
+      roomQuery.$and = [{ $or: scope }];
+    }
+    const room = await Room.findOne(roomQuery);
     if (!room) {
       throw new Error(`Room '${roomCodeOrSlug}' not found.`);
     }
@@ -141,33 +151,36 @@ export class IcalService {
 
       const bookingRef = `BK-OTA-${ev.uid.slice(0, 8).toUpperCase()}`;
 
-      // Upsert into Booking collection
+      // Upsert into Booking collection. The access PIN is a secret, assigned once on insert with a
+      // random value, never a shared constant; re-syncs must not rotate it.
+      const pin = String(crypto.randomInt(1000, 10000));
       await Booking.findOneAndUpdate(
         { reference: bookingRef },
         {
-          reference: bookingRef,
-          pin: "0000",
-          roomCode: room.code,
-          roomName: room.name,
-          checkIn: ev.dtStart,
-          checkOut: ev.dtEnd,
-          party: 2,
-          guestName: "Airbnb / OTA Guest",
-          email: "ota-guest@platform.com",
-          phone: "+91 98300 00000",
-          channel: "airbnb",
-          status: "confirmed",
-          plan: "card_full",
-          settled: true,
-          dueToday: 0,
-          balanceDue: 0,
-          roomTotal: 0,
-          cleaningFee: 0,
-          serviceFee: 0,
-          totalAmount: 0,
-          notes: `Synchronized from external iCal: ${ev.summary || "Reserved"}`,
-          ownerId: ownerId || room.ownerId,
-          propertyId: propertyId || room.propertyId,
+          $setOnInsert: { reference: bookingRef, pin },
+          $set: {
+            roomCode: room.code,
+            roomName: room.name,
+            checkIn: ev.dtStart,
+            checkOut: ev.dtEnd,
+            party: 2,
+            guestName: "Airbnb / OTA Guest",
+            email: "ota-guest@platform.com",
+            phone: "+91 98300 00000",
+            channel: "airbnb",
+            status: "confirmed",
+            plan: "card_full",
+            settled: true,
+            dueToday: 0,
+            balanceDue: 0,
+            roomTotal: 0,
+            cleaningFee: 0,
+            serviceFee: 0,
+            totalAmount: 0,
+            notes: `Synchronized from external iCal: ${ev.summary || "Reserved"}`,
+            ownerId: ownerId || room.ownerId,
+            propertyId: propertyId || room.propertyId,
+          },
         },
         { upsert: true, returnDocument: "after" }
       );

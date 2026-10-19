@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -9,27 +9,24 @@ import {
   Linking,
   Platform,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors, Shadows } from '../theme/colors';
+import { Shadows } from '../theme/colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useStayRide } from '../data/store';
 import { formatINR } from '../utils/format';
+import { reportOutcome } from '../utils/report';
 
 export const DriverActiveRideScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
-  const navigation = useNavigation<any>();
-  const { trips, session, completeTrip } = useStayRide();
+  const { driverTrips, driverCompleteTrip } = useStayRide();
+  const [completing, setCompleting] = useState(false);
 
-  const driverId = Number(session?.driver?.id) || 1;
-  const driverName = session?.driver?.name || 'Local Driver';
-
-  // Find active ride: status TRIP_STARTED first, then CONFIRMED
-  const activeRide = trips.find(
-    (t) =>
-      (t.driverId === driverId || (t.driverName && t.driverName.toLowerCase().includes(driverName.toLowerCase()))) &&
-      (t.status === 'TRIP_STARTED' || t.status === 'CONFIRMED')
-  );
+  // Active ride from the server's list of trips assigned to this driver: TRIP_STARTED first, then CONFIRMED
+  const mine = driverTrips.filter((t) => t.assignedToMe);
+  const activeRide = mine.find((t) => t.status === 'TRIP_STARTED') || mine.find((t) => t.status === 'CONFIRMED');
+  // Cash the driver collects, exactly as the server reports it
+  const cashDue = typeof activeRide?.remainingCashAmount === 'number' ? formatINR(activeRide.remainingCashAmount) : '—';
+  const fareText = activeRide?.fare ? formatINR(activeRide.fare) : '—';
 
   const handleOpenGoogleMaps = () => {
     if (!activeRide) return;
@@ -59,24 +56,21 @@ export const DriverActiveRideScreen: React.FC = () => {
   };
 
   const handleFinishTrip = () => {
-    if (!activeRide) return;
-    const cashDue = Math.max(0, (activeRide.fare || 0) - (activeRide.advancePaid ? activeRide.advanceAmount || 0 : 0));
+    if (!activeRide || completing) return;
 
     Alert.alert(
       'Complete Trip',
-      `Did you collect ${formatINR(cashDue)} in cash from ${activeRide.guestName}?`,
+      `Did you collect ${cashDue} in cash from ${activeRide.guestName || 'the guest'}?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Confirm Cash & Complete',
           style: 'default',
           onPress: async () => {
-            try {
-              await completeTrip(activeRide.id, activeRide.fare);
-              Alert.alert('Trip Completed!', `${formatINR(cashDue)} cash collected successfully.`);
-            } catch (e: any) {
-              Alert.alert('Error', e?.message || 'Could not complete trip.');
-            }
+            setCompleting(true);
+            const outcome = await driverCompleteTrip(activeRide.reference);
+            setCompleting(false);
+            reportOutcome(outcome, 'Trip Completed!', 'StayRide has recorded this trip as completed.');
           },
         },
       ]
@@ -98,7 +92,7 @@ export const DriverActiveRideScreen: React.FC = () => {
             </View>
             <Text style={styles.emptyTitle}>No Active Ride in Progress</Text>
             <Text style={styles.emptySubtitle}>
-              Go to "My Rides" and tap "Start Ride" on any of your confirmed bookings to begin navigation.
+              Go to &quot;My Rides&quot; and tap &quot;Start Ride&quot; on any of your confirmed bookings to begin navigation.
             </Text>
           </View>
         ) : (
@@ -111,18 +105,18 @@ export const DriverActiveRideScreen: React.FC = () => {
                   {activeRide.status === 'TRIP_STARTED' ? 'RIDE IN PROGRESS' : 'AWAITING PICKUP'}
                 </Text>
               </View>
-              <Text style={styles.fareTag}>Total ₹{activeRide.fare}</Text>
+              <Text style={styles.fareTag}>Total {fareText}</Text>
             </View>
 
             {/* Passenger Header */}
             <View style={styles.passengerRow}>
               <View style={styles.avatar}>
                 <Text style={styles.avatarText}>
-                  {activeRide.guestName.charAt(0).toUpperCase()}
+                  {(activeRide.guestName || '—').charAt(0).toUpperCase()}
                 </Text>
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.passengerName}>{activeRide.guestName}</Text>
+                <Text style={styles.passengerName}>{activeRide.guestName || '—'}</Text>
                 <Text style={styles.passengerMeta}>
                   {activeRide.passengers} Passengers • {activeRide.vehicleType}
                 </Text>
@@ -166,7 +160,10 @@ export const DriverActiveRideScreen: React.FC = () => {
               <Text style={styles.mapBtnText}>Open Google Maps Navigation ↗</Text>
             </TouchableOpacity>
 
-            {/* Passenger Contact Action Buttons */}
+            {/* Passenger Contact Action Buttons: guest contact arrives only after the advance is paid */}
+            {!activeRide.phone ? (
+              <Text style={styles.passengerMeta}>Guest contact shared after advance is paid</Text>
+            ) : (
             <View style={styles.contactRow}>
               <TouchableOpacity style={styles.callBtn} onPress={handleCall}>
                 <Ionicons name="call" size={18} color="#FFFFFF" />
@@ -177,31 +174,40 @@ export const DriverActiveRideScreen: React.FC = () => {
                 <Text style={styles.wpBtnText}>WhatsApp</Text>
               </TouchableOpacity>
             </View>
+            )}
 
             {/* Cash Collection Ledger */}
             <View style={styles.cashLedgerCard}>
               <Text style={styles.cashLedgerTitle}>Mountain Cash Collection</Text>
               <View style={styles.ledgerRow}>
                 <Text style={styles.ledgerLabel}>Total Agreed Fare:</Text>
-                <Text style={styles.ledgerValue}>₹{activeRide.fare}</Text>
+                <Text style={styles.ledgerValue}>{fareText}</Text>
               </View>
               <View style={styles.ledgerRow}>
                 <Text style={styles.ledgerLabel}>{activeRide.advancePaid ? 'Advance Paid:' : 'Advance (not paid yet):'}</Text>
-                <Text style={styles.ledgerPaid}>{activeRide.advancePaid ? `- ₹${activeRide.advanceAmount || 0}` : '₹0'}</Text>
+                <Text style={styles.ledgerPaid}>
+                  {typeof activeRide.advanceAmount === 'number' ? formatINR(activeRide.advanceAmount) : '—'}
+                </Text>
               </View>
               <View style={[styles.ledgerRow, styles.ledgerRowTotal]}>
                 <Text style={styles.ledgerTotalLabel}>Cash to Collect from Guest:</Text>
-                <Text style={styles.ledgerTotalValue}>
-                  ₹{Math.max(0, (activeRide.fare || 0) - (activeRide.advancePaid ? activeRide.advanceAmount || 0 : 0)).toLocaleString()}
-                </Text>
+                <Text style={styles.ledgerTotalValue}>{cashDue}</Text>
               </View>
+              {typeof activeRide.driverNetPayout === 'number' && (
+                <View style={styles.ledgerRow}>
+                  <Text style={styles.ledgerLabel}>Your net payout:</Text>
+                  <Text style={styles.ledgerValue}>{formatINR(activeRide.driverNetPayout)}</Text>
+                </View>
+              )}
             </View>
 
-            {/* Complete Ride Button */}
-            <TouchableOpacity style={styles.completeBtn} onPress={handleFinishTrip}>
-              <Ionicons name="checkmark-done-circle" size={22} color="#FFFFFF" />
-              <Text style={styles.completeBtnText}>Complete Ride & Collect Cash</Text>
-            </TouchableOpacity>
+            {/* Complete Ride Button: only after the server recorded the start */}
+            {activeRide.status === 'TRIP_STARTED' && (
+              <TouchableOpacity style={styles.completeBtn} onPress={handleFinishTrip} disabled={completing}>
+                <Ionicons name="checkmark-done-circle" size={22} color="#FFFFFF" />
+                <Text style={styles.completeBtnText}>{completing ? 'Completing…' : 'Complete Ride & Collect Cash'}</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
       </ScrollView>

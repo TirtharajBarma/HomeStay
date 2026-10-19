@@ -32,7 +32,7 @@ export const DriverItem: React.FC<DriverItemProps> = ({
         </Text>
         <View style={styles.ratingBox}>
           <Ionicons name="star" size={14} color={Colors.brandAccent} />
-          <Text style={styles.rating}>{driver.rating.toFixed(1)}</Text>
+          <Text style={styles.rating}>{driver.rating ? driver.rating.toFixed(1) : '—'}</Text>
         </View>
         <Pill label={driver.available ? 'AVAILABLE' : 'OFF DUTY'} />
       </View>

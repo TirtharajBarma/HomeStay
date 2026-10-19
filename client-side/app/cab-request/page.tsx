@@ -6,59 +6,31 @@ import { useSearchParams } from "next/navigation";
 import { Icon } from "@/components/icon";
 import { API_ENDPOINTS, apiFetch } from "@/lib/api-config";
 
-const TIME_OPTIONS = [
-  "06:00 AM",
-  "07:30 AM",
-  "09:00 AM",
-  "10:30 AM",
-  "12:00 PM",
-  "02:00 PM",
-  "04:30 PM",
-  "06:00 PM",
-  "08:00 PM",
+// Pickup times, booking window, vehicle classes and sightseeing presets come from StayRide's admin
+// settings (sent with the guest link). These are only used if an older server sends none.
+const FALLBACK_TIMES = ["06:00 AM", "07:30 AM", "09:00 AM", "10:30 AM", "12:00 PM", "02:00 PM", "04:30 PM", "06:00 PM", "08:00 PM"];
+const FALLBACK_HORIZON_DAYS = 60;
+
+// Presentation copy per vehicle class; the label, seats and which classes exist come from the server.
+const VEHICLE_COPY: Record<string, { description: string; tag: string }> = {
+  SUV: { description: "High clearance for hill roads and mountain curves.", tag: "Recommended for Hills" },
+  Sedan: { description: "Comfortable for smooth town transfers & station pickups.", tag: "Budget Friendly" },
+  "7-seater": { description: "Spacious seating for family groups with luggage.", tag: "Family Choice" },
+  "9-seater": { description: "Extra luggage space for large group touring.", tag: "Large Group" },
+};
+const FALLBACK_VEHICLES = [
+  { value: "SUV", label: "6-7 Seater (Bolero / Innova)", seats: 7 },
+  { value: "Sedan", label: "4 Seater (Sedan)", seats: 4 },
+  { value: "7-seater", label: "7 Seater (Ertiga / Maxi)", seats: 7 },
+  { value: "9-seater", label: "9+ Seater (Traveller)", seats: 9 },
 ];
 
-const VEHICLE_OPTIONS = [
-  {
-    id: "SUV",
-    label: "Mountain SUV (Bolero / Innova)",
-    seats: "6-7 Seater",
-    description: "High clearance for hill roads, Nathula & mountain curves.",
-    tag: "Recommended for Hills",
-  },
-  {
-    id: "Sedan",
-    label: "Sedan / Hatchback",
-    seats: "4 Seater",
-    description: "Comfortable for smooth town transfers & station pickups.",
-    tag: "Budget Friendly",
-  },
-  {
-    id: "7-seater",
-    label: "7-Seater Maxi Van",
-    seats: "7 Seater",
-    description: "Spacious seating for family groups with luggage.",
-    tag: "Family Choice",
-  },
-  {
-    id: "9-seater",
-    label: "9-Seater Cruiser",
-    seats: "9 Seater",
-    description: "Extra luggage rack and high capacity group touring.",
-    tag: "Large Group",
-  },
-];
-
-const POPULAR_DESTINATIONS = [
-  "Gangtok MG Marg Stand",
-  "Tsomgo Lake & Baba Mandir",
-  "Nathula Pass Border",
-  "Rumtek Monastery",
-  "Bagdogra Airport (IXB)",
-  "NJP Railway Station",
-  "Darjeeling Mall Road",
-  "Pelling Skywalk",
-];
+type PublicConfig = {
+  pickupTimes?: string[];
+  bookingHorizonDays?: number;
+  sightseeingPresets?: string[];
+  vehicles?: { value: string; label: string; seats: number }[];
+};
 
 type GuestLink = {
   homestayName: string;
@@ -66,6 +38,7 @@ type GuestLink = {
   guestName: string;
   guestPhone: string;
   expiresAt: number | string;
+  config?: PublicConfig;
 };
 
 type CabRequestStatus = {
@@ -77,11 +50,13 @@ type CabRequestStatus = {
   remainingCashAmount?: number | null;
   driverName?: string | null;
   vehicle?: string | null;
+  refundStatus?: "NONE" | "PENDING" | "REFUNDED" | null;
 };
 
+const REFUND_LABELS: Record<string, string> = { PENDING: "Refund in progress", REFUNDED: "Refunded" };
+
 const DEFAULT_TIME = "09:00 AM";
-const DEFAULT_RETURN_TIME = "06:00 PM";
-const DEFAULT_DESTINATIONS = ["Tsomgo Lake & Baba Mandir"];
+const DEFAULT_DESTINATIONS = [""];
 
 // Local calendar date as YYYY-MM-DD (not UTC)
 const toLocalYmd = (d: Date) =>
@@ -116,13 +91,18 @@ function CabRequestFormContent() {
   const [link, setLink] = useState<GuestLink | null>(null);
   const [linkState, setLinkState] = useState<"loading" | "ready" | "invalid">("loading");
   const homestayName = link?.homestayName || "your homestay";
+  const timeOptions = link?.config?.pickupTimes?.length ? link.config.pickupTimes : FALLBACK_TIMES;
+  const vehicleOptions = link?.config?.vehicles?.length ? link.config.vehicles : FALLBACK_VEHICLES;
+  const presets = link?.config?.sightseeingPresets ?? [];
+  const maxYmd = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() + (link?.config?.bookingHorizonDays || FALLBACK_HORIZON_DAYS));
+    return toLocalYmd(d);
+  })();
 
   // Form State
   const [pickup, setPickup] = useState("");
   const [destinations, setDestinations] = useState<string[]>(DEFAULT_DESTINATIONS);
-  const [isRoundTrip, setIsRoundTrip] = useState(false);
-  const [returnDate, setReturnDate] = useState("");
-  const [returnTime, setReturnTime] = useState(DEFAULT_RETURN_TIME);
 
   const [date, setDate] = useState(tomorrowYmd);
   const [time, setTime] = useState(DEFAULT_TIME);
@@ -242,16 +222,6 @@ function CabRequestFormContent() {
       setErrorMessage("Pickup date and time cannot be in the past.");
       return;
     }
-    if (isRoundTrip) {
-      if (!returnDate || !returnTime) {
-        setErrorMessage("Please choose a return date and time for the round trip.");
-        return;
-      }
-      if (toLocalEpoch(returnDate, returnTime) < pickupAt) {
-        setErrorMessage("Return date and time must be after the pickup.");
-        return;
-      }
-    }
 
     submittingRef.current = true;
     setSubmitting(true);
@@ -261,11 +231,8 @@ function CabRequestFormContent() {
         guestPhone: guestPhone.trim(),
         pickup: pickup.trim(),
         destinations: validStops,
-        isRoundTrip,
         date: toLocalEpoch(date),
         time,
-        returnDate: isRoundTrip ? toLocalEpoch(returnDate) : undefined,
-        returnTime: isRoundTrip ? returnTime : undefined,
         passengers: Number(passengers),
         vehicleType,
         notes: notes.trim() || undefined,
@@ -298,9 +265,6 @@ function CabRequestFormContent() {
     setGuestName(link?.guestName || "");
     setGuestPhone(link?.guestPhone || "");
     setDestinations(DEFAULT_DESTINATIONS);
-    setIsRoundTrip(false);
-    setReturnDate("");
-    setReturnTime(DEFAULT_RETURN_TIME);
     setDate(tomorrowYmd());
     setTime(DEFAULT_TIME);
     setVehicleType("SUV");
@@ -320,7 +284,6 @@ function CabRequestFormContent() {
       `Pickup: ${pickup}\n` +
       `Route: ${dest}\n` +
       `Date: ${date} at ${time}\n` +
-      `Round Trip: ${isRoundTrip ? "Yes" : "No"}\n` +
       `Status: Awaiting driver quote & host confirmation.`;
 
     const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
@@ -464,13 +427,13 @@ function CabRequestFormContent() {
                     ))}
                   </div>
 
-                  {/* Quick Preset Buttons */}
-                  <div className="mt-4">
+                  {/* Quick Preset Buttons (admin-managed list) */}
+                  {presets.length > 0 && <div className="mt-4">
                     <p className="text-label-sm font-medium text-on-surface-variant">
                       Quick Mountain Presets:
                     </p>
                     <div className="mt-2 flex flex-wrap gap-2">
-                      {POPULAR_DESTINATIONS.map((preset) => (
+                      {presets.map((preset) => (
                         <button
                           key={preset}
                           type="button"
@@ -482,61 +445,9 @@ function CabRequestFormContent() {
                         </button>
                       ))}
                     </div>
-                  </div>
+                  </div>}
                 </div>
 
-                {/* Round Trip Return Option */}
-                <div className="mt-6 border-t border-outline-variant/40 pt-4">
-                  <label className="flex items-center justify-between cursor-pointer">
-                    <div>
-                      <span className="font-semibold text-body-md text-on-surface">
-                        Round Trip Return?
-                      </span>
-                      <p className="text-body-sm text-on-surface-variant">
-                        Includes waiting time and same-day or multi-day return transfer
-                      </p>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={isRoundTrip}
-                      onChange={(e) => setIsRoundTrip(e.target.checked)}
-                      className="h-5 w-5 rounded border-outline-variant text-primary focus:ring-primary"
-                    />
-                  </label>
-
-                  {isRoundTrip && (
-                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 rounded-xl bg-surface-container-low p-4">
-                      <div>
-                        <label className="block text-label-sm font-medium text-on-surface">
-                          Return Date
-                        </label>
-                        <input
-                          type="date"
-                          min={date || todayYmd}
-                          value={returnDate}
-                          onChange={(e) => setReturnDate(e.target.value)}
-                          className="mt-1 w-full rounded-lg border border-outline-variant/60 bg-surface px-3 py-2 text-body-md text-on-surface"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-label-sm font-medium text-on-surface">
-                          Estimated Return Time
-                        </label>
-                        <select
-                          value={returnTime}
-                          onChange={(e) => setReturnTime(e.target.value)}
-                          className="mt-1 w-full rounded-lg border border-outline-variant/60 bg-surface px-3 py-2 text-body-md text-on-surface"
-                        >
-                          {TIME_OPTIONS.map((t) => (
-                            <option key={t} value={t}>
-                              {t}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                  )}
-                </div>
               </div>
 
               {/* SECTION 2: DATE, TIME & VEHICLE */}
@@ -554,6 +465,7 @@ function CabRequestFormContent() {
                       type="date"
                       required
                       min={todayYmd}
+                      max={maxYmd}
                       value={date}
                       onChange={(e) => setDate(e.target.value)}
                       className="mt-1.5 w-full rounded-xl border border-outline-variant/60 bg-surface px-4 py-2.5 text-body-md text-on-surface"
@@ -568,7 +480,7 @@ function CabRequestFormContent() {
                       onChange={(e) => setTime(e.target.value)}
                       className="mt-1.5 w-full rounded-xl border border-outline-variant/60 bg-surface px-4 py-2.5 text-body-md text-on-surface"
                     >
-                      {TIME_OPTIONS.map((t) => (
+                      {timeOptions.map((t) => (
                         <option key={t} value={t}>
                           {t}
                         </option>
@@ -583,14 +495,15 @@ function CabRequestFormContent() {
                     Select Vehicle Class
                   </label>
                   <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {VEHICLE_OPTIONS.map((v) => {
-                      const active = vehicleType === v.id;
+                    {vehicleOptions.map((v) => {
+                      const active = vehicleType === v.value;
+                      const copy = VEHICLE_COPY[v.value];
                       return (
                         <button
                           type="button"
-                          key={v.id}
+                          key={v.value}
                           aria-pressed={active}
-                          onClick={() => setVehicleType(v.id as typeof vehicleType)}
+                          onClick={() => setVehicleType(v.value as typeof vehicleType)}
                           className={`block w-full text-left cursor-pointer rounded-xl border p-4 transition-all ${
                             active
                               ? "border-primary bg-primary/5 shadow-sm"
@@ -600,13 +513,15 @@ function CabRequestFormContent() {
                           <span className="flex items-start justify-between">
                             <span className="font-semibold text-body-md text-primary">{v.label}</span>
                             <span className="rounded-full bg-surface-container-high px-2 py-0.5 text-label-xs font-semibold text-on-surface-variant">
-                              {v.seats}
+                              {v.seats} Seater
                             </span>
                           </span>
-                          <span className="mt-1 block text-body-sm text-on-surface-variant">{v.description}</span>
-                          <span className="mt-2 inline-block text-label-xs font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded">
-                            {v.tag}
-                          </span>
+                          {copy && <span className="mt-1 block text-body-sm text-on-surface-variant">{copy.description}</span>}
+                          {copy && (
+                            <span className="mt-2 inline-block text-label-xs font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded">
+                              {copy.tag}
+                            </span>
+                          )}
                         </button>
                       );
                     })}
@@ -741,11 +656,6 @@ function CabRequestFormContent() {
                 </div>
               </div>
 
-              {isRoundTrip && (
-                <div className="text-body-sm text-emerald-800 bg-emerald-50 p-2 rounded border border-emerald-100">
-                  <span className="font-semibold">Round Trip Included:</span> Return on {returnDate || date} at {returnTime}
-                </div>
-              )}
             </div>
 
             {/* How It Works Steps */}
@@ -783,11 +693,30 @@ function CabRequestFormContent() {
 
               {statusError && <p className="mt-3 text-body-sm text-red-700">{statusError}</p>}
 
+              {(tripStatus?.status || confirmedTrip.status) === "CANCELLED" && (
+                <div role="alert" className="mt-3 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-body-sm font-semibold text-red-800">
+                  This cab request has been cancelled.
+                  {tripStatus?.refundStatus && REFUND_LABELS[tripStatus.refundStatus]
+                    ? ` ${REFUND_LABELS[tripStatus.refundStatus]}${tripStatus.refundStatus === "REFUNDED" ? " — your advance has been returned." : " — your paid advance will be returned."}`
+                    : ""}
+                </div>
+              )}
+
               <div className="mt-3 space-y-1 text-body-sm text-on-surface-variant">
                 <div className="flex justify-between">
                   <span>Status:</span>
-                  <span className="font-semibold text-primary">{tripStatus?.status || confirmedTrip.status}</span>
+                  <span className={`font-semibold ${(tripStatus?.status || confirmedTrip.status) === "CANCELLED" ? "text-red-700" : "text-primary"}`}>
+                    {(tripStatus?.status || confirmedTrip.status) === "CANCELLED" ? "Cancelled" : tripStatus?.status || confirmedTrip.status}
+                  </span>
                 </div>
+                {tripStatus?.refundStatus && REFUND_LABELS[tripStatus.refundStatus] && (
+                  <div className="flex justify-between">
+                    <span>Refund:</span>
+                    <span className={`font-semibold ${tripStatus.refundStatus === "REFUNDED" ? "text-emerald-800" : "text-amber-800"}`}>
+                      {REFUND_LABELS[tripStatus.refundStatus]}
+                    </span>
+                  </div>
+                )}
                 {tripStatus?.driverName && (
                   <div className="flex justify-between">
                     <span>Driver:</span>
@@ -814,7 +743,7 @@ function CabRequestFormContent() {
                     </span>
                   </div>
                 )}
-                {typeof tripStatus?.remainingCashAmount === "number" && (
+                {typeof tripStatus?.remainingCashAmount === "number" && tripStatus.status !== "CANCELLED" && (
                   <div className="flex justify-between text-emerald-800 font-medium">
                     <span>Pay Cash to Driver:</span>
                     <span>{formatInr(tripStatus.remainingCashAmount)}</span>
@@ -822,11 +751,11 @@ function CabRequestFormContent() {
                 )}
               </div>
 
-              <p className="mt-3 text-body-sm text-on-surface-variant">
+              {tripStatus?.status !== "CANCELLED" && <p className="mt-3 text-body-sm text-on-surface-variant">
                 {typeof tripStatus?.advanceAmount === "number" && !tripStatus.advancePaid
                   ? `Your advance of ${formatInr(tripStatus.advanceAmount)} will be collected via a payment link from StayRide.`
                   : "Once a driver is assigned, the advance amount will be collected via a payment link from StayRide."}
-              </p>
+              </p>}
             </div>
 
             {/* Actions */}

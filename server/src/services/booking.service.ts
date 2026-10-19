@@ -24,10 +24,10 @@ export interface CreateBookingDTO {
 
 export class BookingService {
   private static generateReference(): { reference: string; pin: string } {
-    const randomBytes = crypto.randomBytes(4);
-    const num = randomBytes.readUInt32BE(0);
-    const refNum = (num % 900000) + 100000;
-    const pinNum = (num % 9000) + 1000;
+    // Reference and PIN are derived from independent CSPRNG draws. Deriving both from the same
+    // bytes (the old behaviour) let anyone who saw a reference narrow the PIN space.
+    const refNum = crypto.randomInt(100000, 1000000);
+    const pinNum = crypto.randomInt(1000, 10000);
     return {
       reference: `BK-${refNum}`,
       pin: String(pinNum),

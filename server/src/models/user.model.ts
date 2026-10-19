@@ -14,7 +14,14 @@ export interface IUser extends Document {
   accountStatus: "ACTIVE" | "PENDING_APPROVAL" | "BLOCKED";
   statusReason?: string;
   isAvailable?: boolean;
+  // Driver's last known position (sent by the driver app); used to find drivers near a homestay
+  location?: { lat: number; lng: number; updatedAt: Date } | null;
   vehicle?: { type?: string; model?: string; plate?: string; seats?: number; area?: string };
+  pushTokens?: Array<{ token: string; platform: string; updatedAt: Date }>; // Expo tokens, newest last, max 10
+  ratingSum?: number; // drivers: sum of owner star ratings
+  ratingCount?: number;
+  tokenVersion?: number; // bumped to revoke every session (logout-all, admin revoke/role change/delete)
+  deletedAt?: Date | null; // soft delete by admin (account BLOCKED, money history kept)
   createdAt: Date;
   updatedAt: Date;
   createdAtIST?: string;
@@ -36,6 +43,7 @@ const UserSchema = new Schema<IUser>(
     accountStatus: { type: String, enum: ["ACTIVE", "PENDING_APPROVAL", "BLOCKED"], default: "ACTIVE", index: true },
     statusReason: { type: String, default: "" },
     isAvailable: { type: Boolean, default: true },
+    location: { type: { lat: Number, lng: Number, updatedAt: Date, _id: false }, default: null },
     vehicle: {
       type: { type: String, default: "" },
       model: { type: String, default: "" },
@@ -43,6 +51,15 @@ const UserSchema = new Schema<IUser>(
       seats: { type: Number, default: 0 },
       area: { type: String, default: "" },
     },
+    pushTokens: {
+      type: [new Schema({ token: String, platform: String, updatedAt: Date }, { _id: false })],
+      default: [],
+      select: false, // never returned unless asked for (+pushTokens)
+    },
+    ratingSum: { type: Number, default: 0 },
+    ratingCount: { type: Number, default: 0 },
+    tokenVersion: { type: Number, default: 0 },
+    deletedAt: { type: Date, default: null },
     createdAtIST: { type: String, default: () => getISTTimestamp() },
     updatedAtIST: { type: String, default: () => getISTTimestamp() },
   },

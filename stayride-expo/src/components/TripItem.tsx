@@ -23,7 +23,7 @@ export const TripItem: React.FC<TripItemProps> = ({ trip, onPress }) => {
         <Text style={styles.name} numberOfLines={1}>
           {trip.guestName}
         </Text>
-        <Pill label={trip.status.replace(/_/g, ' ')} />
+        <Pill label={trip.needsReassignment ? 'NEEDS NEW DRIVER' : trip.status.replace(/_/g, ' ')} />
       </View>
 
       <View style={styles.routeRow}>
@@ -39,7 +39,7 @@ export const TripItem: React.FC<TripItemProps> = ({ trip, onPress }) => {
 
       <View style={styles.bottomRow}>
         <Text style={styles.fare}>
-          {trip.status === 'COMPLETED' ? `Fare: ${formatINR(trip.fare)}` : `Est. ${formatINR(trip.estFare)}`}
+          {trip.fare > 0 ? `Fare: ${formatINR(trip.fare)}` : 'Fare: —'}
         </Text>
         {trip.driverName ? (
           <Text style={styles.driverText} numberOfLines={1}>

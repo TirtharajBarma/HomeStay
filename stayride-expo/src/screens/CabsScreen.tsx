@@ -16,20 +16,23 @@ import { Colors, Radii, Shadows } from '../theme/colors';
 import { useStayRide } from '../data/store';
 import { TripItem } from '../components/TripItem';
 import { Header } from '../components/Header';
+import { FeatureLocked } from '../components/FeatureLocked';
 import { plusDays } from '../data/seeder';
 import { CabTrip, Guest } from '../types';
+import { askGuestForCab as askForCab } from '../utils/askCab';
 
 export const CabsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
-  const { trips, guests, bookings, createTrip, homestay, isDemoMode, confirmTripQuote, commissionRates, createGuestLink } =
+  const { trips, guests, bookings, createTrip, homestay, isDemoMode, confirmTripQuote, askGuestForCab, features } =
     useStayRide();
+  const linksLocked = features?.guestCabLinks === false;
 
   const [activeTab, setActiveTab] = useState<'requested' | 'trips' | 'guest_requests'>('requested');
   const [askCabModalVisible, setAskCabModalVisible] = useState(false);
   const [selectedGuestForCab, setSelectedGuestForCab] = useState<Guest | null>(null);
 
   const requestedStatuses = ['NEW_REQUEST', 'FINDING_DRIVER', 'QUOTE_RECEIVED', 'AWAITING_ADVANCE', 'DRIVER_ASSIGNED'];
-  const tripStatuses = ['CONFIRMED', 'TRIP_STARTED', 'COMPLETED', 'CANCELLED'];
+  const tripStatuses = ['CONFIRMED', 'TRIP_STARTED', 'COMPLETED', 'CANCELLED', 'EXPIRED'];
 
   // Filtered lists
   const requestedTrips = trips.filter((t) => requestedStatuses.includes(t.status) && t.source !== 'GUEST_WEB_LINK');
@@ -83,21 +86,33 @@ export const CabsScreen: React.FC = () => {
 
   const [confirmingTripId, setConfirmingTripId] = useState<number | null>(null);
 
-  const handleAcceptDriverQuote = async (trip: CabTrip, driverId: number | string, quotedFare: number) => {
+  // The server takes the fare from the chosen quote; the client sends only the quote's driverId
+  const handleAcceptDriverQuote = async (trip: CabTrip, driverId: number | string) => {
     if (confirmingTripId !== null) return;
     setConfirmingTripId(trip.id);
-    let confirmed: CabTrip;
+    let result: Awaited<ReturnType<typeof confirmTripQuote>>;
     try {
-      confirmed = await confirmTripQuote(trip.id, Number(driverId), quotedFare);
+      result = await confirmTripQuote(trip.id, driverId);
     } catch (e: any) {
       Alert.alert('Error', e?.message || 'Could not confirm driver quote.');
       return;
     } finally {
       setConfirmingTripId(null);
     }
+    if (!result.ok) {
+      Alert.alert('Error', result.error || 'Could not confirm driver quote.');
+      return;
+    }
+    if (!result.trip) {
+      Alert.alert('Driver confirmed', 'Refresh Cabs to see the updated trip.');
+      return;
+    }
+    const confirmed = result.trip;
     Alert.alert(
       'Driver Confirmed',
-      `Driver has been assigned at ₹${(confirmed.fare || quotedFare).toLocaleString()}. You can now send the trip details to ${confirmed.guestName} via WhatsApp.`,
+      confirmed.platform && confirmed.status === 'AWAITING_ADVANCE'
+        ? `Driver confirmed${confirmed.fare ? ` at ₹${confirmed.fare.toLocaleString()}` : ''}. Waiting for the guest advance (collected by StayRide).`
+        : `Driver confirmed${confirmed.fare ? ` at ₹${confirmed.fare.toLocaleString()}` : ''}. You can now send the trip details to ${confirmed.guestName} via WhatsApp.`,
       [
         { text: 'Later', style: 'cancel' },
         {
@@ -107,6 +122,15 @@ export const CabsScreen: React.FC = () => {
         },
       ]
     );
+  };
+
+  const platformNote = (t: CabTrip) => {
+    if (t.refundStatus === 'PENDING') return 'Refund pending';
+    if (t.refundStatus === 'REFUNDED') return 'Advance refunded';
+    if (t.status === 'FINDING_DRIVER') return 'Request sent to StayRide. Driver quotes will appear here.';
+    if (t.status === 'AWAITING_ADVANCE') return 'Waiting for guest advance (collected by StayRide)';
+    if (t.status === 'CONFIRMED' && t.advancePaid) return 'Advance paid to StayRide';
+    return null;
   };
 
   const handleShareTripToGuest = (trip: CabTrip) => {
@@ -140,29 +164,10 @@ export const CabsScreen: React.FC = () => {
     });
   };
 
+  // StayRide's server sends the link from the company WhatsApp number
   const handleSendAskCabLink = async (guest: Guest) => {
-    const cleanPhone = guest.phone.replace(/[^0-9]/g, '');
-    const phoneWithCountry = cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone;
-    const homestayTitle = homestay.name || 'Our Homestay';
-
-    let link: string;
-    try {
-      link = (await createGuestLink({ guestId: guest.id, guestName: guest.name, guestPhone: guest.phone })).url;
-    } catch (e: any) {
-      Alert.alert('Could not create link', e?.message || 'Please try again.');
-      return;
-    }
-    const msg =
-      `Namaste ${guest.name}! 🙏\n` +
-      `Need airport pickup, sightseeing, or a hill cab during your stay at ${homestayTitle}?\n\n` +
-      `Request a verified local driver here:\n` +
-      `${link}\n\n` +
-      `Our team will confirm your mountain driver directly!`;
-
     setAskCabModalVisible(false);
-    Linking.openURL(`https://wa.me/${phoneWithCountry}?text=${encodeURIComponent(msg)}`).catch(() => {
-      Alert.alert('Notice', 'Could not open WhatsApp on this device.');
-    });
+    await askForCab(askGuestForCab, guest);
   };
 
   return (
@@ -288,6 +293,9 @@ export const CabsScreen: React.FC = () => {
                   onPress={() => navigation.navigate('CabRequestDetail', { tripId: t.id })}
                 />
 
+                {/* Platform trip state, exactly as reported by the server */}
+                {t.platform && platformNote(t) && <Text style={styles.platformNote}>{platformNote(t)}</Text>}
+
                 {/* Driver Quote Received Card */}
                 {hasQuotes && t.status === 'QUOTE_RECEIVED' && (
                   <View style={styles.quoteNotificationBox}>
@@ -297,11 +305,6 @@ export const CabsScreen: React.FC = () => {
                     </View>
 
                     {t.quotes!.map((q, idx) => {
-                      // Estimate only; the server computes the final split on confirm
-                      const advance = commissionRates ? Math.round((q.quotedFare * commissionRates.advancePercent) / 100) : null;
-                      const hostComm = commissionRates ? Math.round((q.quotedFare * commissionRates.hcPercent) / 100) : null;
-                      const driverCash = advance !== null ? q.quotedFare - advance : null;
-
                       return (
                         <View key={idx} style={styles.quoteItemCard}>
                           <View style={styles.quoteItemHeader}>
@@ -309,18 +312,27 @@ export const CabsScreen: React.FC = () => {
                             <Text style={styles.quoteFareText}>Fare: ₹{q.quotedFare.toLocaleString()}</Text>
                           </View>
 
-                          <View style={styles.quoteFinancialRow}>
-                            <Text style={styles.quoteFinItem}>Advance: {advance !== null ? `~₹${advance}` : '—'}</Text>
-                            <Text style={styles.quoteFinItem}>Host Comm: {hostComm !== null ? `~₹${hostComm}` : '—'}</Text>
-                            <Text style={[styles.quoteFinItem, { fontWeight: '700', color: '#B45309' }]}>
-                              Driver Cash: {driverCash !== null ? `~₹${driverCash}` : '—'}
-                            </Text>
-                          </View>
+                          {typeof q.homestayCommission === 'number' ? (
+                            <View style={styles.quoteFinancialRow}>
+                              <Text style={styles.quoteFinItem}>
+                                You earn ₹{q.homestayCommission.toLocaleString()}
+                                {typeof q.advanceAmount === 'number' ? ` · Guest pays ₹${q.advanceAmount.toLocaleString()} advance` : ''}
+                              </Text>
+                            </View>
+                          ) : null}
+
+                          {(q.driverVehicle || q.notes) ? (
+                            <View style={styles.quoteFinancialRow}>
+                              <Text style={styles.quoteFinItem}>
+                                {[q.driverVehicle, q.notes].filter(Boolean).join(' · ')}
+                              </Text>
+                            </View>
+                          ) : null}
 
                           <TouchableOpacity
                             style={[styles.acceptQuoteBtn, confirmingTripId !== null && { opacity: 0.6 }]}
                             disabled={confirmingTripId !== null}
-                            onPress={() => handleAcceptDriverQuote(t, q.driverId, q.quotedFare)}
+                            onPress={() => handleAcceptDriverQuote(t, q.driverId)}
                           >
                             <Ionicons name="checkmark-circle" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
                             <Text style={styles.acceptQuoteBtnText}>Accept &amp; Confirm Driver</Text>
@@ -331,8 +343,8 @@ export const CabsScreen: React.FC = () => {
                   </View>
                 )}
 
-                {/* Quick WhatsApp Share for Confirmed Trips */}
-                {t.status === 'CONFIRMED' && (
+                {/* Own-driver trips only: for StayRide trips the server messages guest and driver itself */}
+                {t.status === 'CONFIRMED' && !t.platform && (
                   <TouchableOpacity
                     style={styles.shareGuestBtn}
                     onPress={() => handleShareTripToGuest(t)}
@@ -361,6 +373,10 @@ export const CabsScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
 
+            {linksLocked ? (
+              <FeatureLocked feature="guestCabLinks" title="Ask-for-Cab guest links" />
+            ) : (
+            <>
             <Text style={styles.selectGuestLabel}>Select Guest to Send Link:</Text>
             <ScrollView style={{ maxHeight: 280 }}>
               {checkedInGuests.length === 0 ? (
@@ -384,6 +400,8 @@ export const CabsScreen: React.FC = () => {
                 ))
               )}
             </ScrollView>
+            </>
+            )}
           </View>
         </View>
       </Modal>
@@ -463,6 +481,15 @@ const styles = StyleSheet.create({
     marginHorizontal: 14,
     marginTop: 10,
     marginBottom: 6,
+  },
+  platformNote: {
+    fontSize: 12,
+    color: '#92400E',
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginTop: 4,
   },
   countText: {
     fontSize: 12,

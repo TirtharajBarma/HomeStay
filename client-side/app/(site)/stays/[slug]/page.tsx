@@ -3,7 +3,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { BookingCard } from "@/components/booking-card";
-import { StayTransferSection } from "@/components/cab/stay-transfer-section";
 import { Icon } from "@/components/icon";
 import { MobileReserveBar } from "@/components/mobile-reserve-bar";
 import { StayGallery } from "@/components/stay-gallery";
@@ -14,11 +13,7 @@ import {
   houseRules,
   hosts,
 } from "@/lib/content";
-import { getStay, getLiveStay, getStaySlugs, stays } from "@/lib/stays";
-
-export function generateStaticParams() {
-  return getStaySlugs().map((slug) => ({ slug }));
-}
+import { getLiveStay, getLiveStays } from "@/lib/stays";
 
 export async function generateMetadata({
   params,
@@ -40,6 +35,7 @@ export default async function StayPage({ params, searchParams }: PageProps<"/sta
 
   if (!stay) notFound();
 
+  const others = (await getLiveStays()).stays.filter((other) => other.slug !== stay.slug).slice(0, 3);
   const query = await searchParams;
   const booking = resolveBooking(query, stay.maxGuests);
   const sectionClass = "border-b border-outline-variant/30 pb-3";
@@ -150,9 +146,6 @@ export default async function StayPage({ params, searchParams }: PageProps<"/sta
             </div>
           </section>
 
-          {/* Estate transfers */}
-          <StayTransferSection checkIn={booking.checkIn} />
-
           {/* House rules */}
           <section className="space-y-4" id="house-rules">
             <div className={sectionClass}>
@@ -179,15 +172,12 @@ export default async function StayPage({ params, searchParams }: PageProps<"/sta
       </div>
 
       {/* More stays on the estate */}
-      <section className="mt-12 border-t border-outline-variant/30 pt-8 lg:mt-16">
+      {others.length > 0 && <section className="mt-12 border-t border-outline-variant/30 pt-8 lg:mt-16">
         <h2 className="mb-6 font-display text-headline-md text-primary">
           More stays on the estate
         </h2>
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
-          {stays
-            .filter((other) => other.slug !== stay.slug)
-            .slice(0, 3)
-            .map((other) => (
+          {others.map((other) => (
               <Link
                 key={other.slug}
                 href={stayHref(other.slug, {
@@ -207,7 +197,7 @@ export default async function StayPage({ params, searchParams }: PageProps<"/sta
               </Link>
             ))}
         </div>
-      </section>
+      </section>}
 
       <MobileReserveBar stay={stay} booking={booking} />
     </main>

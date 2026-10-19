@@ -39,12 +39,14 @@ export const GradientHeader: React.FC<GradientHeaderProps> = ({
       <Text style={styles.tagline}>{tagline}</Text>
 
       <View style={styles.bottomRow}>
+        {!!location && (
         <View style={styles.locationContainer}>
           <Ionicons name="location-sharp" size={15} color={Colors.white} />
           <Text style={styles.locationText} numberOfLines={1}>
             {location}
           </Text>
         </View>
+        )}
         <View style={styles.ratingContainer}>
           <Ionicons name="star" size={14} color={Colors.brandAccent} />
           <Text style={styles.ratingText}>{ratingText}</Text>

@@ -1,4 +1,5 @@
 import mongoose, { Schema } from "mongoose";
+import { dbNameFor } from "../config/env.js";
 
 // Append-only record of every admin / money action.
 const AuditLogSchema = new Schema(
@@ -13,7 +14,7 @@ const AuditLogSchema = new Schema(
 );
 
 export function getAuditLogModel(isDemo = false): mongoose.Model<any> {
-  const conn = mongoose.connection.useDb(isDemo ? "test" : "production", { useCache: true });
+  const conn = mongoose.connection.useDb(dbNameFor(isDemo), { useCache: true });
   return (conn.models.AuditLog || conn.model("AuditLog", AuditLogSchema)) as mongoose.Model<any>;
 }
 

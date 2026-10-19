@@ -9,7 +9,13 @@ import {
   type ReactNode,
 } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { API_ENDPOINTS } from "@/lib/api-config";
+import {
+  API_ENDPOINTS,
+  apiFetch,
+  clearAdminSession,
+  TOKEN_STORAGE_KEY,
+  USER_STORAGE_KEY,
+} from "@/lib/api-config";
 
 export type AdminUser = {
   id: string;
@@ -29,8 +35,8 @@ export type AdminAuthContextType = {
 
 const AdminAuthContext = createContext<AdminAuthContextType | null>(null);
 
-const TOKEN_KEY = "platform_admin_token";
-const USER_KEY = "platform_admin_data";
+const TOKEN_KEY = TOKEN_STORAGE_KEY;
+const USER_KEY = USER_STORAGE_KEY;
 
 export function AdminAuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
@@ -41,27 +47,53 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
   useEffect(() => {
+    let cancelled = false;
     async function initAdminAuth() {
       try {
         const storedToken = window.localStorage.getItem(TOKEN_KEY);
         const storedUser = window.localStorage.getItem(USER_KEY);
-        if (storedToken && storedUser) {
-          const parsed = JSON.parse(storedUser);
-          if (parsed.role === "admin") {
-            setToken(storedToken);
-            setAdmin(parsed);
-          } else {
-            window.localStorage.removeItem(TOKEN_KEY);
-            window.localStorage.removeItem(USER_KEY);
-          }
+        if (!storedToken || !storedUser) return;
+
+        const parsed = JSON.parse(storedUser);
+        if (parsed.role !== "admin") {
+          clearAdminSession();
+          return;
         }
-      } catch (e) {
-        console.warn("Admin session error:", e);
+
+        // Do not trust localStorage: confirm the token with the server. A 401 makes
+        // apiFetch clear the session and redirect to /login.
+        const res = await apiFetch(API_ENDPOINTS.me());
+        if (!res.ok) throw new Error(`Session check failed (${res.status}).`);
+        const json = await res.json();
+        const me = json?.data;
+        if (!json?.success || !me || me.role !== "admin") {
+          throw new Error("Stored session is no longer a valid admin.");
+        }
+
+        const user: AdminUser = {
+          id: String(me.id || me._id || parsed.id || ""),
+          name: me.name || parsed.name || "",
+          email: me.email || parsed.email || "",
+          role: "admin",
+        };
+        window.localStorage.setItem(USER_KEY, JSON.stringify(user));
+        if (cancelled) return;
+        setToken(storedToken);
+        setAdmin(user);
+      } catch {
+        if (!cancelled) {
+          clearAdminSession();
+          setToken(null);
+          setAdmin(null);
+        }
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     }
     initAdminAuth();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const login = useCallback(
@@ -78,8 +110,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     setToken(null);
     setAdmin(null);
-    window.localStorage.removeItem(TOKEN_KEY);
-    window.localStorage.removeItem(USER_KEY);
+    clearAdminSession();
     router.push("/login");
   }, [router]);
 
@@ -104,7 +135,14 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
         logout,
       }}
     >
-      {children}
+      {isLoading ? (
+        <div className="flex min-h-screen items-center justify-center gap-2 bg-slate-900 text-slate-400">
+          <span className="material-symbols-outlined animate-spin text-2xl">progress_activity</span>
+          <span className="text-sm font-semibold">Checking session…</span>
+        </div>
+      ) : (
+        children
+      )}
     </AdminAuthContext.Provider>
   );
 }

@@ -65,8 +65,12 @@ export function StayCard({ stay, booking }: { stay: Stay; booking: Booking }) {
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-outline-variant/30 pt-4">
           <span className="flex items-center gap-1 text-label-sm font-medium text-primary">
-            <Icon name={stay.highlight.icon} className="text-[14px]" />
-            {stay.highlight.label}
+            {stay.highlight && (
+              <>
+                <Icon name={stay.highlight.icon} className="text-[14px]" />
+                {stay.highlight.label}
+              </>
+            )}
           </span>
           <span className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-label-md text-on-primary transition-all duration-200 group-hover:bg-primary-container md:min-h-0">
             View Room &amp; Reserve

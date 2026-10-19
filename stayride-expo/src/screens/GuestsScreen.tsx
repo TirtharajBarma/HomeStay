@@ -8,7 +8,6 @@ import {
   TouchableOpacity,
   Platform,
   Alert,
-  Linking,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -18,7 +17,9 @@ import { useStayRide } from '../data/store';
 import { GuestItem } from '../components/GuestItem';
 import { PlatformSelect } from '../components/PlatformSelect';
 import { Header } from '../components/Header';
+import { FeatureLocked } from '../components/FeatureLocked';
 import { Guest } from '../types';
+import { askGuestForCab as askForCab } from '../utils/askCab';
 
 const PERIOD_OPTIONS = [
   { label: 'All time', value: '0', icon: 'calendar-outline' as const },
@@ -30,7 +31,9 @@ const PERIOD_OPTIONS = [
 
 export const GuestsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
-  const { guests, bookings, searchGuests, countGuests, homestay, createGuestLink, deleteGuest } = useStayRide();
+  const { guests, bookings, searchGuests, countGuests, askGuestForCab, deleteGuest, features } =
+    useStayRide();
+  const linksLocked = features?.guestCabLinks === false;
 
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<'ALL' | 'NEW' | 'REPEAT'>('ALL');
@@ -48,11 +51,9 @@ export const GuestsScreen: React.FC = () => {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            try {
-              await deleteGuest(g.id);
-            } catch (err: any) {
-              Alert.alert('Error', err?.message || 'Could not delete guest.');
-            }
+            // deleteGuest reports instead of throwing; the server refuses guests with an active booking
+            const outcome = await deleteGuest(g.id);
+            if (!outcome.ok) Alert.alert('Could not delete guest', outcome.error || 'Please try again.');
           },
         },
       ]
@@ -63,28 +64,8 @@ export const GuestsScreen: React.FC = () => {
   const isCheckedIn = (g: Guest) =>
     bookings.some((b) => b.status === 'CHECKED_IN' && (b.guestId === g.id || b.phone === g.phone));
 
-  const handleAskCab = async (guest: Guest) => {
-    const cleanPhone = guest.phone.replace(/[^0-9]/g, '');
-    const phoneWithCountry = cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone;
-    const homestayName = homestay.name || 'our homestay';
-    let link: string;
-    try {
-      link = (await createGuestLink({ guestId: guest.id, guestName: guest.name, guestPhone: guest.phone })).url;
-    } catch (e: any) {
-      Alert.alert('Could not create link', e?.message || 'Please try again.');
-      return;
-    }
-    const msg =
-      `*Namaste ${guest.name}!* 🏔️\n` +
-      `Hope you are having a wonderful mountain stay at *${homestayName}*.\n\n` +
-      `Need a verified local cab or sightseeing transfer? You can pick your mountain stops and submit your itinerary directly here:\n` +
-      `${link}\n\n` +
-      `We'll instantly match you with verified mountain drivers!`;
-
-    Linking.openURL(`https://wa.me/${phoneWithCountry}?text=${encodeURIComponent(msg)}`).catch(() => {
-      Alert.alert('Notice', 'Could not open WhatsApp on this device.');
-    });
-  };
+  // StayRide's server sends the link from the company WhatsApp number
+  const handleAskCab = (guest: Guest) => askForCab(askGuestForCab, guest);
 
   return (
     <View style={styles.container}>
@@ -138,6 +119,7 @@ export const GuestsScreen: React.FC = () => {
 
       {/* Guest List */}
       <ScrollView contentContainerStyle={styles.listContent}>
+        {linksLocked && guests.some(isCheckedIn) && <FeatureLocked feature="guestCabLinks" title="Ask-for-Cab guest links" />}
         {filteredGuests.length === 0 ? (
           <View style={styles.emptyBox}>
             <Text style={styles.emptyText}>No guests found matching your filter.</Text>
@@ -149,7 +131,7 @@ export const GuestsScreen: React.FC = () => {
               guest={g}
               onPress={() => navigation.navigate('GuestDetail', { guestId: g.id })}
               onLongPress={() => handleDeleteGuest(g)}
-              onAskCab={isCheckedIn(g) ? handleAskCab : undefined}
+              onAskCab={isCheckedIn(g) && !linksLocked ? handleAskCab : undefined}
             />
           ))
         )}

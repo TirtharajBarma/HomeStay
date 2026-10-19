@@ -36,7 +36,7 @@ export const AnalyticsScreen: React.FC = () => {
 
   trips.forEach((t) => {
     if (t.status === 'CANCELLED') return;
-    const val = t.fare > 0 ? t.fare : t.estFare;
+    const val = t.fare > 0 ? t.fare : 0; // only real agreed fares
     if (t.status === 'COMPLETED' && t.date >= cutoff) {
       revenue30 += t.fare;
       commission30 += t.commission;
@@ -58,7 +58,7 @@ export const AnalyticsScreen: React.FC = () => {
     trips.forEach((t) => {
       if (t.status === 'CANCELLED') return;
       if (t.date >= start && t.date < end) {
-        sum += t.fare > 0 ? t.fare : t.estFare;
+        sum += t.fare > 0 ? t.fare : 0;
       }
     });
     const d = new Date(start);

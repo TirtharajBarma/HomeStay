@@ -3,30 +3,27 @@
 import { useRouter } from "next/navigation";
 
 import { homeHref, type Booking, type Filters } from "@/lib/booking";
-import { countByKind, countPetFriendly, kindFilters, stays } from "@/lib/stays";
+import { kindFilters, type Stay } from "@/lib/stays";
 
 import { Icon } from "./icon";
 
 const baseChip =
   "inline-flex min-h-11 items-center justify-center whitespace-nowrap rounded-full px-4 text-label-md transition-colors duration-150 md:min-h-0 md:py-2";
 
-const counts = {
-  all: stays.length,
-  cottage: countByKind("cottage"),
-  loft: countByKind("loft"),
-  cabin: countByKind("cabin"),
-};
-
 export function StayFilters({
   booking,
   filters,
   matching,
+  stays,
 }: {
   booking: Booking;
   filters: Filters;
   matching: number;
+  stays: Stay[];
 }) {
   const router = useRouter();
+  const byKind = (kind: Stay["kind"]) => stays.filter((stay) => stay.kind === kind).length;
+  const counts = { all: stays.length, cottage: byKind("cottage"), loft: byKind("loft"), cabin: byKind("cabin") };
 
   function apply(next: Filters) {
     router.replace(homeHref(booking, next), { scroll: false });
@@ -67,7 +64,7 @@ export function StayFilters({
         >
           <Icon name="pets" className="text-[14px]" />
           <span>Pet Friendly</span>
-          <span className="opacity-70">({countPetFriendly()})</span>
+          <span className="opacity-70">({stays.filter((stay) => stay.petFriendly).length})</span>
         </button>
       </div>
 

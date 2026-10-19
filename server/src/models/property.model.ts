@@ -28,7 +28,7 @@ export interface IProperty extends Document {
   checkOutTime: string;
   responseTime: string;
   currency: string;
-  status: "active" | "pending" | "paused";
+  status: "active" | "pending" | "paused" | "suspended";
   commissionRate: number;
   platformFeePercent?: number | null;
   homestayCommissionPercent?: number | null;
@@ -86,7 +86,7 @@ const PropertySchema = new Schema<IProperty>(
     currency: { type: String, default: "INR" },
     status: {
       type: String,
-      enum: ["active", "pending", "paused"],
+      enum: ["active", "pending", "paused", "suspended"],
       default: "active",
       index: true,
     },

@@ -17,11 +17,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { useClerk, useUser } from '@clerk/expo';
 import * as Updates from 'expo-updates';
 import { Colors, Radii, Shadows } from '../theme/colors';
+import { KeyboardAwareOverlay } from '../components/KeyboardAwareOverlay';
 import { useStayRide } from '../data/store';
 import { api, DEFAULT_BASE_URL } from '../data/api';
 import { Header } from '../components/Header';
 import { CURRENT_RELEASE_VERSION } from '../constants/version';
 import { getActiveAppVersion } from '../services/updates/updateManager';
+import { confirmLogoutAll } from '../utils/report';
 
 export const MoreScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -31,10 +33,12 @@ export const MoreScreen: React.FC = () => {
     campaigns,
     drivers,
     commissionEarned,
-    commissionPending,
+    payoutSummary,
+    features,
     isDemoMode,
     session,
     logout,
+    logoutAllDevices,
   } = useStayRide();
 
   const { signOut } = useClerk();
@@ -125,7 +129,7 @@ export const MoreScreen: React.FC = () => {
       'How StayRide Works',
       '1. Homestay joins StayRide and sets up room inventory.\n' +
         '2. Owner manages rooms, bookings, and guests in real-time.\n' +
-        '3. Owner adds their own drivers or dispatches to the shared network of 50+ vetted mountain drivers.\n' +
+        '3. Owner adds their own drivers or sends the request to StayRide drivers.\n' +
         '4. Guest gets dependable mountain transfers with transparent fares.\n' +
         '5. Homestay owner earns a fixed 12% referral commission on every completed cab booking!'
     );
@@ -233,13 +237,13 @@ export const MoreScreen: React.FC = () => {
           {renderRow(
             'send',
             'Guest marketing',
-            `${campaigns.length} WhatsApp campaigns`,
+            features?.campaigns === false ? 'Not enabled • request access' : `${campaigns.length} WhatsApp campaigns`,
             () => navigation.navigate('Campaign')
           )}
           {renderRow(
             'card',
             'Cab commission',
-            `₹${commissionEarned().toLocaleString()} earned • ₹${commissionPending().toLocaleString()} pending`,
+            `₹${commissionEarned().toLocaleString()} earned • ${payoutSummary ? `₹${payoutSummary.available.toLocaleString()}` : '—'} to withdraw`,
             () => navigation.navigate('Commission')
           )}
           {renderRow(
@@ -256,7 +260,7 @@ export const MoreScreen: React.FC = () => {
           {renderRow(
             'car',
             'Find a Driver',
-            '50+ StayRide drivers around you',
+            'Your own drivers or StayRide drivers',
             () => navigation.navigate('FindDriver')
           )}
           {renderRow(
@@ -294,6 +298,19 @@ export const MoreScreen: React.FC = () => {
             () => setPasswordModalVisible(true)
           )}
           {renderRow(
+            'phone-portrait-outline',
+            'Sign out of all devices',
+            'End your StayRide session on every phone',
+            () =>
+              confirmLogoutAll(logoutAllDevices, async () => {
+                try {
+                  await signOut();
+                } catch (e) {
+                  console.log('[Clerk] signOut note:', e);
+                }
+              })
+          )}
+          {renderRow(
             'log-out-outline',
             'Log out',
             'Sign out of your homestay account',
@@ -325,6 +342,7 @@ export const MoreScreen: React.FC = () => {
         animationType="fade"
         onRequestClose={closePasswordModal}
       >
+        <KeyboardAwareOverlay style={{ flex: 1 }}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Change Account Password</Text>
@@ -393,6 +411,7 @@ export const MoreScreen: React.FC = () => {
             </View>
           </View>
         </View>
+        </KeyboardAwareOverlay>
       </Modal>
     </View>
   );

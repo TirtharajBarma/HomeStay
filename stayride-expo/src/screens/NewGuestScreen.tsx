@@ -12,8 +12,10 @@ import {
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useStayRide } from '../data/store';
+import { api } from '../data/api';
 import { Header } from '../components/Header';
 import { Colors } from '../theme/colors';
+import { FormScroll } from '../components/FormScroll';
 
 export const NewGuestScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
@@ -21,6 +23,8 @@ export const NewGuestScreen: React.FC = () => {
   const { guestId } = route.params || {};
 
   const { guests, createGuest, updateGuest } = useStayRide();
+  // Leaving this form ends the submission: a reopened form gets a fresh Idempotency-Key
+  useEffect(() => () => api.clearIdempotencyKeys('/guests'), []);
 
   const editingGuest = guestId ? guests.find((g) => g.id === guestId) : null;
 
@@ -28,7 +32,8 @@ export const NewGuestScreen: React.FC = () => {
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [notes, setNotes] = useState('');
-  const [consent, setConsent] = useState(true);
+  // Marketing is opt-in: the owner switches it on only when the guest agrees
+  const [consent, setConsent] = useState(false);
 
   useEffect(() => {
     if (editingGuest) {
@@ -54,13 +59,17 @@ export const NewGuestScreen: React.FC = () => {
     }
 
     if (editingGuest) {
-      await updateGuest(editingGuest.id, {
+      const outcome = await updateGuest(editingGuest.id, {
         name: trimmedName,
         phone: trimmedPhone,
         email: email.trim(),
         notes: notes.trim(),
         marketingConsent: consent,
       });
+      if (!outcome.ok) {
+        Alert.alert("Couldn't save", outcome.error || 'Please try again.');
+        return;
+      }
       Alert.alert('Success', 'Guest updated', [
         { text: 'OK', onPress: () => navigation.goBack() },
       ]);
@@ -90,7 +99,7 @@ export const NewGuestScreen: React.FC = () => {
         onBack={() => navigation.goBack()}
       />
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <FormScroll contentContainerStyle={styles.scrollContent}>
         <Text style={styles.label}>Full Name *</Text>
         <TextInput
           style={styles.input}
@@ -152,7 +161,7 @@ export const NewGuestScreen: React.FC = () => {
             {editingGuest ? 'Update guest' : 'Add guest to database'}
           </Text>
         </TouchableOpacity>
-      </ScrollView>
+      </FormScroll>
     </View>
   );
 };

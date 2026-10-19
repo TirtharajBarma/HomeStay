@@ -1,15 +1,10 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { Icon } from "@/components/icon";
 import { Stars } from "@/components/stars";
 import { StayGallery } from "@/components/stay-gallery";
-import { getLiveStay, getStaySlugs } from "@/lib/stays";
-
-export function generateStaticParams() {
-  return getStaySlugs().map((slug) => ({ slug }));
-}
+import { getLiveStay } from "@/lib/stays";
 
 export async function generateMetadata({
   params,
@@ -39,46 +34,6 @@ export default async function DedicatedHomestayPage({
   const checkIn = typeof query.checkIn === "string" ? query.checkIn : "";
   const checkOut = typeof query.checkOut === "string" ? query.checkOut : "";
   const guestName = typeof query.guest === "string" ? query.guest : "";
-
-  // Pre-configured transfer destinations
-  const transferCards = [
-    {
-      title: "Return Transfer: Homestay ➔ NJP Railway Station",
-      badge: "High Demand · No Hill Surcharges",
-      desc: "Guaranteed door-to-door hill descent from the estate gate to New Jalpaiguri (NJP) Platform 1.",
-      eta: "Approx. 3.5 hrs",
-      fare: "₹3,400",
-      icon: "train",
-      link: `/cab?pickup=${encodeURIComponent(stay.name)}&dropoff=${encodeURIComponent("NJP Railway Station")}&date=${checkOut || checkIn}${guestName ? `&guest=${encodeURIComponent(guestName)}` : ""}`,
-    },
-    {
-      title: "Return Transfer: Homestay ➔ Bagdogra Airport (IXB)",
-      badge: "Flight Guaranteed · Local Drivers",
-      desc: "Direct private cab from homestay to Bagdogra departures terminal. Zero mountain syndication hassle.",
-      eta: "Approx. 3 hrs 15 mins",
-      fare: "₹3,200",
-      icon: "flight",
-      link: `/cab?pickup=${encodeURIComponent(stay.name)}&dropoff=${encodeURIComponent("Bagdogra Airport")}&date=${checkOut || checkIn}${guestName ? `&guest=${encodeURIComponent(guestName)}` : ""}`,
-    },
-    {
-      title: "Tiger Hill Sunrise Tour (03:30 AM Pickup)",
-      badge: "Kanchenjunga First Light",
-      desc: "Early morning private excursion to Tiger Hill summit, returning via Ghoom Monastery & Batasia Loop.",
-      eta: "4 hrs tour",
-      fare: "₹2,200",
-      icon: "wb_twilight",
-      link: `/cab?pickup=${encodeURIComponent(stay.name)}&dropoff=${encodeURIComponent("Tiger Hill")}&date=${checkIn}${guestName ? `&guest=${encodeURIComponent(guestName)}` : ""}`,
-    },
-    {
-      title: "Darjeeling 7-Points Sightseeing Charter",
-      badge: "Full Day Local Tour",
-      desc: "Zoo, HMI, Ropeway, Tea Gardens, Tibetan Refugee Centre, Japanese Temple & Peace Pagoda.",
-      eta: "Full Day",
-      fare: "₹2,800",
-      icon: "explore",
-      link: `/cab?pickup=${encodeURIComponent(stay.name)}&dropoff=${encodeURIComponent("Darjeeling Station")}&date=${checkIn}${guestName ? `&guest=${encodeURIComponent(guestName)}` : ""}`,
-    },
-  ];
 
   return (
     <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
@@ -163,89 +118,19 @@ export default async function DedicatedHomestayPage({
       {/* 3. High-Quality Photo Gallery */}
       <StayGallery stay={stay} />
 
-      {/* 4. HIGH-MARGIN CAB TRANSFER SECTION */}
+      {/* 4. Cabs: requested through the secure StayRide link the host sends on WhatsApp */}
       <section id="cab-transfers" className="my-12 scroll-mt-20">
         <div className="rounded-3xl border border-outline-variant/50 bg-surface-container-lowest p-6 sm:p-8 shadow-md">
-          <div className="flex flex-col justify-between gap-4 border-b border-outline-variant/30 pb-6 sm:flex-row sm:items-end">
-            <div>
-              <span className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-secondary">
-                <Icon name="local_taxi" className="text-base" />
-                Guaranteed Hill Transit &amp; Return Transfers
-              </span>
-              <h2 className="mt-1 font-serif text-2xl font-bold text-primary sm:text-3xl">
-                Door-to-Door Private Hill Cabs
-              </h2>
-              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-on-surface-variant">
-                Mountain syndicate taxi counters in the hills often charge sudden surge pricing or leave travelers stranded.
-                Book directly with homestay-affiliated local drivers with upfront fixed fares in rupees.
-              </p>
-            </div>
-
-            <Link
-              href={`/cab?pickup=${encodeURIComponent(stay.name)}`}
-              className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-on-primary shadow hover:opacity-95"
-            >
-              <Icon name="search" className="text-lg" />
-              <span>Custom Hill Route →</span>
-            </Link>
-          </div>
-
-          {/* Transfer Route Cards Grid */}
-          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {transferCards.map((card) => (
-              <div
-                key={card.title}
-                className="flex flex-col justify-between rounded-2xl border border-outline-variant/40 bg-surface p-5 transition hover:border-primary/50 hover:shadow-md"
-              >
-                <div>
-                  <div className="flex items-center justify-between">
-                    <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-tint text-primary">
-                      <Icon name={card.icon} className="text-xl" />
-                    </span>
-                    <span className="font-mono text-base font-bold text-primary">
-                      {card.fare}
-                    </span>
-                  </div>
-
-                  <h3 className="mt-4 font-serif text-base font-bold leading-snug text-primary">
-                    {card.title}
-                  </h3>
-                  <span className="mt-1 inline-block text-[11px] font-semibold uppercase tracking-wide text-secondary">
-                    {card.badge}
-                  </span>
-                  <p className="mt-2 text-xs leading-relaxed text-outline">
-                    {card.desc}
-                  </p>
-                </div>
-
-                <div className="mt-5 border-t border-outline-variant/20 pt-4">
-                  <div className="mb-3 flex items-center justify-between text-xs text-outline">
-                    <span>Duration</span>
-                    <span className="font-medium text-on-surface">{card.eta}</span>
-                  </div>
-
-                  <Link
-                    href={card.link}
-                    className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-primary py-2.5 text-xs font-semibold text-on-primary transition hover:opacity-95"
-                  >
-                    <span>Reserve Cab</span>
-                    <Icon name="arrow_forward" className="text-sm" />
-                  </Link>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-outline-variant/40 bg-surface-container-low px-4 py-3 text-xs text-outline">
-            <span className="flex items-center gap-2">
-              <Icon name="payments" className="text-base text-primary" />
-              Pay driver directly via Cash or UPI at dropoff • No prepayment required
-            </span>
-            <span className="flex items-center gap-2">
-              <Icon name="cancel" className="text-base text-primary" />
-              Free cancellation up to 12 hours before pickup
-            </span>
-          </div>
+          <span className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-secondary">
+            <Icon name="local_taxi" className="text-base" />
+            Hill cabs &amp; transfers
+          </span>
+          <h2 className="mt-1 font-serif text-2xl font-bold text-primary sm:text-3xl">Need a cab during your stay?</h2>
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-on-surface-variant">
+            Ask your host for a cab. StayRide sends you a secure link on WhatsApp where you choose your stops,
+            date and vehicle. Verified local drivers quote their fare, you pay a small advance to StayRide,
+            and the rest in cash to the driver.
+          </p>
         </div>
       </section>
 

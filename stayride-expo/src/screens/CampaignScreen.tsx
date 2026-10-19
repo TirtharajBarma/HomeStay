@@ -15,7 +15,10 @@ import { useStayRide } from '../data/store';
 import { Header } from '../components/Header';
 import { Pill } from '../components/Pill';
 import { PlatformSelect } from '../components/PlatformSelect';
+import { FeatureLocked } from '../components/FeatureLocked';
 import { Colors } from '../theme/colors';
+import { FormScroll } from '../components/FormScroll';
+import { KeyboardAwareOverlay } from '../components/KeyboardAwareOverlay';
 import { Campaign } from '../types';
 
 const AUDIENCE_OPTIONS = [
@@ -29,7 +32,7 @@ const AUDIENCES = ['All guests', 'Repeat guests', 'Recent guests', 'Inactive gue
 
 export const CampaignScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
-  const { campaigns, guests, createCampaign, sendCampaign, homestay } = useStayRide();
+  const { campaigns, guests, createCampaign, sendCampaign, homestay, features } = useStayRide();
 
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [selectedAudience, setSelectedAudience] = useState(AUDIENCES[0]);
@@ -63,10 +66,9 @@ export const CampaignScreen: React.FC = () => {
           {
             text: 'Mark as sent',
             onPress: async () => {
-              try {
-                await sendCampaign(c.id);
-              } catch (e: any) {
-                Alert.alert('Not saved', e?.message || 'Please try again.');
+              const outcome = await sendCampaign(c.id);
+              if (!outcome.ok) {
+                Alert.alert('Not saved', outcome.error || 'Please try again.');
                 return;
               }
               Alert.alert('Campaign Updated', 'Campaign marked as sent. Automatic WhatsApp delivery is not connected yet.');
@@ -114,11 +116,20 @@ export const CampaignScreen: React.FC = () => {
     Alert.alert('Campaign Created', 'Tap it to start sending');
   };
 
+  if (features?.campaigns === false) {
+    return (
+      <View style={styles.container}>
+        <Header title="Campaigns" onBack={() => navigation.goBack()} />
+        <FeatureLocked feature="campaigns" title="Guest campaigns" />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <Header title="Campaigns" onBack={() => navigation.goBack()} />
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <FormScroll contentContainerStyle={styles.scrollContent}>
         <View style={styles.summaryBar}>
           <Text style={styles.summaryText}>
             {campaigns.length} campaigns · {guests.length} guests · {consentCount} with marketing consent
@@ -167,7 +178,7 @@ export const CampaignScreen: React.FC = () => {
             </TouchableOpacity>
           ))
         )}
-      </ScrollView>
+      </FormScroll>
 
       {/* Floating Action Button */}
       <TouchableOpacity
@@ -185,6 +196,7 @@ export const CampaignScreen: React.FC = () => {
         animationType="slide"
         onRequestClose={() => setCreateModalVisible(false)}
       >
+        <KeyboardAwareOverlay style={{ flex: 1 }}>
         <TouchableOpacity
           style={styles.modalOverlay}
           activeOpacity={1}
@@ -229,6 +241,7 @@ export const CampaignScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
+        </KeyboardAwareOverlay>
       </Modal>
     </View>
   );

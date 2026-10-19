@@ -42,7 +42,7 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
   const params = await searchParams;
   const booking = resolveBooking(params, MAX_GUESTS);
   const filters = readFilters(params);
-  const allStays = await getLiveStays();
+  const { stays: allStays, error: staysError } = await getLiveStays();
   const visible = filterStays(allStays, filters);
 
   return (
@@ -105,10 +105,25 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
               pottery.
             </p>
           </div>
-          <StayFilters booking={booking} filters={filters} matching={visible.length} />
+          <StayFilters booking={booking} filters={filters} matching={visible.length} stays={allStays} />
         </div>
 
-        {visible.length > 0 ? (
+        {staysError ? (
+          <div
+            role="alert"
+            className="rounded-xl border border-dashed border-outline-variant bg-surface-container-low p-12 text-center"
+          >
+            <Icon name="cloud_off" className="mb-3 text-[32px] text-outline" />
+            <h3 className="mb-1 font-display text-headline-sm text-primary">Stays are unavailable right now</h3>
+            <p className="text-body-md text-on-surface-variant">{staysError}</p>
+          </div>
+        ) : allStays.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-outline-variant bg-surface-container-low p-12 text-center">
+            <Icon name="cottage" className="mb-3 text-[32px] text-outline" />
+            <h3 className="mb-1 font-display text-headline-sm text-primary">No stays are listed yet</h3>
+            <p className="text-body-md text-on-surface-variant">Please check back soon.</p>
+          </div>
+        ) : visible.length > 0 ? (
           <div className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
             {visible.map((stay) => (
               <StayCard key={stay.slug} stay={stay} booking={booking} />

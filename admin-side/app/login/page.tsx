@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAdminAuth } from "@/components/auth-context";
-import { API_ENDPOINTS } from "@/lib/api-config";
+import { API_ENDPOINTS, apiFetch, SESSION_EXPIRED_KEY } from "@/lib/api-config";
 
 export default function AdminLoginPage() {
   const { login } = useAdminAuth();
@@ -11,34 +11,46 @@ export default function AdminLoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [expiredNotice, setExpiredNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    const reason = window.sessionStorage.getItem(SESSION_EXPIRED_KEY);
+    if (reason) {
+      window.sessionStorage.removeItem(SESSION_EXPIRED_KEY);
+      setExpiredNotice(reason === "1" ? "Session expired. Please sign in again." : reason);
+    }
+  }, []);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setLoading(true);
 
+    let res: Response;
     try {
-      const res = await fetch(API_ENDPOINTS.login(), {
+      res = await apiFetch(API_ENDPOINTS.login(), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
+        skipAuthRedirect: true,
       });
-
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || "Invalid administrator credentials.");
-      }
-
-      if (data.data?.user?.role !== "admin") {
-        throw new Error("Access Denied: Account is not authorized for Super Admin tower.");
-      }
-
-      login(data.data.token, data.data.user);
-    } catch (err: any) {
-      setError(err.message || "Failed to authenticate administrator.");
-    } finally {
+    } catch {
+      setError("Could not reach the server. Please try again.");
       setLoading(false);
+      return;
     }
+    const data = await res.json().catch(() => ({}));
+    setLoading(false);
+    if (res.status === 429 || res.status >= 500) {
+      setError(`Sign-in is temporarily unavailable (${res.status}). Please try again.`);
+      return;
+    }
+    // Generic message for every credential/role failure: never reveal whether the account exists.
+    if (!res.ok || !data?.success || !data.data?.token || data.data?.user?.role !== "admin") {
+      setError("Invalid email or password.");
+      return;
+    }
+    login(data.data.token, data.data.user);
   }
 
   return (
@@ -55,6 +67,13 @@ export default function AdminLoginPage() {
             Restricted founder gateway for network operations &amp; driver payouts.
           </p>
         </div>
+
+        {expiredNotice && (
+          <div className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-950/40 p-3 text-xs text-amber-400">
+            <span className="material-symbols-outlined text-base">schedule</span>
+            <span>{expiredNotice}</span>
+          </div>
+        )}
 
         {error && (
           <div className="flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-950/40 p-3 text-xs text-red-400">

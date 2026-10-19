@@ -57,12 +57,20 @@ export class DriverController {
   }
 
   static async getDriverTrips(req: Request, res: Response) {
+    const user = (req as any).user;
+    if (!(await DriverService.canAccessDriver(req.params.id as string, user))) {
+      return res.status(403).json({ success: false, error: "You do not have access to this driver." });
+    }
     const trips = await DriverService.getDriverTrips(req.params.id as string);
     res.json({ success: true, count: trips.length, data: trips });
   }
 
   static async updateTripStatus(req: Request, res: Response) {
     const { status } = req.body;
+    const user = (req as any).user;
+    if (!(await DriverService.canAccessTrip(req.params.id as string, user))) {
+      return res.status(403).json({ success: false, error: "You do not have access to this trip." });
+    }
     const trip = await DriverService.updateTripStatus(req.params.id as string, status);
     if (!trip) return res.status(404).json({ success: false, error: "Trip not found" });
     res.json({ success: true, data: trip });

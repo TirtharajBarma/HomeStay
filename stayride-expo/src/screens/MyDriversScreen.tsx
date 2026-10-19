@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -16,7 +16,12 @@ import { useStayRide } from '../data/store';
 import { Header } from '../components/Header';
 import { DriverItem } from '../components/DriverItem';
 import { Colors } from '../theme/colors';
+import { FormScroll } from '../components/FormScroll';
+import { KeyboardAwareOverlay } from '../components/KeyboardAwareOverlay';
 import { Driver } from '../types';
+import { reportOutcome } from '../utils/report';
+import { vehicleLabel } from '../utils/vehicle';
+import { api } from '../data/api';
 
 const VEHICLE_TYPES = ['SUV', 'Sedan', '7-seater', '9-seater'];
 const ROUTE_OPTIONS = ['NJP', 'Bagdogra', 'Sightseeing', 'Local'];
@@ -40,9 +45,14 @@ export const MyDriversScreen: React.FC = () => {
   const [vehicle, setVehicle] = useState('');
   const [vehicleType, setVehicleType] = useState('SUV');
   const [seats, setSeats] = useState('4');
-  const [area, setArea] = useState('Gangtok');
+  const [area, setArea] = useState('');
   const [available, setAvailable] = useState(true);
   const [selectedRoutes, setSelectedRoutes] = useState<string[]>(['Local', 'NJP']);
+
+  // Closing the add/edit form ends that submission: a reopened form gets a fresh Idempotency-Key
+  useEffect(() => {
+    if (!formVisible) api.clearIdempotencyKeys('/drivers');
+  }, [formVisible]);
 
   const activeCount = drivers.filter((d) => d.active).length;
   const availableCount = drivers.filter((d) => d.active && d.available).length;
@@ -54,7 +64,7 @@ export const MyDriversScreen: React.FC = () => {
     setVehicle('');
     setVehicleType('SUV');
     setSeats('4');
-    setArea('Gangtok');
+    setArea('');
     setAvailable(true);
     setSelectedRoutes(['Local', 'NJP']);
     setFormVisible(true);
@@ -102,17 +112,17 @@ export const MyDriversScreen: React.FC = () => {
     const parsedSeats = parseInt(seats, 10) || 4;
 
     if (editingDriver) {
-      await updateDriver(editingDriver.id, {
+      const outcome = await updateDriver(editingDriver.id, {
         name: trimmedName,
         phone: trimmedPhone,
         vehicle: trimmedVehicle,
         vehicleType: vehicleType as any,
         seats: parsedSeats,
-        area: area.trim() || 'Gangtok',
+        area: area.trim(),
         trips: selectedRoutes,
         available,
       });
-      Alert.alert('Success', `${trimmedName} updated`);
+      reportOutcome(outcome, 'Success', `${trimmedName} updated`);
     } else {
       try {
         await createDriver({
@@ -121,9 +131,8 @@ export const MyDriversScreen: React.FC = () => {
           vehicle: trimmedVehicle,
           vehicleType: vehicleType as any,
           seats: parsedSeats,
-          area: area.trim() || 'Gangtok',
+          area: area.trim(),
           trips: selectedRoutes,
-          rating: 4.8,
           available,
         });
       } catch (e: any) {
@@ -145,8 +154,8 @@ export const MyDriversScreen: React.FC = () => {
           text: 'Remove',
           style: 'destructive',
           onPress: async () => {
-            await deleteDriver(d.id);
-            Alert.alert('Removed', `${d.name} removed`);
+            const outcome = await deleteDriver(d.id);
+            reportOutcome(outcome, 'Removed', `${d.name} removed`);
           },
         },
       ]
@@ -157,7 +166,7 @@ export const MyDriversScreen: React.FC = () => {
     <View style={styles.container}>
       <Header title="My Drivers" onBack={() => navigation.goBack()} />
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <FormScroll contentContainerStyle={styles.scrollContent}>
         <View style={styles.summaryBar}>
           <Text style={styles.summaryText}>
             {drivers.length} drivers · {activeCount} active · {availableCount} available now
@@ -185,7 +194,7 @@ export const MyDriversScreen: React.FC = () => {
             />
           ))
         )}
-      </ScrollView>
+      </FormScroll>
 
       {/* Floating Add Driver Button */}
       <TouchableOpacity style={styles.fab} onPress={openAddForm}>
@@ -200,6 +209,7 @@ export const MyDriversScreen: React.FC = () => {
         animationType="slide"
         onRequestClose={() => setFormVisible(false)}
       >
+        <KeyboardAwareOverlay style={{ flex: 1 }}>
         <TouchableOpacity
           style={styles.modalOverlay}
           activeOpacity={1}
@@ -250,7 +260,7 @@ export const MyDriversScreen: React.FC = () => {
                       onPress={() => setVehicleType(t)}
                     >
                       <Text style={[styles.typeChipText, active && styles.typeChipTextActive]}>
-                        {t}
+                        {vehicleLabel(t)}
                       </Text>
                     </TouchableOpacity>
                   );
@@ -312,6 +322,7 @@ export const MyDriversScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
+        </KeyboardAwareOverlay>
       </Modal>
     </View>
   );

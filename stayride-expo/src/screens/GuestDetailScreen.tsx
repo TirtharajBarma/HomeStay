@@ -17,6 +17,8 @@ import { Header } from '../components/Header';
 import { Pill } from '../components/Pill';
 import { BookingItem } from '../components/BookingItem';
 import { Colors } from '../theme/colors';
+import { KeyboardAwareOverlay } from '../components/KeyboardAwareOverlay';
+import { reportOutcome } from '../utils/report';
 
 export const GuestDetailScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
@@ -51,8 +53,9 @@ export const GuestDetailScreen: React.FC = () => {
     });
 
   const handleConsentToggle = async (value: boolean) => {
-    await updateGuest(guest.id, { marketingConsent: value });
-    Alert.alert(
+    const outcome = await updateGuest(guest.id, { marketingConsent: value });
+    reportOutcome(
+      outcome,
       'Marketing Preference',
       value
         ? `${guest.name} can receive WhatsApp offers`
@@ -66,9 +69,9 @@ export const GuestDetailScreen: React.FC = () => {
   };
 
   const handleSaveNotes = async () => {
-    await updateGuest(guest.id, { notes: editedNotes });
+    const outcome = await updateGuest(guest.id, { notes: editedNotes });
     setNotesModalVisible(false);
-    Alert.alert('Saved', 'Notes saved');
+    reportOutcome(outcome, 'Saved', 'Notes saved');
   };
 
   return (
@@ -187,6 +190,7 @@ export const GuestDetailScreen: React.FC = () => {
         animationType="fade"
         onRequestClose={() => setNotesModalVisible(false)}
       >
+        <KeyboardAwareOverlay style={{ flex: 1 }}>
         <TouchableOpacity
           style={styles.modalOverlay}
           activeOpacity={1}
@@ -216,6 +220,7 @@ export const GuestDetailScreen: React.FC = () => {
             </View>
           </View>
         </TouchableOpacity>
+        </KeyboardAwareOverlay>
       </Modal>
     </View>
   );

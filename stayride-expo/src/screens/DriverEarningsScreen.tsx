@@ -14,106 +14,82 @@ import { formatINR } from '../utils/format';
 
 export const DriverEarningsScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
-  const { trips, session } = useStayRide();
+  const { driverTrips } = useStayRide();
 
-  const driverId = Number(session?.driver?.id) || 1;
-  const driverName = session?.driver?.name || 'Local Driver';
-
-  const completedTrips = trips.filter(
-    (t) =>
-      (t.driverId === driverId || (t.driverName && t.driverName.toLowerCase().includes(driverName.toLowerCase()))) &&
-      t.status === 'COMPLETED'
-  );
-
-  const totalGrossFares = completedTrips.reduce((acc, t) => acc + (t.fare || t.estFare || 3000), 0);
-  const totalHostCommission = completedTrips.reduce(
-    (acc, t) => acc + (t.commission ?? 0),
-    0
-  );
-  const totalPlatformFees = completedTrips.reduce(
-    (acc, t) => acc + (t.financialSnapshot?.platformFeeAmount ?? t.platformFee ?? 0),
-    0
-  );
-  const totalCashCollected = completedTrips.reduce(
-    (acc, t) => acc + Math.max(0, (t.fare || 0) - (t.advancePaid ? t.advanceAmount || 0 : 0)),
-    0
-  );
-  const netEarnings = totalGrossFares - totalHostCommission - totalPlatformFees;
+  // Server values only: fee, commission and net payout come from the server, never computed here
+  const completedTrips = driverTrips.filter((t) => t.assignedToMe && t.status === 'COMPLETED');
+  const sumNet = (list: typeof completedTrips) =>
+    list.reduce((sum, t) => sum + (typeof t.driverNetPayout === 'number' ? t.driverNetPayout : 0), 0);
+  const settledTotal = sumNet(completedTrips.filter((t) => t.driverSettlementStatus === 'SETTLED'));
+  const pendingTotal = sumNet(completedTrips.filter((t) => t.driverSettlementStatus !== 'SETTLED'));
+  const money = (v?: number | null) => (typeof v === 'number' ? formatINR(v) : '—');
 
   return (
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: Math.max(insets.top + 10, Platform.OS === 'ios' ? 54 : 38) }]}>
         <Text style={styles.headerTitle}>Driver Earnings &amp; Ledger</Text>
-        <Text style={styles.headerSubtitle}>Direct Mountain Cash &amp; Commission Breakdown</Text>
+        <Text style={styles.headerSubtitle}>Completed StayRide trips</Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        {/* Main Payout Card */}
-        <View style={styles.highlightCard}>
-          <Text style={styles.highlightLabel}>NET DRIVER EARNINGS</Text>
-          <Text style={styles.highlightValue}>{formatINR(netEarnings)}</Text>
-          <Text style={styles.highlightSub}>From {completedTrips.length} completed mountain trips</Text>
-        </View>
-
-        {/* 2-Column Stats Grid */}
         <View style={styles.gridRow}>
-          <View style={styles.gridCard}>
-            <View style={styles.iconCircle}>
-              <Ionicons name="cash-outline" size={20} color="#16A34A" />
-            </View>
-            <Text style={styles.gridLabel}>Cash Collected</Text>
-            <Text style={styles.gridValue}>{formatINR(totalCashCollected)}</Text>
-            <Text style={styles.gridSub}>In hand from guests</Text>
-          </View>
           <View style={styles.gridCard}>
             <View style={[styles.iconCircle, { backgroundColor: '#EFF6FF' }]}>
               <Ionicons name="car-outline" size={20} color="#2563EB" />
             </View>
             <Text style={styles.gridLabel}>Rides Completed</Text>
             <Text style={styles.gridValue}>{completedTrips.length}</Text>
-            <Text style={styles.gridSub}>100% verified trips</Text>
+          </View>
+          <View style={styles.gridCard}>
+            <View style={styles.iconCircle}>
+              <Ionicons name="wallet-outline" size={20} color="#16A34A" />
+            </View>
+            <Text style={styles.gridLabel}>Settled</Text>
+            <Text style={styles.gridValue}>{formatINR(settledTotal)}</Text>
+            <Text style={styles.gridSub}>Pending {formatINR(pendingTotal)}</Text>
           </View>
         </View>
 
-        {/* Commission Transparency Breakdown */}
-        <View style={styles.breakdownCard}>
-          <Text style={styles.sectionTitle}>Commission &amp; Fee Breakdown</Text>
-          <View style={styles.breakdownRow}>
-            <Text style={styles.rowLabel}>Total Gross Fare Value:</Text>
-            <Text style={styles.rowVal}>{formatINR(totalGrossFares)}</Text>
-          </View>
-          <View style={styles.breakdownRow}>
-            <Text style={styles.rowLabel}>Homestay Host Commission (~10%):</Text>
-            <Text style={[styles.rowVal, { color: '#DC2626' }]}>- {formatINR(totalHostCommission)}</Text>
-          </View>
-          <View style={styles.breakdownRow}>
-            <Text style={styles.rowLabel}>Platform Tech Fee (~5%):</Text>
-            <Text style={[styles.rowVal, { color: '#DC2626' }]}>- {formatINR(totalPlatformFees)}</Text>
-          </View>
-          <View style={[styles.breakdownRow, styles.totalRow]}>
-            <Text style={styles.totalRowLabel}>Net Payout to You:</Text>
-            <Text style={styles.totalRowVal}>{formatINR(netEarnings)}</Text>
-          </View>
-        </View>
-
-        {/* Recent Trip Payouts */}
+        {/* Per-trip payout breakdown */}
         <View style={styles.historyCard}>
-          <Text style={styles.sectionTitle}>Trip Settlements</Text>
+          <Text style={styles.sectionTitle}>Completed Trips</Text>
           {completedTrips.length === 0 ? (
-            <Text style={styles.emptyText}>No completed trip payouts yet.</Text>
+            <Text style={styles.emptyText}>No completed trips yet.</Text>
           ) : (
             completedTrips.map((t) => (
-              <View key={t.id} style={styles.tripSettlement}>
+              <View key={t.reference} style={styles.tripSettlement}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.tripRider}>{t.guestName}</Text>
+                  <Text style={styles.tripRider}>{t.guestName || t.reference}</Text>
                   <Text style={styles.tripRoute}>{t.pickup} ➔ {t.destination}</Text>
                   <Text style={styles.tripDate}>
                     {new Date(t.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
                   </Text>
+                  <Text style={styles.tripDate}>
+                    Fare {money(t.fare)} • Platform fee {money(t.platformFeeAmount)} • Homestay commission{' '}
+                    {money(t.homestayCommissionAmount)}
+                  </Text>
+                  <Text style={styles.tripDate}>
+                    Cash collected {money(t.remainingCashAmount)}
+                  </Text>
                 </View>
                 <View style={{ alignItems: 'flex-end' }}>
-                  <Text style={styles.tripFare}>+ ₹{t.fare || 3000}</Text>
-                  <Text style={styles.tripSettledBadge}>Settled</Text>
+                  <Text style={styles.tripFare}>{money(t.driverNetPayout)}</Text>
+                  <Text style={styles.tripDate}>Net payout</Text>
+                  <Text style={styles.tripSettledBadge}>
+                    {t.driverSettlementStatus === 'SETTLED'
+                      ? 'Settled'
+                      : t.driverSettlementStatus === 'PENDING'
+                      ? 'Settlement pending'
+                      : 'Not settled'}
+                  </Text>
+                  {!!t.driverSettlementReference && (
+                    <Text style={styles.tripDate}>Ref {t.driverSettlementReference}</Text>
+                  )}
+                  {!!t.driverSettledAt && (
+                    <Text style={styles.tripDate}>
+                      {new Date(t.driverSettledAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                    </Text>
+                  )}
                 </View>
               </View>
             ))

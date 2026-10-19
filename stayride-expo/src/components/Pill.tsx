@@ -53,6 +53,8 @@ export const Pill: React.FC<PillProps> = ({ label, value, color, bgColor }) => {
     case 'MAINTENANCE':
     case 'CANCELLED':
     case 'CANCELED':
+    case 'EXPIRED':
+    case 'NEEDS NEW DRIVER':
     case 'FAILED':
       textColor = Colors.statusRed;
       bg = Colors.statusRedBg;

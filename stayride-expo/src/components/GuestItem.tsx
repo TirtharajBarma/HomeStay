@@ -49,7 +49,7 @@ export const GuestItem: React.FC<GuestItemProps> = ({ guest, onPress, onLongPres
               activeOpacity={0.8}
             >
               <Ionicons name="logo-whatsapp" size={14} color="#16A34A" style={{ marginRight: 4 }} />
-              <Text style={styles.askCabBtnText}>Ask for Cab (WhatsApp)</Text>
+              <Text style={styles.askCabBtnText}>Ask for Cab</Text>
             </TouchableOpacity>
           </View>
         )}

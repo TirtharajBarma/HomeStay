@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,42 +10,42 @@ import {
   TextInput,
   ActivityIndicator,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useStayRide } from '../data/store';
 import { Header } from '../components/Header';
 import { Pill } from '../components/Pill';
 import { Colors } from '../theme/colors';
-import { CabTrip } from '../types';
+import { FormScroll } from '../components/FormScroll';
+import { KeyboardAwareOverlay } from '../components/KeyboardAwareOverlay';
+import { FeatureLocked } from '../components/FeatureLocked';
 import { api } from '../data/api';
 import { formatINR } from '../utils/format';
 
 export const CommissionScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
-  const { trips, payCommission, session, commissionRates } = useStayRide();
+  const { trips, commissionRates, features, payoutSummary, refreshPayoutSummary } = useStayRide();
 
-  const completedTrips = trips.filter((t) => t.status === 'COMPLETED' && t.commission > 0);
+  // Display-only ledger: commission values come from the server (earned only on platform trips)
+  const completedTrips = trips.filter((t) => t.platform && t.commission > 0);
 
-  const earned = completedTrips.reduce((acc, t) => acc + t.commission, 0);
-  const paid = completedTrips
-    .filter((t) => t.commissionPaid)
-    .reduce((acc, t) => acc + t.commission, 0);
-
-  // Trips eligible for platform payout (completed, advance collected in escrow, not settled)
-  const withdrawableTrips = completedTrips.filter((t) => !t.commissionPaid && t.advancePaid);
-  const pending = withdrawableTrips.reduce((acc, t) => acc + t.commission, 0);
-
-  // Trips where advance was not recorded through platform escrow
-  const awaitingAdvanceTrips = completedTrips.filter((t) => !t.commissionPaid && !t.advancePaid);
-  const awaitingAdvance = awaitingAdvanceTrips.reduce((acc, t) => acc + t.commission, 0);
+  // Withdrawable balance is computed only by the server (GET /payouts/summary)
+  const available = payoutSummary?.available ?? 0;
+  const pendingPayout = payoutSummary?.pendingPayout ?? null;
+  const payoutsLocked = features?.payouts === false;
 
   // Payout Request Modal State
   const [modalVisible, setModalVisible] = useState(false);
-  const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [payoutMethod, setPayoutMethod] = useState<'UPI' | 'BANK_TRANSFER'>('UPI');
   const [upiId, setUpiId] = useState('');
+  const [accountName, setAccountName] = useState('');
+  const [accountNumber, setAccountNumber] = useState('');
+  const [ifsc, setIfsc] = useState('');
+  const [bankName, setBankName] = useState('');
   const [submittingPayout, setSubmittingPayout] = useState(false);
   const [payoutHistory, setPayoutHistory] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
 
   const fmtDate = (ms: number | string | Date) => {
     const d = new Date(ms);
@@ -61,71 +61,90 @@ export const CommissionScreen: React.FC = () => {
     try {
       setLoadingHistory(true);
       const res = await api.get('/payouts/history');
-      if (Array.isArray(res)) {
-        setPayoutHistory(res);
-      }
-    } catch {
-      // offline / demo fallback
+      if (!Array.isArray(res)) throw new Error('Unexpected reply from StayRide.');
+      setPayoutHistory(res);
+      setHistoryError(null);
+    } catch (e: any) {
+      // Never show an empty history when we simply could not load it
+      setHistoryError(e?.message && !/network|abort/i.test(e.message) ? e.message : 'No connection to StayRide.');
     } finally {
       setLoadingHistory(false);
     }
   };
 
-  useEffect(() => {
+  const refresh = useCallback(() => {
+    refreshPayoutSummary().catch(() => {});
     fetchPayoutHistory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useFocusEffect(refresh);
+
   const openWithdrawModal = () => {
-    if (pending <= 0) {
-      Alert.alert('No Balance', 'You currently have ₹0 in pending commission to withdraw.');
+    if (available <= 0) {
+      Alert.alert('No Balance', 'You have no commission available to withdraw yet.');
       return;
     }
-    setWithdrawAmount(String(pending));
     setModalVisible(true);
   };
 
+  // Closing the form ends this submission; reopening it creates a new Idempotency-Key
+  const closeWithdrawModal = () => {
+    setModalVisible(false);
+    api.clearIdempotencyKeys('/payouts/request');
+  };
+
+  // Requests the FULL server-computed balance; the server rejects it if the balance changed meanwhile
   const handleRequestPayout = async () => {
-    const amt = Number(withdrawAmount);
-    if (!amt || amt <= 0) {
-      Alert.alert('Validation Error', 'Please enter a valid payout amount.');
-      return;
-    }
-    if (amt > pending) {
-      Alert.alert(
-        'Insufficient Pending Balance',
-        `You cannot withdraw more than your pending commission of ₹${pending.toLocaleString()}.`
-      );
-      return;
-    }
-    if (!upiId.trim() || !upiId.includes('@')) {
-      Alert.alert(
-        'Invalid UPI ID',
-        'Please enter a valid UPI address (e.g. yourname@okhdfcbank or 9800123456@paytm).'
-      );
-      return;
+    let destination: Record<string, unknown>;
+    if (payoutMethod === 'UPI') {
+      if (!upiId.trim() || !upiId.includes('@')) {
+        Alert.alert(
+          'Invalid UPI ID',
+          'Please enter a valid UPI address (e.g. yourname@okhdfcbank or 9800123456@paytm).'
+        );
+        return;
+      }
+      destination = { upiId: upiId.trim() };
+    } else {
+      const cleanIfsc = ifsc.trim().toUpperCase();
+      const cleanAccount = accountNumber.replace(/\s/g, '');
+      if (!accountName.trim()) {
+        Alert.alert('Account Name Required', 'Enter the name on the bank account.');
+        return;
+      }
+      if (!/^\d{9,18}$/.test(cleanAccount)) {
+        Alert.alert('Invalid Account Number', 'Bank account numbers have 9 to 18 digits.');
+        return;
+      }
+      if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(cleanIfsc)) {
+        Alert.alert('Invalid IFSC', 'IFSC is 11 characters, like SBIN0001234 (5th character is 0).');
+        return;
+      }
+      destination = {
+        bank: {
+          accountName: accountName.trim().slice(0, 100),
+          accountNumber: cleanAccount,
+          ifsc: cleanIfsc,
+          ...(bankName.trim() ? { bankName: bankName.trim() } : {}),
+        },
+      };
     }
 
     setSubmittingPayout(true);
     try {
       const res = await api.post('/payouts/request', {
-        amount: amt,
-        payoutMethod: 'UPI',
-        upiId: upiId.trim(),
+        method: payoutMethod,
+        payoutMethod,
+        ...destination,
+        expectedAmount: available,
       });
-
-      if (res && res.success) {
-        Alert.alert(
-          'Payout Request Submitted',
-          `Your withdrawal request of ₹${amt.toLocaleString()} to ${upiId.trim()} has been logged for Super Admin settlement.`
-        );
-        setModalVisible(false);
-        fetchPayoutHistory();
-      } else {
-        throw new Error(res?.error?.message || 'Could not submit payout request.');
-      }
+      Alert.alert('Payout Request Submitted', res?.message || 'Your payout request was submitted to StayRide.');
+      closeWithdrawModal();
     } catch (err: any) {
       Alert.alert('Request Failed', err?.message || 'Could not reach server. Please try again.');
     } finally {
+      refresh();
       setSubmittingPayout(false);
     }
   };
@@ -134,37 +153,57 @@ export const CommissionScreen: React.FC = () => {
     <View style={styles.container}>
       <Header title="Homestay Commission" onBack={() => navigation.goBack()} />
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <FormScroll contentContainerStyle={styles.scrollContent}>
         {/* Balance Card */}
         <View style={styles.balanceCard}>
           <View style={styles.balanceHeader}>
             <Text style={styles.balanceLabel}>Available Commission Balance</Text>
             <View style={styles.escrowBadge}>
-              <Text style={styles.escrowBadgeText}>🔒 Secured in Escrow</Text>
+              <Text style={styles.escrowBadgeText}>Held by StayRide</Text>
             </View>
           </View>
 
-          <Text style={styles.balanceVal}>₹{pending.toLocaleString()}</Text>
+          <Text style={styles.balanceVal}>{payoutSummary ? formatINR(available) : '—'}</Text>
 
-          <Text style={styles.summaryMeta}>
-            Lifetime Earned: ₹{earned.toLocaleString()} · Already Paid Out: ₹{paid.toLocaleString()}
-            {awaitingAdvance > 0 ? ` · Direct/Uncollected: ₹${awaitingAdvance.toLocaleString()}` : ''}
-          </Text>
+          {payoutSummary && (
+            <Text style={styles.summaryMeta}>
+              From {payoutSummary.eligibleTrips} completed StayRide trip{payoutSummary.eligibleTrips === 1 ? '' : 's'}
+              {pendingPayout ? ` · Payout of ${formatINR(pendingPayout.amount)} pending` : ''}
+            </Text>
+          )}
 
           {/* Withdraw Button */}
-          <TouchableOpacity
-            style={[styles.withdrawButton, pending <= 0 && styles.withdrawButtonDisabled]}
-            disabled={pending <= 0}
-            onPress={openWithdrawModal}
-          >
-            <Text style={styles.withdrawButtonText}>
-              {pending > 0 ? `Redeem ₹${pending.toLocaleString()} to UPI` : 'No Pending Payout'}
-            </Text>
-          </TouchableOpacity>
+          {!payoutsLocked && (
+            <TouchableOpacity
+              style={[styles.withdrawButton, (available <= 0 || !!pendingPayout) && styles.withdrawButtonDisabled]}
+              disabled={available <= 0 || !!pendingPayout}
+              onPress={openWithdrawModal}
+            >
+              <Text style={styles.withdrawButtonText}>
+                {pendingPayout
+                  ? 'Payout request pending'
+                  : available > 0
+                  ? `Request ${formatINR(available)} payout`
+                  : 'Nothing to withdraw yet'}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
 
+        {payoutsLocked && <FeatureLocked feature="payouts" title="Commission payouts" />}
+
         {/* Payout History Section */}
-        {payoutHistory.length > 0 && (
+        {historyError && (
+          <View style={[styles.emptyCard, { marginBottom: 20 }]}>
+            <Text style={styles.emptyText}>Could not load payout history. {historyError}</Text>
+            <TouchableOpacity onPress={fetchPayoutHistory} disabled={loadingHistory} style={{ marginTop: 8 }}>
+              <Text style={[styles.emptyText, { color: Colors.brandPrimary, fontWeight: '700' }]}>
+                {loadingHistory ? 'Loading…' : 'Retry'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        {!historyError && payoutHistory.length > 0 && (
           <View style={{ marginBottom: 20 }}>
             <Text style={styles.sectionHeader}>Payout Settlements</Text>
             <Text style={styles.subtext}>Bank & UPI transfers from Super Admin platform escrow.</Text>
@@ -173,27 +212,33 @@ export const CommissionScreen: React.FC = () => {
               <View key={p._id || p.id} style={styles.payoutHistoryRow}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.payoutHistoryTitle}>
-                    ₹{p.amount?.toLocaleString()} · {p.upiId || 'Bank Transfer'}
+                    ₹{p.amount?.toLocaleString()} ·{' '}
+                    {p.method === 'BANK_TRANSFER' || (!p.upiId && p.bank)
+                      ? `Bank transfer ${p.bank?.bankName ? `${p.bank.bankName} ` : ''}${p.bank?.accountNumber ? `A/c ${p.bank.accountNumber}` : ''}`
+                      : `UPI ${p.upiId || ''}`}
                   </Text>
                   <Text style={styles.payoutHistoryMeta}>
                     Requested: {fmtDate(p.requestedAt || p.createdAt)}
                     {p.utrNumber ? ` · Ref: ${p.utrNumber}` : ''}
                   </Text>
+                  {p.status === 'REJECTED' && p.rejectedReason ? (
+                    <Text style={[styles.payoutHistoryMeta, styles.textRejected]}>Reason: {p.rejectedReason}</Text>
+                  ) : null}
                 </View>
 
                 <View
                   style={[
                     styles.payoutBadge,
-                    p.status === 'SETTLED' ? styles.badgeSettled : styles.badgePending,
+                    p.status === 'SETTLED' ? styles.badgeSettled : p.status === 'REJECTED' ? styles.badgeRejected : styles.badgePending,
                   ]}
                 >
                   <Text
                     style={[
                       styles.payoutBadgeText,
-                      p.status === 'SETTLED' ? styles.textSettled : styles.textPending,
+                      p.status === 'SETTLED' ? styles.textSettled : p.status === 'REJECTED' ? styles.textRejected : styles.textPending,
                     ]}
                   >
-                    {p.status === 'SETTLED' ? '✓ TRANSFERRED' : '⏳ PENDING'}
+                    {p.status === 'SETTLED' ? '✓ SETTLED' : p.status === 'REJECTED' ? 'REJECTED' : '⏳ PENDING'}
                   </Text>
                 </View>
               </View>
@@ -204,7 +249,8 @@ export const CommissionScreen: React.FC = () => {
         {/* Trip Commission Ledger */}
         <Text style={styles.sectionHeader}>Trip Commission Breakdown</Text>
         <Text style={styles.subtext}>
-          Dynamic homestay commission earned from guest mountain cab bookings.
+          Your commission per completed StayRide trip. EARNED can be withdrawn, REQUESTED is in your payout
+          request, PAID was transferred to you.
           {commissionRates
             ? ` Platform fee ${commissionRates.pfPercent}% · Homestay commission ${commissionRates.hcPercent}%.`
             : ''}
@@ -232,36 +278,89 @@ export const CommissionScreen: React.FC = () => {
               <View style={{ alignItems: 'flex-end' }}>
                 <Text style={styles.commissionAmount}>+{formatINR(t.commission)}</Text>
                 <View style={{ marginTop: 4 }}>
-                  <Pill type="payment" value={t.commissionPaid ? 'PAID' : t.advancePaid ? 'PENDING' : 'DIRECT'} />
+                  {/* Earned → in a payout request → paid out */}
+                  {t.commissionPaid ? (
+                    <Pill value="PAID" label="PAID" />
+                  ) : t.payoutId ? (
+                    <Pill value="CONFIRMED" label="REQUESTED" />
+                  ) : (
+                    <Pill value="PENDING" label="EARNED" />
+                  )}
                 </View>
               </View>
             </View>
           ))
         )}
-      </ScrollView>
+      </FormScroll>
 
       {/* Payout Modal */}
-      <Modal visible={modalVisible} transparent animationType="slide">
+      <Modal visible={modalVisible} transparent animationType="slide" onRequestClose={closeWithdrawModal}>
+        <KeyboardAwareOverlay style={{ flex: 1 }}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
             <Text style={styles.modalTitle}>Redeem Commission</Text>
             <Text style={styles.modalSub}>
-              Enter your UPI ID to receive direct bank transfer from StayRide platform escrow.
+              Choose how StayRide should pay you: UPI or bank transfer.
             </Text>
 
             <View style={{ marginTop: 14 }}>
-              <Text style={styles.inputLabel}>Withdrawal Amount (₹)</Text>
-              <TextInput
-                style={styles.textInput}
-                keyboardType="numeric"
-                value={withdrawAmount}
-                onChangeText={setWithdrawAmount}
-                placeholder="Enter amount"
-                placeholderTextColor="#9CA3AF"
-              />
-              <Text style={styles.helperText}>Max available: ₹{pending.toLocaleString()}</Text>
+              <Text style={styles.inputLabel}>Amount</Text>
+              <Text style={styles.modalTitle}>{formatINR(available)}</Text>
+              <Text style={styles.helperText}>Your full available balance is requested.</Text>
             </View>
 
+            <View style={{ flexDirection: 'row', marginTop: 12, gap: 8 }}>
+              {(['UPI', 'BANK_TRANSFER'] as const).map((m) => (
+                <TouchableOpacity
+                  key={m}
+                  onPress={() => setPayoutMethod(m)}
+                  style={[styles.modalBtn, payoutMethod === m ? styles.submitBtn : styles.cancelBtn]}
+                >
+                  <Text style={payoutMethod === m ? styles.submitBtnText : styles.cancelBtnText}>
+                    {m === 'UPI' ? 'UPI' : 'Bank transfer'}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {payoutMethod === 'BANK_TRANSFER' ? (
+              <View style={{ marginTop: 12 }}>
+                <Text style={styles.inputLabel}>Account holder name *</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={accountName}
+                  onChangeText={setAccountName}
+                  maxLength={100}
+                  placeholderTextColor="#9CA3AF"
+                />
+                <Text style={[styles.inputLabel, { marginTop: 8 }]}>Account number *</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={accountNumber}
+                  onChangeText={setAccountNumber}
+                  keyboardType="number-pad"
+                  maxLength={18}
+                  placeholderTextColor="#9CA3AF"
+                />
+                <Text style={[styles.inputLabel, { marginTop: 8 }]}>IFSC *</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={ifsc}
+                  onChangeText={(v) => setIfsc(v.toUpperCase())}
+                  autoCapitalize="characters"
+                  maxLength={11}
+                  placeholder="e.g. SBIN0001234"
+                  placeholderTextColor="#9CA3AF"
+                />
+                <Text style={[styles.inputLabel, { marginTop: 8 }]}>Bank name</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={bankName}
+                  onChangeText={setBankName}
+                  placeholderTextColor="#9CA3AF"
+                />
+              </View>
+            ) : (
             <View style={{ marginTop: 12 }}>
               <Text style={styles.inputLabel}>Your UPI ID *</Text>
               <TextInput
@@ -272,15 +371,14 @@ export const CommissionScreen: React.FC = () => {
                 placeholderTextColor="#9CA3AF"
                 autoCapitalize="none"
               />
-              <Text style={styles.helperText}>
-                Transfers are processed within 24 hours directly to your linked bank account.
-              </Text>
             </View>
+            )}
+            <Text style={styles.helperText}>StayRide reviews and settles payout requests.</Text>
 
             <View style={styles.modalActions}>
               <TouchableOpacity
                 style={[styles.modalBtn, styles.cancelBtn]}
-                onPress={() => setModalVisible(false)}
+                onPress={closeWithdrawModal}
                 disabled={submittingPayout}
               >
                 <Text style={styles.cancelBtnText}>Cancel</Text>
@@ -300,6 +398,7 @@ export const CommissionScreen: React.FC = () => {
             </View>
           </View>
         </View>
+        </KeyboardAwareOverlay>
       </Modal>
     </View>
   );
@@ -467,6 +566,12 @@ const styles = StyleSheet.create({
   },
   textPending: {
     color: '#92400E',
+  },
+  badgeRejected: {
+    backgroundColor: Colors.statusRedBg,
+  },
+  textRejected: {
+    color: Colors.statusRed,
   },
   modalOverlay: {
     flex: 1,

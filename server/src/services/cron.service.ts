@@ -6,6 +6,16 @@ export class CronService {
   private static timer: NodeJS.Timeout | null = null;
 
   static startIcalWorker(intervalMinutes = 15) {
+    // Serverless platforms (Vercel) freeze the process between requests, so a long-lived
+    // setInterval never fires reliably and would run duplicated across instances. Use an external
+    // scheduler (e.g. a Vercel Cron hitting a route) instead.
+    if (process.env.VERCEL) {
+      console.log(
+        "⏱️  [CRON WORKER] Skipped in-process iCal worker on Vercel (use an external scheduler)."
+      );
+      return;
+    }
+
     console.log(
       `⏱️  [CRON WORKER] Initialized automatic background iCal sync (every ${intervalMinutes} mins)`
     );

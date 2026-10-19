@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,17 +6,22 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  TextInput,
   ActivityIndicator,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useStayRide } from '../data/store';
+import type { ActionOutcome } from '../data/store';
 import { Header } from '../components/Header';
 import { Pill } from '../components/Pill';
 import { Colors } from '../theme/colors';
 import { Driver } from '../types';
 import { formatINR } from '../utils/format';
+import { ownFleetFeeFor } from '../data/platformConfig';
+import { api } from '../data/api';
+import { Ionicons } from '@expo/vector-icons';
 
 export const CabRequestDetailScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
@@ -33,23 +38,30 @@ export const CabRequestDetailScreen: React.FC = () => {
     completeTrip,
     cancelTrip,
     reassignTrip,
+    confirmTripQuote,
+    dispatchTrip,
+    rateTrip,
+    config,
   } = useStayRide();
 
   const trip = trips.find((t) => t.id === tripId);
 
   const [overrideStatus, setOverrideStatus] = useState<string | null>(null);
-  const [searchMode, setSearchMode] = useState<'idle' | 'loading_own' | 'own' | 'loading_network' | 'network'>('idle');
+  // Opening a trip that is already searching starts in the right list (same rule as beginOwnSearch below)
+  const [searchMode, setSearchMode] = useState<'idle' | 'loading_own' | 'own' | 'loading_network' | 'network'>(() => {
+    if (!trip || trip.status !== 'FINDING_DRIVER' || trip.platform) return 'idle';
+    const hasOwn = drivers.some((d) => d.active && d.available);
+    return !hasOwn && networkDrivers.length > 0 ? 'network' : 'own';
+  });
+  const [busy, setBusy] = useState(false);
+  const [showOwnPicker, setShowOwnPicker] = useState(false);
+  // Fare agreed with the owner's own driver; StayRide's own-fleet fee comes out of it as the guest advance
+  const [ownFare, setOwnFare] = useState('');
+  const [stars, setStars] = useState(0);
   const insets = useSafeAreaInsets();
-  const timerRef = useRef<any>(null);
 
-  useEffect(() => {
-    if (trip && trip.status === 'FINDING_DRIVER') {
-      beginOwnSearch();
-    }
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, []);
+  // Leaving the screen ends this rating "form": a later rating attempt gets a fresh Idempotency-Key
+  useEffect(() => () => api.clearIdempotencyKeys(`/trips/${tripId}/rate`), [tripId]);
 
   if (!trip) {
     return (
@@ -97,6 +109,8 @@ export const CabRequestDetailScreen: React.FC = () => {
       ? 'Trip in progress'
       : status === 'COMPLETED'
       ? 'Trip completed'
+      : status === 'EXPIRED'
+      ? 'Expired'
       : 'Cancelled';
 
   const fmtLong = (ms: number) =>
@@ -118,25 +132,29 @@ export const CabRequestDetailScreen: React.FC = () => {
     return (exact.length > 0 ? exact : networkDrivers).slice(0, 8);
   };
 
+  // Lists come straight from the store; no simulated search delay
   const beginOwnSearch = () => {
-    setSearchMode('loading_own');
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => {
-      const own = ownMatches();
-      if (own.length === 0) {
-        beginNetworkSearch();
-      } else {
-        setSearchMode('own');
-      }
-    }, 1200);
+    setSearchMode(ownMatches().length === 0 && networkDrivers.length > 0 ? 'network' : 'own');
   };
 
   const beginNetworkSearch = () => {
-    setSearchMode('loading_network');
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => {
-      setSearchMode('network');
-    }, 1600);
+    setSearchMode('network');
+  };
+
+  // Every server write below awaits the response and reports failures
+  const run = async (fn: () => Promise<ActionOutcome | void>) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const outcome = await fn();
+      if (outcome && !outcome.ok) {
+        Alert.alert('Not saved', outcome.error || 'Please try again.');
+      }
+    } catch (e: any) {
+      Alert.alert('Not saved', e?.message || 'Please try again.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const handleAccept = () => {
@@ -144,33 +162,96 @@ export const CabRequestDetailScreen: React.FC = () => {
     beginOwnSearch();
   };
 
-  const handleAssignDriver = async (driver: Driver, own: boolean) => {
-    await assignTripDriver(trip.id, driver.id);
-    setOverrideStatus(null);
-    setSearchMode('idle');
-    Alert.alert('Driver Assigned', `${driver.name} assigned to ${trip.guestName}`);
-  };
+  const fareNum = Math.round(Number(ownFare));
+  const ownFee = fareNum > 0 ? ownFleetFeeFor(config, fareNum) : 0;
 
-  const handleConfirmBooking = async () => {
-    await acceptTrip(trip.id);
-    Alert.alert('Booking Confirmed', `Confirmation sent to ${trip.guestName}`);
-  };
+  const handleAssignDriver = (driver: Driver, own: boolean) =>
+    run(async () => {
+      if (!(fareNum > 0)) return { ok: false, synced: false, error: 'Enter the fare agreed with the driver first.' };
+      const outcome = await assignTripDriver(trip.id, driver.id, fareNum);
+      if (!outcome.ok) return outcome;
+      setOverrideStatus(null);
+      setSearchMode('idle');
+      setShowOwnPicker(false);
+      Alert.alert(
+        'Driver assigned',
+        ownFee > 0
+          ? `StayRide sent ${trip.guestName} a link to pay the ₹${ownFee.toLocaleString('en-IN')} advance. Phones are shared with ${driver.name} and the guest once it is paid.`
+          : `${driver.name} and ${trip.guestName} got the trip details on WhatsApp.`
+      );
+      return outcome;
+    });
 
-  const handleStartTrip = async () => {
-    await startTrip(trip.id);
-    Alert.alert('Trip Started', 'Driver notified successfully.');
-  };
+  const fareField = (
+    <View style={{ marginBottom: 10 }}>
+      <Text style={styles.assignName}>Fare agreed with the driver (₹)</Text>
+      <TextInput
+        style={styles.fareInput}
+        placeholder="e.g. 3000"
+        value={ownFare}
+        onChangeText={(t) => setOwnFare(t.replace(/[^0-9]/g, ''))}
+        keyboardType="number-pad"
+        placeholderTextColor={Colors.textSecondary}
+      />
+      <Text style={styles.assignMeta}>
+        {fareNum > 0
+          ? `Guest pays StayRide ₹${ownFee.toLocaleString('en-IN')} advance · ₹${(fareNum - ownFee).toLocaleString('en-IN')} cash to the driver`
+          : `StayRide fee: ${config.ownFleetFeePercent}% of the fare (min ₹${config.ownFleetMinFee}), paid by the guest as the advance.`}
+      </Text>
+    </View>
+  );
 
-  const handleCompleteTrip = async () => {
-    await completeTrip(trip.id);
-    Alert.alert('Trip Completed', `Commission Earned: ${formatINR(trip.commission)}`);
-  };
+  const handleConfirmBooking = () =>
+    run(async () => {
+      const outcome = await acceptTrip(trip.id);
+      if (!outcome.ok) return outcome;
+      Alert.alert('Booking Confirmed', `Saved. Remember to inform ${trip.guestName}.`);
+      return outcome;
+    });
+
+  const handleStartTrip = () =>
+    run(async () => {
+      const outcome = await startTrip(trip.id);
+      if (!outcome.ok) return outcome;
+      Alert.alert('Trip Started', 'Trip marked as started.');
+      return outcome;
+    });
+
+  const handleCompleteTrip = () =>
+    run(async () => {
+      const outcome = await completeTrip(trip.id);
+      if (!outcome.ok) return outcome;
+      Alert.alert('Trip Completed', 'Trip marked as completed.');
+      return outcome;
+    });
 
   const handleChangeDriver = async () => {
-    await reassignTrip(trip.id);
+    const outcome = await reassignTrip(trip.id);
+    if (!outcome.ok) {
+      Alert.alert('Not saved', outcome.error || 'Please try again.');
+      return;
+    }
     setOverrideStatus(null);
     beginOwnSearch();
   };
+
+  // Platform trip: the fare comes from the chosen quote on the server
+  const handleConfirmQuote = (driverId: number | string) =>
+    run(async () => {
+      const outcome = await confirmTripQuote(trip.id, driverId);
+      if (!outcome.ok) return outcome;
+      Alert.alert('Driver Confirmed', 'StayRide will collect the guest advance.');
+      return outcome;
+    });
+
+  // Guest inquiry: the owner sends it to nearby StayRide drivers (they quote; StayRide earns its fee)
+  const handleDispatch = () =>
+    run(async () => {
+      const outcome = await dispatchTrip(trip.id);
+      if (!outcome.ok) return outcome;
+      Alert.alert('Sent to nearby drivers', 'Drivers with a matching vehicle can now quote. Quotes will appear here.');
+      return outcome;
+    });
 
   const handleCancelSearch = () => {
     setOverrideStatus(null);
@@ -180,22 +261,33 @@ export const CabRequestDetailScreen: React.FC = () => {
   const handleConfirmDecline = () => {
     Alert.alert(
       'Decline this request?',
-      `${trip.guestName} will be told that no cab is available right now (demo).`,
+      'This cab request will be cancelled. Please let the guest know no cab is available.',
       [
         { text: 'Keep request', style: 'cancel' },
         {
           text: 'Decline',
           style: 'destructive',
-          onPress: async () => {
-            await cancelTrip(trip.id);
-            setOverrideStatus(null);
-            setSearchMode('idle');
-            Alert.alert('Notice', 'Request declined');
-          },
+            onPress: () =>
+              run(async () => {
+                const outcome = await cancelTrip(trip.id, 'Declined by homestay');
+                if (!outcome.ok) return outcome;
+                setOverrideStatus(null);
+                setSearchMode('idle');
+                Alert.alert('Notice', 'Request declined');
+                return outcome;
+              }),
         },
       ]
     );
   };
+
+  const handleRate = () =>
+    run(async () => {
+      if (stars < 1) return { ok: false, synced: false, error: 'Tap 1 to 5 stars first.' };
+      const outcome = await rateTrip(trip.id, stars);
+      if (outcome.ok) Alert.alert('Thank you', 'Your rating was saved.');
+      return outcome;
+    });
 
   const handleConfirmCancel = () => {
     Alert.alert(
@@ -206,12 +298,15 @@ export const CabRequestDetailScreen: React.FC = () => {
         {
           text: 'Cancel request',
           style: 'destructive',
-          onPress: async () => {
-            await cancelTrip(trip.id);
-            setOverrideStatus(null);
-            setSearchMode('idle');
-            Alert.alert('Notice', 'Request cancelled');
-          },
+            onPress: () =>
+              run(async () => {
+                const outcome = await cancelTrip(trip.id);
+                if (!outcome.ok) return outcome;
+                setOverrideStatus(null);
+                setSearchMode('idle');
+                Alert.alert('Notice', 'Request cancelled');
+                return outcome;
+              }),
         },
       ]
     );
@@ -274,9 +369,7 @@ export const CabRequestDetailScreen: React.FC = () => {
 
           <View style={styles.rowBetween}>
             <Text style={styles.fareText}>
-              {trip.status === 'COMPLETED'
-                ? formatINR(trip.fare)
-                : `Est. ${formatINR(trip.estFare)}`}
+              {trip.fare > 0 ? formatINR(trip.fare) : '—'}
             </Text>
             <Text style={styles.driverTagText}>
               {trip.driverName
@@ -309,21 +402,143 @@ export const CabRequestDetailScreen: React.FC = () => {
           </View>
         )}
 
-        {/* Commission Card if Completed */}
-        {trip.status === 'COMPLETED' && (
+        {/* Commission Card: platform trips only, values from the server */}
+        {trip.platform && trip.status === 'COMPLETED' && (
           <View style={styles.commissionCard}>
             <Text style={styles.commissionTitle}>
               Commission earned: {formatINR(trip.commission)}
             </Text>
             <Text style={styles.commissionMeta}>
-              Trip fare {formatINR(trip.fare)} · 12% StayRide commission ·{' '}
-              {trip.commissionPaid ? 'Paid to you' : 'Pending payout'}
+              Trip fare {formatINR(trip.fare)} ·{' '}
+              {trip.commission > 0 ? (trip.commissionPaid ? 'Paid to you' : 'Pending payout') : 'No commission on this trip'}
             </Text>
           </View>
         )}
 
-        {/* Search Area / Banners */}
-        {status !== 'FINDING_DRIVER' ? (
+        {/* Platform trip: StayRide manages drivers and money; show server state only */}
+        {trip.platform ? (
+          <View style={styles.bannerContainer}>
+            <View style={[styles.banner, { backgroundColor: Colors.statusOrangeBg }]}>
+              <Text style={[styles.bannerText, { color: Colors.statusOrange }]}>
+                {trip.refundStatus === 'PENDING'
+                  ? 'Refund pending'
+                  : trip.refundStatus === 'REFUNDED'
+                  ? 'Advance refunded'
+                  : status === 'NEW_REQUEST'
+                  ? 'New guest request. Choose how to find a driver.'
+                  : status === 'FINDING_DRIVER'
+                  ? 'Request sent to StayRide. Driver quotes will appear here.'
+                  : status === 'QUOTE_RECEIVED'
+                  ? 'Choose a driver quote below.'
+                  : status === 'AWAITING_ADVANCE'
+                  ? `${trip.ownerDriver ? `Your driver ${trip.driverName || ''} · w` : 'W'}aiting for the guest's ${formatINR(trip.advanceAmount || 0)} advance (collected by StayRide)${
+                      trip.advanceDueAt
+                        ? ` · due by ${new Date(trip.advanceDueAt).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}, otherwise the driver is released`
+                        : ''
+                    }`
+                  : status === 'CONFIRMED'
+                  ? `Advance ${trip.advancePaid ? 'paid' : 'pending'} · Cash to driver: ${formatINR(trip.remainingCashAmount || 0)}`
+                  : status === 'TRIP_STARTED'
+                  ? 'Trip in progress (managed by StayRide).'
+                  : status === 'COMPLETED'
+                  ? 'Trip completed.'
+                  : status === 'EXPIRED'
+                  ? 'No driver was confirmed before the pickup time, so this request expired.'
+                  : 'This request was cancelled.'}
+              </Text>
+            </View>
+            {status === 'NEW_REQUEST' && trip.dispatched === false && (
+              <View style={[styles.card, { marginTop: 8 }]}>
+                <Text style={styles.assignName}>How do you want to find a driver?</Text>
+                <Text style={[styles.assignMeta, { marginBottom: 12 }]}>
+                  Nearby drivers send you quotes and you earn commission on the trip. Your own driver is assigned directly.
+                </Text>
+                <TouchableOpacity style={styles.solidBtn} disabled={busy} onPress={handleDispatch}>
+                  <Text style={styles.solidBtnText}>{busy ? 'Sending…' : 'Send to nearby drivers'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.outlineBtn} disabled={busy} onPress={() => setShowOwnPicker((v) => !v)}>
+                  <Text style={styles.outlineBtnText}>{showOwnPicker ? 'Hide my drivers' : 'Assign my own driver'}</Text>
+                </TouchableOpacity>
+                {showOwnPicker && ownMatches().length > 0 && fareField}
+                {showOwnPicker &&
+                  (ownMatches().length === 0 ? (
+                    <Text style={styles.assignMeta}>No driver from your fleet is available right now.</Text>
+                  ) : (
+                    ownMatches().map((d) => (
+                      <View key={d.id} style={styles.assignRow}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.assignName}>{d.name}</Text>
+                          <Text style={styles.assignMeta}>
+                            {d.vehicle} · {d.seats} seats · {d.phone}
+                          </Text>
+                        </View>
+                        <TouchableOpacity style={styles.assignBtn} disabled={busy} onPress={() => handleAssignDriver(d, true)}>
+                          <Text style={styles.assignBtnText}>Assign</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ))
+                  ))}
+              </View>
+            )}
+            {trip.needsReassignment && (
+              <View style={[styles.banner, { backgroundColor: Colors.statusRedBg, marginTop: 8 }]}>
+                <Text style={[styles.bannerText, { color: Colors.statusRed }]}>
+                  Needs a new driver: your driver is no longer available. StayRide is assigning a new driver at the
+                  same agreed fare.
+                </Text>
+              </View>
+            )}
+            {status === 'COMPLETED' && trip.driverName && !trip.ownerDriver && (
+              <View style={[styles.card, { marginTop: 8 }]}>
+                {trip.driverRated ? (
+                  <Text style={styles.assignMeta}>You rated {trip.driverName}. Thank you!</Text>
+                ) : (
+                  <>
+                    <Text style={styles.assignName}>Rate {trip.driverName}</Text>
+                    <View style={{ flexDirection: 'row', marginVertical: 8 }}>
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <TouchableOpacity
+                          key={n}
+                          onPress={() => setStars(n)}
+                          accessibilityLabel={`${n} star${n > 1 ? 's' : ''}`}
+                          style={{ padding: 4 }}
+                        >
+                          <Ionicons name={n <= stars ? 'star' : 'star-outline'} size={28} color="#F59E0B" />
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                    <TouchableOpacity style={styles.assignBtn} disabled={busy || stars < 1} onPress={handleRate}>
+                      <Text style={styles.assignBtnText}>{busy ? 'Saving…' : 'Submit rating'}</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+              </View>
+            )}
+            {(status === 'FINDING_DRIVER' || status === 'QUOTE_RECEIVED') &&
+              (trip.quotes || []).map((q) => (
+                <View key={String(q.driverId)} style={[styles.assignRow, { marginTop: 8 }]}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.assignName}>{q.driverName}</Text>
+                    <Text style={styles.assignMeta}>
+                      {formatINR(q.quotedFare)}
+                      {q.driverVehicle ? ` · ${q.driverVehicle}` : ''}
+                      {typeof q.driverRating === 'number' ? ` · ★ ${q.driverRating} (${q.driverRatingCount ?? 0})` : ''}
+                      {q.notes ? ` · ${q.notes}` : ''}
+                    </Text>
+                    {typeof q.homestayCommission === 'number' && (
+                      <Text style={styles.assignArea}>
+                        You earn {formatINR(q.homestayCommission)}
+                        {typeof q.advanceAmount === 'number' ? ` · Guest pays ${formatINR(q.advanceAmount)} advance` : ''}
+                      </Text>
+                    )}
+                  </View>
+                  <TouchableOpacity style={styles.assignBtn} disabled={busy} onPress={() => handleConfirmQuote(q.driverId)}>
+                    <Text style={styles.assignBtnText}>Confirm</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+          </View>
+        ) : status !== 'FINDING_DRIVER' ? (
           <View style={styles.bannerContainer}>
             {status === 'NEW_REQUEST' && (
               <View style={[styles.banner, { backgroundColor: Colors.brandPrimaryLight }]}>
@@ -342,20 +557,21 @@ export const CabRequestDetailScreen: React.FC = () => {
             {status === 'COMPLETED' && (
               <View style={[styles.banner, { backgroundColor: Colors.statusGreenBg }]}>
                 <Text style={[styles.bannerText, { color: Colors.statusGreen }]}>
-                  Trip completed. Your commission has been added below.
+                  Trip completed.
                 </Text>
               </View>
             )}
-            {status === 'CANCELLED' && (
+            {(status === 'CANCELLED' || status === 'EXPIRED') && (
               <View style={[styles.banner, { backgroundColor: Colors.statusRedBg }]}>
                 <Text style={[styles.bannerText, { color: Colors.statusRed }]}>
-                  This request was cancelled.
+                  {status === 'EXPIRED' ? 'This request expired after the pickup time.' : 'This request was cancelled.'}
                 </Text>
               </View>
             )}
           </View>
         ) : (
           <View style={styles.searchSection}>
+            {(searchMode === 'own' || searchMode === 'network') && fareField}
             {searchMode === 'loading_own' && (
               <View style={[styles.banner, { backgroundColor: Colors.brandPrimaryLight }]}>
                 <ActivityIndicator size="small" color={Colors.brandPrimaryDark} style={{ marginRight: 8 }} />
@@ -389,7 +605,8 @@ export const CabRequestDetailScreen: React.FC = () => {
                     <View style={{ flex: 1 }}>
                       <Text style={styles.assignName}>{d.name} (yours)</Text>
                       <Text style={styles.assignMeta}>
-                        {d.vehicle} · {d.seats} seats · {d.vehicleType} · ★ {d.rating}
+                        {d.vehicle} · {d.seats} seats · {d.vehicleType}
+                        {d.rating ? ` · ★ ${d.rating}` : ''}
                       </Text>
                       <Text style={styles.assignArea}>{d.area} · {d.phone}</Text>
                     </View>
@@ -408,7 +625,7 @@ export const CabRequestDetailScreen: React.FC = () => {
               <>
                 <View style={[styles.banner, { backgroundColor: Colors.statusPurpleBg, marginBottom: 12 }]}>
                   <Text style={[styles.bannerText, { color: Colors.statusPurple }]}>
-                    Searching 50+ StayRide drivers around you…
+                    StayRide network drivers
                   </Text>
                 </View>
                 <Text style={styles.resultsHeader}>
@@ -419,7 +636,8 @@ export const CabRequestDetailScreen: React.FC = () => {
                     <View style={{ flex: 1 }}>
                       <Text style={styles.assignName}>{d.name}</Text>
                       <Text style={styles.assignMeta}>
-                        {d.vehicle} · {d.seats} seats · {d.vehicleType} · ★ {d.rating}
+                        {d.vehicle} · {d.seats} seats · {d.vehicleType}
+                        {d.rating ? ` · ★ ${d.rating}` : ''}
                       </Text>
                       <Text style={styles.assignArea}>
                         {d.area} · {d.trips?.join(' · ')}
@@ -441,7 +659,29 @@ export const CabRequestDetailScreen: React.FC = () => {
 
       {/* Action Buttons Footer */}
       <View style={[styles.footerActions, { paddingBottom: Math.max(insets.bottom, 16) + 8 }]}>
-        {status === 'NEW_REQUEST' && (
+        {trip.platform && ['NEW_REQUEST', 'FINDING_DRIVER', 'QUOTE_RECEIVED', 'AWAITING_ADVANCE', 'CONFIRMED'].includes(status) && (
+          <TouchableOpacity
+            style={[styles.outlineBtn, { borderColor: Colors.statusRed }]}
+            disabled={busy}
+            onPress={handleConfirmCancel}
+          >
+            <Text style={[styles.outlineBtnText, { color: Colors.statusRed }]}>Cancel request</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Own-fleet trips: the owner records start/finish (own drivers may not have the app) */}
+        {trip.platform && trip.ownerDriver && status === 'CONFIRMED' && (
+          <TouchableOpacity style={styles.solidBtn} disabled={busy} onPress={handleStartTrip}>
+            <Text style={styles.solidBtnText}>Start trip</Text>
+          </TouchableOpacity>
+        )}
+        {trip.platform && trip.ownerDriver && status === 'TRIP_STARTED' && (
+          <TouchableOpacity style={styles.solidBtn} disabled={busy} onPress={handleCompleteTrip}>
+            <Text style={styles.solidBtnText}>Complete trip</Text>
+          </TouchableOpacity>
+        )}
+
+        {!trip.platform && status === 'NEW_REQUEST' && (
           <>
             <TouchableOpacity style={styles.solidBtn} onPress={handleAccept}>
               <Text style={styles.solidBtnText}>Accept / Find Driver</Text>
@@ -457,7 +697,7 @@ export const CabRequestDetailScreen: React.FC = () => {
           </>
         )}
 
-        {status === 'FINDING_DRIVER' && (
+        {!trip.platform && status === 'FINDING_DRIVER' && (
           <>
             {searchMode === 'own' && (
               <TouchableOpacity
@@ -486,7 +726,7 @@ export const CabRequestDetailScreen: React.FC = () => {
           </>
         )}
 
-        {status === 'DRIVER_ASSIGNED' && (
+        {!trip.platform && status === 'DRIVER_ASSIGNED' && (
           <>
             <TouchableOpacity style={styles.solidBtn} onPress={handleConfirmBooking}>
               <Text style={styles.solidBtnText}>Confirm booking</Text>
@@ -505,7 +745,7 @@ export const CabRequestDetailScreen: React.FC = () => {
           </>
         )}
 
-        {status === 'CONFIRMED' && (
+        {!trip.platform && status === 'CONFIRMED' && (
           <>
             <TouchableOpacity style={styles.solidBtn} onPress={handleStartTrip}>
               <Text style={styles.solidBtnText}>Start trip</Text>
@@ -521,13 +761,13 @@ export const CabRequestDetailScreen: React.FC = () => {
           </>
         )}
 
-        {status === 'TRIP_STARTED' && (
+        {!trip.platform && status === 'TRIP_STARTED' && (
           <TouchableOpacity style={styles.solidBtn} onPress={handleCompleteTrip}>
             <Text style={styles.solidBtnText}>Complete trip</Text>
           </TouchableOpacity>
         )}
 
-        {status === 'COMPLETED' && (
+        {trip.platform && status === 'COMPLETED' && (
           <TouchableOpacity
             style={styles.outlineBtn}
             onPress={() => navigation.navigate('Commission')}
@@ -760,6 +1000,17 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: Colors.divider,
     paddingTop: 10,
+  },
+  fareInput: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: Colors.divider,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: Colors.textPrimary,
+    marginVertical: 6,
   },
   solidBtn: {
     backgroundColor: Colors.brandPrimary,

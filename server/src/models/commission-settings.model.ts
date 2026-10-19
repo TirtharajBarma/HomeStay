@@ -1,5 +1,6 @@
 import mongoose, { Schema, model, Document } from "mongoose";
 import { getISTTimestamp } from "../utils/date.js";
+import { dbNameFor } from "../config/env.js";
 
 export interface IPropertyCommissionOverride {
   propertyId: Schema.Types.ObjectId | string;
@@ -18,6 +19,8 @@ export interface ICommissionSettings extends Document {
   // Platform-wide feature switches: enabled=false disables everywhere (wins over per-homestay overrides);
   // defaultOn decides the per-homestay value when admin hasn't overridden it.
   features: Record<string, { enabled: boolean; defaultOn: boolean }>;
+  // Operational settings (times, presets, vehicles, limits, fees...); see services/platform-config.ts
+  platform?: Record<string, any>;
   updatedBy?: string;
   changeReason?: string;
   effectiveFrom?: Date;
@@ -63,6 +66,7 @@ const CommissionSettingsSchema = new Schema<ICommissionSettings>(
     },
     minAdvanceAmount: { type: Number, default: 300, min: 0 },
     features: { type: Schema.Types.Mixed, default: () => ({}) },
+    platform: { type: Schema.Types.Mixed, default: () => ({}) },
     propertyOverrides: {
       type: [PropertyCommissionOverrideSchema],
       default: [],
@@ -90,7 +94,7 @@ export const CommissionSettings = model<ICommissionSettings>(
 
 // Platform settings live in the "production" db ("test" for the demo tenant), never the default connection.
 export function getCommissionSettingsModel(isDemo = false): mongoose.Model<ICommissionSettings> {
-  const conn = mongoose.connection.useDb(isDemo ? "test" : "production", { useCache: true });
+  const conn = mongoose.connection.useDb(dbNameFor(isDemo), { useCache: true });
   return (conn.models.CommissionSettings ||
     conn.model<ICommissionSettings>("CommissionSettings", CommissionSettingsSchema)) as mongoose.Model<ICommissionSettings>;
 }

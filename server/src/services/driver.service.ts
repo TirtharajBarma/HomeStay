@@ -2,6 +2,7 @@ import crypto from "crypto";
 import mongoose from "mongoose";
 import { Driver, type IDriver } from "../models/driver.model.js";
 import { CabTrip, type ICabTrip } from "../models/cab-trip.model.js";
+import { CommissionService } from "./commission.service.js";
 import { NotificationService } from "./notification.service.js";
 
 export const CURATED_CAB_PLACES = [
@@ -176,13 +177,18 @@ export class DriverService {
       status: { $in: ["Active", "On a trip"] },
     });
 
+    // Commission comes from the single source of truth (admin-configured platform settings),
+    // never from a hard-coded rate. PF + HC is the estate's cut; the remainder is the payout.
+    const { pfPercent, hcPercent, advancePercent, minAdvanceAmount } = await CommissionService.getEffectiveRates();
+
     const quotes = drivers.map((driver) => {
       // Long distance hill surcharge (>40 km, e.g. down to Siliguri/Bagdogra)
       const surgeMultiplier = distanceKm > 40 ? 1.15 : 1.0;
       const rawFare = distanceKm * driver.perKm * surgeMultiplier;
       const fare = Math.round(Math.max(driver.minimum, rawFare) / 10) * 10;
-      const commission = Math.round(fare * 0.18);
-      const payout = fare - commission;
+      const split = CommissionService.split(fare, pfPercent, hcPercent, advancePercent, minAdvanceAmount);
+      const commission = split.platformFeeAmount + split.homestayCommissionAmount;
+      const payout = split.driverPayoutAmount;
       const etaMinutes = Math.round(15 + distanceKm * 2.2 + driver.etaPad);
 
       return {
@@ -275,8 +281,11 @@ export class DriverService {
     const surgeMultiplier = distanceKm > 40 ? 1.15 : 1.0;
     const rawFare = distanceKm * driver.perKm * surgeMultiplier;
     const fareAmount = Math.round(Math.max(driver.minimum, rawFare) / 10) * 10;
-    const estateCommission = Math.round(fareAmount * 0.18);
-    const driverPayout = fareAmount - estateCommission;
+    // Single source of truth for the split (no hard-coded rate).
+    const { pfPercent, hcPercent, advancePercent, minAdvanceAmount } = await CommissionService.getEffectiveRates();
+    const split = CommissionService.split(fareAmount, pfPercent, hcPercent, advancePercent, minAdvanceAmount);
+    const estateCommission = split.platformFeeAmount + split.homestayCommissionAmount;
+    const driverPayout = split.driverPayoutAmount;
 
     const randomBytes = crypto.randomBytes(2);
     const refNum = (randomBytes.readUInt16BE(0) % 9000) + 1000;
@@ -302,7 +311,7 @@ export class DriverService {
       seats: data.seats,
       distanceKm,
       fareAmount,
-      commissionRate: 0.18,
+      commissionRate: (pfPercent + hcPercent) / 100,
       estateCommission,
       driverPayout,
       status: "scheduled",
@@ -311,7 +320,9 @@ export class DriverService {
     // Update driver state
     driver.status = "On a trip";
     driver.trips += 1;
-    driver.commission += driverPayout;
+    // `commission` is the estate's cut earned from this driver; only the commission is credited here,
+    // never the driver's payout.
+    driver.commission += estateCommission;
     await driver.save();
 
     // Dispatch Notifications asynchronously (guest confirmation + driver alert)
@@ -341,7 +352,15 @@ export class DriverService {
       const count = await Driver.countDocuments();
       data.id = `DRV-${101 + count}`;
     }
-    return await Driver.create(data);
+    if (!data.pin) {
+      // Unique per driver; the old shared default of "1234" let any driver log in as any other.
+      data.pin = String(crypto.randomInt(1000, 10000));
+    }
+    const driver = await Driver.create(data);
+    if (!process.env.VERCEL && process.env.NODE_ENV !== "production") {
+      console.log(`🧑✈️ [DRIVER PIN] ${driver.id} (${driver.phone}) -> ${driver.pin}`);
+    }
+    return driver;
   }
 
   static async updateDriverStatus(
@@ -371,6 +390,46 @@ export class DriverService {
     return await CabTrip.find({
       $or: [{ driverId }, { driverName: new RegExp(driverId, "i") }],
     }).sort({ createdAt: -1 });
+  }
+
+  static async getDriverById(id: string) {
+    const filter = mongoose.isValidObjectId(id) ? { $or: [{ id }, { _id: id }] } : { id };
+    return await Driver.findOne(filter);
+  }
+
+  static async getTripById(id: string) {
+    const filter = mongoose.isValidObjectId(id)
+      ? { $or: [{ _id: id }, { reference: id }] }
+      : { $or: [{ reference: id }, { id }] };
+    return await CabTrip.findOne(filter);
+  }
+
+  /**
+   * Authorization for a driver-scoped resource. A driver may only act on themselves; an owner
+   * may only act on drivers they own (Driver.ownerId); admins may act on anyone. A plain role
+   * check is not enough — without the ownership check any owner could read/modify any driver.
+   */
+  static async canAccessDriver(driverId: string, user: any): Promise<boolean> {
+    if (!user) return false;
+    if (user.role === "admin") return true;
+    const driver = await this.getDriverById(driverId);
+    if (!driver) return false;
+    if (user.role === "driver") {
+      return String(driver.id) === String(user.id) || String(driver._id) === String(user.id);
+    }
+    if (user.role === "owner") {
+      return Boolean(driver.ownerId) && String(driver.ownerId) === String(user.id);
+    }
+    return false;
+  }
+
+  /** Same rule as canAccessDriver but resolved through the trip's driver. */
+  static async canAccessTrip(tripId: string, user: any): Promise<boolean> {
+    if (!user) return false;
+    if (user.role === "admin") return true;
+    const trip = await this.getTripById(tripId);
+    if (!trip) return false;
+    return this.canAccessDriver(trip.driverId, user);
   }
 
   static async updateTripStatus(tripId: string, status: string) {

@@ -8,7 +8,8 @@ import { config } from "./config/env.js";
 import apiRouter from "./routes/index.js";
 import adminRoutes from "./routes/admin.routes.js";
 import stayrideV1Router from "./stayride/routes.js";
-import { errorHandler, notFoundHandler } from "./middlewares/error-handler.js";
+import { errorHandler, notFoundHandler, httpError } from "./middlewares/error-handler.js";
+import { MongoRateLimitStore } from "./middlewares/rate-limit-store.js";
 
 const app = express();
 
@@ -19,63 +20,72 @@ app.use(
   })
 );
 
+// Vercel sits in front as one proxy hop; needed so rate limits key on the real client IP
+app.set("trust proxy", 1);
+
 // 2. HTTP Request Logging via Morgan
-app.use(morgan(config.nodeEnv === "production" ? "combined" : "dev"));
+// Guest-link tokens travel in the path/query; never write them to logs
+morgan.token("safe-url", (req: any) =>
+  String(req.originalUrl || req.url).replace(/\?.*$/, "").replace(/(\/guest-links\/)[^/]+/, "$1[token]")
+);
+app.use(morgan(':remote-addr :method :safe-url :status :res[content-length] - :response-time ms'));
 
 // 3. HTTP Compression
 app.use(compression());
 
-// 4. Rate Limiting for Public APIs
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 1000, // Limit each IP to 1000 requests per windowMs
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: {
-    success: false,
-    error: "Too many requests from this IP, please try again after 15 minutes",
-  },
-});
-app.use(["/api", "/v1"], limiter);
-
-// Stricter limit for login/signup and the public guest endpoints (brute force / spam).
-const strictLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 30,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: { message: "Too many attempts, please try again after 15 minutes" } },
-});
-app.use(
-  ["/v1/auth/login", "/v1/auth/signup", "/api/v1/stayride/auth/login", "/api/v1/stayride/auth/signup"],
-  strictLimiter
-);
-app.post(["/v1/public/*path", "/api/v1/stayride/public/*path"], strictLimiter);
-
-// 5. CORS Configuration
+// 4. CORS: only configured origins (CORS_ORIGIN + the guest web page), plus localhost when not deployed.
+// A rejected origin gets a 403 (never a 500). Runs before the rate limiters so rejects cost no DB call.
+const LOCAL_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (curl, mobile apps, SSR server-to-server)
-      if (!origin) return callback(null, true);
-      if (
-        config.corsOrigins.includes(origin) ||
-        config.corsOrigins.includes("*") ||
-        config.nodeEnv === "development" ||
-        origin.endsWith(".vercel.app") ||
-        origin.startsWith("http://localhost:") ||
-        origin.startsWith("http://127.0.0.1:")
-      ) {
+      // Requests without an Origin (mobile apps, curl, server-to-server) are not CORS requests.
+      if (!origin || config.corsOrigins.includes(origin) || (!config.isDeployed && LOCAL_ORIGIN.test(origin))) {
         return callback(null, true);
       }
-      return callback(new Error(`CORS origin '${origin}' not allowed`));
+      return callback(httpError(403, "Origin not allowed.", "CORS_ORIGIN_REJECTED"));
     },
     credentials: true,
   })
 );
 
+// 5. Rate limiting, shared across serverless instances through MongoDB (see rate-limit-store.ts).
+// - Global limiter fails OPEN if Mongo is unreachable: every API route needs Mongo anyway, so it
+//   would fail on its own; blocking all traffic on a limiter error only adds an outage.
+// - Strict limiter (login/signup/public guest writes) fails CLOSED with a 503: those are the
+//   brute-force / spam targets, and they cannot succeed without Mongo either, so nothing is lost.
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  limit: 1000, // per IP per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  store: new MongoRateLimitStore("g:"),
+  passOnStoreError: true,
+  message: { success: false, error: { message: "Too many requests from this IP, please try again after 15 minutes", code: "RATE_LIMITED" } },
+});
+app.use(["/api", "/v1"], limiter);
+
+const strictLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  store: new MongoRateLimitStore("s:"),
+  passOnStoreError: false,
+  message: { error: { message: "Too many attempts, please try again after 15 minutes", code: "RATE_LIMITED" } },
+});
+app.use(
+  ["/v1/auth/login", "/v1/auth/signup", "/api/v1/stayride/auth/login", "/api/v1/stayride/auth/signup", "/api/v1/auth/login"],
+  strictLimiter
+);
+app.post(["/v1/public/*path", "/api/v1/stayride/public/*path"], strictLimiter);
+// Public booking creation is unauthenticated and writes records — keep it on the strict limiter.
+app.post(["/api/v1/bookings", "/api/v1/reservations"], strictLimiter);
+app.post(["/api/v1/drivers/bookings", "/api/v1/cabs/bookings"], strictLimiter);
+
 // 6. Body Parsing (Clerk webhook needs the raw body for signature verification)
 app.use(["/v1/auth/clerk-webhook", "/api/v1/stayride/auth/clerk-webhook"], express.raw({ type: "application/json" }));
+app.use(["/v1/webhooks/razorpay", "/api/v1/stayride/webhooks/razorpay"], express.raw({ type: "application/json" }));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 // Express 5 leaves req.body undefined when there is no body; handlers destructure it.

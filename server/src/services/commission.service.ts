@@ -1,5 +1,6 @@
 import { getCommissionSettingsModel, ICommissionSettings } from "../models/commission-settings.model.js";
 import { getTenantControlModel, FEATURE_KEYS, FeatureKey } from "../models/tenant-control.model.js";
+import { resolvePlatformConfig, PlatformConfig } from "./platform-config.js";
 
 export interface CommissionCalculationResult {
   agreedFare: number;
@@ -71,10 +72,12 @@ export class CommissionService {
     defaultAdvancePercent?: unknown;
     minAdvanceAmount?: unknown;
     features?: Record<string, { enabled?: unknown; defaultOn?: unknown }>;
+    platform?: Record<string, any>;
     updatedBy: string;
     changeReason?: string;
+    isDemo?: boolean;
   }): Promise<{ before: any; after: ICommissionSettings }> {
-    const settings = await this.getSettings(false);
+    const settings = await this.getSettings(Boolean(params.isDemo));
     const before = settings.toObject();
     const pf = pct(params.globalPlatformFeePercent);
     const hc = pct(params.globalHomestayCommissionPercent);
@@ -101,11 +104,39 @@ export class CommissionService {
       settings.features = next;
       settings.markModified("features");
     }
+    if (params.platform && typeof params.platform === "object") {
+      // Partial edits merge onto what is saved; the result is validated/clamped before it is stored.
+      const current = this.platformConfig(settings);
+      settings.platform = resolvePlatformConfig({
+        ...current,
+        ...params.platform,
+        vehicles: { ...current.vehicles, ...(params.platform.vehicles || {}) },
+      }) as any;
+      settings.markModified("platform");
+    }
     settings.updatedBy = params.updatedBy;
     settings.changeReason = params.changeReason || "Admin updated platform settings";
     settings.effectiveFrom = new Date();
     await settings.save();
+    this.configCache.delete(Boolean(params.isDemo));
     return { before, after: settings };
+  }
+
+  /** The admin's operational settings, complete and valid (defaults fill anything unsaved). */
+  static platformConfig(settings: ICommissionSettings): PlatformConfig {
+    return resolvePlatformConfig((settings as any).platform);
+  }
+
+  // Read on hot paths (every list, every message), so cached briefly; a save clears it at once on this
+  // instance. ponytail: per-instance cache, other serverless instances see a change within 30s.
+  private static configCache = new Map<boolean, { at: number; cfg: PlatformConfig }>();
+
+  static async getPlatformConfig(isDemo = false): Promise<PlatformConfig> {
+    const hit = this.configCache.get(isDemo);
+    if (hit && Date.now() - hit.at < 30000) return hit.cfg;
+    const cfg = this.platformConfig(await this.getSettings(isDemo));
+    this.configCache.set(isDemo, { at: Date.now(), cfg });
+    return cfg;
   }
 
   static globalFeatures(settings: ICommissionSettings): Record<FeatureKey, { enabled: boolean; defaultOn: boolean }> {
@@ -121,6 +152,11 @@ export class CommissionService {
   /** Effective account state for a homestay: blocked flag + features (global disable always wins). */
   static async getAccountState(tenantKey: string, isDemo = false) {
     const [settings, control] = await Promise.all([this.getSettings(isDemo), this.getControl(tenantKey, isDemo)]);
+    return this.accountStateFrom(settings, control);
+  }
+
+  /** Pure version of getAccountState for batch use (admin tenant list): no DB calls. */
+  static accountStateFrom(settings: ICommissionSettings, control: any) {
     const global = this.globalFeatures(settings);
     const features = {} as Record<FeatureKey, boolean>;
     for (const key of FEATURE_KEYS) {

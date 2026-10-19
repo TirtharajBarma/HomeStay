@@ -13,7 +13,13 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.stayride.app"
+      "bundleIdentifier": "com.stayride.app",
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true,
+          "NSAllowsLocalNetworking": true
+        }
+      }
     },
     "android": {
       "package": "com.stayride.app",
@@ -24,6 +30,7 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
+      "usesCleartextTraffic": true,
       "predictiveBackGestureEnabled": false
     },
     "web": {
@@ -50,7 +57,8 @@
       "easUpdateMessage": "v1.0.0: Initial release"
     },
     "plugins": [
-      "./plugins/with-ios-local-no-push"
+      "./plugins/with-ios-local-no-push",
+      "expo-notifications"
     ]
   }
 }

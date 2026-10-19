@@ -1,4 +1,5 @@
 import mongoose, { Schema } from "mongoose";
+import { dbNameFor } from "../config/env.js";
 
 // Admin-only controls per StayRide homestay (tenant). Owners can never write this collection.
 export const FEATURE_KEYS = ["campaigns", "guestCabLinks", "platformDispatch", "payouts", "driverQuotes"] as const;
@@ -24,6 +25,6 @@ const TenantControlSchema = new Schema(
 );
 
 export function getTenantControlModel(isDemo = false): mongoose.Model<any> {
-  const conn = mongoose.connection.useDb(isDemo ? "test" : "production", { useCache: true });
+  const conn = mongoose.connection.useDb(dbNameFor(isDemo), { useCache: true });
   return (conn.models.TenantControl || conn.model("TenantControl", TenantControlSchema)) as mongoose.Model<any>;
 }

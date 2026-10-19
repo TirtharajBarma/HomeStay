@@ -3,20 +3,24 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TextInput,
   TouchableOpacity,
   Alert,
   Modal,
-  Switch,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useStayRide } from '../data/store';
+import { api } from '../data/api';
 import { Header } from '../components/Header';
 import { PlatformSelect } from '../components/PlatformSelect';
+import { RangeCalendar } from '../components/RangeCalendar';
+import { roomAvailability } from '../utils/rooms';
+import { PAYMENT_METHODS } from '../utils/payments';
 import { Colors } from '../theme/colors';
-import { Guest, Room } from '../types';
+import { FormScroll } from '../components/FormScroll';
+import { Guest, PaymentMethod, Room } from '../types';
 
 const SOURCE_OPTIONS = [
   { label: 'StayRide Public Web Link', value: 'StayRide link', icon: 'globe-outline' as const },
@@ -36,31 +40,33 @@ const GUEST_COUNT_OPTIONS = [
 
 export const NewBookingScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
-  const route = useRoute<RouteProp<{ params: { guestId?: number } }, 'params'>>();
-  const { guestId } = route.params || {};
+  const route = useRoute<RouteProp<{ params: { guestId?: number; roomId?: number; checkIn?: number } }, 'params'>>();
+  const { guestId, roomId: presetRoomId, checkIn: presetCheckIn } = route.params || {};
 
-  const { guests, rooms, createBooking, createGuest } = useStayRide();
+  const { guests, rooms, bookings, createBooking } = useStayRide();
+  // Leaving this form ends the submission: a reopened form gets a fresh Idempotency-Key
+  useEffect(() => () => api.clearIdempotencyKeys('/bookings'), []);
 
   const [guestName, setGuestName] = useState('');
   const [phone, setPhone] = useState('');
   const [selectedGuest, setSelectedGuest] = useState<Guest | null>(null);
 
-  const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
+  // Opened from the occupancy calendar: that room and night are preselected
+  const [selectedRoom, setSelectedRoom] = useState<Room | null>(() => rooms.find((r) => r.id === presetRoomId) || null);
   const [source, setSource] = useState('StayRide link');
   const [guestsCount, setGuestsCount] = useState('1');
   const [amount, setAmount] = useState('');
-  const [paid, setPaid] = useState(false);
+  // Money received while booking: an advance, the full amount, or nothing yet
+  const [received, setReceived] = useState('');
+  const [receivedMethod, setReceivedMethod] = useState<PaymentMethod>('UPI');
 
   // Dates: default checkIn = today midnight, checkOut = in 2 days
   const now = new Date();
   const todayMs = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   const dayMs = 86400000;
-  const [checkIn, setCheckIn] = useState<number>(todayMs);
-  const [checkOut, setCheckOut] = useState<number>(todayMs + 2 * dayMs);
+  const [checkIn, setCheckIn] = useState<number>(presetCheckIn ?? todayMs);
+  const [checkOut, setCheckOut] = useState<number>((presetCheckIn ?? todayMs) + (presetCheckIn ? 1 : 2) * dayMs);
 
-  // Modals for selection
-  const [guestPickerVisible, setGuestPickerVisible] = useState(false);
-  const [sourcePickerVisible, setSourcePickerVisible] = useState(false);
   const [datesPickerVisible, setDatesPickerVisible] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -95,16 +101,36 @@ export const NewBookingScreen: React.FC = () => {
     setSelectedGuest(g);
     setGuestName(g.name);
     setPhone(g.phone);
-    setGuestPickerVisible(false);
   };
 
-  const handleAdjustDays = (inOffset: number, duration: number) => {
-    const inDate = todayMs + inOffset * dayMs;
-    const outDate = inDate + duration * dayMs;
-    setCheckIn(inDate);
-    setCheckOut(outDate);
-    setDatesPickerVisible(false);
+  const clearGuest = () => {
+    setSelectedGuest(null);
+    setGuestName('');
+    setPhone('');
   };
+
+  // Type-ahead over the guest list (name or phone), so a big list never needs scrolling
+  const digits = (p: string) => (p || '').replace(/\D/g, '');
+  const query = guestName.trim().toLowerCase();
+  const phoneQuery = digits(phone).slice(-10);
+  const suggestions = selectedGuest
+    ? []
+    : guests
+        .filter(
+          (g) =>
+            (query.length >= 2 && g.name.toLowerCase().includes(query)) ||
+            (phoneQuery.length >= 4 && digits(g.phone).includes(phoneQuery))
+        )
+        .slice(0, 5);
+  // Same phone = same person: offer the existing record instead of creating a duplicate
+  const phoneOwner = !selectedGuest && phoneQuery.length === 10 ? guests.find((g) => digits(g.phone).slice(-10) === phoneQuery) : undefined;
+
+  // Only rooms free for these dates can be picked; the rest are listed with the reason
+  const availability = roomAvailability(rooms, bookings, checkIn, checkOut);
+  const freeRooms = availability.filter((a) => a.free).map((a) => a.room);
+  const busyRooms = availability.filter((a) => !a.free);
+  // A room picked earlier stops counting once new dates make it unavailable
+  const pickedRoom = selectedRoom && freeRooms.some((r) => r.id === selectedRoom.id) ? selectedRoom : null;
 
   const handleSave = async () => {
     if (submitting) return;
@@ -116,25 +142,15 @@ export const NewBookingScreen: React.FC = () => {
       return;
     }
 
-    if (!selectedRoom) {
-      Alert.alert('Required', 'Please select a room');
+    if (!pickedRoom) {
+      Alert.alert('Required', 'Please select a room that is free for these dates');
       return;
     }
 
-    // Match by phone when one is entered; by name only if no phone and the name is unique.
-    const digits = (p: string) => (p || '').replace(/\D/g, '').slice(-10);
-    const phoneDigits = digits(trimmedPhone);
-    const sameName = guests.filter(
-      (g) => g.name.toLowerCase() === trimmedName.toLowerCase()
-    );
-    const matchedGuest = phoneDigits
-      ? guests.find((g) => digits(g.phone) === phoneDigits)
-      : sameName.length === 1
-      ? sameName[0]
-      : undefined;
-
-    if (!selectedGuest && !matchedGuest && !trimmedPhone) {
-      Alert.alert('Required', 'Phone number is required for a new guest');
+    // An existing guest is picked from the suggestions; anyone else is new and needs a phone
+    // (the server also matches by phone, so the same person is never stored twice).
+    if (!selectedGuest && digits(trimmedPhone).length < 10) {
+      Alert.alert('Required', 'Enter a 10-digit phone number for a new guest, or pick an existing guest.');
       return;
     }
 
@@ -145,39 +161,32 @@ export const NewBookingScreen: React.FC = () => {
     }
 
     const parsedCount = Math.max(1, parseInt(guestsCount, 10) || 1);
+    const receivedNum = received ? parseInt(received, 10) : 0;
+    if (receivedNum > parsedAmount) {
+      Alert.alert('Check amount', 'The amount received cannot be more than the booking total.');
+      return;
+    }
 
-    const knownGuest = selectedGuest || matchedGuest;
     setSubmitting(true);
     try {
-      let finalGuestId = knownGuest ? knownGuest.id : 0;
-      if (!finalGuestId) {
-        const newGuest = await createGuest({
-          name: trimmedName,
-          phone: trimmedPhone,
-          marketingConsent: false,
-        });
-        if (!newGuest || !newGuest.id) {
-          throw new Error('Could not create the guest record');
-        }
-        finalGuestId = newGuest.id;
-      }
-
       await createBooking({
-        guestId: finalGuestId,
+        guestId: selectedGuest?.id ?? 0,
         guestName: trimmedName,
-        phone: trimmedPhone || knownGuest?.phone || '',
-        roomNumber: selectedRoom.number,
+        phone: trimmedPhone || selectedGuest?.phone || '',
+        roomNumber: pickedRoom.number,
         checkIn,
         checkOut,
         guests: parsedCount,
         amount: parsedAmount,
         source: source || 'Walk-in',
-        paid,
+        paid: false, // the server marks it paid once the money received covers the total
+        advance: receivedNum,
+        advanceMethod: receivedMethod,
       });
 
       Alert.alert(
         'Booking Created',
-        `Booking created for ${trimmedName} · Room ${selectedRoom.number}`,
+        `Booking created for ${trimmedName} · Room ${pickedRoom.number}`,
         [{ text: 'OK', onPress: () => navigation.goBack() }]
       );
     } catch (err: any) {
@@ -191,60 +200,88 @@ export const NewBookingScreen: React.FC = () => {
     <View style={styles.container}>
       <Header title="New booking" onBack={() => navigation.goBack()} />
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <FormScroll contentContainerStyle={styles.scrollContent}>
         {/* Guest Input / Picker */}
         <Text style={styles.label}>Guest</Text>
-        <View style={styles.guestInputRow}>
-          <TextInput
-            style={[styles.input, { flex: 1 }]}
-            placeholder="Guest name"
-            placeholderTextColor={Colors.textSecondary}
-            value={guestName}
-            onChangeText={(txt) => {
-              setGuestName(txt);
-              if (selectedGuest && txt !== selectedGuest.name) {
-                setSelectedGuest(null);
-              }
-            }}
-          />
-          <TouchableOpacity
-            style={styles.pickerTriggerBtn}
-            onPress={() => setGuestPickerVisible(true)}
-          >
-            <Text style={styles.pickerTriggerText}>Select Existing</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Phone */}
-        <Text style={styles.label}>Phone number</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="+91 00000 00000"
-          placeholderTextColor={Colors.textSecondary}
-          keyboardType="phone-pad"
-          value={phone}
-          onChangeText={setPhone}
-        />
+        {selectedGuest ? (
+          <View style={styles.selectedGuestCard}>
+            <Ionicons name="person-circle-outline" size={26} color={Colors.brandPrimaryDark} />
+            <View style={{ flex: 1, marginLeft: 10 }}>
+              <Text style={styles.selectedGuestName}>{selectedGuest.name}</Text>
+              <Text style={styles.selectedGuestMeta}>
+                {selectedGuest.phone} · existing guest · {selectedGuest.visits} visit(s)
+              </Text>
+            </View>
+            <TouchableOpacity onPress={clearGuest} hitSlop={10}>
+              <Text style={styles.pickerTriggerText}>Change</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <>
+            <TextInput
+              style={styles.input}
+              placeholder="Type a name or phone to find a guest"
+              placeholderTextColor={Colors.textSecondary}
+              value={guestName}
+              onChangeText={setGuestName}
+            />
+            <Text style={styles.label}>Phone number</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="10-digit mobile number"
+              placeholderTextColor={Colors.textSecondary}
+              keyboardType="phone-pad"
+              value={phone}
+              onChangeText={setPhone}
+            />
+            {phoneOwner ? (
+              <TouchableOpacity style={styles.suggestionRow} onPress={() => handleSelectGuest(phoneOwner)}>
+                <Ionicons name="alert-circle-outline" size={18} color={Colors.statusOrange} />
+                <Text style={[styles.suggestionText, { flex: 1 }]}>
+                  This number belongs to {phoneOwner.name}. Tap to use that guest.
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              suggestions.map((g) => (
+                <TouchableOpacity key={g.id} style={styles.suggestionRow} onPress={() => handleSelectGuest(g)}>
+                  <Ionicons name="person-outline" size={16} color={Colors.brandPrimaryDark} />
+                  <Text style={[styles.suggestionText, { flex: 1 }]}>{g.name}</Text>
+                  <Text style={styles.selectedGuestMeta}>{g.phone}</Text>
+                </TouchableOpacity>
+              ))
+            )}
+            {!phoneOwner && guestName.trim().length >= 2 && (
+              <Text style={styles.selectedGuestMeta}>
+                {suggestions.length ? 'Tap a guest above, or continue to add a new guest.' : 'New guest: they will be saved with this booking.'}
+              </Text>
+            )}
+          </>
+        )}
 
         {/* Room Picker */}
         <PlatformSelect
           label="Room"
-          value={selectedRoom ? String(selectedRoom.id) : ''}
-          options={rooms.map((r) => ({
+          value={pickedRoom ? String(pickedRoom.id) : ''}
+          options={freeRooms.map((r) => ({
             label: `Room ${r.number} · ${r.type}`,
             value: String(r.id),
             icon: 'bed-outline' as const,
-            subLabel: `₹${r.price.toLocaleString()}/night · ${r.floor} · ${r.status}`,
+            subLabel: `₹${r.price.toLocaleString()}/night · ${r.floor}`,
           }))}
           onSelect={(roomIdStr) => {
-            const rm = rooms.find((r) => String(r.id) === roomIdStr);
+            const rm = freeRooms.find((r) => String(r.id) === roomIdStr);
             if (rm) {
               setSelectedRoom(rm);
               setAmount(String(rm.price * nights));
             }
           }}
-          placeholder="Select an available room"
+          placeholder={freeRooms.length ? `${freeRooms.length} room(s) free for these dates` : 'No room is free for these dates'}
         />
+        {busyRooms.length > 0 && (
+          <Text style={styles.selectedGuestMeta}>
+            Not free for these dates: {busyRooms.map((a) => `Room ${a.room.number} (${a.reason})`).join(', ')}
+          </Text>
+        )}
 
         {/* Dates */}
         <Text style={styles.label}>Stay Dates</Text>
@@ -252,7 +289,8 @@ export const NewBookingScreen: React.FC = () => {
           style={styles.dropdownBtn}
           onPress={() => setDatesPickerVisible(true)}
         >
-          <Text style={styles.dropdownVal}>
+          <Ionicons name="calendar-outline" size={18} color={Colors.brandPrimaryDark} style={{ marginRight: 10 }} />
+          <Text style={[styles.dropdownVal, { flex: 1 }]}>
             Check-in {fmtLong(checkIn)}
             {'\n'}Check-out {fmtLong(checkOut)} · {nights} night(s)
           </Text>
@@ -285,19 +323,41 @@ export const NewBookingScreen: React.FC = () => {
           onSelect={setSource}
         />
 
-        {/* Payment Received Switch (matching Android paidCheck) */}
-        <View style={styles.paymentSwitchRow}>
-          <View style={{ flex: 1, paddingRight: 10 }}>
-            <Text style={styles.paymentSwitchTitle}>Payment received now</Text>
-            <Text style={styles.paymentSwitchSub}>Mark booking as paid immediately</Text>
-          </View>
-          <Switch
-            value={paid}
-            onValueChange={setPaid}
-            trackColor={{ false: Colors.divider, true: Colors.brandPrimaryLight }}
-            thumbColor={paid ? Colors.brandPrimary : '#f4f3f4'}
+        {/* Money received now: advance or full amount */}
+        <Text style={styles.label}>Received now (₹)</Text>
+        <View style={styles.guestInputRow}>
+          <TextInput
+            style={[styles.input, { flex: 1 }]}
+            placeholder="0 = nothing yet"
+            placeholderTextColor={Colors.textSecondary}
+            keyboardType="number-pad"
+            value={received}
+            onChangeText={(t) => setReceived(t.replace(/[^0-9]/g, ''))}
           />
+          <TouchableOpacity style={styles.pickerTriggerBtn} onPress={() => setReceived(amount)}>
+            <Text style={styles.pickerTriggerText}>Full amount</Text>
+          </TouchableOpacity>
         </View>
+        {Number(received) > 0 && (
+          <View style={styles.methodRow}>
+            {PAYMENT_METHODS.filter((m) => m.value !== 'OTA').map((m) => (
+              <TouchableOpacity
+                key={m.value}
+                style={[styles.methodChip, receivedMethod === m.value && styles.methodChipActive]}
+                onPress={() => setReceivedMethod(m.value)}
+              >
+                <Text style={[styles.methodChipText, receivedMethod === m.value && styles.methodChipTextActive]}>{m.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+        {Number(amount) > 0 && (
+          <Text style={styles.selectedGuestMeta}>
+            {Number(received) >= Number(amount)
+              ? 'Fully paid'
+              : `Balance due: ₹${(Number(amount) - (Number(received) || 0)).toLocaleString('en-IN')}`}
+          </Text>
+        )}
 
         {/* Save Button */}
         <TouchableOpacity
@@ -307,37 +367,7 @@ export const NewBookingScreen: React.FC = () => {
         >
           <Text style={styles.saveBtnText}>{submitting ? 'Saving…' : 'Create booking'}</Text>
         </TouchableOpacity>
-      </ScrollView>
-
-      {/* Guest Picker Modal */}
-      <Modal
-        visible={guestPickerVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setGuestPickerVisible(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setGuestPickerVisible(false)}
-        >
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Select a guest</Text>
-            <ScrollView style={{ maxHeight: 300 }}>
-              {guests.map((g) => (
-                <TouchableOpacity
-                  key={g.id}
-                  style={styles.modalItem}
-                  onPress={() => handleSelectGuest(g)}
-                >
-                  <Text style={styles.modalItemText}>{g.name}</Text>
-                  <Text style={styles.modalItemSubtext}>{g.phone}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        </TouchableOpacity>
-      </Modal>
+      </FormScroll>
 
       {/* Quick Dates Picker Modal */}
       <Modal
@@ -351,25 +381,19 @@ export const NewBookingScreen: React.FC = () => {
           activeOpacity={1}
           onPress={() => setDatesPickerVisible(false)}
         >
-          <View style={styles.modalCard}>
+          {/* inner touchable swallows taps so picking a day does not hit the backdrop's close */}
+          <TouchableOpacity activeOpacity={1} style={styles.modalCard}>
             <Text style={styles.modalTitle}>Select Stay Dates</Text>
-            {[
-              { label: 'Today (1 night)', in: 0, dur: 1 },
-              { label: 'Today (2 nights)', in: 0, dur: 2 },
-              { label: 'Tomorrow (1 night)', in: 1, dur: 1 },
-              { label: 'Tomorrow (2 nights)', in: 1, dur: 2 },
-              { label: 'This Weekend (2 nights)', in: 2, dur: 2 },
-              { label: 'Next Week (3 nights)', in: 4, dur: 3 },
-            ].map((d, i) => (
-              <TouchableOpacity
-                key={i}
-                style={styles.modalItem}
-                onPress={() => handleAdjustDays(d.in, d.dur)}
-              >
-                <Text style={styles.modalItemText}>{d.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+            <RangeCalendar
+              checkIn={checkIn}
+              checkOut={checkOut}
+              onChange={(inMs, outMs) => {
+                setCheckIn(inMs);
+                setCheckOut(outMs);
+                setDatesPickerVisible(false);
+              }}
+            />
+          </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
     </View>
@@ -419,6 +443,63 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: 'bold',
   },
+  methodRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+  },
+  methodChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 16,
+    backgroundColor: '#F1F5F9',
+  },
+  methodChipActive: {
+    backgroundColor: Colors.brandPrimary,
+  },
+  methodChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+  },
+  methodChipTextActive: {
+    color: '#FFFFFF',
+  },
+  selectedGuestCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.brandPrimaryLight,
+    borderRadius: 10,
+    padding: 12,
+  },
+  selectedGuestName: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: Colors.textPrimary,
+  },
+  selectedGuestMeta: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginTop: 4,
+  },
+  suggestionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: Colors.divider,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginTop: 6,
+  },
+  suggestionText: {
+    fontSize: 14,
+    color: Colors.textPrimary,
+    fontWeight: '600',
+  },
   dropdownBtn: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
@@ -426,6 +507,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 13,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   dropdownVal: {
     fontSize: 15,
@@ -479,8 +562,15 @@ const styles = StyleSheet.create({
   },
   modalCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 20,
+    borderRadius: 24,
+    paddingHorizontal: 18,
+    paddingTop: 22,
+    paddingBottom: 18,
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 12,
   },
   modalTitle: {
     fontSize: 17,

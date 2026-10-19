@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
+import { tenantDbModel } from '../utils/tenant-model.js';
 
 export interface IPayoutRequest extends Document {
   tenantId: string; // Homestay owner email
@@ -6,12 +7,12 @@ export interface IPayoutRequest extends Document {
   ownerName: string;
   ownerPhone: string;
   amount: number; // Commission amount in INR
-  payoutMethod: 'UPI' | 'BANK_TRANSFER';
+  method: 'UPI' | 'BANK_TRANSFER';
   upiId?: string;
-  bankDetails?: {
+  bank?: {
+    accountName: string;
     accountNumber: string;
-    ifscCode: string;
-    accountHolderName: string;
+    ifsc: string;
     bankName?: string;
   };
   status: 'PENDING' | 'SETTLED' | 'REJECTED';
@@ -33,13 +34,15 @@ const PayoutRequestSchema: Schema = new Schema(
     ownerName: { type: String, required: true, trim: true },
     ownerPhone: { type: String, default: '' },
     amount: { type: Number, required: true, min: 1 },
-    payoutMethod: { type: String, enum: ['UPI', 'BANK_TRANSFER'], default: 'UPI' },
+    // Legacy docs used payoutMethod/bankDetails; scripts/migrate-indexes.ts copies them to method.
+    method: { type: String, enum: ['UPI', 'BANK_TRANSFER'], default: 'UPI' },
     upiId: { type: String, trim: true },
-    bankDetails: {
-      accountNumber: { type: String, trim: true },
-      ifscCode: { type: String, trim: true },
-      accountHolderName: { type: String, trim: true },
-      bankName: { type: String, trim: true },
+    bank: {
+      type: new Schema(
+        { accountName: String, accountNumber: String, ifsc: String, bankName: String },
+        { _id: false }
+      ),
+      default: undefined,
     },
     tripIds: { type: [Number], default: [] },
     cabRequestIds: { type: [String], default: [] },
@@ -68,12 +71,9 @@ PayoutRequestSchema.index(
 PayoutRequestSchema.index({ status: 1, requestedAt: -1 }, { name: 'status_requestedAt' });
 
 export function getPayoutRequestModel(isDemo: boolean = false): mongoose.Model<IPayoutRequest> {
-  const dbName = isDemo ? 'test' : 'production';
-  if (mongoose.connection.readyState === 1) {
-    const db = mongoose.connection.useDb(dbName, { useCache: true });
-    return (db.models.PayoutRequest || db.model<IPayoutRequest>('PayoutRequest', PayoutRequestSchema)) as mongoose.Model<IPayoutRequest>;
-  }
-  return (mongoose.models.PayoutRequest || mongoose.model<IPayoutRequest>('PayoutRequest', PayoutRequestSchema)) as mongoose.Model<IPayoutRequest>;
+  // Demo data lives only in "test", everything else only in "production"; never fall back to the
+  // default connection (production) when the DB is not ready.
+  return tenantDbModel(isDemo, 'PayoutRequest', PayoutRequestSchema) as mongoose.Model<IPayoutRequest>;
 }
 
 export const PayoutRequest =

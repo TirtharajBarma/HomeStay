@@ -6,8 +6,9 @@ export interface Room {
   type: string; // Standard, Deluxe, Suite, Family, Dorm
   floor: string;
   price: number;
-  status: RoomStatus;
+  status: RoomStatus; // derived from bookings (MAINTENANCE is the only manual value)
   note: string;
+  nextArrival?: number | null; // server: check-in of the next upcoming booking
 }
 
 export interface Guest {
@@ -39,6 +40,26 @@ export interface Booking {
   paid: boolean;
   amount: number;
   source: 'StayRide link' | 'Walk-in' | 'Phone' | 'WhatsApp' | 'Repeat booking' | string;
+  actualCheckOut?: number; // server: when the guest actually left
+  payments?: BookingPayment[]; // money received (advance, balance…); paid = received >= amount
+  external?: { source: string; uid: string; feedId: string; conflict?: boolean }; // imported from an OTA calendar
+}
+
+export type PaymentMethod = 'CASH' | 'UPI' | 'CARD' | 'BANK' | 'OTA' | 'OTHER';
+
+export interface BookingPayment {
+  id: number;
+  amount: number;
+  method: PaymentMethod;
+  note: string;
+  at: number;
+}
+
+/** Calendar sync settings of one room (server: /rooms/:id/ical) */
+export interface RoomCalendar {
+  exportUrl: string;
+  imports: { id: string; url: string; source: string; lastSyncAt: string | null; lastError: string; eventCount: number }[];
+  results?: { source: string; ok: boolean; added?: number; updated?: number; cancelled?: number; conflicts?: number; error?: string }[];
 }
 
 export type VehicleType = 'SUV' | 'Sedan' | '7-seater' | '9-seater';
@@ -50,7 +71,7 @@ export interface Driver {
   vehicle: string;
   vehicleType: VehicleType;
   seats: number;
-  rating: number;
+  rating?: number;
   area: string;
   trips: string[]; // e.g. ["NJP", "Bagdogra", "Local", "Sightseeing"]
   available: boolean;
@@ -68,7 +89,9 @@ export type CabTripStatus =
   | 'CONFIRMED'
   | 'TRIP_STARTED'
   | 'COMPLETED'
-  | 'CANCELLED';
+  | 'CANCELLED'
+  // Server marks open requests whose pickup is >6h in the past
+  | 'EXPIRED';
 
 export interface CabTrip {
   id: number;
@@ -98,22 +121,82 @@ export interface CabTrip {
   remainingCashAmount?: number;
   reference?: string;
   payoutId?: string;
+  // true = StayRide platform trip (money and progress handled by StayRide)
+  platform?: boolean;
+  // false = guest inquiry held for the owner: not yet sent to drivers
+  dispatched?: boolean;
+  // epoch ms: the guest must pay the advance by then or the driver is released
+  advanceDueAt?: number;
+  refundStatus?: 'NONE' | 'PENDING' | 'REFUNDED';
   quotes?: Array<{
     driverId: number | string;
     driverName: string;
+    driverVehicle?: string;
     quotedFare: number;
+    // Server estimates if this quote is accepted: the owner's commission and the guest's advance
+    homestayCommission?: number;
+    advanceAmount?: number;
+    notes?: string;
     status: string;
+    // Average stars (1 decimal); null when the driver has no ratings yet
+    driverRating?: number | null;
+    driverRatingCount?: number;
   }>;
   financialSnapshot?: any;
   source?: 'MANUAL_OWNER' | 'NEARBY_BROADCAST' | 'GUEST_WEB_LINK' | 'ADMIN_DISPATCH';
   assignedDriverId?: number | string;
   assignedDriverName?: string;
+  // Owner already rated the driver of this completed platform trip
+  driverRated?: boolean;
+  // Assigned driver was removed after the advance was paid; StayRide is finding a new one
+  needsReassignment?: boolean;
+  cancellationReason?: string | null;
 }
 
 export interface CommissionRates {
   pfPercent: number;
   hcPercent: number;
   advancePercent: number;
+  minAdvanceAmount?: number;
+}
+
+export type FeatureKey = 'campaigns' | 'guestCabLinks' | 'platformDispatch' | 'payouts' | 'driverQuotes';
+export type AccountFeatures = Record<FeatureKey, boolean>;
+
+// Trip as the server shows it to a platform driver (GET /snapshot for role 'driver').
+// Guest and money fields are present only when assignedToMe.
+export interface DriverTrip {
+  reference: string;
+  homestayName?: string;
+  pickup: string;
+  destinations?: Array<{ address: string; order: number }>;
+  destination: string;
+  isRoundTrip?: boolean;
+  returnDate?: number;
+  returnTime?: string;
+  date: number;
+  time: string;
+  passengers: number;
+  vehicleType: string;
+  status: CabTripStatus;
+  myQuote: { quotedFare: number; status: string; notes?: string } | null;
+  assignedToMe: boolean;
+  // Server's view of this trip for me; lost trips stay listed for 7 days as CANCELLED/REASSIGNED
+  driverView?: 'OPEN' | 'QUOTED' | 'ASSIGNED' | 'CANCELLED' | 'REASSIGNED' | 'EXPIRED';
+  cancellationReason?: string | null;
+  // Money split, all null until a fare is agreed
+  platformFeeAmount?: number | null;
+  homestayCommissionAmount?: number | null;
+  driverNetPayout?: number | null;
+  driverSettlementStatus?: 'NONE' | 'PENDING' | 'SETTLED';
+  driverSettlementReference?: string | null;
+  driverSettledAt?: string | null;
+  guestName?: string;
+  phone?: string;
+  fare?: number;
+  advanceAmount?: number;
+  advancePaid?: boolean;
+  remainingCashAmount?: number;
 }
 
 export type CampaignAudience = 'All guests' | 'Repeat guests' | 'Recent guests' | 'Inactive guests';
@@ -142,6 +225,8 @@ export interface Homestay {
   mapQuery: string;
   amenities: string[];
   photos: string[];
+  checkInTime?: string; // e.g. "12:00 PM"
+  checkOutTime?: string; // e.g. "11:00 AM"
 }
 
 export type UserRole = 'owner' | 'driver' | 'admin';
@@ -154,8 +239,8 @@ export interface DriverSessionProfile {
   vehicle: string;
   vehicleType: VehicleType;
   plate: string;
-  rating?: number;
   area?: string;
+  seats?: number;
   available?: boolean;
   active?: boolean;
   status?: 'ACTIVE' | 'PENDING_APPROVAL' | 'BLOCKED';

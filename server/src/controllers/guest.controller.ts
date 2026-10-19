@@ -19,7 +19,10 @@ export class GuestController {
   }
 
   static async getGuest(req: Request, res: Response) {
-    const guest = await GuestService.getGuestById(req.params.id as string);
+    const user = (req as any).user;
+    // Scope to the caller's own guests; admins may impersonate an owner via ?ownerId.
+    const ownerId = user?.role === "admin" && req.query.ownerId ? String(req.query.ownerId) : user?.id;
+    const guest = await GuestService.getGuestById(req.params.id as string, ownerId);
     if (!guest) {
       return res.status(404).json({ success: false, error: "Guest not found" });
     }
@@ -27,7 +30,9 @@ export class GuestController {
   }
 
   static async updateGuest(req: Request, res: Response) {
-    const updated = await GuestService.updateGuest(req.params.id as string, req.body);
+    const user = (req as any).user;
+    const ownerId = user?.role === "admin" && req.query.ownerId ? String(req.query.ownerId) : user?.id;
+    const updated = await GuestService.updateGuest(req.params.id as string, req.body, ownerId);
     if (!updated) {
       return res.status(404).json({ success: false, error: "Guest not found" });
     }
@@ -35,9 +40,12 @@ export class GuestController {
   }
 
   static async getTimeline(req: Request, res: Response) {
+    const user = (req as any).user;
     const startDate = req.query.startDate as string;
     const days = req.query.days ? Number(req.query.days) : 14;
-    const timeline = await GuestService.getTimeline(startDate, days);
+    const ownerId = user?.role === "admin" && req.query.ownerId ? String(req.query.ownerId) : user?.id;
+    const propertyId = user?.role === "owner" ? user?.propertyId : undefined;
+    const timeline = await GuestService.getTimeline(startDate, days, ownerId, propertyId);
     res.json({ success: true, data: timeline });
   }
 }

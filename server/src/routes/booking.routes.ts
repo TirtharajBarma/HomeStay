@@ -7,7 +7,7 @@ import { optionalAuth, verifyToken, requireRole } from "../middlewares/auth.js";
 const router = Router();
 
 router.get("/", verifyToken, requireRole("owner", "admin"), BookingController.getBookings);
-router.get("/:reference", BookingController.getBookingByReference);
+router.get("/:reference", optionalAuth, BookingController.getBookingByReference);
 router.post("/", validate(CreateBookingSchema, "body"), BookingController.createBooking);
 router.post("/:reference/cancel", optionalAuth, BookingController.cancelBooking);
 router.patch("/:reference/cancel", optionalAuth, BookingController.cancelBooking);

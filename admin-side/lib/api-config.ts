@@ -29,14 +29,57 @@ export const API_ENDPOINTS = {
   settleDriverCabRequest: (id: string) => `${API_BASE_URL}/admin/cab-requests/${id}/driver-settled`,
 };
 
+export const TOKEN_STORAGE_KEY = "platform_admin_token";
+export const USER_STORAGE_KEY = "platform_admin_data";
+export const SESSION_EXPIRED_KEY = "session_expired"; // holds the sign-out reason
+
 export function getAdminToken(): string | null {
   if (typeof window === "undefined") return null;
-  return window.localStorage.getItem("platform_admin_token");
+  return window.localStorage.getItem(TOKEN_STORAGE_KEY);
 }
 
-export function getAdminHeaders(): Record<string, string> {
+export function clearAdminSession(): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(TOKEN_STORAGE_KEY);
+  window.localStorage.removeItem(USER_STORAGE_KEY);
+}
+
+/**
+ * `fetch` with the admin bearer token attached. Any 401 (expired/invalid/revoked session), and any
+ * 403 from the admin API (no longer an admin, blocked), clears the stored session, stores the reason
+ * for the login page and redirects there.
+ */
+export async function apiFetch(
+  url: string,
+  options: RequestInit & { skipAuthRedirect?: boolean } = {}
+): Promise<Response> {
+  const { skipAuthRedirect, ...init } = options;
+  const headers = new Headers(init.headers);
   const token = getAdminToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  if (token && !headers.has("Authorization")) headers.set("Authorization", `Bearer ${token}`);
+  const res = await fetch(url, { ...init, headers });
+  const isAdminApi = url.startsWith(`${API_BASE_URL}/admin`);
+  if (!skipAuthRedirect && (res.status === 401 || (res.status === 403 && isAdminApi))) {
+    const body = await res.clone().json().catch(() => ({}));
+    const err = body?.error;
+    const code = (typeof err === "object" && err?.code) || body?.code;
+    const msg = typeof err === "string" ? err : err?.message;
+    const reason =
+      code === "SESSION_REVOKED"
+        ? "Your session was revoked. Please sign in again."
+        : res.status === 403
+          ? `Admin access denied${msg ? `: ${msg}` : "."} You have been signed out.`
+          : msg
+            ? `Signed out: ${msg}`
+            : "Session expired. Please sign in again.";
+    clearAdminSession();
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem(SESSION_EXPIRED_KEY, reason);
+      window.location.assign("/login");
+    }
+    throw new Error(reason);
+  }
+  return res;
 }
 
 // Server errors come as `{error: string}` or `{error: {message}}`
@@ -44,4 +87,25 @@ export async function readApiError(res: Response, fallback: string): Promise<str
   const body = await res.json().catch(() => ({}));
   const err = body?.error;
   return (typeof err === "string" ? err : err?.message) || fallback;
+}
+
+/**
+ * StayRide admin API call: `path` is relative to `/admin`. Adds the bearer token, `?demo=true`
+ * (and body.demo) for the demo dataset, and throws the server's error message on failure.
+ */
+export async function adminApi<T = any>(
+  path: string,
+  opts: { method?: string; body?: Record<string, unknown>; demo?: boolean; query?: Record<string, string | number | undefined> } = {}
+): Promise<T> {
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(opts.query || {})) if (v !== undefined && v !== "") params.set(k, String(v));
+  if (opts.demo) params.set("demo", "true");
+  const qs = params.toString();
+  const res = await apiFetch(`${API_BASE_URL}/admin${path}${qs ? `?${qs}` : ""}`, {
+    method: opts.method || "GET",
+    headers: opts.body ? { "Content-Type": "application/json" } : {},
+    body: opts.body ? JSON.stringify(opts.demo ? { ...opts.body, demo: true } : opts.body) : undefined,
+  });
+  if (!res.ok) throw new Error(await readApiError(res, `Request failed (${res.status}).`));
+  return res.json();
 }

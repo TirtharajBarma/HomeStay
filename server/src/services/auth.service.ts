@@ -1,15 +1,21 @@
 import jwt from "jsonwebtoken";
+import crypto from "crypto";
 import { User, type IUser } from "../models/user.model.js";
 import { Property } from "../models/property.model.js";
 import { Driver } from "../models/driver.model.js";
 import { config } from "../config/env.js";
+import { tenantDbModel } from "../utils/tenant-model.js";
+
+// Development conveniences (fixed OTP, demo tokens) are never available on Vercel or with NODE_ENV=production.
+const devConveniences = !config.isDeployed && config.nodeEnv !== "production";
 
 // In-memory OTP store for free development/testing
-const otpStore = new Map<string, { otp: string; expires: number }>();
+const otpStore = new Map<string, { otp: string; expires: number; attempts: number }>();
 
 export class AuthService {
-  static generateToken(user: { _id: any; email: string; name: string; role: string; propertyId?: any }) {
+  static generateToken(user: { _id: any; email: string; name: string; role: string; propertyId?: any; tokenVersion?: number }) {
     const payload = {
+      tv: user.tokenVersion || 0, // session version; admin routes reject tokens after a revoke
       id: user._id.toString(),
       email: user.email,
       name: user.name,
@@ -107,17 +113,11 @@ export class AuthService {
   }
 
   static async login(data: { email: string; password: string }) {
-    const user = await User.findOne({ email: data.email.toLowerCase().trim() });
-    if (!user) {
+    // Same live-database user collection the StayRide admin routes re-check on every request.
+    const user: any = await tenantDbModel(false, "User", User.schema).findOne({ email: data.email.toLowerCase().trim() });
+    // One message for every failure: never reveal whether the account exists or is blocked.
+    if (!user || !(await user.comparePassword(data.password)) || user.accountStatus === "BLOCKED") {
       throw new Error("Invalid email or password.");
-    }
-
-    const isMatch = await user.comparePassword(data.password);
-    if (!isMatch) {
-      throw new Error("Invalid email or password.");
-    }
-    if ((user as any).accountStatus === "BLOCKED") {
-      throw new Error("This account is blocked. Contact support.");
     }
 
     let property: any = null;
@@ -157,20 +157,36 @@ export class AuthService {
     let avatar = "";
 
     if (rawToken && rawToken.startsWith("demo_")) {
-      if (config.nodeEnv === "production") {
+      if (!devConveniences) {
         throw new Error("Demo token authentication is disabled in production.");
       }
     } else if (rawToken) {
+      // Verify the Google ID token server-side. A JWT decode alone trusts attacker-supplied
+      // claims; Google's tokeninfo endpoint validates the signature, issuer and expiry.
+      let info: any;
       try {
-        const decoded: any = jwt.decode(rawToken);
-        if (decoded && decoded.email) {
-          email = decoded.email.toLowerCase().trim();
-          name = decoded.name || decoded.given_name || email.split("@")[0];
-          avatar = decoded.picture || "";
-        }
+        const res = await fetch(
+          `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(rawToken)}`
+        );
+        if (!res.ok) throw new Error("Google token verification failed.");
+        info = await res.json();
       } catch {
-        // Fallback to provided credentials
+        throw new Error("Invalid Google credential token.");
       }
+      const verifiedEmail = String(info?.email || "").toLowerCase().trim();
+      const emailVerified = info?.email_verified === true || info?.email_verified === "true";
+      if (!verifiedEmail || !emailVerified) {
+        throw new Error("Google account email is not verified.");
+      }
+      if (config.googleClientId && String(info?.aud || "") !== config.googleClientId) {
+        throw new Error("Google token was issued for a different client.");
+      }
+      email = verifiedEmail;
+      name = info?.name || info?.given_name || verifiedEmail.split("@")[0];
+      avatar = info?.picture || "";
+    } else if (config.isDeployed) {
+      // No token to verify: never trust a bare email in a deployed environment.
+      throw new Error("A valid Google credential is required.");
     }
 
     if (!email) {
@@ -216,15 +232,22 @@ export class AuthService {
 
   static async sendOtp(phone: string) {
     const cleanPhone = phone.replace(/[^0-9+]/g, "");
-    const otp = "123456"; // Development/demo OTP default
+    const isDev = devConveniences;
+    // The universal "123456" code is a development convenience only. In production a random
+    // code is generated and the value is never logged or echoed back in the response.
+    const otp = isDev ? "123456" : String(crypto.randomInt(100000, 1000000));
     const expires = Date.now() + 5 * 60 * 1000; // 5 minutes
 
-    otpStore.set(cleanPhone, { otp, expires });
-    console.log(`\n📲 [OTP DISPATCH] -> Phone: ${cleanPhone} | Verification Code: ${otp}\n`);
+    otpStore.set(cleanPhone, { otp, expires, attempts: 0 });
+    if (isDev) {
+      console.log(`\n📲 [OTP DISPATCH] -> Phone: ${cleanPhone} | Verification Code: ${otp}\n`);
+    } else {
+      console.log(`📲 [OTP DISPATCH] -> Phone: ${cleanPhone} (code withheld in production)`);
+    }
 
     return {
       success: true,
-      message: "OTP sent successfully (Demo OTP: 123456)",
+      message: isDev ? "OTP sent successfully (Demo OTP: 123456)" : "OTP sent successfully.",
       phone: cleanPhone,
     };
   }
@@ -239,12 +262,19 @@ export class AuthService {
     const cleanPhone = data.phone.replace(/[^0-9+]/g, "");
     const stored = otpStore.get(cleanPhone);
 
+    // Cap brute-force attempts per issued code.
+    if (stored && stored.attempts >= 5) {
+      otpStore.delete(cleanPhone);
+      throw new Error("Too many invalid attempts. Please request a new OTP.");
+    }
+
     // In production, universal dev OTP '123456' is rejected unless actively stored
-    const isDev = config.nodeEnv !== "production";
+    const isDev = devConveniences;
     const isMatch =
       (isDev && data.otp === "123456") ||
       (stored && stored.otp === data.otp && Date.now() <= stored.expires);
     if (!isMatch) {
+      if (stored) stored.attempts += 1;
       throw new Error("Invalid or expired OTP.");
     }
 

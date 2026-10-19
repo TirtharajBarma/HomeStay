@@ -1,4 +1,5 @@
 import { Schema, model, Document } from "mongoose";
+import crypto from "crypto";
 
 export interface IDriver extends Document {
   ownerId?: Schema.Types.ObjectId | string;
@@ -33,7 +34,8 @@ const DriverSchema = new Schema<IDriver>(
     ownerId: { type: Schema.Types.ObjectId, ref: "User", index: true },
     propertyId: { type: Schema.Types.ObjectId, ref: "Property", index: true },
     id: { type: String, required: true, unique: true, index: true },
-    pin: { type: String, default: "1234" },
+    // No shared default: every driver gets a unique random PIN, provisioned out-of-band.
+    pin: { type: String, default: () => String(crypto.randomInt(1000, 10000)) },
     name: { type: String, required: true },
     phone: { type: String, required: true },
     email: { type: String, required: true },

@@ -6,38 +6,70 @@ import { CommissionService, validateRates } from "../services/commission.service
 import { getTenantControlModel, FEATURE_KEYS } from "../models/tenant-control.model.js";
 import { getFeatureAppealModel } from "../models/feature-appeal.model.js";
 import { getAuditLogModel, audit } from "../models/audit-log.model.js";
-import { getStayRideTenantModel } from "../stayride/store.js";
+import { getStayRideTenantModel, tenantManager, normKey, isDemoKey, clean, FIELDS, TENANT_COLLECTIONS, TenantCollection } from "../stayride/store.js";
 import {
   OPEN_STATUSES, cabModel, payoutModel, userModel, parseFare, cancelRequest, startTrip, completeTrip,
   adminAssignDriver, adminRecordPayment, adminVoidPayment, adminMarkRefunded, adminSettleDriver,
-  settlePayout, rejectPayout,
+  settlePayout, rejectPayout, expireStaleRequests, overlayTrips, onDriverStatusChange,
 } from "../stayride/platform.js";
 import { httpError } from "../middlewares/error-handler.js";
 
 const router = Router();
+
 const isDemo = (req: Request) => req.query.demo === "true" || req.body?.demo === true;
 const actor = (req: Request) => (req as any).user?.email || String((req as any).user?.id || "admin");
 const ok = (res: Response, data: any, message?: string) => res.json({ success: true, ...(message ? { message } : {}), data });
-const page = (req: Request) => Math.max(0, Number(req.query.page) || 0);
 const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const search = (req: Request) => String(req.query.q ?? req.query.search ?? "").trim().slice(0, 100);
+
+// A1 pagination: ?page=1&limit=50 (limit max 100) -> { success, items, total, page, limit }.
+function paging(req: Request) {
+  const limit = Math.min(100, Math.max(1, Math.floor(Number(req.query.limit)) || 50));
+  const page = Math.max(1, Math.floor(Number(req.query.page)) || 1);
+  return { page, limit, skip: (page - 1) * limit };
+}
+async function sendPage(req: Request, res: Response, Model: mongoose.Model<any>, filter: any, sort: any, select?: string, map: (d: any) => any = (d) => d) {
+  const { page, limit, skip } = paging(req);
+  let query = Model.find(filter).sort(sort).skip(skip).limit(limit);
+  if (select) query = query.select(select);
+  const [docs, total] = await Promise.all([query.lean(), Model.countDocuments(filter)]);
+  res.json({ success: true, items: docs.map(map), total, page, limit });
+}
+
+const ratingOf = (u: any) => (u.ratingCount ? Math.round((u.ratingSum / u.ratingCount) * 10) / 10 : null);
+const USER_FIELDS = "name email phone role accountStatus statusReason vehicle createdAt deletedAt ratingSum ratingCount";
+const userItem = (demo: boolean) => (u: any) => ({
+  id: String(u._id),
+  name: u.name,
+  email: u.email,
+  phone: u.phone || "",
+  role: u.role,
+  accountStatus: u.accountStatus,
+  statusReason: u.statusReason || "",
+  tenantKey: u.email,
+  isDemo: demo,
+  createdAt: u.createdAt,
+  deletedAt: u.deletedAt ?? null,
+  ...(u.role === "driver" ? { rating: ratingOf(u), ratingCount: u.ratingCount || 0, vehicle: u.vehicle || null } : {}),
+});
 
 // ---------------------------------------------------------------------------
 // Platform settings: commission rates, minimum advance, global feature switches
 // ---------------------------------------------------------------------------
 router.get("/commission/settings", async (req, res) => {
   const settings = await CommissionService.getSettings(isDemo(req));
-  ok(res, { ...settings.toObject(), features: CommissionService.globalFeatures(settings) });
+  ok(res, { ...settings.toObject(), features: CommissionService.globalFeatures(settings), platform: CommissionService.platformConfig(settings), isDemo: isDemo(req) });
 });
 
 router.put("/commission/settings", async (req, res) => {
   try {
-    const { before, after } = await CommissionService.updateSettings({ ...req.body, updatedBy: actor(req) });
+    const { before, after } = await CommissionService.updateSettings({ ...req.body, updatedBy: actor(req), isDemo: isDemo(req) });
     await audit(actor(req), "settings.update", "PlatformSettings", String(after._id), {
-      before: { pf: before.globalPlatformFeePercent, hc: before.globalHomestayCommissionPercent, adv: before.defaultAdvancePercent, min: before.minAdvanceAmount, features: before.features },
-      after: { pf: after.globalPlatformFeePercent, hc: after.globalHomestayCommissionPercent, adv: after.defaultAdvancePercent, min: after.minAdvanceAmount, features: after.features },
+      before: { pf: before.globalPlatformFeePercent, hc: before.globalHomestayCommissionPercent, adv: before.defaultAdvancePercent, min: before.minAdvanceAmount, features: before.features, platform: before.platform },
+      after: { pf: after.globalPlatformFeePercent, hc: after.globalHomestayCommissionPercent, adv: after.defaultAdvancePercent, min: after.minAdvanceAmount, features: after.features, platform: after.platform },
       reason: req.body.changeReason || "",
-    });
-    ok(res, { ...after.toObject(), features: CommissionService.globalFeatures(after) }, "Platform settings updated.");
+    }, isDemo(req));
+    ok(res, { ...after.toObject(), features: CommissionService.globalFeatures(after), platform: CommissionService.platformConfig(after) }, "Platform settings updated.");
   } catch (err: any) {
     throw err?.status ? err : httpError(400, err?.message || "Invalid settings");
   }
@@ -53,16 +85,17 @@ router.post("/commission/preview", async (req, res) => {
 // ---------------------------------------------------------------------------
 router.get("/stayride/tenants", async (req, res) => {
   const demo = isDemo(req);
-  const q = String(req.query.search || "").trim();
+  const q = search(req);
   const filter = q ? { $or: [{ tenantId: new RegExp(escapeRegex(q), "i") }, { homestayName: new RegExp(escapeRegex(q), "i") }] } : {};
-  const tenants = await getStayRideTenantModel(demo)
-    .find(filter)
-    .select("tenantId homestayName ownerName email phone location createdAt lastActiveAt")
-    .sort({ createdAt: -1 })
-    .skip(page(req) * 50)
-    .limit(50)
-    .lean();
+  const { page, limit, skip } = paging(req);
+  const Tenant = getStayRideTenantModel(demo);
+  const [tenants, total, settings] = await Promise.all([
+    Tenant.find(filter).select("tenantId homestayName ownerName email phone location createdAt lastActiveAt").sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+    Tenant.countDocuments(filter),
+    CommissionService.getSettings(demo),
+  ]);
   const keys = tenants.map((t: any) => t.tenantId);
+  // Batched: one query for controls, one aggregation for stats, settings once (no per-row queries).
   const [controls, stats] = await Promise.all([
     getTenantControlModel(demo).find({ tenantKey: { $in: keys } }).lean(),
     cabModel(demo).aggregate([
@@ -79,29 +112,28 @@ router.get("/stayride/tenants", async (req, res) => {
   ]);
   const controlBy = new Map(controls.map((c: any) => [c.tenantKey, c]));
   const statsBy = new Map(stats.map((s: any) => [s._id, s]));
-  const data = await Promise.all(
-    tenants.map(async (t: any) => {
-      const state = await CommissionService.getAccountState(t.tenantId, demo);
-      const c: any = controlBy.get(t.tenantId);
-      return {
-        tenantKey: t.tenantId,
-        homestayName: t.homestayName,
-        ownerName: t.ownerName,
-        email: t.email,
-        phone: t.phone,
-        location: t.location,
-        createdAt: t.createdAt,
-        lastActiveAt: t.lastActiveAt,
-        blocked: state.blocked,
-        blockReason: state.blockReason,
-        effectiveFeatures: state.features,
-        featureOverrides: c?.features || {},
-        commissionOverride: c?.commissionOverride || null,
-        stats: statsBy.get(t.tenantId) || { requests: 0, completed: 0, gmv: 0 },
-      };
-    })
-  );
-  ok(res, data);
+  const items = tenants.map((t: any) => {
+    const c: any = controlBy.get(t.tenantId);
+    const state = CommissionService.accountStateFrom(settings, c);
+    const st: any = statsBy.get(t.tenantId);
+    return {
+      tenantKey: t.tenantId,
+      homestayName: t.homestayName,
+      ownerName: t.ownerName,
+      email: t.email,
+      phone: t.phone,
+      location: t.location,
+      createdAt: t.createdAt,
+      lastActiveAt: t.lastActiveAt,
+      blocked: state.blocked,
+      blockReason: state.blockReason,
+      effectiveFeatures: state.features,
+      featureOverrides: c?.features || {},
+      commissionOverride: c?.commissionOverride || null,
+      stats: st ? { requests: st.requests, completed: st.completed, gmv: st.gmv } : { requests: 0, completed: 0, gmv: 0 },
+    };
+  });
+  res.json({ success: true, items, total, page, limit });
 });
 
 router.put("/stayride/tenants/:tenantKey/controls", async (req, res) => {
@@ -140,60 +172,33 @@ router.put("/stayride/tenants/:tenantKey/controls", async (req, res) => {
 router.get("/stayride/users", async (req, res) => {
   const demo = isDemo(req);
   const filter: any = {};
-  if (req.query.role && ["guest", "owner", "driver", "admin"].includes(String(req.query.role))) {
-    filter.role = req.query.role;
-  }
-  if (req.query.status && ["ACTIVE", "PENDING_APPROVAL", "BLOCKED"].includes(String(req.query.status))) {
-    filter.accountStatus = req.query.status;
-  }
-  const q = String(req.query.search || "").trim();
+  if (["guest", "owner", "driver", "admin"].includes(String(req.query.role))) filter.role = req.query.role;
+  if (["ACTIVE", "PENDING_APPROVAL", "BLOCKED"].includes(String(req.query.status))) filter.accountStatus = req.query.status;
+  const q = search(req);
   if (q) {
     const regex = new RegExp(escapeRegex(q), "i");
     filter.$or = [{ name: regex }, { email: regex }, { phone: regex }];
   }
-  const users = await userModel(demo)
-    .find(filter)
-    .select("name email phone role accountStatus statusReason vehicle propertyId createdAt updatedAt")
-    .sort({ createdAt: -1 })
-    .skip(page(req) * 100)
-    .limit(100)
-    .lean();
-  const total = await userModel(demo).countDocuments(filter);
-  ok(res, { total, count: users.length, users });
+  await sendPage(req, res, userModel(demo), filter, { createdAt: -1 }, USER_FIELDS, userItem(demo));
 });
 
-router.patch("/stayride/users/:id/role", async (req, res) => {
-  const demo = isDemo(req);
-  const targetRole = String(req.body.role);
-  if (!["guest", "owner", "driver", "admin"].includes(targetRole)) {
-    throw httpError(400, "Role must be guest, owner, driver, or admin.");
+async function loadTargetUser(req: Request, demo: boolean) {
+  const id = String(req.params.id);
+  if (!mongoose.Types.ObjectId.isValid(id)) throw httpError(404, "User not found.");
+  const user: any = await userModel(demo).findById(id).select(USER_FIELDS).lean();
+  if (!user) throw httpError(404, "User not found.");
+  return user;
+}
+
+/** An admin can't lock itself out, and the last active admin can't be blocked, demoted or deleted. */
+async function protectAdmins(req: Request, demo: boolean, target: any, what: string) {
+  if (String(target._id) === String((req as any).user?.id)) throw httpError(409, `You cannot ${what} your own account.`, "SELF_ACTION");
+  if (target.role === "admin" && target.accountStatus === "ACTIVE") {
+    // ponytail: count-then-write; two admins removing each other at the same instant could both pass
+    const others = await userModel(demo).countDocuments({ role: "admin", accountStatus: "ACTIVE", _id: { $ne: target._id } });
+    if (others === 0) throw httpError(409, "At least one active admin must remain.", "LAST_ADMIN");
   }
-  if (!mongoose.Types.ObjectId.isValid(String(req.params.id))) throw httpError(404, "User not found.");
-
-  const targetUser = await userModel(demo).findById(String(req.params.id));
-  if (!targetUser) throw httpError(404, "User not found.");
-
-  const beforeRole = targetUser.role;
-  targetUser.role = targetRole as any;
-  if (req.body.accountStatus && ["ACTIVE", "PENDING_APPROVAL", "BLOCKED"].includes(req.body.accountStatus)) {
-    targetUser.accountStatus = req.body.accountStatus;
-  }
-  await targetUser.save();
-
-  await audit(actor(req), "user.role_change", "User", String(req.params.id), {
-    before: { role: beforeRole },
-    after: { role: targetRole, accountStatus: targetUser.accountStatus },
-    reason: String(req.body.reason || "Role updated by Super Admin"),
-  }, demo);
-
-  ok(res, {
-    _id: targetUser._id,
-    name: targetUser.name,
-    email: targetUser.email,
-    role: targetUser.role,
-    accountStatus: targetUser.accountStatus,
-  }, `User role updated from ${beforeRole} to ${targetRole}.`);
-});
+}
 
 router.patch("/stayride/users/:id/status", async (req, res) => {
   const demo = isDemo(req);
@@ -201,69 +206,126 @@ router.patch("/stayride/users/:id/status", async (req, res) => {
   if (!["ACTIVE", "PENDING_APPROVAL", "BLOCKED"].includes(status)) {
     throw httpError(400, "Status must be ACTIVE, PENDING_APPROVAL or BLOCKED.");
   }
-  if (!mongoose.Types.ObjectId.isValid(String(req.params.id))) throw httpError(404, "User not found.");
-
-  const updated = await userModel(demo).findByIdAndUpdate(
-    String(req.params.id),
-    { $set: { accountStatus: status, statusReason: String(req.body.reason || "").slice(0, 300) } },
-    { returnDocument: "after" }
-  ).select("name email phone role accountStatus statusReason vehicle").lean();
-
+  const target = await loadTargetUser(req, demo);
+  if (status !== "ACTIVE") await protectAdmins(req, demo, target, "block");
+  const reason = String(req.body.reason || "").slice(0, 300);
+  const updated = await userModel(demo).findByIdAndUpdate(target._id, { $set: { accountStatus: status, statusReason: reason } }, { returnDocument: "after" })
+    .select(USER_FIELDS).lean();
   if (!updated) throw httpError(404, "User not found.");
-  await audit(actor(req), "user.status", "User", String(req.params.id), { status, reason: req.body.reason || "" }, demo);
-  ok(res, updated, `User account ${status === "ACTIVE" ? "activated" : status === "BLOCKED" ? "blocked" : "set to pending"}.`);
+  await audit(actor(req), "user.status", "User", String(target._id), { before: target.accountStatus, status, reason }, demo);
+  // D6: blocking releases the driver's not-yet-started trips; approve/block also notify the driver.
+  if (target.role === "driver" && status !== target.accountStatus) await onDriverStatusChange(demo, String(target._id), status, actor(req));
+  ok(res, userItem(demo)(updated), `User account ${status === "ACTIVE" ? "activated" : status === "BLOCKED" ? "blocked" : "set to pending"}.`);
+});
+
+router.patch("/stayride/users/:id/role", async (req, res) => {
+  const demo = isDemo(req);
+  const role = String(req.body.role);
+  if (!["guest", "owner", "driver", "admin"].includes(role)) throw httpError(400, "Role must be guest, owner, driver, or admin.");
+  const target = await loadTargetUser(req, demo);
+  if (role !== "admin") await protectAdmins(req, demo, target, "demote");
+  // Tokens carry the role, so a role change ends every existing session.
+  const updated = await userModel(demo).findByIdAndUpdate(target._id, { $set: { role }, $inc: { tokenVersion: 1 } }, { returnDocument: "after" })
+    .select(USER_FIELDS).lean();
+  if (!updated) throw httpError(404, "User not found.");
+  await audit(actor(req), "user.role_change", "User", String(target._id), {
+    before: { role: target.role },
+    after: { role },
+    reason: String(req.body.reason || "").slice(0, 300),
+  }, demo);
+  ok(res, userItem(demo)(updated), `User role updated from ${target.role} to ${role}.`);
+});
+
+router.post("/stayride/users/:id/revoke-sessions", async (req, res) => {
+  const demo = isDemo(req);
+  const target = await loadTargetUser(req, demo);
+  await userModel(demo).updateOne({ _id: target._id }, { $inc: { tokenVersion: 1 } });
+  await audit(actor(req), "user.revoke_sessions", "User", String(target._id), { reason: String(req.body?.reason || "").slice(0, 300) }, demo);
+  ok(res, userItem(demo)(target), "All sessions revoked.");
+});
+
+// Soft delete: the account is blocked and marked deleted; its money history stays.
+router.delete("/stayride/users/:id", async (req, res) => {
+  const demo = isDemo(req);
+  const target = await loadTargetUser(req, demo);
+  await protectAdmins(req, demo, target, "delete");
+  const updated = await userModel(demo).findByIdAndUpdate(
+    target._id,
+    { $set: { accountStatus: "BLOCKED", statusReason: String(req.body?.reason || "Deleted by StayRide admin").slice(0, 300), deletedAt: target.deletedAt || new Date() }, $inc: { tokenVersion: 1 } },
+    { returnDocument: "after" }
+  ).select(USER_FIELDS).lean();
+  if (!updated) throw httpError(404, "User not found.");
+  await audit(actor(req), "user.delete", "User", String(target._id), { email: target.email, role: target.role, reason: String(req.body?.reason || "").slice(0, 300) }, demo);
+  if (target.role === "driver" && target.accountStatus !== "BLOCKED") await onDriverStatusChange(demo, String(target._id), "BLOCKED", actor(req));
+  ok(res, userItem(demo)(updated), "User deleted.");
 });
 
 // ---------------------------------------------------------------------------
 // Platform drivers: approve / block
 // ---------------------------------------------------------------------------
 router.get("/stayride/drivers", async (req, res) => {
+  const demo = isDemo(req);
   const filter: any = { role: "driver" };
   if (["ACTIVE", "PENDING_APPROVAL", "BLOCKED"].includes(String(req.query.status))) filter.accountStatus = req.query.status;
-  const drivers = await userModel(isDemo(req))
-    .find(filter)
-    .select("name email phone accountStatus statusReason vehicle createdAt")
-    .sort({ createdAt: -1 })
-    .skip(page(req) * 100)
-    .limit(100)
-    .lean();
-  ok(res, drivers);
+  const q = search(req);
+  if (q) {
+    const regex = new RegExp(escapeRegex(q), "i");
+    filter.$or = [{ name: regex }, { email: regex }, { phone: regex }, { "vehicle.plate": regex }];
+  }
+  await sendPage(req, res, userModel(demo), filter, { createdAt: -1 }, "name email phone accountStatus statusReason vehicle createdAt deletedAt ratingSum ratingCount isAvailable",
+    ({ ratingSum, ...d }: any) => ({ ...d, id: String(d._id), rating: ratingOf({ ratingSum, ratingCount: d.ratingCount }), ratingCount: d.ratingCount || 0 }));
 });
 
 router.patch("/stayride/drivers/:id/status", async (req, res) => {
   const status = String(req.body.status);
   if (!["ACTIVE", "PENDING_APPROVAL", "BLOCKED"].includes(status)) throw httpError(400, "Status must be ACTIVE, PENDING_APPROVAL or BLOCKED.");
   if (!mongoose.Types.ObjectId.isValid(String(req.params.id))) throw httpError(404, "Driver not found.");
-  const updated = await userModel(isDemo(req)).findOneAndUpdate(
+  const prev = await userModel(isDemo(req)).findOneAndUpdate(
     { _id: String(req.params.id), role: "driver" },
     { $set: { accountStatus: status, statusReason: String(req.body.reason || "").slice(0, 300) } },
-    { returnDocument: "after" }
+    { returnDocument: "before" }
   ).select("name email phone accountStatus statusReason vehicle").lean();
-  if (!updated) throw httpError(404, "Driver not found.");
+  if (!prev) throw httpError(404, "Driver not found.");
   await audit(actor(req), "driver.status", "User", String(req.params.id), { status, reason: req.body.reason || "" }, isDemo(req));
-  ok(res, updated, `Driver ${status === "ACTIVE" ? "approved" : status === "BLOCKED" ? "blocked" : "set to pending"}.`);
+  // Release trips / push only on a real change, so re-saving the same status doesn't re-notify
+  if (prev.accountStatus !== status) await onDriverStatusChange(isDemo(req), String(req.params.id), status, actor(req));
+  const updated = { ...prev, accountStatus: status, statusReason: String(req.body.reason || "").slice(0, 300) };
+  ok(res, { ...updated, id: String(updated._id) }, `Driver ${status === "ACTIVE" ? "approved" : status === "BLOCKED" ? "blocked" : "set to pending"}.`);
 });
 
 // ---------------------------------------------------------------------------
 // Cab requests (Workflow B queue + full history)
 // ---------------------------------------------------------------------------
 router.get("/cab-requests/pending", async (req, res) => {
-  const data = await cabModel(isDemo(req))
-    .find({ status: { $in: [...OPEN_STATUSES, "AWAITING_ADVANCE_PAYMENT"] } })
-    .sort({ createdAt: -1 })
-    .limit(200)
-    .lean();
-  res.json({ success: true, count: data.length, data });
+  const demo = isDemo(req);
+  await expireStaleRequests(demo);
+  // Needs admin action: open / awaiting payment, plus paid trips whose driver was removed (D6).
+  const filter: any = { $or: [{ status: { $in: [...OPEN_STATUSES, "AWAITING_ADVANCE_PAYMENT"] } }, { status: "CONFIRMED", needsReassignment: true }] };
+  if (req.query.tenantKey) filter.propertyId = String(req.query.tenantKey);
+  if (req.query.needsReassignment === "true") filter.needsReassignment = true;
+  const q = search(req);
+  if (q) {
+    const regex = new RegExp(escapeRegex(q), "i");
+    filter.$and = [{ $or: [{ reference: regex }, { homestayName: regex }, { guestName: regex }] }];
+  }
+  await sendPage(req, res, cabModel(demo), filter, { createdAt: -1 });
 });
 
 router.get("/cab-requests", async (req, res) => {
+  const demo = isDemo(req);
+  await expireStaleRequests(demo);
   const filter: any = {};
   if (req.query.status) filter.status = String(req.query.status);
   if (req.query.tenantKey) filter.propertyId = String(req.query.tenantKey);
   if (req.query.refundStatus) filter.refundStatus = String(req.query.refundStatus);
   if (req.query.driverSettlementStatus) filter.driverSettlementStatus = String(req.query.driverSettlementStatus);
-  const data = await cabModel(isDemo(req)).find(filter).sort({ createdAt: -1 }).skip(page(req) * 100).limit(100).lean();
-  res.json({ success: true, count: data.length, data });
+  if (req.query.needsReassignment === "true") filter.needsReassignment = true;
+  const q = search(req);
+  if (q) {
+    const regex = new RegExp(escapeRegex(q), "i");
+    filter.$or = [{ reference: regex }, { homestayName: regex }, { guestName: regex }, { assignedDriverName: regex }];
+  }
+  await sendPage(req, res, cabModel(demo), filter, { createdAt: -1 });
 });
 
 const cabAction = (fn: (demo: boolean, id: string, req: Request) => Promise<any>, message: string) => async (req: Request, res: Response) => {
@@ -286,7 +348,8 @@ router.post("/cab-requests/:id/driver-settled", cabAction((d, id, req) => adminS
 router.get("/host-payouts", async (req, res) => {
   const filter: any = {};
   if (["PENDING", "SETTLED", "REJECTED"].includes(String(req.query.status))) filter.status = req.query.status;
-  res.json(await payoutModel(isDemo(req)).find(filter).sort({ requestedAt: -1 }).skip(page(req) * 100).limit(100).lean());
+  if (req.query.tenantKey) filter.tenantId = String(req.query.tenantKey);
+  await sendPage(req, res, payoutModel(isDemo(req)), filter, { requestedAt: -1 });
 });
 
 router.post("/host-payouts/:id/settle", async (req, res) => {
@@ -305,8 +368,10 @@ router.post("/host-payouts/:id/reject", async (req, res) => {
 // Feature appeals → grant per-homestay feature
 // ---------------------------------------------------------------------------
 router.get("/appeals", async (req, res) => {
-  const data = await getFeatureAppealModel(isDemo(req)).find().sort({ createdAt: -1 }).limit(200).lean();
-  res.json({ success: true, count: data.length, data });
+  const filter: any = {};
+  if (["PENDING", "APPROVED", "REJECTED"].includes(String(req.query.status))) filter.status = req.query.status;
+  if (req.query.tenantKey) filter.propertyId = String(req.query.tenantKey);
+  await sendPage(req, res, getFeatureAppealModel(isDemo(req)), filter, { createdAt: -1 });
 });
 
 router.post("/appeals/:id/decide", async (req, res) => {
@@ -368,8 +433,82 @@ router.get("/audit-log", async (req, res) => {
   const filter: any = {};
   if (req.query.action) filter.action = String(req.query.action);
   if (req.query.targetId) filter.targetId = String(req.query.targetId);
-  const data = await getAuditLogModel(isDemo(req)).find(filter).sort({ createdAt: -1 }).skip(page(req) * 100).limit(100).lean();
-  ok(res, data);
+  await sendPage(req, res, getAuditLogModel(isDemo(req)), filter, { createdAt: -1 });
+});
+
+// ---------------------------------------------------------------------------
+// Tenant data (A3): view and correct a homestay's records. Same validation as the owner API;
+// platform trips are refused (use the cab-request actions). Every write is audited.
+// ---------------------------------------------------------------------------
+async function existingTenant(req: Request) {
+  const key = normKey(String(req.params.tenantKey));
+  const demo = isDemoKey(key);
+  if (!(await getStayRideTenantModel(demo).exists({ tenantId: key }))) throw httpError(404, "Homestay not found.");
+  return { key, demo };
+}
+const collectionOf = (req: Request): TenantCollection => {
+  const c = String(req.params.collection);
+  if (!Object.prototype.hasOwnProperty.call(TENANT_COLLECTIONS, c)) throw httpError(404, "Unknown collection.");
+  return c as TenantCollection;
+};
+// Audit entries keep field values but not photo data.
+const auditable = (o: any) => (o && o.photos ? { ...o, photos: `${o.photos.length} photo(s)` } : o);
+
+router.get("/stayride/tenants/:tenantKey/data", async (req, res) => {
+  const { key, demo } = await existingTenant(req);
+  const store = await tenantManager.load(key);
+  res.json({
+    success: true,
+    homestay: store.homestay,
+    rooms: store.rooms,
+    guests: store.guests,
+    bookings: store.bookings,
+    drivers: store.drivers,
+    trips: await overlayTrips(key, demo, store.trips),
+    campaigns: store.campaigns,
+    version: store.version,
+  });
+});
+
+router.patch("/stayride/tenants/:tenantKey/homestay", async (req, res) => {
+  const { key, demo } = await existingTenant(req);
+  let before: any = null;
+  let changes: any = null;
+  const homestay = await tenantManager.mutate(key, (s) => {
+    changes = clean("homestay", req.body, s.homestay.photos);
+    before = Object.fromEntries(Object.keys(changes).map((k) => [k, (s.homestay as any)[k]]));
+    return Object.assign(s.homestay, changes);
+  });
+  await audit(actor(req), "tenant.homestay.update", "Tenant", key, { before: auditable(before), after: auditable(changes) }, demo);
+  ok(res, homestay, "Homestay updated.");
+});
+
+router.patch("/stayride/tenants/:tenantKey/:collection/:id", async (req, res) => {
+  const { key, demo } = await existingTenant(req);
+  const collection = collectionOf(req);
+  const id = Number(req.params.id);
+  // Say so instead of silently dropping fields the server never lets anyone edit
+  const editable = new Set([...Object.keys(FIELDS[TENANT_COLLECTIONS[collection]]), "id", "_id", "createdAt", "updatedAt"]);
+  const rejected = Object.keys(req.body || {}).filter((k) => !editable.has(k));
+  if (rejected.length) throw httpError(400, `These fields can't be edited: ${rejected.join(", ")}.`);
+  let before: any = null;
+  const item = await tenantManager.mutate(key, (s) => {
+    before = { ...((s[collection] as any[]).find((x) => x.id === id) || {}) };
+    return s.updateItem(collection, id, req.body);
+  });
+  if (!item) throw httpError(404, "Record not found.");
+  await audit(actor(req), "tenant.data.update", "Tenant", key, { collection, id, before, after: item }, demo);
+  ok(res, item, "Record updated.");
+});
+
+router.delete("/stayride/tenants/:tenantKey/:collection/:id", async (req, res) => {
+  const { key, demo } = await existingTenant(req);
+  const collection = collectionOf(req);
+  const id = Number(req.params.id);
+  const removed = await tenantManager.mutate(key, (s) => s.deleteItem(collection, id));
+  if (!removed) throw httpError(404, "Record not found.");
+  await audit(actor(req), "tenant.data.delete", "Tenant", key, { collection, id, removed }, demo);
+  ok(res, removed, "Record deleted.");
 });
 
 export default router;

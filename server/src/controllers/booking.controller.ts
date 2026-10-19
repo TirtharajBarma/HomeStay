@@ -44,7 +44,13 @@ export class BookingController {
         error: `Booking '${reference}' not found`,
       });
     }
-    res.json({ success: true, data: booking });
+    // This route is public (a guest looks up their own booking). The door PIN is a secret used to
+    // authorise cancellation, so it is only returned to the property owner or an admin.
+    const user = (req as any).user;
+    const authorized = Boolean(user) && (user.role === "admin" || String(user.id) === String(booking.ownerId));
+    const data: any = typeof (booking as any).toObject === "function" ? (booking as any).toObject() : { ...booking };
+    if (!authorized) delete data.pin;
+    res.json({ success: true, data });
   }
 
   static async cancelBooking(req: Request, res: Response) {

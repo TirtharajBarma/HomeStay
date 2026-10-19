@@ -7,14 +7,20 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
-      "channel": "development"
+      "channel": "development",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "http://192.168.0.123:5050/v1"
+      }
     },
     "preview": {
       "distribution": "internal",
       "android": {
         "buildType": "apk"
       },
-      "channel": "preview"
+      "channel": "preview",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "http://192.168.0.123:5050/v1"
+      }
     },
     "production": {
       "autoIncrement": true,
@@ -24,7 +30,10 @@
       "ios": {
         "simulator": false
       },
-      "channel": "production"
+      "channel": "production",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "http://192.168.0.123:5050/v1"
+      }
     }
   },
   "submit": {

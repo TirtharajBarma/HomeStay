@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 import dns from "node:dns";
-import { config } from "./env.js";
+import { config, liveDbName, markInMemoryDb } from "./env.js";
 
 // Local/standalone only: some ISPs and home routers block Atlas SRV lookups. Never override DNS on Vercel.
 if (!process.env.VERCEL) {
@@ -11,10 +11,21 @@ if (!process.env.VERCEL) {
 
 let memoryServerInstance: any = null;
 
+// One shared connect per serverless instance: concurrent cold-start requests await the same promise
+let connecting: Promise<typeof mongoose> | null = null;
+
 export async function connectDB(): Promise<typeof mongoose> {
   if (mongoose.connection.readyState === 1) {
     return mongoose;
   }
+  connecting ??= openConnection().catch((err) => {
+    connecting = null; // let the next request retry
+    throw err;
+  });
+  return connecting;
+}
+
+async function openConnection(): Promise<typeof mongoose> {
 
   let uri = config.mongoUri;
 
@@ -29,6 +40,7 @@ export async function connectDB(): Promise<typeof mongoose> {
     try {
       const { MongoMemoryServer } = await import("mongodb-memory-server");
       memoryServerInstance = await MongoMemoryServer.create();
+      markInMemoryDb();
       uri = memoryServerInstance.getUri();
       console.log(`📦 In-memory MongoDB running at: ${uri}`);
       console.log("👉 To use MongoDB Atlas, set MONGODB_URI in server/.env");
@@ -56,12 +68,15 @@ export async function connectDB(): Promise<typeof mongoose> {
     console.warn("⚠️  MongoDB disconnected");
   });
 
-  const defaultDbName = process.env.MONGODB_DATABASE || "production";
+  // Throws (before connecting) for a local "production" db without ALLOW_LOCAL_PRODUCTION_DB=true.
+  const defaultDbName = liveDbName();
 
   return await mongoose.connect(uri, {
     dbName: defaultDbName,
     autoIndex: true,
-    serverSelectionTimeoutMS: 15000,
+    // M0 allows 500 connections in total; keep each serverless instance small
+    maxPoolSize: 10,
+    serverSelectionTimeoutMS: 8000,
   });
 }
 

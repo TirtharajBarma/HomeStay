@@ -4,6 +4,7 @@ import { validate } from "../middlewares/validate.js";
 import {
   CreateDriverSchema,
   DriverStatusSchema,
+  TripStatusSchema,
   CabQuoteSchema,
   CreateCabBookingSchema,
 } from "../schemas/driver.schema.js";
@@ -18,7 +19,7 @@ router.post("/quote", validate(CabQuoteSchema, "body"), DriverController.calcula
 router.post("/bookings", validate(CreateCabBookingSchema, "body"), DriverController.createCabBooking);
 router.get("/payouts", verifyToken, requireRole("admin"), DriverController.getPayouts);
 router.get("/:id/trips", verifyToken, requireRole("admin", "driver", "owner"), DriverController.getDriverTrips);
-router.patch("/trips/:id/status", verifyToken, requireRole("admin", "driver", "owner"), DriverController.updateTripStatus);
+router.patch("/trips/:id/status", verifyToken, requireRole("admin", "driver", "owner"), validate(TripStatusSchema, "body"), DriverController.updateTripStatus);
 router.post("/", verifyToken, requireRole("admin", "owner"), validate(CreateDriverSchema, "body"), DriverController.addDriver);
 router.patch("/:id/status", verifyToken, requireRole("admin"), validate(DriverStatusSchema, "body"), DriverController.updateStatus);
 

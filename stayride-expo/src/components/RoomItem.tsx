@@ -20,6 +20,11 @@ export const RoomItem: React.FC<RoomItemProps> = ({ room, onPress }) => {
       <Text style={styles.meta}>
         {room.type} • {room.floor}
       </Text>
+      {room.nextArrival ? (
+        <Text style={styles.note}>
+          Next arrival {new Date(room.nextArrival).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+        </Text>
+      ) : null}
       {room.note ? <Text style={styles.note} numberOfLines={1}>{room.note}</Text> : null}
       <View style={styles.bottomRow}>
         <Text style={styles.price}>₹{room.price.toLocaleString()} / night</Text>
