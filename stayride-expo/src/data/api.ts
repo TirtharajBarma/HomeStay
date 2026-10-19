@@ -187,7 +187,7 @@ class ApiService {
         `Request failed (${res.status})`;
       const code: string | undefined = errorData?.error?.code;
       if (fingerprint && res.status === 409 && code !== 'IDEMPOTENCY_IN_PROGRESS') this.idempotencyKeys.delete(fingerprint);
-      if (!authToken && (code === 'ACCOUNT_BLOCKED' || code === 'DRIVER_NOT_APPROVED') && this.session) {
+      if (!authToken && (code === 'ACCOUNT_BLOCKED' || code === 'DRIVER_NOT_APPROVED' || code === 'OWNER_NOT_APPROVED') && this.session) {
         this.accountErrorListener?.(code, message);
       }
       throw new ApiError(message, res.status, code, errorData?.error?.feature);

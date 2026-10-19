@@ -133,6 +133,7 @@ export interface CabTrip {
     driverName: string;
     driverVehicle?: string;
     quotedFare: number;
+    counterFare?: number | null; // the owner's counter-offer, waiting for the driver
     // Server estimates if this quote is accepted: the owner's commission and the guest's advance
     homestayCommission?: number;
     advanceAmount?: number;
@@ -169,6 +170,8 @@ export interface DriverTrip {
   reference: string;
   homestayName?: string;
   pickup: string;
+  pickupLat?: number | null; // map pin of the pickup (homestay or owner-set point)
+  pickupLng?: number | null;
   destinations?: Array<{ address: string; order: number }>;
   destination: string;
   isRoundTrip?: boolean;
@@ -179,7 +182,8 @@ export interface DriverTrip {
   passengers: number;
   vehicleType: string;
   status: CabTripStatus;
-  myQuote: { quotedFare: number; status: string; notes?: string } | null;
+  // counterFare: the homestay's counter-offer on my quote, waiting for me to accept
+  myQuote: { quotedFare: number; status: string; notes?: string; counterFare?: number | null } | null;
   assignedToMe: boolean;
   // Server's view of this trip for me; lost trips stay listed for 7 days as CANCELLED/REASSIGNED
   driverView?: 'OPEN' | 'QUOTED' | 'ASSIGNED' | 'CANCELLED' | 'REASSIGNED' | 'EXPIRED';
@@ -227,6 +231,8 @@ export interface Homestay {
   photos: string[];
   checkInTime?: string; // e.g. "12:00 PM"
   checkOutTime?: string; // e.g. "11:00 AM"
+  latitude?: number; // map pin (server-set via setHomestayLocation)
+  longitude?: number;
 }
 
 export type UserRole = 'owner' | 'driver' | 'admin';

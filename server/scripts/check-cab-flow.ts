@@ -200,6 +200,70 @@ const stale: any = await Cab.create(base({ date: Date.now() - 3 * 3600000, time:
 await expireStaleRequests(false, { reference: stale.reference });
 assert.equal(((await Cab.findById(stale._id).lean()) as any).status, 'EXPIRED');
 
+// ---------------------------------------------------------------------------
+// Quote links, quote expiry, counter-offers, owner completing a forgotten trip
+// ---------------------------------------------------------------------------
+const P = await import('../src/stayride/platform.js');
+const { default: mongooseLib } = await import('mongoose');
+const drvId = new mongooseLib.Types.ObjectId();
+await Users.collection.insertOne({ _id: drvId, role: 'driver', accountStatus: 'ACTIVE', isAvailable: true, name: 'Neg', email: 'neg@d.in', phone: '9000000099', vehicle: { type: 'SUV', model: 'Bolero', plate: 'WB-1' } });
+const negDriver = await Users.findById(drvId).lean();
+
+// signed links: bound to driver + request, tamper-proof
+const link = P.driverQuoteLink(false, drvId, 'REQ-LINK1');
+const tok = decodeURIComponent(link.split('t=')[1]);
+assert.deepEqual(P.readDriverQuoteToken(tok), { driverId: String(drvId), reference: 'REQ-LINK1', isDemo: false });
+assert.equal(P.readDriverQuoteToken(tok.slice(0, -2) + (tok.endsWith('A') ? 'BB' : 'AA')), null);
+assert.equal(P.readDriverQuoteToken('garbage'), null);
+
+// quote → expires after the validity → re-quote works
+await CommissionService.updateSettings({ globalPlatformFeePercent: 5, globalHomestayCommissionPercent: 10, platform: { quoteValidityHours: 1 }, updatedBy: 'test', isDemo: false });
+const negReq: any = await Cab.create(base());
+await P.driverSubmitQuote(false, negReq.reference, negDriver, 3000, 'AC');
+await Cab.updateOne({ _id: negReq._id }, { $set: { 'quotes.0.createdAt': new Date(Date.now() - 2 * 3600000) } });
+await P.expireStaleRequests(false, { reference: negReq.reference });
+let nd: any = await Cab.findById(negReq._id).lean();
+assert.equal(nd.quotes[0].status, 'EXPIRED');
+assert.equal(nd.status, 'FINDING_DRIVER');
+await P.driverSubmitQuote(false, negReq.reference, negDriver, 2900, '');
+nd = await Cab.findById(negReq._id).lean();
+assert.equal(nd.quotes[0].status, 'PENDING');
+assert.equal(nd.quotes[0].quotedFare, 2900);
+assert.equal(nd.status, 'QUOTE_RECEIVED');
+
+// counter-offer → driver accepts → confirmed at the counter fare
+await P.ownerCounterOffer('owner@x.in', false, negReq.reference, String(drvId), 2500, 'owner@x.in');
+nd = await Cab.findById(negReq._id).lean();
+assert.equal(nd.quotes[0].counterFare, 2500);
+await assert.rejects(P.ownerCounterOffer('other@x.in', false, negReq.reference, String(drvId), 2400, 'x'), /no longer open/); // other homestay
+const acc: any = await P.driverAcceptCounter(false, negReq.reference, negDriver);
+assert.equal(acc.status, 'AWAITING_ADVANCE_PAYMENT');
+assert.equal(acc.agreedFare, 2500);
+assert.equal(acc.quotes[0].status, 'ACCEPTED');
+await assert.rejects(P.driverAcceptCounter(false, negReq.reference, negDriver), /no longer open/);
+// a new fare from the driver clears an open counter
+const neg2: any = await Cab.create(base());
+await P.driverSubmitQuote(false, neg2.reference, negDriver, 3100, '');
+await P.ownerCounterOffer('owner@x.in', false, neg2.reference, String(drvId), 2800, 'o');
+await P.driverSubmitQuote(false, neg2.reference, negDriver, 3000, '');
+assert.equal(((await Cab.findById(neg2._id).lean()) as any).quotes[0].counterFare, null);
+
+// owner completes a forgotten trip only after pickup + 3h (or once started)
+const paidTrip: any = await Cab.create(base({ status: 'CONFIRMED', advancePaid: true, assignedDriverUserId: String(drvId), date: Date.now(), time: '11:59 PM',
+  financialSnapshot: { agreedFare: 3000, advanceAmount: 450, platformFeeRate: 0.05, platformFeeAmount: 150, homestayCommissionRate: 0.1, homestayCommissionAmount: 300, driverPayoutAmount: 2550, remainingCashToDriver: 2550 } }));
+await assert.rejects(P.ownerCompleteTrip('owner@x.in', false, paidTrip.reference, 'o'), /3 hours after/);
+await Cab.updateOne({ _id: paidTrip._id }, { $set: { date: Date.now() - 2 * 86400000, time: '09:00 AM' } });
+const doneTrip: any = await P.ownerCompleteTrip('owner@x.in', false, paidTrip.reference, 'o');
+assert.equal(doneTrip.status, 'COMPLETED');
+
+// saving only operations config keeps the saved rates (the two admin forms never revert each other)
+await CommissionService.updateSettings({ globalPlatformFeePercent: 7, globalHomestayCommissionPercent: 11, updatedBy: 'test', isDemo: false });
+await CommissionService.updateSettings({ platform: { maxFare: 150000 }, updatedBy: 'test', isDemo: false });
+const kept: any = await CommissionService.getSettings(false);
+assert.equal(kept.globalPlatformFeePercent, 7);
+assert.equal(kept.globalHomestayCommissionPercent, 11);
+assert.equal(CommissionService.platformConfig(kept).maxFare, 150000);
+
 console.log('cab flow checks passed');
 await mongoose.disconnect();
 await mongod.stop();

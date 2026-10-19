@@ -34,7 +34,12 @@ export const MyDriversScreen: React.FC = () => {
     updateDriver,
     deleteDriver,
     setDriverActive,
+    config,
   } = useStayRide();
+
+  const availableVehicles = config?.vehicles?.length
+    ? config.vehicles.map((v) => v.value)
+    : VEHICLE_TYPES;
 
   const [formVisible, setFormVisible] = useState(false);
   const [editingDriver, setEditingDriver] = useState<Driver | null>(null);
@@ -62,7 +67,7 @@ export const MyDriversScreen: React.FC = () => {
     setName('');
     setPhone('');
     setVehicle('');
-    setVehicleType('SUV');
+    setVehicleType(availableVehicles[0] || 'SUV');
     setSeats('4');
     setArea('');
     setAvailable(true);
@@ -251,7 +256,7 @@ export const MyDriversScreen: React.FC = () => {
 
               <Text style={styles.label}>Vehicle Type</Text>
               <View style={styles.chipRow}>
-                {VEHICLE_TYPES.map((t) => {
+                {availableVehicles.map((t) => {
                   const active = vehicleType === t;
                   return (
                     <TouchableOpacity

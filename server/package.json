@@ -12,7 +12,8 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "test": "npm run test:api",
-    "test:api": "tsx scripts/test-endpoints.ts"
+    "test:api": "tsx scripts/test-endpoints.ts",
+    "lint": "expo lint"
   },
   "dependencies": {
     "@clerk/express": "^2.1.78",
@@ -39,6 +40,8 @@
     "@types/morgan": "^1.9.10",
     "@types/node": "^26.6.4",
     "@types/nodemailer": "^8.0.2",
+    "eslint": "^9.0.0",
+    "eslint-config-expo": "~57.0.2",
     "mongodb-memory-server": "^11.3.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"

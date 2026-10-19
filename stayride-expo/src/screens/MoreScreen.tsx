@@ -124,17 +124,6 @@ export const MoreScreen: React.FC = () => {
     getActiveAppVersion().then(setActiveVersion).catch(() => {});
   }, []);
 
-  const handleShowFlow = () => {
-    Alert.alert(
-      'How StayRide Works',
-      '1. Homestay joins StayRide and sets up room inventory.\n' +
-        '2. Owner manages rooms, bookings, and guests in real-time.\n' +
-        '3. Owner adds their own drivers or sends the request to StayRide drivers.\n' +
-        '4. Guest gets dependable mountain transfers with transparent fares.\n' +
-        '5. Homestay owner earns a fixed 12% referral commission on every completed cab booking!'
-    );
-  };
-
   const handleLogout = () => {
     Alert.alert('Log Out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
@@ -272,8 +261,8 @@ export const MoreScreen: React.FC = () => {
           {renderRow(
             'information-circle',
             'How StayRide works',
-            'The complete homestay + cab referral flow',
-            handleShowFlow
+            'Bookings, the 3 cab options and your earnings',
+            () => navigation.navigate('HowItWorks')
           )}
         </View>
 
@@ -291,6 +280,12 @@ export const MoreScreen: React.FC = () => {
         {/* Account & Security Group */}
         <Text style={styles.groupHeader}>Account & Security</Text>
         <View style={styles.cardGroup}>
+          {renderRow(
+            'person-circle-outline',
+            'Account & privacy',
+            'Sign-in methods (Google), privacy, terms, delete account',
+            () => navigation.navigate('Account')
+          )}
           {renderRow(
             'key-outline',
             'Change / Set Password',

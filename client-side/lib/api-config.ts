@@ -45,6 +45,13 @@ export const API_ENDPOINTS = {
     status: (reference: string, token: string) =>
       `${API_BASE_URL}/stayride/public/cab-requests/${encodeURIComponent(reference)}?t=${encodeURIComponent(token)}`,
   },
+  // Driver quote page (signed link from the WhatsApp message)
+  driverQuote: {
+    view: (token: string) => `${API_BASE_URL}/stayride/public/driver-quote?t=${encodeURIComponent(token)}`,
+    quote: () => `${API_BASE_URL}/stayride/public/driver-quote/quote`,
+    acceptCounter: () => `${API_BASE_URL}/stayride/public/driver-quote/accept-counter`,
+  },
+  legal: (doc: string) => `${API_BASE_URL}/stayride/public/legal/${encodeURIComponent(doc)}`,
   newsletter: {
     subscribe: () => `${API_BASE_URL}/newsletter/subscribe`,
   },

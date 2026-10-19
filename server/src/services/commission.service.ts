@@ -67,8 +67,8 @@ export class CommissionService {
   }
 
   static async updateSettings(params: {
-    globalPlatformFeePercent: unknown;
-    globalHomestayCommissionPercent: unknown;
+    globalPlatformFeePercent?: unknown;
+    globalHomestayCommissionPercent?: unknown;
     defaultAdvancePercent?: unknown;
     minAdvanceAmount?: unknown;
     features?: Record<string, { enabled?: unknown; defaultOn?: unknown }>;
@@ -79,8 +79,9 @@ export class CommissionService {
   }): Promise<{ before: any; after: ICommissionSettings }> {
     const settings = await this.getSettings(Boolean(params.isDemo));
     const before = settings.toObject();
-    const pf = pct(params.globalPlatformFeePercent);
-    const hc = pct(params.globalHomestayCommissionPercent);
+    // Omitted values keep what is saved, so saving one settings form never reverts another's changes
+    const pf = params.globalPlatformFeePercent === undefined ? settings.globalPlatformFeePercent : pct(params.globalPlatformFeePercent);
+    const hc = params.globalHomestayCommissionPercent === undefined ? settings.globalHomestayCommissionPercent : pct(params.globalHomestayCommissionPercent);
     const adv = params.defaultAdvancePercent === undefined ? settings.defaultAdvancePercent : pct(params.defaultAdvancePercent);
     validateRates(pf, hc, adv);
     settings.globalPlatformFeePercent = pf;

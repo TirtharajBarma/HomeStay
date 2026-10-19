@@ -12,6 +12,7 @@
 //   request's financialSnapshot at the moment a fare is agreed.
 import mongoose from 'mongoose';
 import crypto from 'node:crypto';
+import jwt from 'jsonwebtoken';
 import { config } from '../config/env.js';
 import { getGuestLinkModel } from '../models/guest-link.model.js';
 import { sendWhatsApp, WhatsAppMessage, WhatsAppResult } from '../services/whatsapp.service.js';
@@ -56,10 +57,32 @@ const pushUsers = (isDemo: boolean, ids: unknown[], msg: PushMessage) => {
 const tripData = (d: any, type: string) => ({ type, reference: d.reference, ...(typeof d.tripId === 'number' ? { tripId: d.tripId } : {}) });
 
 /** WhatsApp from the company number. Every message is also pushed to the app where the person has it. */
-const whatsapp = async (isDemo: boolean, to: unknown, built: Omit<WhatsAppMessage, 'to'>): Promise<WhatsAppResult> =>
-  sendWhatsApp(isDemo, { ...built, to: String(to ?? '') }, (await cfgOf(isDemo)).whatsappLanguage);
+const whatsapp = async (isDemo: boolean, to: unknown, built: Omit<WhatsAppMessage, 'to'>): Promise<WhatsAppResult> => {
+  const cfg = await cfgOf(isDemo);
+  return sendWhatsApp(isDemo, { ...built, to: String(to ?? '') }, cfg.whatsappLanguage, cfg.whatsappTemplates[built.event]);
+};
 
 export const hashToken = (t: string) => crypto.createHash('sha256').update(t).digest('hex');
+
+// ---------------------------------------------------------------------------
+// Driver quote links: a signed, expiring link per driver and request, so WhatsApp-only drivers can
+// quote (or accept a counter-offer) on a web page without opening the app. Bound to that driver.
+// ---------------------------------------------------------------------------
+export function driverQuoteLink(isDemo: boolean, driverId: unknown, reference: string) {
+  const token = jwt.sign({ typ: 'dq', d: String(driverId), r: reference, x: isDemo ? 1 : 0 }, config.jwtSecret, { expiresIn: '4d' });
+  return `${config.guestWebUrl}/driver-quote?t=${encodeURIComponent(token)}`;
+}
+
+export function readDriverQuoteToken(token: unknown): { driverId: string; reference: string; isDemo: boolean } | null {
+  if (typeof token !== 'string' || token.length > 2000) return null;
+  try {
+    const p: any = jwt.verify(token, config.jwtSecret);
+    if (p?.typ !== 'dq' || typeof p.d !== 'string' || typeof p.r !== 'string') return null;
+    return { driverId: p.d, reference: p.r, isDemo: p.x === 1 };
+  } catch {
+    return null;
+  }
+}
 
 /** Opaque, expiring guest link (validity set by the admin). Only its hash is stored; the raw URL is returned once. */
 export async function issueGuestLink(tenantKey: string, isDemo: boolean, guest: { guestId?: number | null; guestName: string; guestPhone: string }) {
@@ -122,7 +145,8 @@ export async function requestAdvance(tenantKey: string, isDemo: boolean, doc: an
         });
     let url: string;
     if (link) {
-      await cabModel(isDemo).updateOne({ _id: doc._id, status: 'AWAITING_ADVANCE_PAYMENT' }, { $set: { paymentLinkId: link.id, paymentLinkUrl: link.url } });
+      // every issued id is kept: a guest paying an older link (re-priced / reopened) is still found and refunded
+      await cabModel(isDemo).updateOne({ _id: doc._id, status: 'AWAITING_ADVANCE_PAYMENT' }, { $set: { paymentLinkId: link.id, paymentLinkUrl: link.url }, $addToSet: { paymentLinkIds: link.id } });
       url = link.url;
     } else {
       url = (await issueGuestLink(tenantKey, isDemo, { guestId: doc.guestId as any, guestName: doc.guestName, guestPhone: doc.guestPhone })).url;
@@ -152,6 +176,7 @@ export function istDateTime(date: unknown, time: unknown): number | null {
  */
 export async function expireStaleRequests(isDemo: boolean, extra: Record<string, any> = {}): Promise<number> {
   await releaseUnpaidAdvances(isDemo, extra); // same lazy hook: every list that shows requests runs it
+  await expireOldQuotes(isDemo, extra);
   const cutoff = Date.now() - (await cfgOf(isDemo)).requestExpiryHours * HOUR_MS;
   const Cab = cabModel(isDemo);
   // pickupAt < date + 1 day, so anything with date >= cutoff + 1 day cannot be stale yet.
@@ -222,9 +247,30 @@ export async function releaseUnpaidAdvances(isDemo: boolean, extra: Record<strin
     await Promise.allSettled([
       pushOwner(isDemo, String(updated.propertyId), msg),
       pushUsers(isDemo, [assignedDriverUserId].filter(Boolean), { ...msg, body: `Trip ${updated.reference} was released: the guest did not pay the advance.` }),
+      whatsapp(isDemo, updated.guestPhone, messages.advanceExpiredGuestMessage(updated)),
     ]);
   }
   return released;
+}
+
+/**
+ * A quote older than the admin's validity stops counting (the driver may quote again). A request left
+ * with no live quote goes back to "finding driver".
+ */
+async function expireOldQuotes(isDemo: boolean, extra: Record<string, any> = {}) {
+  const hours = (await cfgOf(isDemo)).quoteValidityHours;
+  if (hours <= 0) return;
+  const cutoff = new Date(Date.now() - hours * HOUR_MS);
+  const Cab = cabModel(isDemo);
+  const filter = { ...extra, status: { $in: OPEN_STATUSES }, quotes: { $elemMatch: { status: 'PENDING', createdAt: { $lt: cutoff } } } };
+  const ids = (await Cab.find(filter).select('_id').limit(200).lean()).map((d: any) => d._id);
+  if (!ids.length) return;
+  await Cab.updateMany(
+    { _id: { $in: ids } },
+    { $set: { 'quotes.$[q].status': 'EXPIRED', 'quotes.$[q].counterFare': null } },
+    { arrayFilters: [{ 'q.status': 'PENDING', 'q.createdAt': { $lt: cutoff } }] }
+  );
+  await Cab.updateMany({ _id: { $in: ids }, status: 'QUOTE_RECEIVED', 'quotes.status': { $ne: 'PENDING' } }, { $set: { status: 'FINDING_DRIVER' } });
 }
 
 /** Quote notes must not carry a way to deal off-platform: no phone numbers, links or emails. */
@@ -390,6 +436,7 @@ export async function overlayTrips(tenantKey: string, isDemo: boolean, trips: an
         driverVehicle: q.driverVehicle,
         ...ratingOf(driverById.get(String(q.driverId))),
         quotedFare: q.quotedFare,
+        counterFare: q.counterFare ?? null,
         ...estimate(q.quotedFare),
         notes: q.notes,
         status: q.status,
@@ -556,9 +603,10 @@ export async function cancelRequest(filter: Record<string, any>, isDemo: boolean
   await audit(actor, 'cab.cancel', 'CabRequest', String(doc._id), { reason, refundDue: doc.advancePaid ? doc.advanceAmount : 0 }, isDemo);
   const msg = { title: 'Trip cancelled', body: `Trip ${doc.reference} was cancelled.`, data: tripData(doc, 'TRIP_CANCELLED') };
   const drivers = [doc.assignedDriverUserId, ...(doc.quotes || []).filter((q: any) => q.status === 'PENDING').map((q: any) => q.driverId)].filter(Boolean);
-  await Promise.all([
+  await Promise.allSettled([
     pushUsers(isDemo, drivers, msg),
     actor === doc.propertyId ? Promise.resolve() : pushOwner(isDemo, String(doc.propertyId), msg),
+    doc.guestPhone ? whatsapp(isDemo, doc.guestPhone, messages.tripCancelledGuestMessage(updated)) : Promise.resolve(),
   ]);
   return updated;
 }
@@ -587,6 +635,8 @@ export function driverTripView(d: any, driverUserId: string) {
     reference: d.reference,
     homestayName: d.homestayName,
     pickup: d.pickupLocation?.address || '',
+    pickupLat: d.pickupLocation?.lat ?? null,
+    pickupLng: d.pickupLocation?.lng ?? null,
     destinations: d.destinations || [],
     destination: (d.destinations || []).map((x: any) => x.address).join(' ➔ '),
     isRoundTrip: d.isRoundTrip,
@@ -599,7 +649,7 @@ export function driverTripView(d: any, driverUserId: string) {
     status: TRIP_STATUS[d.status] || d.status,
     driverView,
     cancellationReason: d.status === 'CANCELLED' ? d.cancellationReason || '' : null,
-    myQuote: mine ? { quotedFare: mine.quotedFare, status: mine.status, notes: mine.notes || '' } : null,
+    myQuote: mine ? { quotedFare: mine.quotedFare, status: mine.status, notes: mine.notes || '', counterFare: mine.counterFare ?? null } : null,
     assignedToMe: assigned,
     // No guest identity / cash due before the advance is paid.
     ...(contact ? { guestName: d.guestName, phone: d.guestPhone } : {}),
@@ -666,8 +716,18 @@ export async function driverSubmitQuote(isDemo: boolean, reference: string, driv
   await expireStaleRequests(isDemo, { reference });
   const revise = () =>
     Model.findOneAndUpdate(
-      { reference, status: { $in: OPEN_STATUSES }, dispatched: { $ne: false }, quotes: { $elemMatch: { driverId, status: 'PENDING' } } },
-      { $set: { 'quotes.$.quotedFare': quotedFare, 'quotes.$.notes': cleanNotes, 'quotes.$.createdAt': new Date() } },
+      { reference, status: { $in: OPEN_STATUSES }, dispatched: { $ne: false }, quotes: { $elemMatch: { driverId, status: { $in: ['PENDING', 'EXPIRED'] } } } },
+      {
+        $set: {
+          'quotes.$.quotedFare': quotedFare,
+          'quotes.$.notes': cleanNotes,
+          'quotes.$.createdAt': new Date(),
+          'quotes.$.status': 'PENDING', // an expired quote comes back to life with the new fare
+          'quotes.$.counterFare': null,
+          'quotes.$.counterAt': null,
+          status: 'QUOTE_RECEIVED',
+        },
+      },
       { returnDocument: 'after' }
     );
   // Each step is one conditional update: revise my pending quote, else add one (only if I have none).
@@ -748,8 +808,12 @@ export async function notifyNewRequest(isDemo: boolean, doc: any) {
   });
   // WhatsApp too, so drivers without the app (or not looking at it) still see it. Capped: each costs money.
   if (isDemo || cfg.driverBroadcastMax <= 0) return;
-  const built = messages.newRequestMessage(doc);
-  await Promise.allSettled(drivers.filter((d) => d.phone).slice(0, cfg.driverBroadcastMax).map((d) => whatsapp(isDemo, d.phone, built)));
+  await Promise.allSettled(
+    drivers
+      .filter((d) => d.phone)
+      .slice(0, cfg.driverBroadcastMax)
+      .map((d) => whatsapp(isDemo, d.phone, messages.newRequestMessage(doc, driverQuoteLink(isDemo, d._id, doc.reference))))
+  );
 }
 
 async function transition(isDemo: boolean, filter: Record<string, any>, set: Record<string, any>, notFound: string, extra: Record<string, any> = {}) {
@@ -784,6 +848,63 @@ export async function completeTrip(isDemo: boolean, filter: Record<string, any>,
   );
   await audit(actor, 'cab.complete', 'CabRequest', String(doc._id), { driverShareOfAdvance: driverShare }, isDemo);
   await pushOwner(isDemo, String(updated.propertyId), { title: 'Trip completed', body: `Trip ${updated.reference} is complete. Rate your driver.`, data: tripData(updated, 'TRIP_COMPLETED') });
+  return updated;
+}
+
+// ---------------------------------------------------------------------------
+// Negotiation: owner counter-offers a driver's quote; the driver accepts (trip confirmed at that fare)
+// or simply sends a new fare. One live counter per quote.
+// ---------------------------------------------------------------------------
+export async function ownerCounterOffer(tenantKey: string, isDemo: boolean, reference: string, driverId: string, fareInput: unknown, actor: string) {
+  const fare = parseFare(fareInput, (await cfgOf(isDemo)).maxFare);
+  await expireStaleRequests(isDemo, { reference });
+  const updated: any = await cabModel(isDemo).findOneAndUpdate(
+    { reference, propertyId: tenantKey, status: { $in: OPEN_STATUSES }, quotes: { $elemMatch: { driverId, status: 'PENDING' } } },
+    { $set: { 'quotes.$.counterFare': fare, 'quotes.$.counterAt': new Date() } },
+    { returnDocument: 'after' }
+  );
+  if (!updated) throw conflict('This quote is no longer open. Refresh and try again.');
+  const q = updated.quotes.find((x: any) => String(x.driverId) === String(driverId));
+  if (fare === q.quotedFare) throw httpError(400, 'That is the driver\'s own fare: confirm the quote instead.');
+  await audit(actor, 'cab.counter_offer', 'CabRequest', String(updated._id), { reference, driverId, fare, quoted: q.quotedFare }, isDemo);
+  await Promise.allSettled([
+    pushUsers(isDemo, [driverId], { title: 'Counter-offer', body: `The homestay offers ₹${fare.toLocaleString('en-IN')} for trip ${reference}.`, data: tripData(updated, 'QUOTE_COUNTER') }),
+    whatsapp(isDemo, q.driverPhone, messages.quoteCounterMessage(q.driverName, reference, fare, driverQuoteLink(isDemo, driverId, reference))),
+  ]);
+  return updated;
+}
+
+/** Driver takes the owner's counter-offer: the quote becomes that fare and the trip is confirmed. */
+export async function driverAcceptCounter(isDemo: boolean, reference: string, driver: any) {
+  const driverId = String(driver._id);
+  await expireStaleRequests(isDemo, { reference });
+  const doc: any = await cabModel(isDemo).findOne({ reference, status: { $in: OPEN_STATUSES }, quotes: { $elemMatch: { driverId, status: 'PENDING', counterFare: { $gt: 0 } } } }).lean();
+  if (!doc) throw conflict('This offer is no longer open.');
+  const q = doc.quotes.find((x: any) => String(x.driverId) === driverId);
+  const set = await cabModel(isDemo).findOneAndUpdate(
+    { _id: doc._id, quotes: { $elemMatch: { driverId, status: 'PENDING', counterFare: q.counterFare } } },
+    { $set: { 'quotes.$.quotedFare': q.counterFare, 'quotes.$.counterFare': null, 'quotes.$.notes': q.notes || '' } },
+    { returnDocument: 'after' }
+  );
+  if (!set) throw conflict('This offer changed. Refresh and try again.');
+  // The owner already agreed to this fare: confirm the trip on their behalf
+  return ownerConfirmQuote(String(doc.propertyId), isDemo, reference, driverId, `driver:${driverId}:accepted-counter`);
+}
+
+/**
+ * Owner closes a StayRide trip the driver forgot to mark: a started trip any time, a confirmed (paid)
+ * one only once the pickup time is 3 hours past, so commission is not held up by a forgetful driver.
+ */
+export async function ownerCompleteTrip(tenantKey: string, isDemo: boolean, reference: string, actor: string) {
+  const doc: any = await cabModel(isDemo).findOne({ reference, propertyId: tenantKey }).lean();
+  if (!doc) throw httpError(404, 'Trip not found');
+  if (doc.status === 'CONFIRMED') {
+    const pickupAt = istDateTime(doc.date, doc.time) ?? Number(doc.date);
+    if (Date.now() < pickupAt + 3 * HOUR_MS) throw conflict('You can mark it complete 3 hours after the pickup time, or once the driver starts the trip.');
+    await transition(isDemo, { _id: doc._id, status: 'CONFIRMED', advancePaid: true, needsReassignment: { $ne: true } }, { status: 'TRIP_STARTED', startedAt: new Date() }, 'Only a paid trip with a driver can be completed.');
+  }
+  const updated = await completeTrip(isDemo, { _id: doc._id }, actor);
+  await pushUsers(isDemo, [doc.assignedDriverUserId].filter(Boolean), { title: 'Trip completed', body: `The homestay marked trip ${reference} as completed.`, data: tripData(doc, 'TRIP_COMPLETED') });
   return updated;
 }
 
@@ -840,15 +961,37 @@ export async function adminAssignDriver(isDemo: boolean, id: string, body: any, 
     );
   }
   await audit(actor, reassign ? 'cab.reassign_driver' : 'cab.assign_driver', 'CabRequest', id, { fare, driverUserId, name }, isDemo);
-  const pushes: Promise<void>[] = [];
+  // Like the owner's confirm: the chosen driver's quote is accepted, everyone else's declined
+  const declined = reassign
+    ? []
+    : (doc.quotes || []).filter((q: any) => q.status === 'PENDING' && String(q.driverId) !== String(driverUserId)).map((q: any) => q.driverId);
+  if (!reassign && (doc.quotes || []).some((q: any) => q.status === 'PENDING')) {
+    const mine = driverUserId ? { 'quotes.$[q].status': 'ACCEPTED' } : {};
+    await Model.updateOne(
+      { _id: doc._id, status: 'AWAITING_ADVANCE_PAYMENT' },
+      { $set: { ...mine, 'quotes.$[o].status': 'REJECTED' } },
+      { arrayFilters: [...(driverUserId ? [{ 'q.driverId': driverUserId, 'q.status': 'PENDING' }] : []), { 'o.driverId': { $ne: driverUserId }, 'o.status': 'PENDING' }] }
+    );
+  }
+  const pushes: Promise<unknown>[] = [];
   if (driverUserId && driverUserId !== previous) {
     pushes.push(pushUsers(isDemo, [driverUserId], { title: 'New trip assigned', body: `StayRide assigned you trip ${doc.reference}.`, data: tripData(doc, 'TRIP_ASSIGNED') }));
   }
   if (previous && previous !== driverUserId) {
     pushes.push(pushUsers(isDemo, [previous], { title: 'Trip reassigned', body: `Trip ${doc.reference} was given to another driver.`, data: tripData(doc, 'DRIVER_REMOVED') }));
   }
-  // A new fare means a new advance: give the guest a way to pay it.
-  if (!reassign) pushes.push(requestAdvance(String(doc.propertyId), isDemo, updated));
+  if (declined.length) pushes.push(pushUsers(isDemo, declined, { title: 'Trip taken', body: `Trip ${doc.reference} was given to another driver.`, data: tripData(doc, 'DRIVER_REMOVED') }));
+  if (reassign) {
+    // Advance already paid: the new driver and the guest get each other's details now, the owner is told
+    pushes.push(
+      whatsapp(isDemo, phone, messages.advancePaidDriverMessage(updated)),
+      whatsapp(isDemo, updated.guestPhone, messages.advancePaidGuestMessage(updated)),
+      pushOwner(isDemo, String(doc.propertyId), { title: 'New driver assigned', body: `StayRide assigned ${name} to trip ${doc.reference}.`, data: tripData(updated, 'TRIP_ASSIGNED') })
+    );
+  } else {
+    // A new fare means a new advance: give the guest a way to pay it; WhatsApp-only drivers hear it too
+    pushes.push(whatsapp(isDemo, phone, messages.quoteAcceptedDriverMessage(name, doc.reference)), requestAdvance(String(doc.propertyId), isDemo, updated));
+  }
   await Promise.allSettled(pushes);
   return updated;
 }
@@ -925,7 +1068,7 @@ export async function recordGatewayPayment(linkId: string, paymentId: string, am
   const isDemo = false; // the gateway is never used for demo tenants
   const Model = cabModel(isDemo);
   if (!linkId || !paymentId) return 'UNKNOWN';
-  const doc: any = await Model.findOne({ $or: [{ paymentLinkId: linkId }, { 'unmatchedPayments.paymentId': paymentId }, { advancePaymentId: paymentId }] }).lean();
+  const doc: any = await Model.findOne({ $or: [{ paymentLinkId: linkId }, { paymentLinkIds: linkId }, { 'unmatchedPayments.paymentId': paymentId }, { advancePaymentId: paymentId }] }).lean();
   if (!doc) return 'UNKNOWN';
   if (doc.advancePaymentId === paymentId || (doc.unmatchedPayments || []).some((u: any) => u.paymentId === paymentId)) return 'DUPLICATE';
   if (doc.paymentLinkId === linkId && doc.status === 'AWAITING_ADVANCE_PAYMENT' && !doc.advancePaid && amountRupees === doc.advanceAmount) {
@@ -951,8 +1094,10 @@ export async function adminVoidPayment(isDemo: boolean, id: string, reason: unkn
   const Model = cabModel(isDemo);
   const doc: any = await Model.findById(id).lean();
   if (!doc) throw httpError(404, 'Cab request not found.');
+  const cfg = await cfgOf(isDemo);
   const updated = await Model.findOneAndUpdate(
-    { _id: doc._id, status: 'CONFIRMED', advancePaid: true, hostPayoutId: null },
+    // a paid trip waiting for a new driver keeps its payment: assign a driver (or cancel) first
+    { _id: doc._id, status: 'CONFIRMED', advancePaid: true, hostPayoutId: null, needsReassignment: { $ne: true } },
     {
       $set: {
         advancePaid: false,
@@ -960,6 +1105,9 @@ export async function adminVoidPayment(isDemo: boolean, id: string, reason: unkn
         advancePaymentId: '',
         advancePaymentMethod: '',
         status: 'AWAITING_ADVANCE_PAYMENT',
+        advanceDueAt: dueAt(cfg),
+        paymentLinkId: '',
+        paymentLinkUrl: '',
       },
       $push: {
         voidedPayments: { transactionId: doc.advancePaymentId, amount: doc.advanceAmount, method: doc.advancePaymentMethod, reason: why, voidedBy: actor, at: new Date() },
@@ -967,8 +1115,14 @@ export async function adminVoidPayment(isDemo: boolean, id: string, reason: unkn
     },
     { returnDocument: 'after' }
   );
-  if (!updated) throw conflict('Only a confirmed, not-yet-started payment can be voided.');
+  if (!updated) throw conflict('Only a confirmed, not-yet-started payment can be voided (a trip waiting for a new driver needs one first).');
   await audit(actor, 'payment.void', 'CabRequest', id, { transactionId: doc.advancePaymentId, reason: why }, isDemo);
+  const msg = { title: 'Advance not received', body: `The advance for trip ${doc.reference} was not received. The trip waits for payment again.`, data: tripData(updated, 'ADVANCE_VOIDED') };
+  await Promise.allSettled([
+    pushOwner(isDemo, String(doc.propertyId), msg),
+    pushUsers(isDemo, [updated.assignedDriverUserId].filter(Boolean), msg),
+    requestAdvance(String(doc.propertyId), isDemo, updated),
+  ]);
   return updated;
 }
 
@@ -982,6 +1136,24 @@ export async function adminMarkRefunded(isDemo: boolean, id: string, reference: 
     'No pending refund on this request.'
   );
   await audit(actor, 'payment.refund', 'CabRequest', id, { reference: ref, amount: updated.advanceAmount }, isDemo);
+  if (updated.guestPhone) await whatsapp(isDemo, updated.guestPhone, messages.refundGuestMessage(updated, ref)).catch(() => {});
+  return updated;
+}
+
+/** 2. A gateway payment that matched nothing (paid twice, old link, after a cancel): refunded in Razorpay, then closed here. */
+export async function adminRefundUnmatched(isDemo: boolean, id: string, paymentId: unknown, reference: unknown, actor: string) {
+  const pid = String(paymentId || '').trim();
+  const ref = String(reference || '').trim().slice(0, 100);
+  if (!pid) throw httpError(400, 'Payment id is required.');
+  if (!ref) throw httpError(400, 'Refund reference is required.');
+  const updated = await transition(
+    isDemo,
+    { _id: id, unmatchedPayments: { $elemMatch: { paymentId: pid, refundedAt: null } } },
+    { 'unmatchedPayments.$.refundedAt': new Date(), 'unmatchedPayments.$.refundReference': ref },
+    'No open unmatched payment with this id on this request.'
+  );
+  const amount = (updated.unmatchedPayments || []).find((u: any) => u.paymentId === pid)?.amount;
+  await audit(actor, 'payment.unmatched_refund', 'CabRequest', id, { paymentId: pid, reference: ref, amount }, isDemo);
   return updated;
 }
 
@@ -1211,7 +1383,9 @@ export const driverRatingFields = (u: any) => ({ rating: ratingOf(u).driverRatin
 // Driver account status changes (admin). Call after the status is saved.
 // ---------------------------------------------------------------------------
 export async function onDriverStatusChange(isDemo: boolean, driverUserId: string, status: string, actor: string) {
-  if (status === 'BLOCKED') await releaseDriverTrips(isDemo, driverUserId, actor);
+  // A driver who can't use the app any more (pending review or blocked) can't keep trips either
+  if (status === 'BLOCKED') await releaseDriverTrips(isDemo, driverUserId, actor, 'Your StayRide driver account was blocked. Contact StayRide support.');
+  if (status === 'PENDING_APPROVAL') await releaseDriverTrips(isDemo, driverUserId, actor, 'Your StayRide driver account is under review again. Your upcoming trips were given back to StayRide.');
   if (status === 'ACTIVE') {
     await pushUsers(isDemo, [driverUserId], { title: 'You are approved', body: 'Your StayRide driver account is active. You can now quote on trips.', data: { type: 'DRIVER_APPROVED' } });
   }
@@ -1223,7 +1397,7 @@ export async function onDriverStatusChange(isDemo: boolean, driverUserId: string
  *  - advance not paid: assignment and fare cleared, the request reopens for quotes;
  *  - advance paid: driver cleared, needsReassignment=true; admin assigns a new driver at the locked fare.
  */
-export async function releaseDriverTrips(isDemo: boolean, driverUserId: string, actor: string) {
+export async function releaseDriverTrips(isDemo: boolean, driverUserId: string, actor: string, notice: string | null = null) {
   const Cab = cabModel(isDemo);
   const id = String(driverUserId);
   const noDriver = { assignedDriverUserId: null, assignedDriverName: '', assignedDriverPhone: '', vehicleDetails: { model: '', plate: '' } };
@@ -1253,6 +1427,9 @@ export async function releaseDriverTrips(isDemo: boolean, driverUserId: string, 
           advanceAmount: 0,
           remainingCashAmount: 0,
           financialSnapshot: null,
+          advanceDueAt: null,
+          paymentLinkId: '',
+          paymentLinkUrl: '',
         },
         $addToSet: { previousDriverUserIds: id },
       },
@@ -1269,7 +1446,7 @@ export async function releaseDriverTrips(isDemo: boolean, driverUserId: string, 
     );
     released.push(...(await Cab.find({ _id: { $in: paid.map((d) => d._id) }, needsReassignment: true }).lean()));
   }
-  await pushUsers(isDemo, [id], { title: 'Account blocked', body: 'Your StayRide driver account was blocked. Contact StayRide support.', data: { type: 'DRIVER_BLOCKED' } });
+  if (notice) await pushUsers(isDemo, [id], { title: 'Driver account update', body: notice, data: { type: 'DRIVER_BLOCKED' } });
   if (!released.length) return;
   await audit(actor, 'driver.trips_released', 'User', id, { references: released.map((d) => d.reference) }, isDemo);
   await Promise.all(released.map((d) => pushOwner(isDemo, String(d.propertyId), removedMsg(d))));

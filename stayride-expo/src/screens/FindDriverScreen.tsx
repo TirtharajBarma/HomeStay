@@ -1,29 +1,23 @@
 import React, { useEffect, useState, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
-  Modal,
-  Alert,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, Modal, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useStayRide } from '../data/store';
 import { api } from '../data/api';
 import { Header } from '../components/Header';
 import { FeatureLocked } from '../components/FeatureLocked';
-import { Pill } from '../components/Pill';
 import { PlatformSelect } from '../components/PlatformSelect';
-import { Colors } from '../theme/colors';
+import { Colors, Radii, Shadows } from '../theme/colors';
 import { FormScroll } from '../components/FormScroll';
 import { vehicleOptions, vehicleLabel } from '../utils/vehicle';
 import { RangeCalendar } from '../components/RangeCalendar';
+import { LocationPicker } from '../components/LocationPicker';
 import { ownFleetFeeFor } from '../data/platformConfig';
 import { Driver, Guest, VehicleType } from '../types';
+
+type IconName = keyof typeof Ionicons.glyphMap;
 
 // "hh:mm AM" on a local-midnight day -> epoch ms
 // ponytail: uses device timezone; assumes the device is on IST like the server's check
@@ -37,9 +31,26 @@ const atTime = (dayMs: number, time: string) => {
 };
 
 const isFuture = (ms: number) => ms > Date.now();
+const inr = (n: number) => `₹${n.toLocaleString('en-IN')}`;
+const MANUAL = '__manual__';
+const MAX_STOPS = 6;
+
+const Section: React.FC<{ icon: IconName; title: string; right?: React.ReactNode; children: React.ReactNode }> = ({ icon, title, right, children }) => (
+  <View style={styles.card}>
+    <View style={styles.cardHead}>
+      <View style={styles.cardIcon}>
+        <Ionicons name={icon} size={16} color={Colors.brandPrimaryDark} />
+      </View>
+      <Text style={styles.cardTitle}>{title}</Text>
+      {right}
+    </View>
+    {children}
+  </View>
+);
 
 export const FindDriverScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
+  const insets = useSafeAreaInsets();
   const { homestay, drivers, guests, bookings, trips, bookDriver, createTrip, features, config } = useStayRide();
   // Pickup times, booking window, presets and vehicle classes are the admin's settings (from the server)
   const timeOptions = config.pickupTimes.map((t) => ({ label: t, value: t, icon: 'time-outline' as const }));
@@ -47,24 +58,26 @@ export const FindDriverScreen: React.FC = () => {
   useEffect(() => () => api.clearIdempotencyKeys('/trips'), []);
   const platformLocked = features?.platformDispatch === false;
 
-  // Mode: Nearby Mountain Pool vs My Private Fleet
+  // StayRide drivers (quotes) vs the owner's own fleet (direct assign)
   const [bookingMode, setBookingMode] = useState<'NEARBY' | 'MY_DRIVERS'>('NEARBY');
 
   // Pickup is the homestay as saved on the backend; the owner can override it with free text
   const homestayTitle = homestay.name || homestay.location || 'My Homestay';
   const homestayPickup = [homestay.name, homestay.location].filter(Boolean).join(', ') || homestayTitle;
 
-  const [panel, setPanel] = useState<'INPUT' | 'SEARCHING' | 'RESULTS'>('INPUT');
   const [customPickup, setCustomPickup] = useState('');
+  const [editPickup, setEditPickup] = useState(false);
   const pickup = customPickup.trim() || homestayPickup;
+  // Map pin for a pickup away from the homestay (sent with the trip so the driver can navigate)
+  const [pickupPin, setPickupPin] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [pickupMapVisible, setPickupMapVisible] = useState(false);
+  const pinFields = customPickup.trim() && pickupPin ? { pickupLat: pickupPin.latitude, pickupLng: pickupPin.longitude } : {};
 
   // Multi-stop destination list (starts empty: no pre-filled places)
   const [destinations, setDestinations] = useState<string[]>(['']);
 
   // Schedule & Vehicle
-  const [selectedTime, setSelectedTime] = useState(() =>
-    config.pickupTimes.includes('09:00 AM') ? '09:00 AM' : config.pickupTimes[0]
-  );
+  const [selectedTime, setSelectedTime] = useState(() => (config.pickupTimes.includes('09:00 AM') ? '09:00 AM' : config.pickupTimes[0]));
   // Pickup day (local midnight); defaults to tomorrow
   const [pickupDate, setPickupDate] = useState(() => {
     const d = new Date();
@@ -77,20 +90,38 @@ export const FindDriverScreen: React.FC = () => {
   // Fare the owner agreed with their own driver; StayRide's own-fleet fee is taken from it as the advance
   const [ownFare, setOwnFare] = useState('');
   const [passengers, setPassengers] = useState(2);
+  const [fleetDriverId, setFleetDriverId] = useState<Driver['id'] | null>(null);
+  const fleetDriver = drivers.find((d) => d.id === fleetDriverId) || null;
+
+  // Seats of the vehicle that will actually go: the chosen own driver's, else the requested class
+  const seatsFor = (type?: string | null) => vehicleOptions().find((v) => v.value === type)?.seats || 4;
+  const maxSeats = bookingMode === 'MY_DRIVERS' && fleetDriver ? seatsFor(fleetDriver.vehicleType) : seatsFor(vehicleType);
+  const passengerOptions = Array.from({ length: maxSeats }, (_, i) => ({
+    label: `${i + 1} ${i === 0 ? 'passenger' : 'passengers'}`,
+    value: String(i + 1),
+    icon: 'people-outline' as const,
+  }));
 
   // Passenger selection
   // Default passenger: a currently checked-in guest, otherwise nobody
-  const [selectedGuest, setSelectedGuest] = useState<Guest | null>(
-    () =>
-      guests.find((g) =>
-        bookings.some((b) => b.status === 'CHECKED_IN' && (b.guestId === g.id || b.phone === g.phone))
-      ) || null
-  );
+  const checkedIn = (g: Guest) => bookings.some((b) => b.status === 'CHECKED_IN' && (b.guestId === g.id || b.phone === g.phone));
+  const [selectedGuest, setSelectedGuest] = useState<Guest | null>(() => guests.find(checkedIn) || null);
   const [customGuestName, setCustomGuestName] = useState('');
   const [customGuestPhone, setCustomGuestPhone] = useState('');
-  const [isCustomPassenger, setIsCustomPassenger] = useState(false);
+  const [isCustomPassenger, setIsCustomPassenger] = useState(() => guests.length === 0);
+  const guestOptions = [
+    ...[...guests]
+      .sort((a, b) => Number(checkedIn(b)) - Number(checkedIn(a)))
+      .map((g) => ({
+        label: g.name,
+        value: String(g.id),
+        subLabel: `${checkedIn(g) ? 'Staying now · ' : ''}${g.phone}`,
+        icon: (checkedIn(g) ? 'bed' : 'person-outline') as IconName,
+      })),
+    { label: 'Someone else', value: MANUAL, subLabel: 'Type the name and number', icon: 'create-outline' as IconName },
+  ];
 
-  // Driver modals
+  // Success modals
   const [selectedDriver, setSelectedDriver] = useState<Driver | null>(null);
   const [broadcastSuccessModalVisible, setBroadcastSuccessModalVisible] = useState(false);
   const [bookedSuccessModalVisible, setBookedSuccessModalVisible] = useState(false);
@@ -111,8 +142,8 @@ export const FindDriverScreen: React.FC = () => {
 
   // Multi-stop handlers
   const handleAddDestination = () => {
-    if (destinations.length >= 6) {
-      Alert.alert('Limit Reached', 'You can add up to 6 mountain stop destinations.');
+    if (destinations.length >= MAX_STOPS) {
+      Alert.alert('Limit reached', `You can add up to ${MAX_STOPS} stops.`);
       return;
     }
     setDestinations([...destinations, '']);
@@ -129,17 +160,17 @@ export const FindDriverScreen: React.FC = () => {
       setDestinations(['']);
       return;
     }
-    const updated = destinations.filter((_, i) => i !== idx);
-    setDestinations(updated);
+    setDestinations(destinations.filter((_, i) => i !== idx));
   };
 
   const handleQuickAddPreset = (dest: string) => {
+    if (destinations.includes(dest)) return;
     const emptyIdx = destinations.findIndex((d) => !d.trim());
     if (emptyIdx !== -1) {
       handleUpdateDestination(emptyIdx, dest);
     } else {
-      if (destinations.length >= 6) {
-        Alert.alert('Limit Reached', 'You can add up to 6 mountain stop destinations.');
+      if (destinations.length >= MAX_STOPS) {
+        Alert.alert('Limit reached', `You can add up to ${MAX_STOPS} stops.`);
         return;
       }
       setDestinations([...destinations, dest]);
@@ -149,15 +180,9 @@ export const FindDriverScreen: React.FC = () => {
   // Passenger data resolver
   const getPassengerInfo = () => {
     if (isCustomPassenger || !selectedGuest) {
-      return {
-        name: customGuestName.trim(),
-        phone: customGuestPhone.trim(),
-      };
+      return { name: customGuestName.trim(), phone: customGuestPhone.trim() };
     }
-    return {
-      name: selectedGuest.name,
-      phone: selectedGuest.phone,
-    };
+    return { name: selectedGuest.name, phone: selectedGuest.phone };
   };
 
   const cleanDestinationSummary = () => {
@@ -182,7 +207,7 @@ export const FindDriverScreen: React.FC = () => {
     if (submittingRef.current) return false;
     const error = validateRequest();
     if (error) {
-      Alert.alert('Check Trip Details', error);
+      Alert.alert('Check trip details', error);
       return false;
     }
     submittingRef.current = true;
@@ -200,11 +225,11 @@ export const FindDriverScreen: React.FC = () => {
       !duplicate ||
       (await new Promise<boolean>((resolve) =>
         Alert.alert(
-          'Possible Duplicate',
+          'Possible duplicate',
           'An open cab trip already exists for this guest on this date. Book another one anyway?',
           [
             { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-            { text: 'Book Anyway', onPress: () => resolve(true) },
+            { text: 'Book anyway', onPress: () => resolve(true) },
           ],
           { cancelable: true, onDismiss: () => resolve(false) }
         )
@@ -222,21 +247,20 @@ export const FindDriverScreen: React.FC = () => {
     setSubmitting(false);
   };
 
+  const formattedDestinations = () => destinations.filter((d) => d.trim()).map((addr, order) => ({ address: addr, order }));
+
   // Send to StayRide drivers/admin (platform dispatch); quotes arrive from the server
   const handleBroadcastToAll = async () => {
     if (!(await beginSubmit())) return;
     const passenger = getPassengerInfo();
-    const formattedDestinations = destinations
-      .filter((d) => d.trim())
-      .map((addr, order) => ({ address: addr, order }));
-
     try {
       const trip = await createTrip({
         guestName: passenger.name,
         phone: passenger.phone,
         pickup,
+        ...pinFields,
         destination: cleanDestinationSummary(),
-        destinations: formattedDestinations,
+        destinations: formattedDestinations(),
         date: pickupDate,
         time: selectedTime,
         passengers,
@@ -247,36 +271,38 @@ export const FindDriverScreen: React.FC = () => {
       setLastCreatedTrip(trip);
       setBroadcastSuccessModalVisible(true);
     } catch (err: any) {
-      Alert.alert('Broadcast Failed', err?.message || 'Could not broadcast request. Please try again.');
+      Alert.alert('Not sent', err?.message || 'Could not send the request. Please try again.');
     } finally {
       endSubmit();
     }
   };
 
-  // Direct assign to host's private driver (My Drivers)
+  // Direct assign to the owner's own driver
   const fareNum = Math.round(Number(ownFare));
   const ownFee = fareNum > 0 ? ownFleetFeeFor(config, fareNum) : 0;
 
-  const handleDirectAssignMyDriver = async (driver: Driver) => {
+  const handleDirectAssignMyDriver = async (driver: Driver | null) => {
+    if (!driver) {
+      Alert.alert('Choose a driver', 'Pick one of your drivers first.');
+      return;
+    }
     if (!(fareNum > 0)) {
       Alert.alert('Enter the fare', 'Type the fare you agreed with your driver. StayRide takes its fee from it as the guest advance.');
       return;
     }
     if (!(await beginSubmit())) return;
     const passenger = getPassengerInfo();
-    const formattedDestinations = destinations
-      .filter((d) => d.trim())
-      .map((addr, order) => ({ address: addr, order }));
     try {
       const trip = await bookDriver({
         guestName: passenger.name,
         phone: passenger.phone,
         pickup,
+        ...pinFields,
         destination: cleanDestinationSummary(),
-        destinations: formattedDestinations,
+        destinations: formattedDestinations(),
         date: pickupDate,
         time: selectedTime,
-        passengers,
+        passengers: Math.min(passengers, seatsFor(driver.vehicleType)),
         vehicleType: driver.vehicleType || vehicleType,
         driverId: driver.id,
         fare: fareNum,
@@ -285,321 +311,365 @@ export const FindDriverScreen: React.FC = () => {
       setLastCreatedTrip(trip);
       setBookedSuccessModalVisible(true);
     } catch (err: any) {
-      Alert.alert('Assignment Failed', err?.message || 'Could not assign private driver.');
+      Alert.alert('Not assigned', err?.message || 'Could not assign your driver.');
     } finally {
       endSubmit();
     }
   };
 
+  const pickupIsCustom = Boolean(customPickup.trim());
+  const usedPresets = new Set(destinations.map((d) => d.trim()));
+  const nearby = bookingMode === 'NEARBY';
+
+  const tab = (mode: 'NEARBY' | 'MY_DRIVERS', icon: IconName, label: string) => {
+    const active = bookingMode === mode;
+    return (
+      <TouchableOpacity
+        style={[styles.tab, active && styles.tabActive]}
+        onPress={() => setBookingMode(mode)}
+        accessibilityRole="tab"
+        accessibilityState={{ selected: active }}
+      >
+        <Ionicons name={icon} size={16} color={active ? Colors.white : Colors.textSecondary} />
+        <Text style={[styles.tabText, active && styles.tabTextActive]}>{label}</Text>
+      </TouchableOpacity>
+    );
+  };
+
   return (
     <View style={styles.container}>
-      <Header title="Book a Cab" onBack={() => navigation.goBack()} />
+      <Header title="Book a cab" onBack={() => navigation.goBack()} />
 
-      {/* Top Mode Switcher */}
-      <View style={styles.modeToggleContainer}>
-        <TouchableOpacity
-          style={[styles.modeToggleBtn, bookingMode === 'NEARBY' && styles.modeToggleBtnActive]}
-          onPress={() => {
-            setBookingMode('NEARBY');
-            setPanel('INPUT');
-          }}
-        >
-          <Ionicons
-            name="globe-outline"
-            size={16}
-            color={bookingMode === 'NEARBY' ? '#FFFFFF' : Colors.textSecondary}
-            style={{ marginRight: 6 }}
-          />
-          <Text style={[styles.modeToggleText, bookingMode === 'NEARBY' && styles.modeToggleTextActive]}>
-            StayRide Drivers
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.modeToggleBtn, bookingMode === 'MY_DRIVERS' && styles.modeToggleBtnActive]}
-          onPress={() => {
-            setBookingMode('MY_DRIVERS');
-            setPanel('INPUT');
-          }}
-        >
-          <Ionicons
-            name="car"
-            size={16}
-            color={bookingMode === 'MY_DRIVERS' ? '#FFFFFF' : Colors.textSecondary}
-            style={{ marginRight: 6 }}
-          />
-          <Text style={[styles.modeToggleText, bookingMode === 'MY_DRIVERS' && styles.modeToggleTextActive]}>
-            My Fleet ({drivers.length})
-          </Text>
-        </TouchableOpacity>
+      <View style={styles.tabs}>
+        {tab('NEARBY', 'navigate', 'StayRide drivers')}
+        {tab('MY_DRIVERS', 'people', `My fleet · ${drivers.length}`)}
       </View>
 
-      {/* PANEL 1: INPUT FORM */}
-      {panel === 'INPUT' && (
-        <FormScroll contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>
-              {bookingMode === 'NEARBY' ? 'Mountain Driver Network' : 'Homestay Private Fleet'}
-            </Text>
-            <Text style={styles.cardSubtitle}>
-              {bookingMode === 'NEARBY'
-                ? 'Send your itinerary to StayRide. Driver quotes will appear in Cabs for you to confirm.'
-                : 'Directly dispatch one of your registered homestay drivers without bidding.'}
-            </Text>
+      <FormScroll contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+        <View style={styles.intro}>
+          <Ionicons name={nearby ? 'chatbubbles-outline' : 'flash-outline'} size={16} color={Colors.brandPrimaryDark} />
+          <Text style={styles.introText}>
+            {nearby
+              ? 'Nearby drivers with the right seats quote a fare. Quotes appear in Cabs for you to accept or counter.'
+              : 'Assign one of your own drivers straight away at the fare you agreed. No quotes needed.'}
+          </Text>
+        </View>
 
-            {/* Pickup Point */}
-            <Text style={styles.label}>1. Start / Pickup Location</Text>
-            <View style={styles.stopInputRow}>
-              <View style={styles.stopBadge}>
-                <Ionicons name="home-outline" size={14} color={Colors.brandPrimaryDark} />
-              </View>
-              <TextInput
-                style={styles.stopTextInput}
-                placeholder={homestayPickup}
-                value={customPickup}
-                onChangeText={setCustomPickup}
-                placeholderTextColor={Colors.textSecondary}
-              />
+        {/* Route */}
+        <Section
+          icon="map"
+          title="Route"
+          right={
+            <TouchableOpacity style={styles.addStop} onPress={handleAddDestination} accessibilityRole="button" accessibilityLabel="Add a stop">
+              <Ionicons name="add" size={14} color={Colors.brandPrimaryDark} />
+              <Text style={styles.addStopText}>Stop</Text>
+            </TouchableOpacity>
+          }
+        >
+          {/* Pickup */}
+          <View style={styles.routeRow}>
+            <View style={styles.rail}>
+              <View style={[styles.dot, { backgroundColor: Colors.statusGreen }]} />
+              <View style={styles.railLine} />
             </View>
-            <Text style={styles.roundTripSubtitle}>
-              Pickup is your homestay. Type here only if the guest is picked up elsewhere.
-            </Text>
-
-            {/* Multi-Destination Builder */}
-            <View style={styles.destHeaderRow}>
-              <Text style={styles.label}>2. Drop Destinations & Sightseeing Stops</Text>
-              <TouchableOpacity style={styles.addStopBtn} onPress={handleAddDestination}>
-                <Ionicons name="add-circle" size={16} color={Colors.brandPrimaryDark} style={{ marginRight: 4 }} />
-                <Text style={styles.addStopText}>+ Add Stop</Text>
-              </TouchableOpacity>
-            </View>
-
-            {destinations.map((dest, idx) => (
-              <View key={idx} style={styles.stopInputRow}>
-                <View style={styles.stopBadge}>
-                  <Text style={styles.stopBadgeText}>{idx === 0 ? 'Drop' : `Stop ${idx + 1}`}</Text>
-                </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.routeLabel}>Pickup</Text>
+              {editPickup || pickupIsCustom ? (
                 <TextInput
-                  style={styles.stopTextInput}
-                  placeholder={idx === 0 ? 'Where to? Type a place or tap one below' : 'Next stop'}
-                  value={dest}
-                  onChangeText={(text) => handleUpdateDestination(idx, text)}
-                  placeholderTextColor={Colors.textSecondary}
+                  style={styles.input}
+                  placeholder={homestayPickup}
+                  value={customPickup}
+                  autoFocus={editPickup && !pickupIsCustom}
+                  onChangeText={(t) => {
+                    setCustomPickup(t);
+                    if (!t.trim()) setPickupPin(null);
+                  }}
+                  onBlur={() => !customPickup.trim() && setEditPickup(false)}
+                  placeholderTextColor={Colors.textTertiary}
                 />
-                {destinations.length > 1 && (
+              ) : (
+                <TouchableOpacity onPress={() => setEditPickup(true)} accessibilityRole="button" accessibilityLabel="Change pickup">
+                  <Text style={styles.routeValue} numberOfLines={2}>
+                    {homestayPickup}
+                  </Text>
+                  <Text style={styles.routeHint}>Your homestay · tap to change</Text>
+                </TouchableOpacity>
+              )}
+              {pickupIsCustom ? (
+                <View style={styles.pickupActions}>
+                  <Text style={styles.routeHint}>{pickupPin ? 'Pinned on map · the driver gets directions' : 'Pin it so the driver can navigate'}</Text>
                   <TouchableOpacity
-                    style={styles.removeStopBtn}
-                    onPress={() => handleRemoveDestination(idx)}
+                    onPress={() => {
+                      setCustomPickup('');
+                      setPickupPin(null);
+                      setEditPickup(false);
+                    }}
+                    hitSlop={8}
                   >
-                    <Ionicons name="close-circle" size={20} color={Colors.statusRed} />
+                    <Text style={styles.linkText}>Use homestay</Text>
                   </TouchableOpacity>
+                </View>
+              ) : null}
+            </View>
+            <TouchableOpacity style={styles.iconBtn} onPress={() => setPickupMapVisible(true)} accessibilityRole="button" accessibilityLabel="Pick pickup on map">
+              <Ionicons name="map-outline" size={18} color={Colors.brandPrimaryDark} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Drops and stops */}
+          {destinations.map((dest, idx) => {
+            const last = idx === destinations.length - 1;
+            return (
+              <View key={idx} style={styles.routeRow}>
+                <View style={styles.rail}>
+                  <View style={[styles.dot, { backgroundColor: last ? Colors.statusRed : Colors.brandPrimary }]} />
+                  {!last && <View style={styles.railLine} />}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.routeLabel}>{idx === 0 ? (destinations.length > 1 ? 'First stop' : 'Drop') : last ? 'Final drop' : `Stop ${idx + 1}`}</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder={idx === 0 ? 'Where to? Type or pick a place below' : 'Next place'}
+                    value={dest}
+                    onChangeText={(text) => handleUpdateDestination(idx, text)}
+                    placeholderTextColor={Colors.textTertiary}
+                    accessibilityLabel={idx === 0 ? 'Drop location' : `Stop ${idx + 1}`}
+                  />
+                </View>
+                {destinations.length > 1 || dest ? (
+                  <TouchableOpacity style={styles.iconBtn} onPress={() => handleRemoveDestination(idx)} accessibilityRole="button" accessibilityLabel="Remove stop">
+                    <Ionicons name="close" size={18} color={Colors.statusRed} />
+                  </TouchableOpacity>
+                ) : (
+                  <View style={styles.iconBtnSpacer} />
                 )}
               </View>
-            ))}
+            );
+          })}
 
-            {/* Quick Destination Pills */}
-            <Text style={styles.quickPresetTitle}>Quick Sightseeing Presets:</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.presetScroll}>
-              {config.sightseeingPresets.map((dest, i) => (
-                <TouchableOpacity
-                  key={i}
-                  style={styles.presetChip}
-                  onPress={() => handleQuickAddPreset(dest)}
-                >
-                  <Ionicons name="location-sharp" size={12} color={Colors.brandPrimary} style={{ marginRight: 4 }} />
-                  <Text style={styles.presetChipText}>{dest}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
+          {config.sightseeingPresets.length > 0 ? (
+            <>
+              <Text style={styles.presetTitle}>Popular places</Text>
+              <View style={styles.presetWrap}>
+                {config.sightseeingPresets.map((dest) => {
+                  const used = usedPresets.has(dest);
+                  return (
+                    <TouchableOpacity
+                      key={dest}
+                      style={[styles.preset, used && styles.presetUsed]}
+                      onPress={() => handleQuickAddPreset(dest)}
+                      disabled={used}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Add ${dest}`}
+                    >
+                      <Ionicons name={used ? 'checkmark' : 'add'} size={12} color={used ? Colors.white : Colors.brandPrimaryDark} />
+                      <Text style={[styles.presetText, used && { color: Colors.white }]}>{dest}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </>
+          ) : null}
+        </Section>
 
-            {/* Start Ride Date */}
-            <Text style={styles.label}>3. Start Date</Text>
-            <TouchableOpacity style={styles.datePickBtn} onPress={() => setDatePickerVisible(true)}>
-              <Ionicons name="calendar-outline" size={18} color={Colors.brandPrimaryDark} style={{ marginRight: 8 }} />
-              <Text style={styles.datePickText}>{fmtDay(pickupDate)}</Text>
-              <Ionicons name="chevron-down" size={16} color={Colors.textSecondary} />
-            </TouchableOpacity>
+        {/* When */}
+        <Section icon="calendar" title="When">
+          <Text style={styles.fieldLabel}>Pickup date</Text>
+          <TouchableOpacity style={styles.selectBtn} onPress={() => setDatePickerVisible(true)} accessibilityRole="button" accessibilityLabel="Choose pickup date">
+            <Ionicons name="calendar-outline" size={18} color={Colors.brandPrimaryDark} />
+            <Text style={styles.selectText}>{fmtDay(pickupDate)}</Text>
+            <Ionicons name="chevron-down" size={16} color={Colors.textSecondary} />
+          </TouchableOpacity>
+          <PlatformSelect label="Pickup time" value={selectedTime} options={timeOptions} onSelect={setSelectedTime} />
+        </Section>
 
+        {/* Guest */}
+        <Section icon="person" title="Guest">
+          {guests.length > 0 ? (
             <PlatformSelect
-              label="Pickup Time"
-              value={selectedTime}
-              options={timeOptions}
-              onSelect={setSelectedTime}
+              label="Who is travelling"
+              value={isCustomPassenger ? MANUAL : selectedGuest ? String(selectedGuest.id) : ''}
+              placeholder="Choose a guest"
+              options={guestOptions}
+              onSelect={(v) => {
+                if (v === MANUAL) return setIsCustomPassenger(true);
+                setIsCustomPassenger(false);
+                setSelectedGuest(guests.find((g) => String(g.id) === v) || null);
+              }}
             />
-
-            {/* Vehicle Type */}
-            <Text style={styles.label}>4. Vehicle Preference & Seats</Text>
-            <View style={styles.vehicleTypeGrid}>
-              {vehicleOptions().map((v) => {
-                const active = vehicleType === v.value;
-                return (
-                  <TouchableOpacity
-                    key={v.value}
-                    style={[styles.vehicleTypeCard, active && styles.vehicleTypeCardActive]}
-                    onPress={() => setVehicleType(v.value)}
-                  >
-                    <Ionicons
-                      name="car-outline"
-                      size={18}
-                      color={active ? Colors.brandPrimaryDark : Colors.textSecondary}
-                    />
-                    <Text style={[styles.vehicleTypeText, active && styles.vehicleTypeTextActive]}>
-                      {v.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
+          ) : null}
+          {isCustomPassenger || guests.length === 0 ? (
+            <View style={styles.inlineFields}>
+              <TextInput
+                style={[styles.input, { flex: 1 }]}
+                placeholder="Guest name"
+                value={customGuestName}
+                onChangeText={setCustomGuestName}
+                placeholderTextColor={Colors.textTertiary}
+                accessibilityLabel="Guest name"
+              />
+              <TextInput
+                style={[styles.input, { flex: 1 }]}
+                placeholder="WhatsApp number"
+                value={customGuestPhone}
+                onChangeText={setCustomGuestPhone}
+                keyboardType="phone-pad"
+                placeholderTextColor={Colors.textTertiary}
+                accessibilityLabel="Guest WhatsApp number"
+              />
             </View>
+          ) : null}
+          <PlatformSelect
+            label="Passengers"
+            value={String(Math.min(passengers, maxSeats))}
+            options={passengerOptions}
+            onSelect={(v) => setPassengers(Number(v))}
+          />
+        </Section>
 
-            {/* Passenger Assignment */}
-            <Text style={styles.label}>5. Passenger (Guest)</Text>
-            <View style={styles.passengerToggleRow}>
-              <TouchableOpacity
-                style={[styles.passOptionBtn, !isCustomPassenger && styles.passOptionBtnActive]}
-                onPress={() => setIsCustomPassenger(false)}
-              >
-                <Text style={[styles.passOptionText, !isCustomPassenger && styles.passOptionTextActive]}>
-                  From Homestay Guests
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.passOptionBtn, isCustomPassenger && styles.passOptionBtnActive]}
-                onPress={() => setIsCustomPassenger(true)}
-              >
-                <Text style={[styles.passOptionText, isCustomPassenger && styles.passOptionTextActive]}>
-                  Manual Entry
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {!isCustomPassenger ? (
-              guests.length === 0 ? (
-                <View style={styles.emptyGuestBox}>
-                  <Text style={styles.emptyGuestText}>No registered guests found in your homestay database.</Text>
-                  <TouchableOpacity onPress={() => setIsCustomPassenger(true)}>
-                    <Text style={styles.switchManualText}>Enter passenger details manually ➔</Text>
+        {nearby ? (
+          <Section icon="car" title="Vehicle">
+            <PlatformSelect
+              label="Seats needed"
+              value={vehicleType}
+              options={vehicleOptions().map((v) => ({ label: v.label, value: v.value, icon: 'car-outline' as const, subLabel: `Usually around ${inr(v.estFare)}` }))}
+              onSelect={(v) => {
+                setVehicleType(v as VehicleType);
+                setPassengers((p) => Math.min(p, seatsFor(v)));
+              }}
+            />
+            <Text style={styles.hint}>Only drivers with this many seats or more get your request.</Text>
+          </Section>
+        ) : (
+          <>
+            <Section
+              icon="people"
+              title="Your driver"
+              right={
+                <TouchableOpacity onPress={() => navigation.navigate('MyDrivers')} hitSlop={8}>
+                  <Text style={styles.linkText}>Manage</Text>
+                </TouchableOpacity>
+              }
+            >
+              {drivers.length === 0 ? (
+                <View style={styles.empty}>
+                  <Ionicons name="car-outline" size={32} color={Colors.textTertiary} />
+                  <Text style={styles.emptyTitle}>No drivers in your fleet yet</Text>
+                  <Text style={styles.emptyText}>Add the drivers you work with, or switch to StayRide drivers.</Text>
+                  <TouchableOpacity style={styles.emptyBtn} onPress={() => navigation.navigate('MyDrivers')} accessibilityRole="button">
+                    <Text style={styles.emptyBtnText}>Add my driver</Text>
                   </TouchableOpacity>
                 </View>
               ) : (
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginVertical: 6 }}>
-                  {guests.map((g) => {
-                    const active = selectedGuest?.id === g.id;
-                    return (
-                      <TouchableOpacity
-                        key={g.id}
-                        style={[styles.guestChip, active && styles.guestChipActive]}
-                        onPress={() => setSelectedGuest(g)}
-                      >
-                        <Text style={[styles.guestChipName, active && styles.guestChipNameActive]}>
-                          {g.name}
+                drivers.map((drv) => {
+                  const on = fleetDriverId === drv.id;
+                  return (
+                    <TouchableOpacity
+                      key={drv.id}
+                      style={[styles.driverRow, on && styles.driverRowOn]}
+                      onPress={() => {
+                        setFleetDriverId(drv.id);
+                        setPassengers((p) => Math.min(p, seatsFor(drv.vehicleType)));
+                      }}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected: on }}
+                    >
+                      <View style={styles.driverAvatar}>
+                        <Text style={styles.driverInitial}>{(drv.name || 'D').charAt(0).toUpperCase()}</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.driverName}>{drv.name}</Text>
+                        <Text style={styles.driverMeta} numberOfLines={1}>
+                          {[drv.vehicle, vehicleLabel(drv.vehicleType)].filter(Boolean).join(' · ')}
                         </Text>
-                        <Text style={styles.guestChipPhone}>{g.phone}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-              )
-            ) : (
-              <View style={styles.customPassInputs}>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="Passenger Full Name"
-                  value={customGuestName}
-                  onChangeText={setCustomGuestName}
-                  placeholderTextColor={Colors.textSecondary}
-                />
-                <TextInput
-                  style={[styles.textInput, { marginTop: 8 }]}
-                  placeholder="WhatsApp Mobile Number (e.g. 9832012345)"
-                  value={customGuestPhone}
-                  onChangeText={setCustomGuestPhone}
-                  keyboardType="phone-pad"
-                  placeholderTextColor={Colors.textSecondary}
-                />
-              </View>
-            )}
+                        <Text style={[styles.driverStatus, { color: drv.available ? Colors.statusGreen : Colors.statusOrange }]}>
+                          {drv.available ? 'Available' : 'On a trip'}
+                        </Text>
+                      </View>
+                      <Ionicons name={on ? 'radio-button-on' : 'radio-button-off'} size={22} color={on ? Colors.brandPrimary : Colors.textTertiary} />
+                    </TouchableOpacity>
+                  );
+                })
+              )}
+            </Section>
 
-            {/* Main Action Button */}
-            {bookingMode === 'NEARBY' ? (
-              platformLocked ? (
-                <FeatureLocked feature="platformDispatch" title="Send to StayRide drivers" />
-              ) : (
-                <TouchableOpacity
-                  style={[styles.searchBtn, submitting && { opacity: 0.6 }]}
-                  onPress={handleBroadcastToAll}
-                  disabled={submitting}
-                >
-                  <Ionicons name="paper-plane" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
-                  <Text style={styles.searchBtnText}>{submitting ? 'Sending…' : 'Send to StayRide drivers'}</Text>
-                </TouchableOpacity>
-              )
-            ) : (
-              <View style={{ marginTop: 20 }}>
-                <Text style={styles.label}>Fare agreed with your driver (₹)</Text>
+            <Section icon="cash" title="Fare">
+              <Text style={styles.fieldLabel}>Fare agreed with your driver</Text>
+              <View style={styles.fareInput}>
+                <Text style={styles.rupee}>₹</Text>
                 <TextInput
-                  style={styles.textInput}
-                  placeholder="e.g. 3000"
+                  style={styles.fareText}
+                  placeholder="3000"
                   value={ownFare}
                   onChangeText={(t) => setOwnFare(t.replace(/[^0-9]/g, ''))}
                   keyboardType="number-pad"
-                  placeholderTextColor={Colors.textSecondary}
+                  placeholderTextColor={Colors.textTertiary}
+                  accessibilityLabel="Fare in rupees"
                 />
-                <Text style={styles.roundTripSubtitle}>
-                  {fareNum > 0
-                    ? `Guest pays StayRide ₹${ownFee.toLocaleString('en-IN')} advance · ₹${(fareNum - ownFee).toLocaleString('en-IN')} cash to your driver`
-                    : `StayRide fee: ${config.ownFleetFeePercent}% of the fare (min ₹${config.ownFleetMinFee}), paid by the guest as the advance.`}
-                </Text>
-                <Text style={[styles.subheadText, { marginTop: 14 }]}>Select Driver from Your Fleet ({drivers.length}):</Text>
-                {drivers.length === 0 ? (
-                  <View style={styles.emptyFleetCard}>
-                    <Ionicons name="car-outline" size={36} color="#94A3B8" />
-                    <Text style={styles.emptyFleetTitle}>No Private Drivers Added Yet</Text>
-                    <Text style={styles.emptyFleetDesc}>
-                      {`You haven't added private drivers to your homestay fleet yet. Switch to "StayRide Drivers" or add your driver now.`}
-                    </Text>
-                    <TouchableOpacity
-                      style={styles.addDriverFleetBtn}
-                      onPress={() => navigation.navigate('MyDrivers')}
-                    >
-                      <Text style={styles.addDriverFleetBtnText}>+ Add My Driver</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  drivers.map((drv) => (
-                    <View key={drv.id} style={styles.privateDriverCard}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.privateDriverName}>{drv.name}</Text>
-                        <Text style={styles.privateDriverVehicle}>
-                          {drv.vehicle} · {vehicleLabel(drv.vehicleType)} · {drv.phone}
-                        </Text>
-                        <Pill
-                          type="driver"
-                          value={drv.available ? 'AVAILABLE' : 'ON TRIP'}
-                        />
-                      </View>
-                      <TouchableOpacity
-                        style={styles.directAssignBtn}
-                        onPress={() => handleDirectAssignMyDriver(drv)}
-                        disabled={submitting}
-                      >
-                        <Text style={styles.directAssignBtnText}>
-                          {submitting ? 'Assigning...' : 'Assign & Book'}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  ))
-                )}
               </View>
-            )}
-          </View>
-        </FormScroll>
-      )}
+              {fareNum > 0 ? (
+                <View style={styles.split}>
+                  <View style={styles.splitRow}>
+                    <Text style={styles.splitLabel}>Guest pays StayRide now (advance)</Text>
+                    <Text style={styles.splitValue}>{inr(ownFee)}</Text>
+                  </View>
+                  <View style={styles.splitRow}>
+                    <Text style={styles.splitLabel}>Guest pays your driver in cash</Text>
+                    <Text style={styles.splitValue}>{inr(fareNum - ownFee)}</Text>
+                  </View>
+                </View>
+              ) : null}
+              <Text style={styles.hint}>
+                StayRide fee: {config.ownFleetFeePercent}% of the fare (min {inr(config.ownFleetMinFee)}), paid by the guest as the advance.
+              </Text>
+            </Section>
+          </>
+        )}
+      </FormScroll>
+
+      {/* Sticky action */}
+      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+        {nearby ? (
+          platformLocked ? (
+            <FeatureLocked feature="platformDispatch" title="Send to StayRide drivers" />
+          ) : (
+            <TouchableOpacity style={[styles.cta, submitting && { opacity: 0.6 }]} onPress={handleBroadcastToAll} disabled={submitting} accessibilityRole="button">
+              <Ionicons name="paper-plane" size={18} color={Colors.white} />
+              <Text style={styles.ctaText}>{submitting ? 'Sending…' : 'Get quotes from drivers'}</Text>
+            </TouchableOpacity>
+          )
+        ) : (
+          <TouchableOpacity
+            style={[styles.cta, (submitting || drivers.length === 0) && { opacity: 0.6 }]}
+            onPress={() => handleDirectAssignMyDriver(fleetDriver)}
+            disabled={submitting || drivers.length === 0}
+            accessibilityRole="button"
+          >
+            <Ionicons name="checkmark-circle" size={18} color={Colors.white} />
+            <Text style={styles.ctaText}>
+              {submitting ? 'Assigning…' : fleetDriver ? `Assign ${fleetDriver.name.split(' ')[0]}${fareNum > 0 ? ` · ${inr(fareNum)}` : ''}` : 'Choose a driver'}
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      <LocationPicker
+        visible={pickupMapVisible}
+        title="Pickup point"
+        initial={pickupPin || (homestay.latitude && homestay.longitude ? { latitude: homestay.latitude, longitude: homestay.longitude } : null)}
+        onConfirm={(loc) => {
+          setPickupPin({ latitude: loc.latitude, longitude: loc.longitude });
+          setCustomPickup(loc.address || `${loc.latitude.toFixed(5)}, ${loc.longitude.toFixed(5)}`);
+          setPickupMapVisible(false);
+        }}
+        onClose={() => setPickupMapVisible(false)}
+      />
 
       {/* Pickup date: a calendar limited to the admin's booking window */}
       <Modal visible={datePickerVisible} transparent animationType="fade" onRequestClose={() => setDatePickerVisible(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setDatePickerVisible(false)}>
           <TouchableOpacity activeOpacity={1} style={styles.modalCard}>
-            <Text style={styles.successTitle}>Pickup date</Text>
+            <Text style={styles.modalTitle}>Pickup date</Text>
             <RangeCalendar
               mode="single"
               checkIn={pickupDate}
@@ -614,70 +684,58 @@ export const FindDriverScreen: React.FC = () => {
         </TouchableOpacity>
       </Modal>
 
-      {/* MODAL 2: Broadcast / Quote Request Sent Modal */}
-      <Modal
-        visible={broadcastSuccessModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setBroadcastSuccessModalVisible(false)}
-      >
+      {/* Request sent */}
+      <Modal visible={broadcastSuccessModalVisible} transparent animationType="fade" onRequestClose={() => setBroadcastSuccessModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
-            <View style={styles.successIconCircle}>
-              <Ionicons name="paper-plane" size={32} color="#2563EB" />
+            <View style={[styles.successIcon, { backgroundColor: Colors.statusBlueBg }]}>
+              <Ionicons name="paper-plane" size={30} color={Colors.statusBlue} />
             </View>
-            <Text style={styles.successTitle}>Request sent to StayRide</Text>
-            <Text style={styles.successMessage}>
-              Request sent to StayRide. Driver quotes will appear here, under{' '}
-              <Text style={{ fontWeight: 'bold' }}>Cabs ➔ Requested</Text>.
+            <Text style={styles.modalTitle}>Request sent</Text>
+            <Text style={styles.modalText}>
+              {lastCreatedTrip?.ref ? `Trip ${lastCreatedTrip.ref}. ` : ''}Driver quotes will appear under <Text style={{ fontWeight: '700' }}>Cabs ➔ Requested</Text>.
             </Text>
-
             <TouchableOpacity
-              style={styles.doneBtnPrimary}
+              style={[styles.cta, { alignSelf: 'stretch' }]}
               onPress={() => {
                 setBroadcastSuccessModalVisible(false);
                 navigation.navigate('Cabs');
               }}
+              accessibilityRole="button"
             >
-              <Text style={styles.doneBtnPrimaryText}>View in Cabs Tab</Text>
+              <Text style={styles.ctaText}>View in Cabs</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
-      {/* MODAL 3: Private Driver Booked & WhatsApp Share Modal */}
-      <Modal
-        visible={bookedSuccessModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setBookedSuccessModalVisible(false)}
-      >
+      {/* Own driver assigned */}
+      <Modal visible={bookedSuccessModalVisible} transparent animationType="fade" onRequestClose={() => setBookedSuccessModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
-            <View style={[styles.successIconCircle, { backgroundColor: '#DCFCE7' }]}>
-              <Ionicons name="checkmark-circle" size={36} color="#16A34A" />
+            <View style={[styles.successIcon, { backgroundColor: Colors.statusGreenBg }]}>
+              <Ionicons name="checkmark-circle" size={34} color={Colors.statusGreen} />
             </View>
-            <Text style={[styles.successTitle, { color: '#16A34A' }]}>Driver assigned</Text>
-            <Text style={styles.successMessage}>
-              <Text style={{ fontWeight: 'bold' }}>{selectedDriver?.name}</Text> will drive {getPassengerInfo().name}.
-              {'\n\n'}
-              Route: {cleanDestinationSummary()}
+            <Text style={[styles.modalTitle, { color: Colors.statusGreen }]}>Driver assigned</Text>
+            <Text style={styles.modalText}>
+              <Text style={{ fontWeight: '700' }}>{selectedDriver?.name}</Text> will drive {getPassengerInfo().name}.{'\n'}
+              {cleanDestinationSummary()}
               {'\n'}
               {fmtDay(pickupDate)} at {selectedTime}
               {'\n\n'}
               {lastCreatedTrip?.status === 'CONFIRMED'
                 ? 'StayRide sent the trip details to your driver and the guest on WhatsApp.'
-                : `StayRide sent the guest a WhatsApp link to pay the ₹${(lastCreatedTrip?.advanceAmount ?? ownFee).toLocaleString('en-IN')} advance. Phone numbers are shared with your driver and the guest once it is paid.`}
+                : `StayRide sent the guest a WhatsApp link to pay the ${inr(lastCreatedTrip?.advanceAmount ?? ownFee)} advance. Phone numbers are shared with your driver and the guest once it is paid.`}
             </Text>
-
             <TouchableOpacity
-              style={styles.doneBtn}
+              style={[styles.cta, { alignSelf: 'stretch' }]}
               onPress={() => {
                 setBookedSuccessModalVisible(false);
                 navigation.navigate('Cabs');
               }}
+              accessibilityRole="button"
             >
-              <Text style={styles.doneBtnText}>Done</Text>
+              <Text style={styles.ctaText}>Done</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -687,648 +745,68 @@ export const FindDriverScreen: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.pageBackground,
-  },
-  modeToggleContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    padding: 6,
-    marginHorizontal: 14,
-    marginTop: 10,
-    marginBottom: 6,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.divider,
-  },
-  modeToggleBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  modeToggleBtnActive: {
-    backgroundColor: Colors.brandPrimary,
-  },
-  modeToggleText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: Colors.textSecondary,
-  },
-  modeToggleTextActive: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-  },
-  scrollContent: {
-    paddingHorizontal: 14,
-    paddingTop: 8,
-    paddingBottom: 48,
-  },
-  card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: Colors.divider,
-  },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: Colors.textPrimary,
-  },
-  cardSubtitle: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    marginTop: 4,
-    lineHeight: 18,
-    marginBottom: 12,
-  },
-  label: {
-    fontSize: 13,
-    fontWeight: 'bold',
-    color: Colors.textSecondary,
-    marginTop: 14,
-    marginBottom: 6,
-  },
-  destHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 14,
-    marginBottom: 4,
-  },
-  addStopBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.brandPrimaryLight,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  addStopText: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: Colors.brandPrimaryDark,
-  },
-  stopInputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  stopBadge: {
-    backgroundColor: '#F1F5F9',
-    paddingHorizontal: 8,
-    paddingVertical: 9,
-    borderRadius: 8,
-    marginRight: 6,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  stopBadgeText: {
-    fontSize: 11,
-    fontWeight: 'bold',
-    color: '#475569',
-  },
-  stopTextInput: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    fontSize: 14,
-    color: Colors.textPrimary,
-  },
-  removeStopBtn: {
-    marginLeft: 8,
-    padding: 4,
-  },
-  quickPresetTitle: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: Colors.textSecondary,
-    marginTop: 4,
-    marginBottom: 4,
-  },
-  presetScroll: {
-    marginVertical: 4,
-  },
-  presetChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F1F5F9',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 16,
-    marginRight: 6,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  presetChipText: {
-    fontSize: 12,
-    color: Colors.textPrimary,
-  },
-  roundTripRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#F8FAFC',
-    padding: 12,
-    borderRadius: 10,
-    marginTop: 14,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  roundTripTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: Colors.textPrimary,
-  },
-  roundTripSubtitle: {
-    fontSize: 11,
-    color: Colors.textSecondary,
-    marginTop: 2,
-  },
-  returnSection: {
-    backgroundColor: '#F8FAFC',
-    padding: 12,
-    borderRadius: 10,
-    marginTop: 10,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  dateChip: {
-    backgroundColor: '#F3F4F6',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    marginRight: 8,
-  },
-  chipActive: {
-    backgroundColor: Colors.brandPrimary,
-  },
-  chipText: {
-    fontSize: 13,
-    color: Colors.textPrimary,
-  },
-  chipTextActive: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-  },
-  datePickBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: Colors.divider,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginVertical: 6,
-  },
-  datePickText: {
-    flex: 1,
-    fontSize: 15,
-    color: Colors.textPrimary,
-    fontWeight: '600',
-  },
-  vehicleTypeGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 4,
-  },
-  vehicleTypeCard: {
-    width: '48%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    padding: 10,
-    borderRadius: 8,
-    gap: 6,
-  },
-  vehicleTypeCardActive: {
-    borderColor: Colors.brandPrimary,
-    backgroundColor: Colors.brandPrimaryLight,
-  },
-  vehicleTypeText: {
-    fontSize: 12,
-    color: Colors.textPrimary,
-    fontWeight: '500',
-    flex: 1,
-  },
-  vehicleTypeTextActive: {
-    color: Colors.brandPrimaryDark,
-    fontWeight: 'bold',
-  },
-  passengerToggleRow: {
-    flexDirection: 'row',
-    backgroundColor: '#F1F5F9',
-    borderRadius: 8,
-    padding: 3,
-    marginBottom: 8,
-  },
-  passOptionBtn: {
-    flex: 1,
-    paddingVertical: 7,
-    alignItems: 'center',
-    borderRadius: 6,
-  },
-  passOptionBtnActive: {
-    backgroundColor: '#FFFFFF',
-  },
-  passOptionText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: Colors.textSecondary,
-  },
-  passOptionTextActive: {
-    color: Colors.brandPrimaryDark,
-    fontWeight: 'bold',
-  },
-  guestChip: {
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginRight: 8,
-  },
-  guestChipActive: {
-    borderColor: Colors.brandPrimary,
-    backgroundColor: Colors.brandPrimaryLight,
-  },
-  guestChipName: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: Colors.textPrimary,
-  },
-  guestChipNameActive: {
-    color: Colors.brandPrimaryDark,
-    fontWeight: 'bold',
-  },
-  guestChipPhone: {
-    fontSize: 11,
-    color: Colors.textSecondary,
-    marginTop: 2,
-  },
-  emptyGuestBox: {
-    padding: 12,
-    backgroundColor: '#F8FAFC',
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  emptyGuestText: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-  },
-  switchManualText: {
-    fontSize: 12,
-    color: Colors.brandPrimaryDark,
-    fontWeight: 'bold',
-    marginTop: 6,
-  },
-  customPassInputs: {
-    marginTop: 4,
-  },
-  textInput: {
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    fontSize: 14,
-    color: Colors.textPrimary,
-  },
-  searchBtn: {
-    flexDirection: 'row',
-    backgroundColor: Colors.brandPrimary,
-    paddingVertical: 14,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 22,
-  },
-  searchBtnText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 15,
-  },
-  subheadText: {
-    fontSize: 13,
-    fontWeight: 'bold',
-    color: Colors.textPrimary,
-    marginBottom: 8,
-  },
-  emptyFleetCard: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  emptyFleetTitle: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: Colors.textPrimary,
-    marginTop: 8,
-  },
-  emptyFleetDesc: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-    marginTop: 4,
-    lineHeight: 16,
-  },
-  addDriverFleetBtn: {
-    marginTop: 12,
-    backgroundColor: Colors.brandPrimary,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  addDriverFleetBtnText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 13,
-  },
-  privateDriverCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F8FAFC',
-    padding: 12,
-    borderRadius: 10,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  privateDriverName: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: Colors.textPrimary,
-  },
-  privateDriverVehicle: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    marginVertical: 4,
-  },
-  directAssignBtn: {
-    backgroundColor: Colors.brandPrimary,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  directAssignBtnText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 12,
-  },
-  radarContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 20,
-  },
-  radarTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: Colors.textPrimary,
-    marginTop: 24,
-  },
-  radarSubtitle: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-    marginTop: 8,
-    lineHeight: 18,
-  },
-  resultsBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-    paddingHorizontal: 4,
-  },
-  resultsCount: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: Colors.textPrimary,
-  },
-  resultsSort: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    marginTop: 2,
-  },
-  searchAgainBtn: {
-    backgroundColor: Colors.brandPrimaryLight,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  searchAgainText: {
-    color: Colors.brandPrimaryDark,
-    fontSize: 13,
-    fontWeight: 'bold',
-  },
-  broadcastCard: {
-    backgroundColor: '#FFFBEB',
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: '#FDE68A',
-    marginBottom: 16,
-  },
-  broadcastHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  broadcastIconBadge: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: '#FEF3C7',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
-  broadcastTitle: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: '#92400E',
-  },
-  broadcastSubtitle: {
-    fontSize: 12,
-    color: '#B45309',
-    marginTop: 2,
-  },
-  broadcastActionBtn: {
-    flexDirection: 'row',
-    backgroundColor: '#D97706',
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  broadcastActionBtnText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  individualDriversHeader: {
-    fontSize: 13,
-    fontWeight: 'bold',
-    color: Colors.textSecondary,
-    marginBottom: 8,
-    paddingHorizontal: 4,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    padding: 20,
-  },
-  profileCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 24,
-    alignItems: 'center',
-  },
-  profileAvatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: Colors.brandPrimary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  avatarInitials: {
-    color: '#FFFFFF',
-    fontSize: 22,
-    fontWeight: 'bold',
-  },
-  profileName: {
-    fontSize: 19,
-    fontWeight: 'bold',
-    color: Colors.textPrimary,
-  },
-  profileRating: {
-    fontSize: 14,
-    color: Colors.statusOrange,
-    fontWeight: 'bold',
-    marginTop: 4,
-  },
-  profileVehicle: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    marginTop: 6,
-  },
-  profileArea: {
-    fontSize: 13,
-    color: Colors.textPrimary,
-    marginTop: 4,
-  },
-  profileTrips: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    marginTop: 4,
-    textAlign: 'center',
-  },
-  bookNowBtn: {
-    backgroundColor: Colors.brandPrimary,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 10,
-    marginTop: 14,
-    width: '100%',
-    alignItems: 'center',
-  },
-  bookNowBtnText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  closeBtn: {
-    paddingVertical: 10,
-    marginTop: 4,
-  },
-  closeBtnText: {
-    color: Colors.textSecondary,
-    fontSize: 14,
-  },
-  modalCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 20,
-    alignItems: 'center',
-  },
-  successIconCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#EFF6FF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  successTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1E40AF',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  successMessage: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 19,
-    marginBottom: 18,
-  },
-  doneBtnPrimary: {
-    backgroundColor: Colors.brandPrimary,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 10,
-    width: '100%',
-    alignItems: 'center',
-  },
-  doneBtnPrimaryText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  whatsappBtn: {
-    flexDirection: 'row',
-    backgroundColor: '#25D366',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-    marginBottom: 10,
-  },
-  whatsappBtnText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  doneBtn: {
-    paddingVertical: 8,
-    alignItems: 'center',
-  },
-  doneBtnText: {
-    color: Colors.textSecondary,
-    fontSize: 14,
-  },
+  container: { flex: 1, backgroundColor: Colors.bgPage },
+  tabs: { flexDirection: 'row', backgroundColor: Colors.bgCard, padding: 4, marginHorizontal: 16, marginTop: 10, borderRadius: Radii.button, ...Shadows.card },
+  tab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 11, borderRadius: 11 },
+  tabActive: { backgroundColor: Colors.brandPrimary },
+  tabText: { fontSize: 14, fontWeight: '600', color: Colors.textSecondary },
+  tabTextActive: { color: Colors.white, fontWeight: '800' },
+  scrollContent: { padding: 16, paddingBottom: 32, gap: 12 },
+  intro: { flexDirection: 'row', gap: 8, alignItems: 'flex-start', backgroundColor: Colors.brandPrimaryLight, borderRadius: 12, padding: 12 },
+  introText: { flex: 1, fontSize: 13, color: Colors.textPrimary, lineHeight: 19 },
+  card: { backgroundColor: Colors.bgCard, borderRadius: Radii.card, padding: 16, ...Shadows.card },
+  cardHead: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
+  cardIcon: { width: 30, height: 30, borderRadius: 15, backgroundColor: Colors.brandPrimaryLight, alignItems: 'center', justifyContent: 'center' },
+  cardTitle: { flex: 1, fontSize: 16, fontWeight: '800', color: Colors.textPrimary },
+  addStop: { flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: Colors.brandPrimaryLight, paddingHorizontal: 10, paddingVertical: 6, borderRadius: Radii.pill },
+  addStopText: { fontSize: 12, fontWeight: '800', color: Colors.brandPrimaryDark },
+  routeRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
+  rail: { width: 14, alignItems: 'center', paddingTop: 22, alignSelf: 'stretch' },
+  dot: { width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: Colors.white },
+  railLine: { flex: 1, width: 2, backgroundColor: Colors.divider, marginTop: 4, minHeight: 20 },
+  routeLabel: { fontSize: 11, fontWeight: '800', color: Colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 4, marginBottom: 4 },
+  routeValue: { fontSize: 15, fontWeight: '600', color: Colors.textPrimary },
+  routeHint: { fontSize: 12, color: Colors.textSecondary, marginTop: 3 },
+  pickupActions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
+  linkText: { fontSize: 13, fontWeight: '700', color: Colors.brandPrimaryDark },
+  iconBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.bgPage, alignItems: 'center', justifyContent: 'center', marginTop: 20 },
+  iconBtnSpacer: { width: 40 },
+  input: { backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.divider, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 11, fontSize: 15, color: Colors.textPrimary, marginBottom: 10 },
+  presetTitle: { fontSize: 12, fontWeight: '700', color: Colors.textSecondary, marginTop: 4, marginBottom: 8 },
+  presetWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  preset: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderColor: Colors.divider, paddingHorizontal: 11, paddingVertical: 7, borderRadius: Radii.pill, backgroundColor: Colors.white },
+  presetUsed: { backgroundColor: Colors.brandPrimary, borderColor: Colors.brandPrimary },
+  presetText: { fontSize: 13, color: Colors.textPrimary, fontWeight: '600' },
+  fieldLabel: { fontSize: 13, fontWeight: '700', color: Colors.textSecondary, marginBottom: 6 },
+  selectBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.divider, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 13, marginBottom: 12 },
+  selectText: { flex: 1, fontSize: 15, fontWeight: '600', color: Colors.textPrimary },
+  inlineFields: { flexDirection: 'row', gap: 8, marginTop: 4 },
+  hint: { fontSize: 12, color: Colors.textSecondary, marginTop: 8, lineHeight: 17 },
+  empty: { alignItems: 'center', paddingVertical: 12 },
+  emptyTitle: { fontSize: 15, fontWeight: '700', color: Colors.textPrimary, marginTop: 8 },
+  emptyText: { fontSize: 13, color: Colors.textSecondary, textAlign: 'center', marginTop: 4 },
+  emptyBtn: { marginTop: 12, backgroundColor: Colors.brandPrimary, paddingHorizontal: 18, paddingVertical: 10, borderRadius: Radii.button },
+  emptyBtnText: { color: Colors.white, fontWeight: '700' },
+  driverRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: Colors.divider, marginBottom: 8 },
+  driverRowOn: { borderColor: Colors.brandPrimary, backgroundColor: Colors.brandPrimaryLight },
+  driverAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.brandPrimary, alignItems: 'center', justifyContent: 'center' },
+  driverInitial: { color: Colors.white, fontWeight: '800', fontSize: 16 },
+  driverName: { fontSize: 15, fontWeight: '700', color: Colors.textPrimary },
+  driverMeta: { fontSize: 12, color: Colors.textSecondary, marginTop: 2 },
+  driverStatus: { fontSize: 12, fontWeight: '700', marginTop: 3 },
+  fareInput: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.divider, borderRadius: 12, paddingHorizontal: 12 },
+  rupee: { fontSize: 20, fontWeight: '800', color: Colors.textPrimary, marginRight: 6 },
+  fareText: { flex: 1, fontSize: 20, fontWeight: '800', color: Colors.textPrimary, paddingVertical: 12 },
+  split: { backgroundColor: Colors.bgPage, borderRadius: 12, padding: 12, marginTop: 10, gap: 6 },
+  splitRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 10 },
+  splitLabel: { flex: 1, fontSize: 13, color: Colors.textSecondary },
+  splitValue: { fontSize: 14, fontWeight: '800', color: Colors.textPrimary },
+  footer: { paddingHorizontal: 16, paddingTop: 10, backgroundColor: Colors.bgCard, borderTopWidth: 1, borderTopColor: Colors.divider },
+  cta: { flexDirection: 'row', gap: 8, backgroundColor: Colors.brandPrimary, paddingVertical: 15, borderRadius: Radii.button, alignItems: 'center', justifyContent: 'center' },
+  ctaText: { color: Colors.white, fontWeight: '800', fontSize: 15 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
+  modalCard: { backgroundColor: Colors.bgCard, borderRadius: Radii.dialog, padding: 20, alignItems: 'center' },
+  successIcon: { width: 60, height: 60, borderRadius: 30, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
+  modalTitle: { fontSize: 18, fontWeight: '800', color: Colors.textPrimary, textAlign: 'center', marginBottom: 8 },
+  modalText: { fontSize: 13, color: Colors.textSecondary, textAlign: 'center', lineHeight: 19, marginBottom: 18 },
 });

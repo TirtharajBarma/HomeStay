@@ -30,7 +30,11 @@ export const DriverActiveRideScreen: React.FC = () => {
 
   const handleOpenGoogleMaps = () => {
     if (!activeRide) return;
-    const origin = encodeURIComponent(activeRide.pickup);
+    // Exact pin when the homestay set one, else the pickup text
+    const origin =
+      typeof activeRide.pickupLat === 'number' && typeof activeRide.pickupLng === 'number'
+        ? `${activeRide.pickupLat},${activeRide.pickupLng}`
+        : encodeURIComponent(activeRide.pickup);
     const destination = encodeURIComponent(activeRide.destination);
     const url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&travelmode=driving`;
     Linking.openURL(url).catch(() => {

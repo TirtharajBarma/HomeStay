@@ -7,6 +7,9 @@ import {
   AppealsTab, AuditTab, inr, CabRequestsTab, DashboardTab, DriversTab, HomestaysTab, PayoutsTab, SettingsTab, UsersTab,
 } from "@/components/stayride-admin";
 
+// The old Hill Hospitality portal: its data is not used by the StayRide app, so its "Suspend" and
+// "Settle UPI" do nothing there. Hidden unless NEXT_PUBLIC_SHOW_LEGACY_PORTAL=true.
+const SHOW_LEGACY = process.env.NEXT_PUBLIC_SHOW_LEGACY_PORTAL === "true";
 type Tab = "dashboard" | "users" | "homestays" | "drivers" | "cab-requests" | "payouts" | "settings" | "appeals" | "audit" | "legacy";
 const TABS: Array<[Tab, string, string]> = [
   ["dashboard", "monitoring", "StayRide"],
@@ -19,7 +22,7 @@ const TABS: Array<[Tab, string, string]> = [
   ["appeals", "verified_user", "Appeals"],
   ["audit", "history", "Audit log"],
   ["legacy", "inventory_2", "Legacy portal"],
-];
+].filter(([key]) => key !== "legacy" || SHOW_LEGACY) as Array<[Tab, string, string]>;
 
 type OverviewData = {
   kpis: {

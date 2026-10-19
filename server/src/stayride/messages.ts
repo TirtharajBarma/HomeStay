@@ -26,15 +26,35 @@ export const askCabMessage = (guestName: string, homestayName: string, link: str
     `Tell us where you want to go and we will find a verified local driver:\n${link}`,
 });
 
-export const newRequestMessage = (doc: any): Built => {
-  const params = [doc.homestayName || 'a homestay', routeText(doc), whenText(doc)];
+/** quoteLink: the driver's own page to quote without opening the app (WhatsApp-only drivers). */
+export const newRequestMessage = (doc: any, quoteLink: string): Built => {
+  const params = [doc.homestayName || 'a homestay', routeText(doc), whenText(doc), quoteLink];
   return {
     event: 'NEW_REQUEST',
     params,
     text:
       `New trip request from ${params[0]}\n` +
       `Route: ${params[1]}\nWhen: ${params[2]}\nVehicle: ${doc.vehicleType}\n\n` +
-      `Open the StayRide app to send your quote.`,
+      `Send your fare here (no app needed):\n${params[3]}`,
+  };
+};
+
+export const quoteCounterMessage = (driverName: string, reference: string, counterFare: number, quoteLink: string): Built => {
+  const params = [driverName, reference, rupees(counterFare), quoteLink];
+  return {
+    event: 'QUOTE_COUNTER',
+    params,
+    text: `Hi ${params[0]}, the homestay offers ${params[2]} for trip ${params[1]}. Accept it or keep your fare here:\n${params[3]}`,
+  };
+};
+
+/** The guest did not pay the advance in time; the held driver was released. */
+export const advanceExpiredGuestMessage = (doc: any): Built => {
+  const params = [doc.guestName, doc.homestayName || 'your homestay'];
+  return {
+    event: 'ADVANCE_EXPIRED_GUEST',
+    params,
+    text: `Hi ${params[0]}, your cab hold expired because the advance was not received in time. Please contact ${params[1]} to book again.`,
   };
 };
 
@@ -82,6 +102,26 @@ export const advancePaidDriverMessage = (doc: any): Built => {
       `Hi ${params[0]}, the advance is paid. Trip confirmed! ✅\n` +
       `Guest: ${params[1]} (${params[2]})\nRoute: ${params[3]}\nWhen: ${params[4]}\n` +
       `Collect ${params[5]} in cash from the guest.`,
+  };
+};
+
+/** The trip was cancelled (by the homestay or StayRide); a paid advance is refunded. */
+export const tripCancelledGuestMessage = (doc: any): Built => {
+  const params = [doc.guestName, doc.reference, whenText(doc), doc.advancePaid ? `Your advance of ${rupees(doc.advanceAmount)} will be refunded.` : 'Nothing was charged.'];
+  return {
+    event: 'TRIP_CANCELLED_GUEST',
+    params,
+    text: `Hi ${params[0]}, your cab trip ${params[1]} on ${params[2]} was cancelled. ${params[3]}`,
+  };
+};
+
+/** StayRide refunded the advance. */
+export const refundGuestMessage = (doc: any, reference: string): Built => {
+  const params = [doc.guestName, rupees(doc.advanceAmount), doc.reference, reference];
+  return {
+    event: 'REFUND_GUEST',
+    params,
+    text: `Hi ${params[0]}, StayRide has refunded your advance of ${params[1]} for trip ${params[2]} (reference ${params[3]}). Your bank may take a few days to show it.`,
   };
 };
 

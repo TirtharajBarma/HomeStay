@@ -260,7 +260,7 @@ export const CommissionScreen: React.FC = () => {
           <View style={styles.emptyCard}>
             <Text style={styles.emptyText}>No completed trips with commission yet.</Text>
             <Text style={[styles.emptyText, { fontSize: 12, marginTop: 4, color: Colors.textTertiary }]}>
-              Commissions credit automatically whenever your guests complete verified cab itineraries.
+              Commission is credited once a trip is completed and the guest&apos;s advance is paid.
             </Text>
           </View>
         ) : (

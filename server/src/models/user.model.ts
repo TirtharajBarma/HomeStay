@@ -22,6 +22,9 @@ export interface IUser extends Document {
   ratingCount?: number;
   tokenVersion?: number; // bumped to revoke every session (logout-all, admin revoke/role change/delete)
   deletedAt?: Date | null; // soft delete by admin (account BLOCKED, money history kept)
+  // Consent at signup: Terms + Privacy accepted and 18+ confirmed (version = legal text version shown)
+  termsAcceptedAt?: Date | null;
+  termsVersion?: string;
   createdAt: Date;
   updatedAt: Date;
   createdAtIST?: string;
@@ -60,6 +63,8 @@ const UserSchema = new Schema<IUser>(
     ratingCount: { type: Number, default: 0 },
     tokenVersion: { type: Number, default: 0 },
     deletedAt: { type: Date, default: null },
+    termsAcceptedAt: { type: Date, default: null },
+    termsVersion: { type: String, default: "" },
     createdAtIST: { type: String, default: () => getISTTimestamp() },
     updatedAtIST: { type: String, default: () => getISTTimestamp() },
   },

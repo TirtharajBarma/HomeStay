@@ -119,6 +119,8 @@ export interface StayRideTrip {
   guestName: string;
   phone: string;
   pickup: string;
+  pickupLat?: number; // map pin of the pickup, when the owner set one
+  pickupLng?: number;
   destination: string;
   destinations?: Array<{ address: string; lat?: number; lng?: number; order: number }>;
   isRoundTrip?: boolean;
@@ -190,6 +192,9 @@ export interface StayRideHomestay {
   // House times shown to owner and guest, e.g. "12:00 PM" / "11:00 AM"
   checkInTime?: string;
   checkOutTime?: string;
+  // Map pin set by the owner (server-set via PUT /homestay/location); "nearby" drivers are measured from it
+  latitude?: number;
+  longitude?: number;
 }
 
 const DAY = 86400000;
@@ -200,7 +205,7 @@ export const WRITABLE = {
   guest: ['name', 'phone', 'email', 'notes', 'marketingConsent'],
   booking: ['guestId', 'guestName', 'phone', 'checkIn', 'checkOut', 'roomNumber', 'guests', 'amount', 'source', 'paid'],
   driver: ['name', 'phone', 'vehicle', 'vehicleType', 'seats', 'rating', 'area', 'trips', 'available', 'active', 'plate'],
-  trip: ['guestName', 'phone', 'pickup', 'destination', 'destinations', 'isRoundTrip', 'returnDate', 'returnTime', 'date', 'time', 'passengers', 'vehicleType', 'guestId', 'bookingId'],
+  trip: ['guestName', 'phone', 'pickup', 'pickupLat', 'pickupLng', 'destination', 'destinations', 'isRoundTrip', 'returnDate', 'returnTime', 'date', 'time', 'passengers', 'vehicleType', 'guestId', 'bookingId'],
   homestay: ['name', 'description', 'location', 'phone', 'email', 'ownerName', 'link', 'mapQuery', 'amenities', 'photos', 'checkInTime', 'checkOutTime'],
 } as const;
 
@@ -244,7 +249,8 @@ export const FIELDS: Record<string, Record<string, FieldRule>> = {
   },
   // Admin edits of OWN_DRIVER trips (owners create trips through tripInput in routes.ts).
   trip: {
-    guestName: S(100), phone: S(20), pickup: S(200), destination: S(200), isRoundTrip: B, returnDate: N({ nullable: true }),
+    guestName: S(100), phone: S(20), pickup: S(200), pickupLat: N({ nullable: true, max: 180 }), pickupLng: N({ nullable: true, max: 180 }),
+    destination: S(200), isRoundTrip: B, returnDate: N({ nullable: true }),
     returnTime: S(10), date: DATE, time: S(10), passengers: N({ int: true, max: 20 }), vehicleType: E(VEHICLE_TYPES),
     guestId: N({ int: true, nullable: true }), bookingId: N({ int: true, nullable: true }),
   },

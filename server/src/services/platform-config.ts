@@ -40,7 +40,40 @@ export interface PlatformConfig {
   maxFare: number;
   /** Calendar (iCal) links are only fetched from these sites (and their subdomains) */
   icalAllowedHosts: string[];
+  /** A driver's quote stops counting after this many hours (he can quote again); 0 = never */
+  quoteValidityHours: number;
+  /** Meta-approved WhatsApp template name per message event (empty = plain text, test number only) */
+  whatsappTemplates: Record<string, string>;
+  /** Who runs StayRide, shown in the legal pages and the app (required business / grievance details) */
+  business: BusinessDetails;
 }
+
+export interface BusinessDetails {
+  name: string; // brand, e.g. StayRide
+  legalName: string; // registered company / proprietor name
+  address: string;
+  email: string;
+  phone: string;
+  grievanceOfficer: string; // India IT Rules / DPDP Act: named contact for complaints
+  grievanceEmail: string;
+  website: string;
+}
+
+const BUSINESS_KEYS = ['name', 'legalName', 'address', 'email', 'phone', 'grievanceOfficer', 'grievanceEmail', 'website'] as const;
+
+export const WHATSAPP_EVENTS = [
+  'ASK_CAB',
+  'NEW_REQUEST',
+  'QUOTE_COUNTER',
+  'QUOTE_ACCEPTED_DRIVER',
+  'QUOTE_ACCEPTED_GUEST',
+  'ADVANCE_PAID_GUEST',
+  'ADVANCE_PAID_DRIVER',
+  'ADVANCE_EXPIRED_GUEST',
+  'TRIP_ASSIGNED_DRIVER',
+  'TRIP_CANCELLED_GUEST',
+  'REFUND_GUEST',
+] as const;
 
 export const DEFAULT_PLATFORM_CONFIG: PlatformConfig = {
   advanceWindowMin: 0,
@@ -77,6 +110,10 @@ export const DEFAULT_PLATFORM_CONFIG: PlatformConfig = {
   guestLinkDays: 7,
   maxOpenRequestsPerPhone: 5,
   maxFare: 200000,
+  quoteValidityHours: 24,
+  whatsappTemplates: {},
+  // Fill these in Operations settings before publishing the app: they appear in the legal pages
+  business: { name: 'StayRide', legalName: '', address: '', email: '', phone: '', grievanceOfficer: '', grievanceEmail: '', website: '' },
   icalAllowedHosts: ['airbnb.com', 'airbnb.co.in', 'booking.com', 'vrbo.com', 'expedia.com', 'agoda.com', 'makemytrip.com', 'goibibo.com', 'calendar.google.com', 'tripadvisor.com'],
 };
 
@@ -126,6 +163,12 @@ export function resolvePlatformConfig(saved: any): PlatformConfig {
     guestLinkDays: num(s.guestLinkDays, d.guestLinkDays, 1, 60),
     maxOpenRequestsPerPhone: num(s.maxOpenRequestsPerPhone, d.maxOpenRequestsPerPhone, 1, 50),
     maxFare: num(s.maxFare, d.maxFare, 1000, 1000000),
+    quoteValidityHours: num(s.quoteValidityHours, d.quoteValidityHours, 0, 24 * 14),
+    business: Object.fromEntries(BUSINESS_KEYS.map((k) => [k, text(s.business?.[k], d.business[k], 300)])) as unknown as BusinessDetails,
+    whatsappTemplates: Object.fromEntries(
+      WHATSAPP_EVENTS.map((e) => [e, typeof s.whatsappTemplates?.[e] === 'string' ? s.whatsappTemplates[e].trim() : ''])
+        .filter(([, v]) => /^[a-z0-9_]{1,200}$/.test(v as string))
+    ) as Record<string, string>,
     icalAllowedHosts: Array.isArray(s.icalAllowedHosts)
       ? [...new Set(s.icalAllowedHosts.map((h: unknown) => String(h ?? '').trim().toLowerCase()).filter((h: string) => /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(h)))].slice(0, 40) as string[]
       : d.icalAllowedHosts,

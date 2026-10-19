@@ -10,7 +10,7 @@ import { getStayRideTenantModel, tenantManager, normKey, isDemoKey, clean, FIELD
 import {
   OPEN_STATUSES, cabModel, payoutModel, userModel, parseFare, cancelRequest, startTrip, completeTrip,
   adminAssignDriver, adminRecordPayment, adminVoidPayment, adminMarkRefunded, adminSettleDriver,
-  settlePayout, rejectPayout, expireStaleRequests, overlayTrips, onDriverStatusChange,
+  settlePayout, rejectPayout, expireStaleRequests, overlayTrips, onDriverStatusChange, releaseDriverTrips, adminRefundUnmatched,
 } from "../stayride/platform.js";
 import { httpError } from "../middlewares/error-handler.js";
 
@@ -76,7 +76,8 @@ router.put("/commission/settings", async (req, res) => {
 });
 
 router.post("/commission/preview", async (req, res) => {
-  const fare = parseFare(req.body.fare);
+  const cfg = await CommissionService.getPlatformConfig(isDemo(req));
+  const fare = parseFare(req.body.fare, cfg.maxFare);
   ok(res, await CommissionService.calculateSplit(fare, req.body.tenantKey || req.body.propertyId, isDemo(req)));
 });
 
@@ -207,6 +208,7 @@ router.patch("/stayride/users/:id/status", async (req, res) => {
     throw httpError(400, "Status must be ACTIVE, PENDING_APPROVAL or BLOCKED.");
   }
   const target = await loadTargetUser(req, demo);
+  if (target.deletedAt && status !== "BLOCKED") throw httpError(409, "This account was deleted and cannot be re-activated.", "ACCOUNT_DELETED");
   if (status !== "ACTIVE") await protectAdmins(req, demo, target, "block");
   const reason = String(req.body.reason || "").slice(0, 300);
   const updated = await userModel(demo).findByIdAndUpdate(target._id, { $set: { accountStatus: status, statusReason: reason } }, { returnDocument: "after" })
@@ -223,6 +225,7 @@ router.patch("/stayride/users/:id/role", async (req, res) => {
   const role = String(req.body.role);
   if (!["guest", "owner", "driver", "admin"].includes(role)) throw httpError(400, "Role must be guest, owner, driver, or admin.");
   const target = await loadTargetUser(req, demo);
+  if (target.deletedAt) throw httpError(409, "This account was deleted; its role cannot be changed.", "ACCOUNT_DELETED");
   if (role !== "admin") await protectAdmins(req, demo, target, "demote");
   // Tokens carry the role, so a role change ends every existing session.
   const updated = await userModel(demo).findByIdAndUpdate(target._id, { $set: { role }, $inc: { tokenVersion: 1 } }, { returnDocument: "after" })
@@ -233,6 +236,8 @@ router.patch("/stayride/users/:id/role", async (req, res) => {
     after: { role },
     reason: String(req.body.reason || "").slice(0, 300),
   }, demo);
+  // No longer a driver: their not-started trips go back to StayRide (same as blocking)
+  if (target.role === "driver" && role !== "driver") await releaseDriverTrips(demo, String(target._id), actor(req));
   ok(res, userItem(demo)(updated), `User role updated from ${target.role} to ${role}.`);
 });
 
@@ -280,12 +285,13 @@ router.patch("/stayride/drivers/:id/status", async (req, res) => {
   const status = String(req.body.status);
   if (!["ACTIVE", "PENDING_APPROVAL", "BLOCKED"].includes(status)) throw httpError(400, "Status must be ACTIVE, PENDING_APPROVAL or BLOCKED.");
   if (!mongoose.Types.ObjectId.isValid(String(req.params.id))) throw httpError(404, "Driver not found.");
+  // A deleted driver can only stay blocked (the filter refuses anything else)
   const prev = await userModel(isDemo(req)).findOneAndUpdate(
-    { _id: String(req.params.id), role: "driver" },
+    { _id: String(req.params.id), role: "driver", ...(status === "BLOCKED" ? {} : { deletedAt: null }) },
     { $set: { accountStatus: status, statusReason: String(req.body.reason || "").slice(0, 300) } },
     { returnDocument: "before" }
   ).select("name email phone accountStatus statusReason vehicle").lean();
-  if (!prev) throw httpError(404, "Driver not found.");
+  if (!prev) throw httpError(404, "Driver not found, or the account was deleted and cannot be re-activated.");
   await audit(actor(req), "driver.status", "User", String(req.params.id), { status, reason: req.body.reason || "" }, isDemo(req));
   // Release trips / push only on a real change, so re-saving the same status doesn't re-notify
   if (prev.accountStatus !== status) await onDriverStatusChange(isDemo(req), String(req.params.id), status, actor(req));
@@ -320,6 +326,7 @@ router.get("/cab-requests", async (req, res) => {
   if (req.query.refundStatus) filter.refundStatus = String(req.query.refundStatus);
   if (req.query.driverSettlementStatus) filter.driverSettlementStatus = String(req.query.driverSettlementStatus);
   if (req.query.needsReassignment === "true") filter.needsReassignment = true;
+  if (req.query.unmatched === "true") filter.unmatchedPayments = { $elemMatch: { refundedAt: null } };
   const q = search(req);
   if (q) {
     const regex = new RegExp(escapeRegex(q), "i");
@@ -340,6 +347,7 @@ router.post("/cab-requests/:id/cancel", cabAction((d, id, req) => cancelRequest(
 router.post("/cab-requests/:id/refund", cabAction((d, id, req) => adminMarkRefunded(d, id, req.body.reference, actor(req)), "Refund recorded."));
 router.post("/cab-requests/:id/start", cabAction((d, id, req) => startTrip(d, { _id: id }, actor(req)), "Trip started."));
 router.post("/cab-requests/:id/complete", cabAction((d, id, req) => completeTrip(d, { _id: id }, actor(req)), "Trip completed."));
+router.post("/cab-requests/:id/unmatched-refunded", cabAction((d, id, req) => adminRefundUnmatched(d, id, req.body.paymentId, req.body.reference, actor(req)), "Unmatched payment marked refunded."));
 router.post("/cab-requests/:id/driver-settled", cabAction((d, id, req) => adminSettleDriver(d, id, req.body.reference, actor(req)), "Driver settlement recorded."));
 
 // ---------------------------------------------------------------------------
@@ -393,7 +401,16 @@ router.post("/appeals/:id/decide", async (req, res) => {
     );
   }
   await audit(actor(req), "appeal.decide", "FeatureAppeal", String(req.params.id), { status, featureKey: appeal.featureKey, tenantKey: appeal.propertyId }, demo);
-  res.json({ success: true, message: `Appeal ${status.toLowerCase()}.`, data: appeal });
+  // A per-homestay grant can't beat the global switch: say so instead of looking like it worked
+  const globalOff = status === "APPROVED" && (FEATURE_KEYS as readonly string[]).includes(appeal.featureKey)
+    && !(CommissionService.globalFeatures(await CommissionService.getSettings(demo)) as any)[appeal.featureKey]?.enabled;
+  res.json({
+    success: true,
+    message: globalOff
+      ? `Appeal approved, but ${appeal.featureKey} is switched OFF globally in Platform settings, so the homestay still can't use it until you enable it there.`
+      : `Appeal ${status.toLowerCase()}.`,
+    data: appeal,
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -426,7 +443,14 @@ router.get("/stayride/summary", async (req, res) => {
     },
   ]);
   const payouts = await payoutModel(demo).aggregate([{ $group: { _id: "$status", amount: { $sum: "$amount" }, count: { $sum: 1 } } }]);
-  ok(res, { cab: cab || {}, payouts });
+  // Gateway money that matched no request (old link, paid twice, after a cancel): must be refunded in Razorpay
+  const [unmatched] = await cabModel(demo).aggregate([
+    { $match: { "unmatchedPayments.0": { $exists: true } } },
+    { $unwind: "$unmatchedPayments" },
+    { $match: { "unmatchedPayments.refundedAt": null } },
+    { $group: { _id: null, amount: { $sum: "$unmatchedPayments.amount" }, count: { $sum: 1 } } },
+  ]);
+  ok(res, { cab: { ...(cab || {}), unmatchedPending: unmatched?.amount ?? 0, unmatchedCount: unmatched?.count ?? 0 }, payouts });
 });
 
 router.get("/audit-log", async (req, res) => {

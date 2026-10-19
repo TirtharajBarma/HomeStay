@@ -109,6 +109,27 @@ function CabRequestFormContent() {
   const [vehicleType, setVehicleType] = useState<"SUV" | "Sedan" | "7-seater" | "9-seater">("SUV");
   const [passengers, setPassengers] = useState(3);
 
+  const selectedVehicle = vehicleOptions.find((v) => v.value === vehicleType) || vehicleOptions[0];
+  const maxSeats = selectedVehicle?.seats || 4;
+
+  useEffect(() => {
+    if (vehicleOptions.length > 0 && !vehicleOptions.some((v) => v.value === vehicleType)) {
+      setVehicleType(vehicleOptions[0].value as any);
+    }
+  }, [vehicleOptions, vehicleType]);
+
+  useEffect(() => {
+    if (timeOptions.length > 0 && !timeOptions.includes(time)) {
+      setTime(timeOptions[0]);
+    }
+  }, [timeOptions, time]);
+
+  useEffect(() => {
+    if (passengers > maxSeats) {
+      setPassengers(maxSeats);
+    }
+  }, [maxSeats, passengers]);
+
   const [guestName, setGuestName] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
   const [notes, setNotes] = useState("");
@@ -536,7 +557,7 @@ function CabRequestFormContent() {
                   <input
                     type="range"
                     min="1"
-                    max="9"
+                    max={maxSeats}
                     value={passengers}
                     onChange={(e) => setPassengers(Number(e.target.value))}
                     className="mt-2 w-full accent-primary"

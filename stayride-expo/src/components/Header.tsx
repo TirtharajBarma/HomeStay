@@ -11,6 +11,7 @@ interface HeaderProps {
   rightAction?: {
     icon: keyof typeof Ionicons.glyphMap;
     onPress: () => void;
+    label?: string;
   };
 }
 
@@ -27,6 +28,8 @@ export const Header: React.FC<HeaderProps> = ({ title, onBack, rightAction }) =>
           <TouchableOpacity
             style={styles.backBtn}
             onPress={onBack}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
             activeOpacity={0.7}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
@@ -35,13 +38,15 @@ export const Header: React.FC<HeaderProps> = ({ title, onBack, rightAction }) =>
         ) : (
           <View style={styles.spacer} />
         )}
-        <Text style={styles.title} numberOfLines={1}>
+        <Text style={styles.title} numberOfLines={1} accessibilityRole="header">
           {title}
         </Text>
         {rightAction ? (
           <TouchableOpacity
             style={styles.rightBtn}
             onPress={rightAction.onPress}
+            accessibilityRole="button"
+            accessibilityLabel={rightAction.label || rightAction.icon.replace(/-outline$/, '').replace(/-/g, ' ')}
             activeOpacity={0.7}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >

@@ -21,6 +21,9 @@ export interface IDriverQuote {
   notes?: string;
   status: "PENDING" | "ACCEPTED" | "REJECTED" | "EXPIRED";
   createdAt: Date;
+  // Owner's counter-offer on this quote; the driver accepts it (trip confirmed) or keeps his fare
+  counterFare?: number | null;
+  counterAt?: Date | null;
 }
 
 export interface IFinancialSnapshot {
@@ -119,9 +122,10 @@ export interface ICabRequest extends Document {
   advanceDueAt?: Date | null;
   // Razorpay link for the current advance (replaced if the trip is released and confirmed again)
   paymentLinkId?: string;
+  paymentLinkIds?: string[]; // every link ever issued, so a payment on a replaced link is still found
   paymentLinkUrl?: string;
   // Gateway payments that arrived when the request was no longer waiting for them: admin must refund
-  unmatchedPayments?: Array<{ paymentId: string; amount: number; status: string; at: Date }>;
+  unmatchedPayments?: Array<{ paymentId: string; amount: number; status: string; at: Date; refundedAt?: Date | null; refundReference?: string }>;
   // Homestay coordinates at request time: "nearby" is measured from here
   homestayLocation?: { lat: number; lng: number } | null;
   createdAtIST?: string;
@@ -157,6 +161,8 @@ const DriverQuoteSchema = new Schema<IDriverQuote>(
       default: "PENDING",
     },
     createdAt: { type: Date, default: Date.now },
+    counterFare: { type: Number, default: null },
+    counterAt: { type: Date, default: null },
   },
   { _id: false }
 );
@@ -226,8 +232,9 @@ const CabRequestSchema = new Schema<ICabRequest>(
     ownDriverId: { type: Number, default: null },
     paymentLinkId: { type: String, default: "", index: true },
     paymentLinkUrl: { type: String, default: "" },
+    paymentLinkIds: { type: [String], default: [], index: true },
     unmatchedPayments: {
-      type: [{ paymentId: String, amount: Number, status: String, at: Date, _id: false }],
+      type: [{ paymentId: String, amount: Number, status: String, at: Date, refundedAt: { type: Date, default: null }, refundReference: { type: String, default: "" }, _id: false }],
       default: [],
     },
     homestayLocation: { type: { lat: Number, lng: Number, _id: false }, default: null },

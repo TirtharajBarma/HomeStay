@@ -1,54 +1,39 @@
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Modal,
-  TextInput,
-  Alert,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useStayRide } from '../data/store';
 import { Header } from '../components/Header';
 import { PlatformSelect } from '../components/PlatformSelect';
-import { Colors } from '../theme/colors';
+import { Colors, Radii, Shadows } from '../theme/colors';
 import { FormScroll } from '../components/FormScroll';
-import { KeyboardAwareOverlay } from '../components/KeyboardAwareOverlay';
+import { LocationPicker, PickedLocation } from '../components/LocationPicker';
 
-const PHOTO_PRESETS = [
-  'Front elevation',
-  'Deluxe room',
-  'Valley view balcony',
-  'Dining hall',
-  'Rooftop garden',
-  'Reception',
-  'Garden view',
-  'Family room',
-  'Kitchen',
-  'Bonfire area',
-];
+type IconName = keyof typeof Ionicons.glyphMap;
 
-const AMENITY_PRESETS = [
-  'Free Wi-Fi',
-  '24x7 Hot Water',
-  'Private Parking',
-  'Home Breakfast',
-  'Air Conditioning',
-  'Power Backup',
-  'Luggage Storage',
-  'Mountain View',
-  'Laundry Service',
-  'In-house Cabs (StayRide)',
-  'Airport Pickup',
-  'Restaurant',
-  'Garden',
-  'CCTV Security',
-  'Doctor on Call',
-  'Travel Desk',
+const PHOTO_PRESETS = ['Front elevation', 'Deluxe room', 'Valley view balcony', 'Dining hall', 'Rooftop garden', 'Reception', 'Garden view', 'Family room', 'Kitchen', 'Bonfire area'];
+
+const AMENITIES: { label: string; icon: IconName }[] = [
+  { label: 'Free Wi-Fi', icon: 'wifi' },
+  { label: '24x7 Hot Water', icon: 'water' },
+  { label: 'Private Parking', icon: 'car' },
+  { label: 'Home Breakfast', icon: 'cafe' },
+  { label: 'Air Conditioning', icon: 'snow' },
+  { label: 'Power Backup', icon: 'flash' },
+  { label: 'Luggage Storage', icon: 'briefcase' },
+  { label: 'Mountain View', icon: 'image' },
+  { label: 'Laundry Service', icon: 'shirt' },
+  { label: 'In-house Cabs (StayRide)', icon: 'navigate' },
+  { label: 'Airport Pickup', icon: 'airplane' },
+  { label: 'Restaurant', icon: 'restaurant' },
+  { label: 'Garden', icon: 'leaf' },
+  { label: 'CCTV Security', icon: 'videocam' },
+  { label: 'Doctor on Call', icon: 'medkit' },
+  { label: 'Travel Desk', icon: 'map' },
 ];
+const iconFor = (amenity: string): IconName => AMENITIES.find((a) => a.label === amenity)?.icon || 'checkmark-circle';
 
 // House check-in / check-out times (half-hour steps), shown on bookings and receipts
 const HOUSE_TIMES = Array.from({ length: 40 }, (_, i) => {
@@ -60,483 +45,398 @@ const HOUSE_TIMES = Array.from({ length: 40 }, (_, i) => {
 
 export const HomestayProfileScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
-  const { homestay, updateHomestay } = useStayRide();
+  const insets = useSafeAreaInsets();
+  const { homestay, rooms, updateHomestay, setHomestayLocation } = useStayRide();
 
-  const [editModalVisible, setEditModalVisible] = useState(false);
-  const [photoPickerVisible, setPhotoPickerVisible] = useState(false);
-  const [amenityPickerVisible, setAmenityPickerVisible] = useState(false);
+  const [editVisible, setEditVisible] = useState(false);
+  const [pinVisible, setPinVisible] = useState(false);
+  const [amenitiesVisible, setAmenitiesVisible] = useState(false);
+  const [photosVisible, setPhotosVisible] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  // Edit fields
-  const [name, setName] = useState(homestay.name);
-  const [owner, setOwner] = useState(homestay.ownerName);
-  const [phone, setPhone] = useState(homestay.phone);
-  const [email, setEmail] = useState(homestay.email);
-  const [location, setLocation] = useState(homestay.location);
-  const [description, setDescription] = useState(homestay.description);
-  const [checkInTime, setCheckInTime] = useState(homestay.checkInTime || '12:00 PM');
-  const [checkOutTime, setCheckOutTime] = useState(homestay.checkOutTime || '11:00 AM');
+  // Edit form (copied from the saved profile when opened)
+  const [name, setName] = useState('');
+  const [owner, setOwner] = useState('');
+  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
+  const [address, setAddress] = useState(''); // filled from the map pin, never typed
+  const [pinDraft, setPinDraft] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [editPinVisible, setEditPinVisible] = useState(false);
+  const [description, setDescription] = useState('');
+  const [checkInTime, setCheckInTime] = useState('12:00 PM');
+  const [checkOutTime, setCheckOutTime] = useState('11:00 AM');
+  const [amenityDraft, setAmenityDraft] = useState<string[]>([]);
+  const [photoDraft, setPhotoDraft] = useState<string[]>([]);
 
-  const openEditModal = () => {
-    setName(homestay.name);
-    setOwner(homestay.ownerName);
-    setPhone(homestay.phone);
-    setEmail(homestay.email);
-    setLocation(homestay.location);
-    setDescription(homestay.description);
+  const hasPin = typeof homestay.latitude === 'number' && typeof homestay.longitude === 'number';
+  const amenities = homestay.amenities || [];
+  const photos = homestay.photos || [];
+
+  const openEdit = () => {
+    setName(homestay.name || '');
+    setOwner(homestay.ownerName || '');
+    setPhone(homestay.phone || '');
+    setEmail(homestay.email || '');
+    setAddress(homestay.location || '');
+    setPinDraft(hasPin ? { latitude: homestay.latitude!, longitude: homestay.longitude! } : null);
+    setDescription(homestay.description || '');
     setCheckInTime(homestay.checkInTime || '12:00 PM');
     setCheckOutTime(homestay.checkOutTime || '11:00 AM');
-    setEditModalVisible(true);
+    setEditVisible(true);
   };
 
-  const handleSaveProfile = async () => {
-    if (!name.trim()) {
-      Alert.alert('Required', 'Name cannot be empty');
-      return;
-    }
-    const outcome = await updateHomestay({
-      ...homestay,
-      name: name.trim(),
-      ownerName: owner.trim(),
-      phone: phone.trim(),
-      email: email.trim(),
-      location: location.trim(),
-      description: description.trim(),
-      checkInTime,
-      checkOutTime,
-    });
-    if (!outcome.ok) {
-      Alert.alert('Not saved', outcome.error || 'Could not save your profile. Please try again.');
-      return;
-    }
-    setEditModalVisible(false);
-    Alert.alert('Profile Updated', 'Homestay profile saved successfully');
-  };
-
-  // Photo/amenity edits: report server failures instead of leaving an unhandled rejection
-  const save = async (data: Parameters<typeof updateHomestay>[0]) => {
+  const save = async (data: Parameters<typeof updateHomestay>[0], done?: () => void, successTitle?: string) => {
+    setSaving(true);
     const outcome = await updateHomestay(data);
-    if (!outcome.ok) {
-      Alert.alert('Not saved', outcome.error || 'Could not save your change. Please try again.');
+    setSaving(false);
+    if (!outcome.ok) return Alert.alert('Not saved', outcome.error || 'Could not save your change. Please try again.');
+    done?.();
+    if (successTitle) Alert.alert(successTitle, 'Your homestay profile is updated.');
+  };
+
+  const pinChanged = Boolean(pinDraft) && (pinDraft!.latitude !== homestay.latitude || pinDraft!.longitude !== homestay.longitude);
+
+  const saveDetails = async () => {
+    if (!name.trim()) return Alert.alert('Required', 'Your homestay needs a name.');
+    if (phone && phone.replace(/\D/g, '').length < 10) return Alert.alert('Check phone', 'Enter a 10-digit phone number.');
+    if (pinChanged) {
+      setSaving(true);
+      const outcome = await setHomestayLocation({ ...pinDraft!, address });
+      setSaving(false);
+      if (!outcome.ok) return Alert.alert('Location not saved', outcome.error || 'Could not save the location. Please try again.');
     }
+    // coordinates are saved only through the pin (above); never resend the old ones from this snapshot
+    const { latitude: _lat, longitude: _lng, mapQuery: _mq, ...rest } = homestay as typeof homestay & { mapQuery?: string };
+    save(
+      { ...rest, name: name.trim(), ownerName: owner.trim(), phone: phone.trim(), email: email.trim(), location: address, description: description.trim(), checkInTime, checkOutTime },
+      () => setEditVisible(false),
+      'Saved'
+    );
   };
 
-  const handleRemovePhoto = async (photo: string) => {
-    const updated = homestay.photos.filter((p) => p !== photo);
-    await save({ ...homestay, photos: updated });
+  const handlePinned = async (loc: PickedLocation) => {
+    setPinVisible(false);
+    const outcome = await setHomestayLocation(loc);
+    if (!outcome.ok) Alert.alert('Not saved', outcome.error || 'Could not save the location. Please try again.');
+    else Alert.alert('Location saved', loc.address || 'Your homestay pin is saved.');
   };
 
-  const handleAddPhoto = async (photo: string) => {
-    setPhotoPickerVisible(false);
-    if (homestay.photos.includes(photo)) return;
-    await save({ ...homestay, photos: [...homestay.photos, photo] });
-  };
+  const toggle = (list: string[], item: string) => (list.includes(item) ? list.filter((x) => x !== item) : [...list, item]);
+  const initial = (homestay.name || 'H').trim().charAt(0).toUpperCase();
 
-  const handleRemoveAmenity = async (amenity: string) => {
-    const updated = homestay.amenities.filter((a) => a !== amenity);
-    await save({ ...homestay, amenities: updated });
-  };
-
-  const handleAddAmenity = async (amenity: string) => {
-    setAmenityPickerVisible(false);
-    if (homestay.amenities.includes(amenity)) return;
-    await save({ ...homestay, amenities: [...homestay.amenities, amenity] });
-  };
-
-  const remainingPhotos = PHOTO_PRESETS.filter((p) => !homestay.photos.includes(p));
-  const remainingAmenities = AMENITY_PRESETS.filter((a) => !homestay.amenities.includes(a));
+  const fact = (icon: IconName, label: string, value: string) => (
+    <View style={styles.fact}>
+      <Ionicons name={icon} size={18} color={Colors.brandPrimaryDark} />
+      <Text style={styles.factValue}>{value}</Text>
+      <Text style={styles.factLabel}>{label}</Text>
+    </View>
+  );
 
   return (
     <View style={styles.container}>
-      <Header title="Homestay Profile" onBack={() => navigation.goBack()} />
+      <Header title="Homestay profile" onBack={() => navigation.goBack()} />
 
-      <FormScroll contentContainerStyle={styles.scrollContent}>
-        {/* Info Card */}
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Identity */}
+        <View style={styles.hero}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{initial}</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.heroName} numberOfLines={2}>
+              {homestay.name || 'Your homestay'}
+            </Text>
+            {homestay.ownerName ? <Text style={styles.heroOwner}>Hosted by {homestay.ownerName}</Text> : null}
+            {homestay.location ? (
+              <Text style={styles.heroLocation} numberOfLines={2}>
+                {homestay.location}
+              </Text>
+            ) : null}
+          </View>
+          <TouchableOpacity style={styles.editBtn} onPress={openEdit} accessibilityRole="button" accessibilityLabel="Edit homestay details">
+            <Ionicons name="create-outline" size={18} color={Colors.white} />
+          </TouchableOpacity>
+        </View>
+
+        {/* At a glance */}
+        <View style={styles.factsRow}>
+          {fact('log-in-outline', 'Check-in', homestay.checkInTime || '—')}
+          {fact('log-out-outline', 'Check-out', homestay.checkOutTime || '—')}
+          {fact('bed-outline', 'Rooms', String(rooms.length))}
+        </View>
+
+        {/* Only when missing: drivers can't find an unpinned homestay */}
+        {!hasPin ? (
+          <TouchableOpacity style={[styles.card, styles.locationCard, { marginTop: 12 }]} onPress={() => setPinVisible(true)} accessibilityRole="button">
+            <View style={[styles.locIcon, { backgroundColor: Colors.statusOrangeBg }]}>
+              <Ionicons name="location" size={20} color={Colors.statusOrange} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cardTitle}>Pin your homestay on the map</Text>
+              <Text style={styles.cardSub}>Your address is filled in from the pin, and nearby drivers get your cab requests</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={Colors.textSecondary} />
+          </TouchableOpacity>
+        ) : null}
+
+        {/* Contact */}
+        <Text style={styles.section}>Contact</Text>
         <View style={styles.card}>
-          <View style={styles.rowBetween}>
-            <Text style={styles.name}>{homestay.name}</Text>
-            <TouchableOpacity onPress={openEditModal}>
-              <Text style={styles.editLink}>Edit</Text>
-            </TouchableOpacity>
+          <View style={styles.contactRow}>
+            <Ionicons name="call-outline" size={18} color={Colors.textSecondary} />
+            <Text style={styles.contactText}>{homestay.phone || 'Add a phone number'}</Text>
           </View>
-
-          <Text style={styles.location}>{homestay.location}</Text>
-          <Text style={styles.owner}>Owned by {homestay.ownerName}</Text>
-          <Text style={styles.description}>{homestay.description}</Text>
-
-          <View style={styles.divider} />
-
-          <Text style={styles.contact}>
-            {homestay.phone}  ·  {homestay.email}
-          </Text>
-        </View>
-
-        {/* Photos Section */}
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Photos ({homestay.photos.length})</Text>
-          <View style={styles.chipsContainer}>
-            {homestay.photos.map((p) => (
-              <View key={p} style={styles.chipItem}>
-                <Text style={styles.chipText}>{p}</Text>
-                <TouchableOpacity onPress={() => handleRemovePhoto(p)}>
-                  <Text style={styles.chipRemove}>✕</Text>
-                </TouchableOpacity>
-              </View>
-            ))}
-            <TouchableOpacity
-              style={styles.chipAdd}
-              onPress={() => setPhotoPickerVisible(true)}
-            >
-              <Text style={styles.chipAddText}>+ Add photo</Text>
-            </TouchableOpacity>
+          <View style={[styles.contactRow, { borderBottomWidth: 0 }]}>
+            <Ionicons name="mail-outline" size={18} color={Colors.textSecondary} />
+            <Text style={styles.contactText}>{homestay.email || 'Add an email'}</Text>
           </View>
         </View>
 
-        {/* Amenities Section */}
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>
-            Amenities ({homestay.amenities.length})
+        {/* About */}
+        <View style={styles.sectionRow}>
+          <Text style={styles.section}>About</Text>
+          <TouchableOpacity onPress={openEdit} hitSlop={8}>
+            <Text style={styles.sectionAction}>Edit</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.card}>
+          <Text style={homestay.description ? styles.about : styles.placeholder}>
+            {homestay.description || 'Tell guests what makes your homestay special: views, food, the walk to town…'}
           </Text>
-          <View style={styles.chipsContainer}>
-            {homestay.amenities.map((a) => (
-              <View key={a} style={styles.chipItem}>
+        </View>
+
+        {/* Amenities */}
+        <View style={styles.sectionRow}>
+          <Text style={styles.section}>Amenities · {amenities.length}</Text>
+          <TouchableOpacity
+            onPress={() => {
+              setAmenityDraft(amenities);
+              setAmenitiesVisible(true);
+            }}
+            hitSlop={8}
+          >
+            <Text style={styles.sectionAction}>Edit</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={[styles.card, styles.chipWrap]}>
+          {amenities.length === 0 ? (
+            <Text style={styles.placeholder}>No amenities yet. Tap Edit to choose them.</Text>
+          ) : (
+            amenities.map((a) => (
+              <View key={a} style={styles.chip}>
+                <Ionicons name={iconFor(a)} size={14} color={Colors.brandPrimaryDark} />
                 <Text style={styles.chipText}>{a}</Text>
-                <TouchableOpacity onPress={() => handleRemoveAmenity(a)}>
-                  <Text style={styles.chipRemove}>✕</Text>
-                </TouchableOpacity>
               </View>
-            ))}
-            <TouchableOpacity
-              style={styles.chipAdd}
-              onPress={() => setAmenityPickerVisible(true)}
-            >
-              <Text style={styles.chipAddText}>+ Add amenity</Text>
+            ))
+          )}
+        </View>
+
+        {/* Photo highlights */}
+        <View style={styles.sectionRow}>
+          <Text style={styles.section}>Photo highlights · {photos.length}</Text>
+          <TouchableOpacity
+            onPress={() => {
+              setPhotoDraft(photos);
+              setPhotosVisible(true);
+            }}
+            hitSlop={8}
+          >
+            <Text style={styles.sectionAction}>Edit</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={[styles.card, styles.chipWrap]}>
+          {photos.length === 0 ? (
+            <Text style={styles.placeholder}>Choose which spaces you have photos of.</Text>
+          ) : (
+            photos.map((p) => (
+              <View key={p} style={[styles.chip, styles.chipGrey]}>
+                <Ionicons name="image-outline" size={14} color={Colors.textSecondary} />
+                <Text style={styles.chipText}>{p}</Text>
+              </View>
+            ))
+          )}
+        </View>
+      </ScrollView>
+
+      <LocationPicker
+        visible={pinVisible}
+        title="Pin your homestay"
+        initial={hasPin ? { latitude: homestay.latitude!, longitude: homestay.longitude! } : null}
+        onConfirm={handlePinned}
+        onClose={() => setPinVisible(false)}
+      />
+
+      {/* Edit details: full-screen form with grouped fields */}
+      <Modal visible={editVisible} animationType="slide" onRequestClose={() => setEditVisible(false)}>
+        <View style={[styles.sheet, { paddingTop: insets.top }]}>
+          {/* iOS shows one modal at a time: the map opens inside this sheet */}
+          <LocationPicker
+            visible={editPinVisible}
+            title="Pin your homestay"
+            initial={pinDraft}
+            onConfirm={(loc) => {
+              setPinDraft({ latitude: loc.latitude, longitude: loc.longitude });
+              if (loc.address) setAddress(loc.address);
+              setEditPinVisible(false);
+            }}
+            onClose={() => setEditPinVisible(false)}
+          />
+          <View style={styles.sheetHeader}>
+            <TouchableOpacity onPress={() => setEditVisible(false)} hitSlop={10} accessibilityLabel="Close">
+              <Ionicons name="close" size={24} color={Colors.textPrimary} />
+            </TouchableOpacity>
+            <Text style={styles.sheetTitle}>Edit homestay</Text>
+            <View style={{ width: 24 }} />
+          </View>
+          <FormScroll contentContainerStyle={styles.form}>
+            <Text style={styles.formGroup}>Basics</Text>
+            <Text style={styles.label}>Homestay name</Text>
+            <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="e.g. Hill View Homestay" placeholderTextColor={Colors.textTertiary} />
+            <Text style={styles.label}>Host name</Text>
+            <TextInput style={styles.input} value={owner} onChangeText={setOwner} placeholder="Your name" placeholderTextColor={Colors.textTertiary} />
+            <Text style={styles.label}>Location</Text>
+            <TouchableOpacity style={[styles.input, styles.pinField]} onPress={() => setEditPinVisible(true)} accessibilityRole="button" accessibilityLabel="Set location on map">
+              <Ionicons name="location" size={18} color={pinDraft ? Colors.brandPrimaryDark : Colors.statusOrange} />
+              <View style={{ flex: 1 }}>
+                <Text style={pinDraft ? styles.pinFieldText : styles.placeholder} numberOfLines={3}>
+                  {pinDraft ? address || `${pinDraft.latitude.toFixed(5)}, ${pinDraft.longitude.toFixed(5)}` : 'Pin your homestay on the map'}
+                </Text>
+                <Text style={styles.cardSub}>{pinDraft ? 'Tap to move the pin' : 'The address is filled in from the pin'}</Text>
+              </View>
+              <Ionicons name="map-outline" size={18} color={Colors.brandPrimaryDark} />
+            </TouchableOpacity>
+
+            <Text style={styles.formGroup}>Contact</Text>
+            <Text style={styles.label}>Phone</Text>
+            <TextInput style={styles.input} value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="10-digit mobile" placeholderTextColor={Colors.textTertiary} />
+            <Text style={styles.label}>Email</Text>
+            <TextInput style={styles.input} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" placeholder="you@example.com" placeholderTextColor={Colors.textTertiary} />
+
+            <Text style={styles.formGroup}>House times</Text>
+            <View style={styles.timeRow}>
+              <View style={{ flex: 1 }}>
+                <PlatformSelect label="Check-in from" value={checkInTime} options={HOUSE_TIMES} onSelect={setCheckInTime} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <PlatformSelect label="Check-out by" value={checkOutTime} options={HOUSE_TIMES} onSelect={setCheckOutTime} />
+              </View>
+            </View>
+
+            <Text style={styles.formGroup}>About</Text>
+            <TextInput
+              style={[styles.input, styles.textArea]}
+              value={description}
+              onChangeText={setDescription}
+              multiline
+              placeholder="What guests will love about your place"
+              placeholderTextColor={Colors.textTertiary}
+            />
+          </FormScroll>
+          <View style={[styles.sheetFooter, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+            <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.6 }]} onPress={saveDetails} disabled={saving} accessibilityRole="button">
+              {saving ? <ActivityIndicator color={Colors.white} /> : <Text style={styles.saveText}>Save changes</Text>}
             </TouchableOpacity>
           </View>
         </View>
-      </FormScroll>
-
-      {/* Edit Profile Modal */}
-      <Modal
-        visible={editModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setEditModalVisible(false)}
-      >
-        <KeyboardAwareOverlay style={{ flex: 1 }}>
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setEditModalVisible(false)}
-        >
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Edit Homestay Profile</Text>
-
-            <ScrollView style={{ maxHeight: 380 }}>
-              <Text style={styles.label}>Homestay Name</Text>
-              <TextInput
-                style={styles.input}
-                value={name}
-                onChangeText={setName}
-              />
-
-              <Text style={styles.label}>Owner Name</Text>
-              <TextInput
-                style={styles.input}
-                value={owner}
-                onChangeText={setOwner}
-              />
-
-              <Text style={styles.label}>Phone</Text>
-              <TextInput
-                style={styles.input}
-                value={phone}
-                onChangeText={setPhone}
-                keyboardType="phone-pad"
-              />
-
-              <Text style={styles.label}>Email</Text>
-              <TextInput
-                style={styles.input}
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-              />
-
-              <Text style={styles.label}>Location / Address</Text>
-              <TextInput
-                style={styles.input}
-                value={location}
-                onChangeText={setLocation}
-              />
-
-              <PlatformSelect label="Check-in from" value={checkInTime} options={HOUSE_TIMES} onSelect={setCheckInTime} />
-              <PlatformSelect label="Check-out by" value={checkOutTime} options={HOUSE_TIMES} onSelect={setCheckOutTime} />
-
-              <Text style={styles.label}>Description</Text>
-              <TextInput
-                style={[styles.input, styles.textArea]}
-                value={description}
-                onChangeText={setDescription}
-                multiline
-                numberOfLines={3}
-              />
-            </ScrollView>
-
-            <TouchableOpacity style={styles.saveBtn} onPress={handleSaveProfile}>
-              <Text style={styles.saveBtnText}>Save</Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-        </KeyboardAwareOverlay>
       </Modal>
 
-      {/* Add Photo Preset Modal */}
-      <Modal
-        visible={photoPickerVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setPhotoPickerVisible(false)}
-      >
-        <KeyboardAwareOverlay style={{ flex: 1 }}>
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setPhotoPickerVisible(false)}
-        >
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Add photo</Text>
-            <ScrollView style={{ maxHeight: 300 }}>
-              {remainingPhotos.length === 0 ? (
-                <Text style={styles.emptyPrompt}>All presets already added</Text>
-              ) : (
-                remainingPhotos.map((p) => (
-                  <TouchableOpacity
-                    key={p}
-                    style={styles.presetItem}
-                    onPress={() => handleAddPhoto(p)}
-                  >
-                    <Text style={styles.presetItemText}>{p}</Text>
-                  </TouchableOpacity>
-                ))
-              )}
-            </ScrollView>
+      {/* Amenities / photos: tick what you have, save once */}
+      {(
+        [
+          [amenitiesVisible, setAmenitiesVisible, 'Amenities', AMENITIES.map((a) => a.label), amenityDraft, setAmenityDraft, 'amenities'],
+          [photosVisible, setPhotosVisible, 'Photo highlights', PHOTO_PRESETS, photoDraft, setPhotoDraft, 'photos'],
+        ] as const
+      ).map(([visible, setVisible, title, options, draft, setDraft, field]) => (
+        <Modal key={field} visible={visible} transparent animationType="slide" onRequestClose={() => setVisible(false)}>
+          <View style={styles.pickOverlay}>
+            <View style={[styles.pickSheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+              <View style={styles.sheetHeader}>
+                <Text style={styles.sheetTitle}>{title}</Text>
+                <TouchableOpacity onPress={() => setVisible(false)} hitSlop={10} accessibilityLabel="Close">
+                  <Ionicons name="close" size={24} color={Colors.textPrimary} />
+                </TouchableOpacity>
+              </View>
+              <ScrollView style={{ maxHeight: 420 }} contentContainerStyle={styles.pickGrid}>
+                {options.map((o) => {
+                  const on = draft.includes(o);
+                  return (
+                    <TouchableOpacity
+                      key={o}
+                      style={[styles.pickItem, on && styles.pickItemOn]}
+                      onPress={() => setDraft(toggle(draft, o))}
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked: on }}
+                    >
+                      <Ionicons name={field === 'amenities' ? iconFor(o) : 'image-outline'} size={16} color={on ? Colors.white : Colors.brandPrimaryDark} />
+                      <Text style={[styles.pickText, on && { color: Colors.white }]}>{o}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+              <TouchableOpacity
+                style={[styles.saveBtn, saving && { opacity: 0.6 }]}
+                disabled={saving}
+                onPress={() => save({ ...homestay, [field]: draft }, () => setVisible(false))}
+                accessibilityRole="button"
+              >
+                {saving ? <ActivityIndicator color={Colors.white} /> : <Text style={styles.saveText}>Save {draft.length} selected</Text>}
+              </TouchableOpacity>
+            </View>
           </View>
-        </TouchableOpacity>
-        </KeyboardAwareOverlay>
-      </Modal>
-
-      {/* Add Amenity Preset Modal */}
-      <Modal
-        visible={amenityPickerVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setAmenityPickerVisible(false)}
-      >
-        <KeyboardAwareOverlay style={{ flex: 1 }}>
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setAmenityPickerVisible(false)}
-        >
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Add amenity</Text>
-            <ScrollView style={{ maxHeight: 300 }}>
-              {remainingAmenities.length === 0 ? (
-                <Text style={styles.emptyPrompt}>All presets already added</Text>
-              ) : (
-                remainingAmenities.map((a) => (
-                  <TouchableOpacity
-                    key={a}
-                    style={styles.presetItem}
-                    onPress={() => handleAddAmenity(a)}
-                  >
-                    <Text style={styles.presetItemText}>{a}</Text>
-                  </TouchableOpacity>
-                ))
-              )}
-            </ScrollView>
-          </View>
-        </TouchableOpacity>
-        </KeyboardAwareOverlay>
-      </Modal>
-
+        </Modal>
+      ))}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.pageBackground,
-  },
-  scrollContent: {
-    paddingHorizontal: 14,
-    paddingTop: 12,
-    paddingBottom: 36,
-  },
-  card: {
-    backgroundColor: Colors.bgCard,
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: Colors.divider,
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  rowBetween: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  name: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: Colors.textPrimary,
-    flex: 1,
-  },
-  editLink: {
-    color: Colors.brandPrimary,
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  location: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    marginTop: 4,
-  },
-  owner: {
-    fontSize: 13,
-    color: Colors.brandPrimaryDark,
-    fontWeight: '600',
-    marginTop: 2,
-  },
-  description: {
-    fontSize: 13,
-    color: Colors.textPrimary,
-    marginTop: 8,
-    lineHeight: 18,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: Colors.divider,
-    marginVertical: 12,
-  },
-  contact: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-  },
-  sectionCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    padding: 14,
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: Colors.divider,
-  },
-  sectionTitle: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: Colors.textPrimary,
-    marginBottom: 10,
-  },
-  chipsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  chipItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  chipText: {
-    fontSize: 13,
-    color: Colors.textPrimary,
-    marginRight: 6,
-  },
-  chipRemove: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    fontWeight: 'bold',
-  },
-  chipAdd: {
-    backgroundColor: Colors.brandPrimaryLight,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  chipAddText: {
-    fontSize: 13,
-    color: Colors.brandPrimaryDark,
-    fontWeight: 'bold',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    padding: 20,
-  },
-  modalCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    padding: 20,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: Colors.textPrimary,
-    marginBottom: 12,
-  },
-  label: {
-    fontSize: 13,
-    fontWeight: 'bold',
-    color: Colors.textSecondary,
-    marginTop: 10,
-    marginBottom: 4,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: Colors.divider,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-    color: Colors.textPrimary,
-  },
-  textArea: {
-    minHeight: 75,
-    textAlignVertical: 'top',
-  },
-  saveBtn: {
-    backgroundColor: Colors.brandPrimary,
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: 'center',
-    marginTop: 18,
-  },
-  saveBtnText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 15,
-  },
-  emptyPrompt: {
-    color: Colors.textSecondary,
-    fontSize: 14,
-    paddingVertical: 10,
-  },
-  presetItem: {
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.divider,
-  },
-  presetItemText: {
-    fontSize: 14,
-    color: Colors.textPrimary,
-  },
+  container: { flex: 1, backgroundColor: Colors.bgPage },
+  content: { padding: 16, paddingBottom: 40 },
+  hero: { flexDirection: 'row', alignItems: 'flex-start', gap: 14, backgroundColor: Colors.brandPrimaryDark, borderRadius: Radii.dialog, padding: 18, ...Shadows.hover },
+  avatar: { width: 54, height: 54, borderRadius: 16, backgroundColor: Colors.white, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { fontSize: 24, fontWeight: '800', color: Colors.brandPrimaryDark },
+  heroName: { fontSize: 20, fontWeight: '800', color: Colors.white },
+  heroOwner: { fontSize: 13, color: '#E2DAFF', marginTop: 3 },
+  heroLocation: { fontSize: 13, color: '#E2DAFF', marginTop: 4, lineHeight: 18 },
+  editBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
+  factsRow: { flexDirection: 'row', gap: 10, marginTop: 12 },
+  fact: { flex: 1, backgroundColor: Colors.bgCard, borderRadius: Radii.card, paddingVertical: 12, alignItems: 'center', ...Shadows.card },
+  factValue: { fontSize: 14, fontWeight: '800', color: Colors.textPrimary, marginTop: 6 },
+  factLabel: { fontSize: 11, color: Colors.textSecondary, marginTop: 2 },
+  section: { fontSize: 12, fontWeight: '800', color: Colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.6, marginTop: 20, marginBottom: 8 },
+  sectionRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
+  sectionAction: { fontSize: 13, fontWeight: '700', color: Colors.brandPrimaryDark },
+  card: { backgroundColor: Colors.bgCard, borderRadius: Radii.card, padding: 14, ...Shadows.card },
+  locationCard: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  locIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.brandPrimaryLight, alignItems: 'center', justifyContent: 'center' },
+  cardTitle: { fontSize: 15, fontWeight: '700', color: Colors.textPrimary },
+  cardSub: { fontSize: 12, color: Colors.textSecondary, marginTop: 2 },
+  contactRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.divider },
+  contactText: { fontSize: 14, color: Colors.textPrimary },
+  about: { fontSize: 14, color: Colors.textPrimary, lineHeight: 21 },
+  placeholder: { fontSize: 13, color: Colors.textTertiary, lineHeight: 19 },
+  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: Colors.brandPrimaryLight, paddingHorizontal: 10, paddingVertical: 7, borderRadius: Radii.pill },
+  chipGrey: { backgroundColor: Colors.statusGreyBg },
+  chipText: { fontSize: 13, color: Colors.textPrimary, fontWeight: '600' },
+  sheet: { flex: 1, backgroundColor: Colors.bgPage },
+  sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12 },
+  sheetTitle: { fontSize: 17, fontWeight: '800', color: Colors.textPrimary },
+  form: { paddingHorizontal: 16, paddingBottom: 24 },
+  formGroup: { fontSize: 12, fontWeight: '800', color: Colors.brandPrimaryDark, textTransform: 'uppercase', letterSpacing: 0.6, marginTop: 18, marginBottom: 2 },
+  label: { fontSize: 13, fontWeight: '700', color: Colors.textSecondary, marginTop: 10, marginBottom: 6 },
+  input: { backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.divider, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 12, fontSize: 15, color: Colors.textPrimary },
+  textArea: { minHeight: 100, textAlignVertical: 'top', marginTop: 6 },
+  timeRow: { flexDirection: 'row', gap: 10 },
+  sheetFooter: { paddingHorizontal: 16, paddingTop: 10, backgroundColor: Colors.bgCard, borderTopWidth: 1, borderTopColor: Colors.divider },
+  saveBtn: { backgroundColor: Colors.brandPrimary, borderRadius: Radii.button, paddingVertical: 14, alignItems: 'center', marginTop: 12 },
+  saveText: { color: Colors.white, fontSize: 15, fontWeight: '800' },
+  pickOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  pickSheet: { backgroundColor: Colors.bgCard, borderTopLeftRadius: Radii.dialog, borderTopRightRadius: Radii.dialog, paddingHorizontal: 16 },
+  pickGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingBottom: 6 },
+  pickItem: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderColor: Colors.divider, paddingHorizontal: 12, paddingVertical: 9, borderRadius: Radii.pill, backgroundColor: Colors.white },
+  pickItemOn: { backgroundColor: Colors.brandPrimary, borderColor: Colors.brandPrimary },
+  pinField: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  pinFieldText: { fontSize: 15, color: Colors.textPrimary, lineHeight: 20 },
+  pickText: { fontSize: 13, fontWeight: '600', color: Colors.textPrimary },
 });

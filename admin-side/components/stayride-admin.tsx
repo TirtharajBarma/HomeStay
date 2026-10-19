@@ -9,6 +9,8 @@ type Any = Record<string, any>;
 type TabProps = { demo: boolean };
 
 export const FEATURE_KEYS = ["campaigns", "guestCabLinks", "platformDispatch", "payouts", "driverQuotes"] as const;
+// Driver quotes is a drivers' feature: one global switch, no per-homestay override
+const HOMESTAY_FEATURE_KEYS = FEATURE_KEYS.filter((k) => k !== "driverQuotes");
 const FEATURE_LABELS: Record<string, string> = {
   campaigns: "Campaigns",
   guestCabLinks: "Guest cab links",
@@ -320,6 +322,9 @@ export function DashboardTab({ demo }: TabProps) {
             <Kpi label="Homestay commission (owed to homestays)" value={inr(cab.homestayCommission)} hint={rateHint(rates?.hc)} />
             <Kpi label="Refunds pending" value={inr(cab.refundsPending)} />
             <Kpi label="Driver share dues pending" value={inr(cab.driverDuesPending)} />
+            {typeof cab.unmatchedPending === "number" && cab.unmatchedPending > 0 && (
+              <Kpi label="Unmatched money to refund" value={inr(cab.unmatchedPending)} hint={`${cab.unmatchedCount ?? 0} payment(s)`} />
+            )}
           </div>
           <div>
             <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">Homestay payouts by status</h3>
@@ -425,11 +430,11 @@ export function UsersTab({ demo }: TabProps) {
                     <td className="p-3 text-slate-400">{dt(u.createdAt)}</td>
                     <td className="p-3 text-right">
                       <div className="flex flex-wrap justify-end gap-1">
-                        {u.accountStatus === "PENDING_APPROVAL" && <button className={btn.ok} onClick={() => setDialog({ u, kind: "approve" })}>Approve</button>}
+                        {u.accountStatus === "PENDING_APPROVAL" && !u.deletedAt && <button className={btn.ok} onClick={() => setDialog({ u, kind: "approve" })}>Approve</button>}
                         {u.accountStatus === "BLOCKED" && !u.deletedAt && <button className={btn.ok} onClick={() => setDialog({ u, kind: "unblock" })}>Unblock</button>}
                         {u.accountStatus !== "BLOCKED" && <button className={btn.danger} onClick={() => setDialog({ u, kind: "block" })}>Block</button>}
                         {u.accountStatus === "ACTIVE" && u.role === "driver" && <button className={btn.ghost} onClick={() => setDialog({ u, kind: "pending" })}>Set pending</button>}
-                        <button className={btn.ghost} onClick={() => setDialog({ u, kind: "role" })}>Role</button>
+                        {!u.deletedAt && <button className={btn.ghost} onClick={() => setDialog({ u, kind: "role" })}>Role</button>}
                         <button className={btn.ghost} onClick={() => setDialog({ u, kind: "revoke" })}>Revoke sessions</button>
                         {!u.deletedAt && <button className={btn.danger} onClick={() => setDialog({ u, kind: "delete" })}>Delete</button>}
                       </div>
@@ -581,8 +586,8 @@ function HomestayRow({ t, demo, onChanged, onOpen }: { t: Any; demo: boolean; on
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-2 md:grid-cols-5">
-        {FEATURE_KEYS.map((k) => {
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
+        {HOMESTAY_FEATURE_KEYS.map((k) => {
           const ov = overrides[k];
           const value = ov === true ? "on" : ov === false ? "off" : "default";
           return (
@@ -898,7 +903,7 @@ export function DriversTab({ demo }: TabProps) {
                 {items.map((d) => (
                   <tr key={rid(d)} className="hover:bg-slate-900/40">
                     <td className="p-3">
-                      <p className="font-semibold text-white">{d.name}</p>
+                      <p className="font-semibold text-white">{d.name} {d.deletedAt && <Badge tone="red">deleted</Badge>}</p>
                       <p className="text-slate-500">{d.email} • {d.phone || "—"}</p>
                     </td>
                     <td className="p-3 text-slate-300">
@@ -911,9 +916,15 @@ export function DriversTab({ demo }: TabProps) {
                     </td>
                     <td className="p-3 text-slate-400">{dt(d.createdAt)}</td>
                     <td className="p-3 text-right space-x-1 whitespace-nowrap">
-                      {d.accountStatus !== "ACTIVE" && <button className={btn.ok} onClick={() => setDriverStatus(d, "ACTIVE")}>Approve</button>}
-                      {d.accountStatus !== "BLOCKED" && <button className={btn.danger} onClick={() => setDriverStatus(d, "BLOCKED")}>Block</button>}
-                      {d.accountStatus !== "PENDING_APPROVAL" && <button className={btn.ghost} onClick={() => setDriverStatus(d, "PENDING_APPROVAL")}>Set pending</button>}
+                      {d.deletedAt ? (
+                        <span className="text-[11px] text-slate-500">Deleted account</span>
+                      ) : (
+                        <>
+                          {d.accountStatus !== "ACTIVE" && <button className={btn.ok} onClick={() => setDriverStatus(d, "ACTIVE")}>Approve</button>}
+                          {d.accountStatus !== "BLOCKED" && <button className={btn.danger} onClick={() => setDriverStatus(d, "BLOCKED")}>Block</button>}
+                          {d.accountStatus !== "PENDING_APPROVAL" && <button className={btn.ghost} onClick={() => setDriverStatus(d, "PENDING_APPROVAL")}>Set pending</button>}
+                        </>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -942,6 +953,7 @@ const CAB_FILTERS: Record<string, { label: string; query?: Any; pending?: boolea
   expired: { label: "Expired", query: { status: "EXPIRED" } },
   refunds: { label: "Refunds pending", query: { refundStatus: "PENDING" } },
   dues: { label: "Driver dues pending", query: { driverSettlementStatus: "PENDING" } },
+  unmatched: { label: "Unmatched to refund", query: { unmatched: "true" } },
   all: { label: "All" },
 };
 
@@ -1038,6 +1050,12 @@ function CabRequestCard({ c, demo, onChanged }: { c: Any; demo: boolean; onChang
     const reference = ask(`Refund reference (UTR) for ${inr(c.advanceAmount)} to ${c.guestName}:`);
     if (reference && window.confirm(`Mark ${inr(c.advanceAmount)} refunded with reference ${reference}?`)) post("refund", { reference });
   }
+  function refundUnmatched(paymentId: string, amount: number) {
+    const reference = ask(`Refund reference (UTR) for unmatched payment ${paymentId} (${inr(amount)}) to ${c.guestName}:`);
+    if (reference && window.confirm(`Mark unmatched payment ${paymentId} (${inr(amount)}) refunded with reference ${reference}?`)) {
+      post("unmatched-refunded", { paymentId, reference });
+    }
+  }
   function settleDriver() {
     const due = typeof s.driverShareOfAdvance === "number" ? s.driverShareOfAdvance : undefined;
     const reference = ask(`Transfer reference (UTR) for driver ${c.assignedDriverName} (due ${inr(due)}):`);
@@ -1073,9 +1091,30 @@ function CabRequestCard({ c, demo, onChanged }: { c: Any; demo: boolean; onChang
           {c.advanceDueAt && !c.advancePaid && <p className="text-amber-300">Advance due by {dt(c.advanceDueAt)}</p>}
           {c.paymentLinkUrl && <p className="text-slate-400">Payment link: <a className="text-blue-400 underline" href={c.paymentLinkUrl} target="_blank" rel="noreferrer">{c.paymentLinkUrl}</a></p>}
           {Array.isArray(c.unmatchedPayments) && c.unmatchedPayments.length > 0 && (
-            <p className="font-bold text-red-400">
-              ⚠ Refund needed in Razorpay: {c.unmatchedPayments.map((u: Any) => `${u.paymentId} (${inr(u.amount)}, request was ${u.status})`).join(", ")}
-            </p>
+            <div className="mt-2 rounded-xl border border-red-800/60 bg-red-950/40 p-2.5 space-y-1.5">
+              <p className="font-bold text-red-300">Unmatched / Out-of-Sequence Payments (Refunds Needed):</p>
+              {c.unmatchedPayments.map((u: Any, idx: number) => (
+                <div key={idx} className="flex flex-wrap items-center justify-between gap-2 text-slate-300">
+                  <span>
+                    <span className="font-mono text-white">{u.paymentId}</span> • {inr(u.amount)} • state was {u.status} • {dt(u.at)}
+                    {u.refundedAt ? (
+                      <span className="ml-2 font-semibold text-emerald-400">✓ Refunded (UTR: {u.refundReference || "—"})</span>
+                    ) : (
+                      <span className="ml-2 font-semibold text-amber-400">⚠ Needs Refund</span>
+                    )}
+                  </span>
+                  {!u.refundedAt && (
+                    <button
+                      type="button"
+                      className="rounded bg-red-600 px-2 py-0.5 text-[11px] font-bold text-white hover:bg-red-500"
+                      onClick={() => refundUnmatched(u.paymentId, u.amount)}
+                    >
+                      Mark Refunded (UTR)
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
           )}
         </div>
         <div className="min-w-[250px] rounded-xl border border-slate-800 bg-slate-950 p-3 space-y-1">
@@ -1489,7 +1528,13 @@ export function SettingsTab({ demo }: TabProps) {
                   <tr key={k} className="text-slate-300">
                     <td className="p-1">{FEATURE_LABELS[k]}</td>
                     <td className="p-1"><input type="checkbox" checked={!!features[k]?.enabled} onChange={(e) => setFeature(k, "enabled", e.target.checked)} /></td>
-                    <td className="p-1"><input type="checkbox" checked={!!features[k]?.defaultOn} onChange={(e) => setFeature(k, "defaultOn", e.target.checked)} /></td>
+                    <td className="p-1">
+                      {k === "driverQuotes" ? (
+                        <span className="text-[10px] text-slate-500">all drivers (no per-homestay setting)</span>
+                      ) : (
+                        <input type="checkbox" checked={!!features[k]?.defaultOn} onChange={(e) => setFeature(k, "defaultOn", e.target.checked)} />
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -1549,6 +1594,32 @@ const NUM_FIELDS: { key: string; label: string; hint: string }[] = [
   { key: "guestLinkDays", label: "Guest link validity (days)", hint: "" },
   { key: "maxOpenRequestsPerPhone", label: "Open requests per guest phone", hint: "Abuse limit on the public guest page." },
   { key: "maxFare", label: "Maximum fare ₹", hint: "Sanity cap on any quote or assignment." },
+  { key: "quoteValidityHours", label: "Driver quote valid for (hours)", hint: "After this a quote expires and the driver can quote again. 0 = never." },
+];
+
+// Business details shown in the app's Privacy Policy, Terms and Refund pages (required before publishing)
+const BUSINESS_FIELDS: { key: string; label: string }[] = [
+  { key: "name", label: "Brand name" },
+  { key: "legalName", label: "Registered business name" },
+  { key: "address", label: "Registered address (city, state)" },
+  { key: "email", label: "Support email" },
+  { key: "phone", label: "Support phone" },
+  { key: "grievanceOfficer", label: "Grievance Officer name" },
+  { key: "grievanceEmail", label: "Grievance email" },
+  { key: "website", label: "Website" },
+];
+
+// Message types StayRide sends on WhatsApp; each needs a Meta-approved template (wording is set in Meta)
+const WHATSAPP_EVENTS: { key: string; label: string }[] = [
+  { key: "ASK_CAB", label: "Ask guest for a cab (link)" },
+  { key: "NEW_REQUEST", label: "New trip request to drivers (quote link)" },
+  { key: "QUOTE_COUNTER", label: "Owner's counter-offer to a driver" },
+  { key: "QUOTE_ACCEPTED_DRIVER", label: "Driver: your quote was accepted" },
+  { key: "QUOTE_ACCEPTED_GUEST", label: "Guest: pay the advance" },
+  { key: "ADVANCE_PAID_GUEST", label: "Guest: trip confirmed + driver details" },
+  { key: "ADVANCE_PAID_DRIVER", label: "Driver: trip confirmed + guest details" },
+  { key: "ADVANCE_EXPIRED_GUEST", label: "Guest: hold expired (advance not paid)" },
+  { key: "TRIP_ASSIGNED_DRIVER", label: "Own driver: trip assigned" },
 ];
 
 function OperationsSettings({ demo }: TabProps) {
@@ -1588,11 +1659,7 @@ function OperationsSettings({ demo }: TabProps) {
           method: "PUT",
           demo,
           body: {
-            // rates are required by the endpoint: send the saved ones unchanged
-            globalPlatformFeePercent: data.globalPlatformFeePercent,
-            globalHomestayCommissionPercent: data.globalHomestayCommissionPercent,
-            defaultAdvancePercent: data.defaultAdvancePercent,
-            minAdvanceAmount: data.minAdvanceAmount,
+            // only the operations config: the server keeps the saved rates and feature switches
             platform: { ...cfg, sightseeingPresets: presetList(presets), icalAllowedHosts: presetList(icalHosts) },
             changeReason: reason.trim(),
           },
@@ -1657,6 +1724,44 @@ function OperationsSettings({ demo }: TabProps) {
             Sightseeing presets (one per line)
             <textarea className={`${input} mt-1 h-40 w-full font-mono`} value={presets} onChange={(e) => setPresets(e.target.value)} />
           </label>
+
+          <div className="rounded-xl border border-slate-800 p-3">
+            <p className="mb-2 font-semibold text-slate-300">Business details (legal pages)</p>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {BUSINESS_FIELDS.map((f) => (
+                <label key={f.key} className="text-slate-400">
+                  {f.label}
+                  <input
+                    className={`${input} mt-1 w-full`}
+                    value={cfg.business?.[f.key] ?? ""}
+                    onChange={(e) => set("business", { ...(cfg.business || {}), [f.key]: e.target.value })}
+                  />
+                </label>
+              ))}
+            </div>
+            <p className="mt-1 text-[10px] text-slate-500">Empty fields show a visible “to be added” placeholder in the app&apos;s legal pages.</p>
+          </div>
+
+          <table className="w-full text-left">
+            <thead className="text-slate-400">
+              <tr><th className="p-1">WhatsApp message</th><th className="p-1">Approved template name (empty = plain text, test number only)</th></tr>
+            </thead>
+            <tbody>
+              {WHATSAPP_EVENTS.map((e) => (
+                <tr key={e.key} className="text-slate-300">
+                  <td className="p-1">{e.label}</td>
+                  <td className="p-1">
+                    <input
+                      className={`${input} w-full font-mono`}
+                      value={cfg.whatsappTemplates?.[e.key] ?? ""}
+                      placeholder="e.g. stayride_ask_cab"
+                      onChange={(ev) => set("whatsappTemplates", { ...(cfg.whatsappTemplates || {}), [e.key]: ev.target.value.trim().toLowerCase() })}
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
 
           <label className="block text-slate-300">
             Calendar sync: allowed sites (one domain per line)

@@ -149,6 +149,8 @@ interface StayRideContextType {
   reportDriverLocation: (lat: number, lng: number) => Promise<void>;
   quoteTrip: (tripId: number, driverId: number, quotedFare: number) => Promise<ActionOutcome>;
   confirmTripQuote: (tripId: number, driverId: number | string) => Promise<ActionOutcome & { trip?: CabTrip }>;
+  /** Owner counter-offers a driver's quote (StayRide trips). */
+  counterOffer: (tripId: number, driverId: number | string, fare: number) => Promise<ActionOutcome>;
   /** Send a held guest inquiry to the nearby driver network. */
   dispatchTrip: (tripId: number) => Promise<ActionOutcome>;
   acceptTrip: (tripId: number) => Promise<ActionOutcome>;
@@ -159,6 +161,8 @@ interface StayRideContextType {
   rateTrip: (tripId: number, stars: number, comment?: string) => Promise<ActionOutcome>;
   driverQuote: (reference: string, quotedFare: number, notes?: string) => Promise<ActionOutcome>;
   driverStartTrip: (reference: string) => Promise<ActionOutcome>;
+  /** Driver takes the homestay's counter-offer: the trip is confirmed at that fare. */
+  driverAcceptCounter: (reference: string) => Promise<ActionOutcome>;
   driverCompleteTrip: (reference: string) => Promise<ActionOutcome>;
   bookDriver: (data: {
     guestName: string;
@@ -169,6 +173,8 @@ interface StayRideContextType {
     time: string;
     passengers: number;
     vehicleType: VehicleType;
+    pickupLat?: number;
+    pickupLng?: number;
     driverId: number;
     fare: number;
     destinations?: CabTrip['destinations'];
@@ -188,6 +194,8 @@ interface StayRideContextType {
   askGuestForCab: (data: { guestId?: number; guestName: string; guestPhone: string }) => Promise<{ sent: boolean; status: 'SENT' | 'SKIPPED' }>;
 
   updateHomestay: (data: Partial<Homestay>) => Promise<ActionOutcome>;
+  /** Pin the homestay on the map (nearby drivers are matched from here). */
+  setHomestayLocation: (loc: { latitude: number; longitude: number; address?: string }) => Promise<ActionOutcome>;
   isDemoMode: boolean;
 
   login: (email: string, pass: string) => Promise<void>;
@@ -210,6 +218,7 @@ interface StayRideContextType {
       latitude?: number;
       longitude?: number;
       mapQuery?: string;
+      acceptedTerms?: boolean; // new accounts: Terms + Privacy accepted, 18+ confirmed
     }
   ) => Promise<void>;
 }
@@ -318,6 +327,9 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setCampaigns(parsed.campaigns || []);
     setHomestay(parsed.homestay || {});
     setNextIds(parsed.nextIds || { room: 10, guest: 20, booking: 100, driver: 20, trip: 20, campaign: 10 });
+    if (parsed.features) setFeatures(parsed.features);
+    if (parsed.commissionRates) setCommissionRates(parsed.commissionRates);
+    if (parsed.config) setConfig(parsed.config);
   };
 
   // Load from local storage or initialize fresh workspace
@@ -403,7 +415,7 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setSession(updatedSession);
     });
     const unsubAccount = api.onAccountError((code, message) => {
-      if (code === 'ACCOUNT_BLOCKED') {
+      if (code === 'ACCOUNT_BLOCKED' || code === 'OWNER_NOT_APPROVED') {
         setAccountBlock(message);
         return;
       }
@@ -527,9 +539,9 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   // Auto-save on state change
   useEffect(() => {
     if (!loading) {
-      persist({ rooms, guests, bookings, drivers, networkDrivers, trips, campaigns, homestay, isDemoMode, nextIds });
+      persist({ rooms, guests, bookings, drivers, networkDrivers, trips, campaigns, homestay, isDemoMode, nextIds, features, commissionRates, config });
     }
-  }, [rooms, guests, bookings, drivers, networkDrivers, trips, campaigns, homestay, isDemoMode, nextIds, loading]);
+  }, [rooms, guests, bookings, drivers, networkDrivers, trips, campaigns, homestay, isDemoMode, nextIds, features, commissionRates, config, loading]);
 
   // Sync with real backend using high-speed /snapshot aggregator.
   // 1) flush the outbox so the server is at least as new as the local state, then
@@ -1226,6 +1238,8 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     guestName: d.guestName,
     phone: d.phone,
     pickup: d.pickup,
+    pickupLat: d.pickupLat,
+    pickupLng: d.pickupLng,
     destination: d.destination,
     destinations: d.destinations,
     isRoundTrip: d.isRoundTrip,
@@ -1417,6 +1431,19 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return outcome;
   };
 
+  const driverAcceptCounter = async (reference: string): Promise<ActionOutcome> => {
+    const outcome = await submit('POST', `/driver/trips/${encodeURIComponent(reference)}/accept-counter`, {});
+    if (outcome.synced) await refreshDriverTrips().catch(() => {});
+    return outcome;
+  };
+
+  const counterOffer = (tripId: number, driverId: number | string, fare: number): Promise<ActionOutcome> =>
+    submit('POST', `/trips/${tripId}/counter`, { driverId: String(driverId), fare }, {
+      applyServer: (entity) => {
+        if (entity?.id) setTrips((prev) => prev.map((t) => (t.id === tripId ? (entity as CabTrip) : t)));
+      },
+    });
+
   const driverStartTrip = async (reference: string): Promise<ActionOutcome> => {
     const outcome = await submit('POST', `/driver/trips/${encodeURIComponent(reference)}/start`, {});
     if (outcome.synced) await refreshDriverTrips().catch(() => {});
@@ -1438,6 +1465,8 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     time: string;
     passengers: number;
     vehicleType: VehicleType;
+    pickupLat?: number;
+    pickupLng?: number;
     driverId: number;
     fare: number;
     destinations?: CabTrip['destinations'];
@@ -1590,6 +1619,18 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   // ------------------------- Profile & Auth Actions -------------------------
+
+  // Shown at once; rolled back if the server refuses it
+  const setHomestayLocation = (loc: { latitude: number; longitude: number; address?: string }): Promise<ActionOutcome> => {
+    const prevHomestay = homestay;
+    setHomestay((prev) => ({ ...prev, latitude: loc.latitude, longitude: loc.longitude, ...(loc.address ? { location: loc.address } : {}) }));
+    return submit('PUT', '/homestay/location', loc, {
+      applyServer: (entity) => {
+        if (entity) setHomestay((prev) => ({ ...prev, ...(entity as Partial<Homestay>) }));
+      },
+      rollback: () => setHomestay(prevHomestay),
+    });
+  };
 
   const updateHomestay = async (data: Partial<Homestay>): Promise<ActionOutcome> => {
     const prevHomestay = homestay;
@@ -1790,6 +1831,7 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       latitude?: number;
       longitude?: number;
       mapQuery?: string;
+      acceptedTerms?: boolean; // new accounts: Terms + Privacy accepted, 18+ confirmed
     }
   ) => {
     if (!clerkUser) return;
@@ -1825,6 +1867,7 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           latitude: extras?.latitude,
           longitude: extras?.longitude,
           mapQuery: extras?.mapQuery,
+          acceptedTerms: extras?.acceptedTerms === true,
         },
         clerkToken
       );
@@ -1936,6 +1979,9 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setBookingPaid,
         changeBookingRoom,
         editBooking,
+        counterOffer,
+        driverAcceptCounter,
+        setHomestayLocation,
         addPayment,
         removePayment,
         getRoomCalendar,

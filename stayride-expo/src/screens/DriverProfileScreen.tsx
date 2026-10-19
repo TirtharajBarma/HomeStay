@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -12,14 +12,14 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { Shadows } from '../theme/colors';
+import { Colors, Shadows } from '../theme/colors';
 import { useStayRide } from '../data/store';
-import { reportOutcome, confirmLogoutAll } from '../utils/report';
+import { reportOutcome } from '../utils/report';
 
 export const DriverProfileScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
-  const { session, logout, logoutAllDevices, setDriverOnline, pushEnabled } = useStayRide();
+  const { session, logout, setDriverOnline, pushEnabled } = useStayRide();
 
   const isOnline = session?.driver?.available !== false;
 
@@ -131,18 +131,19 @@ export const DriverProfileScreen: React.FC = () => {
           </View>
         </View>
 
-        <TouchableOpacity
-          style={styles.logoutBtn}
-          onPress={() => confirmLogoutAll(logoutAllDevices, () => navigation.replace('Login'))}
-        >
-          <Ionicons name="phone-portrait-outline" size={20} color="#DC2626" />
-          <Text style={styles.logoutText}>Sign out of all devices</Text>
+        <TouchableOpacity style={styles.accountBtn} onPress={() => navigation.navigate('Account')} accessibilityRole="button">
+          <Ionicons name="person-circle-outline" size={20} color={Colors.brandPrimaryDark} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.accountText}>Account & privacy</Text>
+            <Text style={styles.accountSub}>Google sign-in, devices, privacy, terms, delete account</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={16} color={Colors.textSecondary} />
         </TouchableOpacity>
 
-        {/* Sign Out Button */}
-        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-          <Ionicons name="log-out-outline" size={20} color="#DC2626" />
-          <Text style={styles.logoutText}>Sign Out from Driver Account</Text>
+        {/* One sign-out here; "sign out of all devices" lives in Account & privacy → Security */}
+        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} accessibilityRole="button">
+          <Ionicons name="log-out-outline" size={20} color={Colors.white} />
+          <Text style={styles.logoutText}>Sign out</Text>
         </TouchableOpacity>
       </ScrollView>
     </View>
@@ -150,6 +151,19 @@ export const DriverProfileScreen: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
+  accountBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: Colors.bgCard,
+    borderRadius: 14,
+    padding: 14,
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: Colors.divider,
+  },
+  accountText: { fontSize: 15, fontWeight: '700', color: Colors.textPrimary },
+  accountSub: { fontSize: 12, color: Colors.textSecondary, marginTop: 2 },
   container: {
     flex: 1,
     backgroundColor: '#F8FAFC',
@@ -288,16 +302,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: '#FEF2F2',
-    borderWidth: 1,
-    borderColor: '#FECACA',
+    backgroundColor: '#DC2626',
     borderRadius: 14,
     paddingVertical: 14,
-    marginTop: 8,
+    marginTop: 24,
   },
   logoutText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '700',
-    color: '#DC2626',
+    color: Colors.white,
   },
 });

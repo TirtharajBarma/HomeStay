@@ -19,7 +19,11 @@ export type WhatsAppEvent =
   | 'QUOTE_ACCEPTED_GUEST'
   | 'ADVANCE_PAID_GUEST'
   | 'ADVANCE_PAID_DRIVER'
-  | 'TRIP_ASSIGNED_DRIVER';
+  | 'ADVANCE_EXPIRED_GUEST'
+  | 'QUOTE_COUNTER'
+  | 'TRIP_ASSIGNED_DRIVER'
+  | 'TRIP_CANCELLED_GUEST'
+  | 'REFUND_GUEST';
 
 export interface WhatsAppMessage {
   event: WhatsAppEvent;
@@ -44,12 +48,13 @@ export function toWhatsAppNumber(phone: unknown): string | null {
   return /^\d{11,15}$/.test(full) ? full : null;
 }
 
-export async function sendWhatsApp(isDemo: boolean, msg: WhatsAppMessage, language = 'en'): Promise<WhatsAppResult> {
+// templateName: from the admin's settings; the WHATSAPP_TPL_<EVENT> env var is the older fallback
+export async function sendWhatsApp(isDemo: boolean, msg: WhatsAppMessage, language = 'en', templateName?: string): Promise<WhatsAppResult> {
   const to = toWhatsAppNumber(msg.to);
   // Demo tenants never message real phones.
   if (isDemo || !to || !enabled()) return 'SKIPPED';
 
-  const template = process.env[`WHATSAPP_TPL_${msg.event}`];
+  const template = templateName || process.env[`WHATSAPP_TPL_${msg.event}`];
   const body = template
     ? {
         messaging_product: 'whatsapp',

@@ -8,6 +8,7 @@ import {
   Alert,
   TextInput,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -20,6 +21,8 @@ import { Colors } from '../theme/colors';
 import { Driver } from '../types';
 import { formatINR } from '../utils/format';
 import { ownFleetFeeFor } from '../data/platformConfig';
+import { KeyboardAwareOverlay } from '../components/KeyboardAwareOverlay';
+import { isPast } from '../utils/rooms';
 import { api } from '../data/api';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -39,6 +42,7 @@ export const CabRequestDetailScreen: React.FC = () => {
     cancelTrip,
     reassignTrip,
     confirmTripQuote,
+    counterOffer,
     dispatchTrip,
     rateTrip,
     config,
@@ -55,6 +59,9 @@ export const CabRequestDetailScreen: React.FC = () => {
   });
   const [busy, setBusy] = useState(false);
   const [showOwnPicker, setShowOwnPicker] = useState(false);
+  // Counter-offer on a driver's quote
+  const [counterFor, setCounterFor] = useState<{ driverId: number | string; name: string; quoted: number } | null>(null);
+  const [counterFare, setCounterFare] = useState('');
   // Fare agreed with the owner's own driver; StayRide's own-fleet fee comes out of it as the guest advance
   const [ownFare, setOwnFare] = useState('');
   const [stars, setStars] = useState(0);
@@ -252,6 +259,32 @@ export const CabRequestDetailScreen: React.FC = () => {
       Alert.alert('Sent to nearby drivers', 'Drivers with a matching vehicle can now quote. Quotes will appear here.');
       return outcome;
     });
+
+  const openCounter = (driverId: number | string, name: string, quoted: number) => {
+    setCounterFor({ driverId, name, quoted });
+    setCounterFare('');
+  };
+
+  const handleSendCounter = () =>
+    run(async () => {
+      const fare = parseInt(counterFare, 10);
+      if (!counterFor || !(fare > 0)) return { ok: false, synced: false, error: 'Enter your fare.' };
+      const outcome = await counterOffer(trip.id, counterFor.driverId, fare);
+      if (!outcome.ok) return outcome;
+      Alert.alert('Offer sent', `${counterFor.name} gets your offer of ${formatINR(fare)}. If they accept, the trip is confirmed at that fare.`);
+      setCounterFor(null);
+      return outcome;
+    });
+
+  // StayRide trip the driver forgot to close: allowed once started, or 3 h after the pickup time
+  const pickupMs = (() => {
+    const m = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i.exec(trip.time || '');
+    const d = new Date(trip.date);
+    const h = m ? (Number(m[1]) % 12) + (m[3].toUpperCase() === 'PM' ? 12 : 0) : 0;
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, m ? Number(m[2]) : 0).getTime();
+  })();
+  const canOwnerComplete =
+    trip.platform && !trip.ownerDriver && (status === 'TRIP_STARTED' || (status === 'CONFIRMED' && trip.advancePaid && isPast(pickupMs + 3 * 3600000)));
 
   const handleCancelSearch = () => {
     setOverrideStatus(null);
@@ -531,8 +564,19 @@ export const CabRequestDetailScreen: React.FC = () => {
                         {typeof q.advanceAmount === 'number' ? ` · Guest pays ${formatINR(q.advanceAmount)} advance` : ''}
                       </Text>
                     )}
+                    {q.status === 'PENDING' && typeof q.counterFare === 'number' && q.counterFare > 0 && (
+                      <Text style={[styles.assignArea, { color: Colors.brandPrimaryDark }]}>
+                        Your offer {formatINR(q.counterFare)} sent · waiting for the driver
+                      </Text>
+                    )}
+                    {q.status === 'EXPIRED' && <Text style={styles.assignArea}>Quote expired · the driver can quote again</Text>}
+                    {q.status === 'PENDING' && (
+                      <TouchableOpacity onPress={() => openCounter(q.driverId, q.driverName, q.quotedFare)} disabled={busy}>
+                        <Text style={styles.counterLink}>{q.counterFare ? 'Change your offer' : 'Counter-offer'}</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
-                  <TouchableOpacity style={styles.assignBtn} disabled={busy} onPress={() => handleConfirmQuote(q.driverId)}>
+                  <TouchableOpacity style={[styles.assignBtn, q.status !== 'PENDING' && { opacity: 0.4 }]} disabled={busy || q.status !== 'PENDING'} onPress={() => handleConfirmQuote(q.driverId)}>
                     <Text style={styles.assignBtnText}>Confirm</Text>
                   </TouchableOpacity>
                 </View>
@@ -669,6 +713,12 @@ export const CabRequestDetailScreen: React.FC = () => {
           </TouchableOpacity>
         )}
 
+        {canOwnerComplete && (
+          <TouchableOpacity style={styles.solidBtn} disabled={busy} onPress={handleCompleteTrip}>
+            <Text style={styles.solidBtnText}>Mark trip completed</Text>
+          </TouchableOpacity>
+        )}
+
         {/* Own-fleet trips: the owner records start/finish (own drivers may not have the app) */}
         {trip.platform && trip.ownerDriver && status === 'CONFIRMED' && (
           <TouchableOpacity style={styles.solidBtn} disabled={busy} onPress={handleStartTrip}>
@@ -776,6 +826,32 @@ export const CabRequestDetailScreen: React.FC = () => {
           </TouchableOpacity>
         )}
       </View>
+      {/* Counter-offer */}
+      <Modal visible={!!counterFor} transparent animationType="fade" onRequestClose={() => setCounterFor(null)}>
+        <KeyboardAwareOverlay style={{ flex: 1 }}>
+          <View style={styles.counterOverlay}>
+            <View style={styles.counterCard}>
+              <Text style={styles.assignName}>Counter-offer to {counterFor?.name}</Text>
+              <Text style={styles.assignMeta}>Their fare: {formatINR(counterFor?.quoted || 0)}</Text>
+              <TextInput
+                style={styles.fareInput}
+                placeholder="Your fare (₹)"
+                value={counterFare}
+                onChangeText={(t) => setCounterFare(t.replace(/[^0-9]/g, ''))}
+                keyboardType="number-pad"
+                placeholderTextColor={Colors.textSecondary}
+                autoFocus
+              />
+              <TouchableOpacity style={styles.solidBtn} disabled={busy} onPress={handleSendCounter}>
+                <Text style={styles.solidBtnText}>{busy ? 'Sending…' : 'Send offer'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.outlineBtn} onPress={() => setCounterFor(null)}>
+                <Text style={styles.outlineBtnText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAwareOverlay>
+      </Modal>
     </View>
   );
 };
@@ -1000,6 +1076,23 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: Colors.divider,
     paddingTop: 10,
+  },
+  counterLink: {
+    marginTop: 4,
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.brandPrimaryDark,
+  },
+  counterOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  counterCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 18,
   },
   fareInput: {
     backgroundColor: '#FFFFFF',

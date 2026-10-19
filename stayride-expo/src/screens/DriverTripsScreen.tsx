@@ -22,7 +22,7 @@ import { reportOutcome } from '../utils/report';
 
 export const DriverTripsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
-  const { driverTrips, session, driverQuote, driverStartTrip, sync, syncing, pushEnabled, reportDriverLocation } = useStayRide();
+  const { driverTrips, session, driverQuote, driverStartTrip, driverAcceptCounter, sync, syncing, pushEnabled, reportDriverLocation } = useStayRide();
 
   const [activeTab, setActiveTab] = useState<'requests' | 'assigned' | 'completed'>('requests');
   const [quoteInputs, setQuoteInputs] = useState<Record<string, string>>({});
@@ -290,12 +290,32 @@ export const DriverTripsScreen: React.FC = () => {
                       <Text style={styles.metaText}>👥 {t.passengers} Pax • {t.vehicleType}</Text>
                     </View>
 
+                    {/* Homestay's counter-offer: accept = trip confirmed at that fare */}
+                    {myQuote?.status === 'PENDING' && typeof myQuote.counterFare === 'number' && myQuote.counterFare > 0 && (
+                      <View style={styles.counterBox}>
+                        <Text style={styles.counterText}>Homestay offers ₹{myQuote.counterFare.toLocaleString('en-IN')}</Text>
+                        <TouchableOpacity
+                          style={styles.counterAccept}
+                          disabled={submittingId === t.reference}
+                          onPress={async () => {
+                            setSubmittingId(t.reference);
+                            const outcome = await driverAcceptCounter(t.reference);
+                            setSubmittingId(null);
+                            reportOutcome(outcome, 'Trip is yours', 'You accepted the offer. The trip is confirmed once the guest pays the advance.');
+                          }}
+                        >
+                          <Text style={styles.counterAcceptText}>{submittingId === t.reference ? 'Accepting…' : 'Accept'}</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+
                     {/* Quotation Section */}
                     {!showInput ? (
                       <View style={styles.quotedBox}>
                         <Ionicons name="checkmark-circle" size={18} color="#059669" />
                         <Text style={styles.quotedText}>
-                          Quoted ₹{myQuote?.quotedFare.toLocaleString()} — {myQuote?.status === 'REJECTED' ? 'Not selected' : 'Awaiting Host Confirmation'}
+                          Quoted ₹{myQuote?.quotedFare.toLocaleString()} —{' '}
+                          {myQuote?.status === 'REJECTED' ? 'Not selected' : myQuote?.status === 'EXPIRED' ? 'Expired, quote again' : 'Awaiting Host Confirmation'}
                         </Text>
                         {canRevise && (
                           <TouchableOpacity
@@ -476,6 +496,18 @@ export const DriverTripsScreen: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
+  counterBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 10,
+    padding: 10,
+    borderRadius: 10,
+    backgroundColor: Colors.brandPrimaryLight,
+  },
+  counterText: { flex: 1, fontSize: 14, fontWeight: '700', color: Colors.brandPrimaryDark },
+  counterAccept: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, backgroundColor: Colors.brandPrimary },
+  counterAcceptText: { color: '#FFFFFF', fontWeight: '700', fontSize: 13 },
   container: {
     flex: 1,
     backgroundColor: '#F8FAFC',

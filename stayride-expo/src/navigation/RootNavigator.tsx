@@ -29,6 +29,9 @@ import { CommissionScreen } from '../screens/CommissionScreen';
 import { AnalyticsScreen } from '../screens/AnalyticsScreen';
 import { HomestayProfileScreen } from '../screens/HomestayProfileScreen';
 import { UpdatesScreen } from '../screens/UpdatesScreen';
+import { HowItWorksScreen } from '../screens/HowItWorksScreen';
+import { LegalScreen } from '../screens/LegalScreen';
+import { AccountScreen } from '../screens/AccountScreen';
 
 // Driver Screens
 import { DriverTripsScreen } from '../screens/DriverTripsScreen';
@@ -46,7 +49,7 @@ export type RootStackParamList = {
   BookingDetail: { bookingId: number };
   CabRequestDetail: { tripId: number };
   GuestDetail: { guestId: number };
-  NewBooking: { guestId?: number };
+  NewBooking: { guestId?: number; roomId?: number; checkIn?: number } | undefined;
   NewGuest: { guestId?: number };
   FindDriver: undefined;
   MyDrivers: undefined;
@@ -55,6 +58,9 @@ export type RootStackParamList = {
   Analytics: undefined;
   HomestayProfile: undefined;
   Updates: undefined;
+  HowItWorks: undefined;
+  Legal: { doc: 'privacy' | 'terms' | 'refunds' };
+  Account: undefined;
 };
 
 export type MainTabParamList = {
@@ -279,6 +285,10 @@ export const RootNavigator: React.FC = () => {
       <Stack.Screen name="Analytics" component={AnalyticsScreen} />
       <Stack.Screen name="HomestayProfile" component={HomestayProfileScreen} />
       <Stack.Screen name="Updates" component={UpdatesScreen} />
+      {/* Shared by owners, drivers and (Legal) the login screen */}
+      <Stack.Screen name="HowItWorks" component={HowItWorksScreen} />
+      <Stack.Screen name="Legal" component={LegalScreen} />
+      <Stack.Screen name="Account" component={AccountScreen} />
     </Stack.Navigator>
   );
 };

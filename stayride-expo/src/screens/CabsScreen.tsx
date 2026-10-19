@@ -150,7 +150,7 @@ export const CabsScreen: React.FC = () => {
       `• Pickup: ${trip.pickup}\n` +
       `• Destination: ${trip.destination}\n` +
       `• Date & Time: ${new Date(trip.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} at ${trip.time}\n` +
-      `• Driver: ${trip.driverName || trip.assignedDriverName || 'Verified Mountain Driver'}\n` +
+      `• Driver: ${trip.driverName || trip.assignedDriverName || 'Your StayRide driver'}\n` +
       `• Vehicle: ${trip.vehicleType}\n\n` +
       `💰 *Fare Details:*\n` +
       `• Total Fare: ${rupees(fare)}\n` +

@@ -6,12 +6,14 @@ import { beginIdempotent } from './idempotency.js';
 import {
   OPEN_STATUSES, cabModel, payoutModel, userModel, parseFare, overlayTrips, ownerConfirmQuote, cancelRequest,
   driverTripView, listDriverTrips, driverSubmitQuote, startTrip, completeTrip, payoutSummary, requestPayout,
-  istDateTime, notifyNewRequest, rateDriver, ownerPayoutView, parseTime12, hashToken, issueGuestLink, sendAskCab, dispatchRequest, assignOwnFleet, recordGatewayPayment,
+  istDateTime, notifyNewRequest, rateDriver, ownerPayoutView, parseTime12, hashToken, readDriverQuoteToken, ownerCounterOffer, driverAcceptCounter, ownerCompleteTrip, onDriverStatusChange, issueGuestLink, sendAskCab, dispatchRequest, assignOwnFleet, recordGatewayPayment,
 } from './platform.js';
 import { CommissionService } from '../services/commission.service.js';
 import { publicConfig, PlatformConfig } from '../services/platform-config.js';
 import { verifyWebhookSignature } from '../services/payment-gateway.service.js';
 import { buildIcs, feedFor, setImports, syncRoom, syncAll, storeForExportToken } from './ical.js';
+import { LEGAL_VERSION, LEGAL_DOCS, LegalDoc, legalDocument } from './legal.js';
+import { audit } from '../models/audit-log.model.js';
 import { FEATURE_KEYS, FeatureKey } from '../models/tenant-control.model.js';
 import { getFeatureAppealModel } from '../models/feature-appeal.model.js';
 import { User } from '../models/user.model.js';
@@ -358,6 +360,13 @@ stayrideV1Router.post('/auth/signup', async (req: Request, res: Response) => {
     if (userRole === 'driver' && !str(area, 100)) {
       return res.status(400).json({ error: { message: 'Drivers must provide the area they serve.' } });
     }
+    if (userRole === 'driver') {
+      const cfg = await CommissionService.getPlatformConfig(false);
+      const vt = VEHICLE_TYPES.includes(vehicleType) ? vehicleType : 'SUV';
+      if (cfg.vehicles[vt as keyof typeof cfg.vehicles]?.enabled === false) {
+        return res.status(400).json({ error: { message: 'This vehicle type is currently disabled by StayRide.' } });
+      }
+    }
 
     const userDoc = await UserModel.create({
       name: cleanName,
@@ -513,6 +522,29 @@ stayrideV1Router.post('/auth/refresh', async (req: Request, res: Response) => {
 // ==========================================
 // Clerk Sync & Webhook (Google + Password + MongoDB Sync)
 // ==========================================
+// Does this Google/Clerk sign-in already have a StayRide account (and which role)? The app asks this
+// before deciding to sign in directly or to show registration, so a role is never guessed.
+stayrideV1Router.post('/auth/clerk-status', async (req: Request, res: Response) => {
+  if (!config.clerkSecretKey) {
+    return res.status(503).json({ error: { message: 'Clerk sign-in is not configured on the server.' } });
+  }
+  let clerkUserId = '';
+  try {
+    clerkUserId = (await verifyToken(bearer(req), { secretKey: config.clerkSecretKey })).sub;
+  } catch {
+    return res.status(401).json({ error: { message: 'Invalid or missing Clerk session. Please sign in again.' } });
+  }
+  const clerkUser = await clerkClient.users.getUser(clerkUserId);
+  const primary = clerkUser.emailAddresses.find((e) => e.id === clerkUser.primaryEmailAddressId);
+  const email = primary?.verification?.status === 'verified' ? primary.emailAddress.toLowerCase().trim() : '';
+  const user: any = await getUserModel(false)
+    .findOne({ $or: [{ clerkId: clerkUserId }, ...(email ? [{ email }] : [])] })
+    .select('role accountStatus deletedAt')
+    .lean();
+  // A deleted account still exists (blocked): its email cannot silently register again
+  return res.json({ exists: Boolean(user), role: user?.role ?? null, blocked: user?.accountStatus === 'BLOCKED', deleted: Boolean(user?.deletedAt) });
+});
+
 stayrideV1Router.post('/auth/clerk-sync', async (req: Request, res: Response) => {
   if (!config.clerkSecretKey) {
     return res.status(503).json({ error: { message: 'Clerk sign-in is not configured on the server.' } });
@@ -572,8 +604,21 @@ stayrideV1Router.post('/auth/clerk-sync', async (req: Request, res: Response) =>
     if (!user && userRole === 'driver' && !str(area, 100)) {
       return res.status(400).json({ error: { message: 'Drivers must provide the area they serve.' } });
     }
+    if (!user && userRole === 'driver') {
+      const cfg = await CommissionService.getPlatformConfig(false);
+      const vt = VEHICLE_TYPES.includes(vehicleType) ? vehicleType : 'SUV';
+      if (cfg.vehicles[vt as keyof typeof cfg.vehicles]?.enabled === false) {
+        return res.status(400).json({ error: { message: 'This vehicle type is currently disabled by StayRide.' } });
+      }
+    }
+    // New accounts must accept the Terms + Privacy Policy and confirm they are 18 or older
+    if (!user && req.body?.acceptedTerms !== true) {
+      return res.status(400).json({ error: { message: 'Please accept the Terms of Service and Privacy Policy to create an account.', code: 'TERMS_REQUIRED' } });
+    }
     if (!user) {
       user = await UserModel.create({
+        termsAcceptedAt: new Date(),
+        termsVersion: LEGAL_VERSION,
         name: cleanName,
         email: cleanEmail,
         clerkId,
@@ -710,15 +755,36 @@ const DAY_MS = 86400000;
 const VEHICLE_TYPES = ['SUV', 'Sedan', '7-seater', '9-seater'];
 
 // Pickup time helpers (istDateTime) live in platform.ts (also used for request expiry).
-export function validateSchedule(body: any, horizonDays = 365): string | null {
+export function validateSchedule(body: any, cfgOrHorizon: PlatformConfig | number = 365): string | null {
+  const cfg = typeof cfgOrHorizon === 'object' && cfgOrHorizon !== null ? cfgOrHorizon : null;
+  const horizonDays = cfg ? cfg.bookingHorizonDays : (typeof cfgOrHorizon === 'number' ? cfgOrHorizon : 365);
   const pickupAt = istDateTime(body.date, body.time);
   if (pickupAt === null) return 'A valid pickup date and time (hh:mm AM/PM) are required.';
   if (pickupAt < Date.now() - 10 * 60000) return 'Pickup date and time cannot be in the past.';
   if (pickupAt > Date.now() + (horizonDays + 1) * DAY_MS) return `Pickup must be within the next ${horizonDays} days.`;
+
+  if (cfg?.pickupStart && cfg?.pickupEnd) {
+    const t = parseTime12(body.time);
+    const start = parseTime12(cfg.pickupStart);
+    const end = parseTime12(cfg.pickupEnd);
+    if (t === null || start === null || end === null || t < start || t > end) {
+      return `Pickup time must be between ${cfg.pickupStart} and ${cfg.pickupEnd}.`;
+    }
+  }
+
   if (body.isRoundTrip) {
     const returnAt = istDateTime(body.returnDate, body.returnTime);
     if (returnAt === null) return 'Round trips need a return date and time.';
     if (returnAt <= pickupAt) return 'Return must be after the pickup date and time.';
+    if (returnAt > Date.now() + (horizonDays + 1) * DAY_MS) return `Return date must be within the next ${horizonDays} days.`;
+    if (cfg?.pickupStart && cfg?.pickupEnd) {
+      const rt = parseTime12(body.returnTime);
+      const start = parseTime12(cfg.pickupStart);
+      const end = parseTime12(cfg.pickupEnd);
+      if (rt === null || start === null || end === null || rt < start || rt > end) {
+        return `Return time must be between ${cfg.pickupStart} and ${cfg.pickupEnd}.`;
+      }
+    }
   }
   return null;
 }
@@ -767,10 +833,15 @@ async function createPlatformTrip(
         s.trips = s.trips.filter((t) => t.reference !== reference);
       }
     });
-  // "Nearby" drivers are measured from the homestay (coordinates saved on the property at signup).
-  const prop: any = isDemo ? null : await getPropertyModel(false).findOne({ email: tenantKey }).select('coordinates').lean();
+  // "Nearby" drivers are measured from the homestay: the owner's map pin, else the property's signup GPS.
+  const pinned = await tenantManager.load(tenantKey).then((s) => s.homestay).catch(() => null);
+  const prop: any = isDemo || (pinned?.latitude && pinned?.longitude) ? null : await getPropertyModel(false).findOne({ email: tenantKey }).select('coordinates').lean();
   const homestayLocation =
-    prop?.coordinates?.latitude && prop?.coordinates?.longitude ? { lat: Number(prop.coordinates.latitude), lng: Number(prop.coordinates.longitude) } : null;
+    pinned?.latitude && pinned?.longitude
+      ? { lat: Number(pinned.latitude), lng: Number(pinned.longitude) }
+      : prop?.coordinates?.latitude && prop?.coordinates?.longitude
+      ? { lat: Number(prop.coordinates.latitude), lng: Number(prop.coordinates.longitude) }
+      : null;
   let doc: any;
   try {
     const fields = {
@@ -782,7 +853,7 @@ async function createPlatformTrip(
       guestId: trip.guestId ?? null,
       guestName: trip.guestName,
       guestPhone: trip.phone,
-      pickupLocation: { address: trip.pickup },
+      pickupLocation: { address: trip.pickup, lat: trip.pickupLat ?? homestayLocation?.lat ?? null, lng: trip.pickupLng ?? homestayLocation?.lng ?? null },
       destinations: trip.destinations?.length ? trip.destinations : [{ address: trip.destination || 'Destination', order: 0 }],
       isRoundTrip: Boolean(trip.isRoundTrip),
       returnDate: trip.returnDate ?? null,
@@ -831,6 +902,10 @@ function tripInput(b: any) {
     guestName: str(b.guestName, 100),
     phone: str(b.phone ?? b.guestPhone, 20),
     pickup: str(b.pickup, 200),
+    // optional map pin for the pickup (lat/lng); India-sized sanity range
+    ...(Number.isFinite(Number(b.pickupLat)) && Number.isFinite(Number(b.pickupLng)) && Math.abs(Number(b.pickupLat)) <= 90 && Math.abs(Number(b.pickupLng)) <= 180 && b.pickupLat !== null && b.pickupLat !== ''
+      ? { pickupLat: Number(b.pickupLat), pickupLng: Number(b.pickupLng) }
+      : {}),
     destination: destinations.length ? destinations.join(' ➔ ') : str(b.destination, 200),
     destinations: destinations.map((address: string, order: number) => ({ address, order })),
     isRoundTrip,
@@ -898,7 +973,7 @@ stayrideV1Router.post('/public/guest-links/:token/cab-requests', async (req: Req
   const tenantKey = link.tenantKey as string;
   const isDemo = isDemoKey(tenantKey);
   const cfg = await CommissionService.getPlatformConfig(isDemo);
-  const inputError = vehicleError(cfg, input.vehicleType) || validateSchedule(input, cfg.bookingHorizonDays);
+  const inputError = vehicleError(cfg, input.vehicleType) || validateSchedule(input, cfg);
   if (inputError) return res.status(400).json({ error: { message: inputError } });
   const Cab = cabModel(isDemo);
 
@@ -946,6 +1021,72 @@ stayrideV1Router.get('/public/cab-requests/:reference', async (req: Request, res
 // ==========================================
 // Clerk webhook (raw body, svix-signed)
 // ==========================================
+// ------------------------------------------------------------------------------------------------
+// Driver quote page (signed link from the WhatsApp message): WhatsApp-only drivers quote without the
+// app. The link is bound to one driver and one request; the view never shows guest contact details.
+// ------------------------------------------------------------------------------------------------
+async function quoteLinkDriver(token: unknown, res: Response) {
+  const link = readDriverQuoteToken(token);
+  if (!link) {
+    res.status(404).json({ error: { message: 'This link is invalid or has expired.' } });
+    return null;
+  }
+  if (link.isDemo && !config.demoEnabled) {
+    res.status(404).json({ error: { message: 'This link is invalid or has expired.' } });
+    return null;
+  }
+  const driver: any = mongoose.Types.ObjectId.isValid(link.driverId)
+    ? await getUserModel(link.isDemo).findOne({ _id: link.driverId, role: 'driver' }).lean()
+    : null;
+  if (!driver || driver.accountStatus !== 'ACTIVE') {
+    res.status(403).json({ error: { message: 'Your driver account is not active. Contact StayRide support.', code: 'DRIVER_NOT_ACTIVE' } });
+    return null;
+  }
+  return { ...link, driver };
+}
+
+const quotePageView = async (isDemo: boolean, reference: string, driver: any) => {
+  const settings = await CommissionService.getSettings(isDemo);
+  const quotesOn = CommissionService.globalFeatures(settings).driverQuotes.enabled;
+  const doc: any = await cabModel(isDemo).findOne({ reference }).lean();
+  if (!doc) return null;
+  const view = driverTripView(doc, String(driver._id));
+  return { ...view, driverName: driver.name, canQuote: quotesOn && view.driverView !== 'ASSIGNED' && OPEN_STATUSES.includes(doc.status) && doc.dispatched !== false };
+};
+
+stayrideV1Router.get('/public/driver-quote', async (req: Request, res: Response) => {
+  const ctx = await quoteLinkDriver(req.query.t, res);
+  if (!ctx) return;
+  const view = await quotePageView(ctx.isDemo, ctx.reference, ctx.driver);
+  return view ? res.json(view) : res.status(404).json({ error: { message: 'This trip is no longer available.' } });
+});
+
+stayrideV1Router.post('/public/driver-quote/quote', async (req: Request, res: Response) => {
+  const ctx = await quoteLinkDriver(req.body?.t, res);
+  if (!ctx) return;
+  const settings = await CommissionService.getSettings(ctx.isDemo);
+  if (!CommissionService.globalFeatures(settings).driverQuotes.enabled) {
+    return res.status(403).json({ error: { message: 'Driver quotes are currently disabled by StayRide.', code: 'FEATURE_DISABLED' } });
+  }
+  await driverSubmitQuote(ctx.isDemo, ctx.reference, ctx.driver, req.body?.quotedFare, req.body?.notes);
+  return res.json(await quotePageView(ctx.isDemo, ctx.reference, ctx.driver));
+});
+
+stayrideV1Router.post('/public/driver-quote/accept-counter', async (req: Request, res: Response) => {
+  const ctx = await quoteLinkDriver(req.body?.t, res);
+  if (!ctx) return;
+  await driverAcceptCounter(ctx.isDemo, ctx.reference, ctx.driver);
+  return res.json(await quotePageView(ctx.isDemo, ctx.reference, ctx.driver));
+});
+
+// Legal pages (app + web): public, so they can be read before signing up
+stayrideV1Router.get('/public/legal/:doc', async (req: Request, res: Response) => {
+  const doc = String(req.params.doc) as LegalDoc;
+  if (!LEGAL_DOCS.includes(doc)) return res.status(404).json({ error: { message: 'Page not found.' } });
+  const cfg = await CommissionService.getPlatformConfig(false);
+  return res.json({ ...legalDocument(doc, cfg.business), business: cfg.business });
+});
+
 // Room calendar for Airbnb / Booking.com to read (secret link; busy dates only, no guest details).
 stayrideV1Router.get('/public/ical/:token', async (req: Request, res: Response) => {
   const found = await storeForExportToken(String(req.params.token).replace(/\.ics$/, ''));
@@ -1175,6 +1316,12 @@ stayrideV1Router.post('/driver/trips/:reference/quote', driverGate, async (req: 
   res.json(driverTripView(updated, String((req as any).driver._id)));
 });
 
+stayrideV1Router.post('/driver/trips/:reference/accept-counter', driverGate, async (req: Request, res: Response) => {
+  const isDemo = isDemoKey(authOf(req).tenantKey);
+  const updated = await driverAcceptCounter(isDemo, String(req.params.reference), (req as any).driver);
+  res.json(driverTripView(updated, String((req as any).driver._id)));
+});
+
 stayrideV1Router.post('/driver/trips/:reference/start', driverGate, async (req: Request, res: Response) => {
   const isDemo = isDemoKey(authOf(req).tenantKey);
   const updated = await startTrip(isDemo, { reference: String(req.params.reference), assignedDriverUserId: String((req as any).driver._id) }, authOf(req).email);
@@ -1242,6 +1389,31 @@ stayrideV1Router.delete('/push-token', async (req: Request, res: Response) => {
   res.json({ ok: true });
 });
 
+// Delete my account (owners and drivers): required by the app stores. Immediate and irreversible:
+// sign-in is removed, personal profile data is erased, and money/trip records are kept as the law requires.
+stayrideV1Router.post('/account/delete', async (req: Request, res: Response) => {
+  const u = authOf(req);
+  if (isDemoKey(u.tenantKey)) return res.status(400).json({ error: { message: 'The demo account cannot be deleted.' } });
+  if (req.body?.confirm !== 'DELETE') return res.status(400).json({ error: { message: 'Type DELETE to confirm.', code: 'CONFIRM_REQUIRED' } });
+  const Users = getUserModel(false);
+  const user: any = mongoose.Types.ObjectId.isValid(u.id) ? await Users.findById(u.id).lean() : null;
+  if (!user || (user.role !== 'owner' && user.role !== 'driver')) return res.status(404).json({ error: { message: 'Account not found.' } });
+  await Users.updateOne(
+    { _id: user._id },
+    {
+      $set: { accountStatus: 'BLOCKED', statusReason: 'Deleted by the user', deletedAt: new Date(), name: 'Deleted user', phone: '', avatar: '', pushTokens: [], location: null },
+      $unset: { clerkId: '' },
+      $inc: { tokenVersion: 1 }, // ends every session
+    }
+  );
+  if (user.role === 'driver') await onDriverStatusChange(false, String(user._id), 'BLOCKED', `user:${user._id}`);
+  if (user.clerkId && config.clerkSecretKey) {
+    await clerkClient.users.deleteUser(user.clerkId).catch((err: any) => console.warn('[StayRide] Clerk user delete failed:', err?.message));
+  }
+  await audit(`user:${user._id}`, 'user.self_delete', 'User', String(user._id), { role: user.role }, false);
+  return res.json({ ok: true });
+});
+
 // ==========================================
 // Homestay-owner API. Admin controls (block / feature switches) are enforced here for every route.
 // ==========================================
@@ -1253,7 +1425,10 @@ stayrideV1Router.use(async (req: Request, res: Response, next: () => void) => {
   // Admin can block the person (User.accountStatus) or the homestay (TenantControl); both stop access now.
   if (!isDemoKey(u.tenantKey)) {
     const user: any = (req as any).stayrideAccount;
-    if (!user || user.accountStatus === 'BLOCKED' || user.role !== 'owner') {
+    if (user?.accountStatus === 'PENDING_APPROVAL') {
+      return res.status(403).json({ error: { message: 'Your homestay account is pending approval by StayRide.', code: 'OWNER_NOT_APPROVED' } });
+    }
+    if (!user || user.accountStatus !== 'ACTIVE' || user.role !== 'owner') {
       return res.status(403).json({ error: { message: 'This account is blocked. Contact StayRide support.', code: 'ACCOUNT_BLOCKED' } });
     }
   }
@@ -1336,6 +1511,29 @@ stayrideV1Router.put('/homestay', async (req: Request, res: Response) => {
     }
   }
   res.json(await mutateReq(req, (s) => Object.assign(s.homestay, clean('homestay', req.body, s.homestay.photos))));
+});
+
+// Owner pins the homestay on the map. Saved on the homestay and on the property record, so nearby
+// drivers are matched from the real spot (also for owners who skipped GPS at signup).
+stayrideV1Router.put('/homestay/location', async (req: Request, res: Response) => {
+  const { tenantKey, isDemo } = tenantOf(req);
+  const lat = Number(req.body?.latitude);
+  const lng = Number(req.body?.longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180 || (lat === 0 && lng === 0)) {
+    return res.status(400).json({ error: { message: 'Pick a valid location on the map.', code: 'VALIDATION' } });
+  }
+  const address = str(req.body?.address, 200);
+  const homestay = await mutateReq(req, (s) => {
+    s.homestay.latitude = lat;
+    s.homestay.longitude = lng;
+    s.homestay.mapQuery = `${lat},${lng}`;
+    if (address) s.homestay.location = address; // the address is the one under the confirmed pin
+    return s.homestay;
+  });
+  if (!isDemo) {
+    await getPropertyModel(false).updateOne({ email: tenantKey }, { $set: { coordinates: { latitude: lat, longitude: lng } } });
+  }
+  res.json(homestay);
 });
 
 // ==========================================
@@ -1515,7 +1713,7 @@ stayrideV1Router.post('/trips', async (req: Request, res: Response) => {
   const input = tripInput(req.body);
   if (!input.guestName || !input.phone) return res.status(400).json({ error: { message: 'Guest name and phone are required.' } });
   const cfg = await CommissionService.getPlatformConfig(isDemo);
-  const inputError = vehicleError(cfg, input.vehicleType) || validateSchedule(input, cfg.bookingHorizonDays);
+  const inputError = vehicleError(cfg, input.vehicleType) || validateSchedule(input, cfg);
   if (inputError) return res.status(400).json({ error: { message: inputError } });
   const platform = req.body.dispatchMode === 'PLATFORM';
   if (platform && !(req as any).account.features.platformDispatch) {
@@ -1555,6 +1753,11 @@ const ownFleetOrOwnTrip = (kind: 'start' | 'complete', fn: (s: StayRideMemorySto
     const filter = { reference: trip.reference, propertyId: tenantKey, ownFleet: true };
     if (kind === 'start') await startTrip(isDemo, filter, actor);
     else await completeTrip(isDemo, filter, actor);
+    return res.json(await overlayOne(req, trip));
+  }
+  // StayRide driver trip the driver forgot to close (rules in ownerCompleteTrip)
+  if (trip.reference && kind === 'complete') {
+    await ownerCompleteTrip(tenantKey, isDemo, trip.reference, actor);
     return res.json(await overlayOne(req, trip));
   }
   return ownTripAction(fn)(req, res);
@@ -1659,6 +1862,17 @@ stayrideV1Router.post('/trips/:id/dispatch', async (req: Request, res: Response)
   if (!trip) return notFound(res, 'Trip');
   if (!trip.reference) return res.status(409).json({ error: { message: 'Only StayRide requests can be sent to drivers.', code: 'INVALID_STATE' } });
   await dispatchRequest(tenantKey, isDemo, trip.reference);
+  return res.json(await overlayOne(req, trip));
+});
+
+// Owner counter-offers a driver's quote (StayRide trips): the driver accepts, or quotes again
+stayrideV1Router.post('/trips/:id/counter', async (req: Request, res: Response) => {
+  const { tenantKey, isDemo, actor } = tenantOf(req);
+  const store = await loadReqStore(req);
+  const trip = store.trip(Number(req.params.id));
+  if (!trip) return notFound(res, 'Trip');
+  if (!trip.reference) return res.status(409).json({ error: { message: 'Counter-offers are for StayRide driver quotes.', code: 'INVALID_STATE' } });
+  await ownerCounterOffer(tenantKey, isDemo, trip.reference, str(req.body?.driverId, 64), req.body?.fare, actor);
   return res.json(await overlayOne(req, trip));
 });
 
@@ -1771,7 +1985,8 @@ stayrideV1Router.get('/appeals', async (req: Request, res: Response) => {
 stayrideV1Router.post('/appeals', async (req: Request, res: Response) => {
   const { tenantKey, isDemo, actor } = tenantOf(req);
   const featureKey = req.body.featureKey as FeatureKey;
-  if (!FEATURE_KEYS.includes(featureKey)) return res.status(400).json({ error: { message: 'Unknown feature.' } });
+  // driverQuotes is one platform-wide switch for drivers, not something a homestay can be granted
+  if (!FEATURE_KEYS.includes(featureKey) || featureKey === 'driverQuotes') return res.status(400).json({ error: { message: 'Unknown feature.' } });
   const reason = str(req.body.reason, 500);
   if (!reason) return res.status(400).json({ error: { message: 'Please tell StayRide why you need this feature.' } });
   const Appeal = getFeatureAppealModel(isDemo);
