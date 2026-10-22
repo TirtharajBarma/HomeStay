@@ -542,8 +542,13 @@ stayrideV1Router.post('/auth/clerk-status', async (req: Request, res: Response) 
   const clerkUser = await clerkClient.users.getUser(clerkUserId);
   const primary = clerkUser.emailAddresses.find((e) => e.id === clerkUser.primaryEmailAddressId);
   const email = primary?.verification?.status === 'verified' ? primary.emailAddress.toLowerCase().trim() : '';
+  const primaryPhone = clerkUser.phoneNumbers?.find((p) => p.id === clerkUser.primaryPhoneNumberId)?.phoneNumber;
+  const digitsPhone = primaryPhone ? primaryPhone.replace(/\D/g, '').slice(-10) : '';
+  const phoneFilters = digitsPhone
+    ? [{ phone: digitsPhone }, { phone: `+91${digitsPhone}` }, { email: `driver_${digitsPhone}@driver.stayride.in` }]
+    : [];
   const user: any = await getUserModel(false)
-    .findOne({ $or: [{ clerkId: clerkUserId }, ...(email ? [{ email }] : [])] })
+    .findOne({ $or: [{ clerkId: clerkUserId }, ...(email ? [{ email }] : []), ...phoneFilters] })
     .select('role accountStatus deletedAt')
     .lean();
   // A deleted account still exists (blocked): its email cannot silently register again
@@ -581,11 +586,23 @@ stayrideV1Router.post('/auth/clerk-sync', async (req: Request, res: Response) =>
     // Profile hints from client
     const { phone, homestayName, location, role, vehicleType, vehicleNumber, area } = req.body;
     const requestedRole = (role === 'driver' ? 'driver' : 'owner') as 'owner' | 'driver';
-    const cleanPhone = String(phone || '').trim();
+    const cleanPhone = String(phone || '').replace(/\D/g, '').slice(-10);
+    const primaryPhone = clerkUser.phoneNumbers?.find((p) => p.id === clerkUser.primaryPhoneNumberId)?.phoneNumber;
+    const clerkDigitsPhone = primaryPhone ? primaryPhone.replace(/\D/g, '').slice(-10) : '';
+    const lookupPhone = cleanPhone || clerkDigitsPhone;
+    const phoneFilters = lookupPhone
+      ? [{ phone: lookupPhone }, { phone: `+91${lookupPhone}` }, { email: `driver_${lookupPhone}@driver.stayride.in` }]
+      : [];
     const cleanName = (clerkUser.fullName || clerkUser.firstName || (requestedRole === 'driver' ? 'Driver' : 'Host')).trim();
 
     const UserModel = getUserModel(false); // Production DB
-    let user = await UserModel.findOne({ $or: [{ clerkId }, { email: cleanEmail }] });
+    let user = await UserModel.findOne({
+      $or: [
+        { clerkId },
+        { email: cleanEmail },
+        ...phoneFilters,
+      ],
+    });
 
     if (user && user.role === 'admin') {
       return res.status(403).json({
@@ -664,8 +681,16 @@ stayrideV1Router.post('/auth/clerk-sync', async (req: Request, res: Response) =>
         user.clerkId = clerkId;
         modified = true;
       }
+      if (cleanEmail && user.email && user.email.startsWith('driver_') && user.email.endsWith('@driver.stayride.in')) {
+        user.email = cleanEmail;
+        modified = true;
+      }
       if (cleanAvatar && !user.avatar) {
         user.avatar = cleanAvatar;
+        modified = true;
+      }
+      if (lookupPhone && !user.phone) {
+        user.phone = lookupPhone;
         modified = true;
       }
       if (modified) await user.save();

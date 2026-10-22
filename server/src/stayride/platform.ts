@@ -627,9 +627,16 @@ export async function cancelRequest(filter: Record<string, any>, isDemo: boolean
 const CONTACT_STATUSES = ['CONFIRMED', 'EN_ROUTE_PICKUP', 'ARRIVED_HOMESTAY', 'TRIP_STARTED', 'COMPLETED'];
 
 /** The one shape drivers ever see for a request (open, quoted, assigned or lost). */
-export function driverTripView(d: any, driverUserId: string) {
-  const mine = (d.quotes || []).find((q: any) => String(q.driverId) === driverUserId);
-  const assigned = Boolean(driverUserId) && String(d.assignedDriverUserId || '') === driverUserId;
+export function driverTripView(d: any, driverUserId: string, driverPhone?: string) {
+  const cleanPhone = driverPhone ? String(driverPhone).replace(/\D/g, '').slice(-10) : '';
+  const mine = (d.quotes || []).find((q: any) =>
+    (driverUserId && String(q.driverId) === driverUserId) ||
+    (cleanPhone && q.driverPhone && String(q.driverPhone).replace(/\D/g, '').endsWith(cleanPhone))
+  );
+  const assigned = Boolean(
+    (driverUserId && String(d.assignedDriverUserId || '') === driverUserId) ||
+    (cleanPhone && d.assignedDriverPhone && String(d.assignedDriverPhone).replace(/\D/g, '').endsWith(cleanPhone))
+  );
   const driverView = assigned
     ? (d.status === 'CANCELLED' ? 'CANCELLED' : 'ASSIGNED')
     : OPEN_STATUSES.includes(d.status)
@@ -683,7 +690,15 @@ export function driverTripView(d: any, driverUserId: string) {
 export async function listDriverTrips(isDemo: boolean, driver: any, quotesOn: boolean) {
   await expireStaleRequests(isDemo);
   const id = String(driver._id);
+  const cleanPhone = driver.phone ? String(driver.phone).replace(/\D/g, '').slice(-10) : '';
   const since = new Date(Date.now() - 7 * DAY_MS);
+  const phoneFilter = cleanPhone
+    ? [
+        { assignedDriverPhone: { $regex: `${cleanPhone}$` }, status: { $ne: 'CANCELLED' } },
+        { assignedDriverPhone: { $regex: `${cleanPhone}$` }, status: 'CANCELLED', updatedAt: { $gte: since } },
+        { 'quotes.driverPhone': { $regex: `${cleanPhone}$` }, status: { $in: ['CANCELLED', 'EXPIRED'] }, updatedAt: { $gte: since } },
+      ]
+    : [];
   const Cab = cabModel(isDemo);
   const [mine, open] = await Promise.all([
     Cab.find({
@@ -692,6 +707,7 @@ export async function listDriverTrips(isDemo: boolean, driver: any, quotesOn: bo
         { assignedDriverUserId: id, status: 'CANCELLED', updatedAt: { $gte: since } },
         { 'quotes.driverId': id, status: { $in: ['CANCELLED', 'EXPIRED'] }, updatedAt: { $gte: since } },
         { previousDriverUserIds: id, updatedAt: { $gte: since } },
+        ...phoneFilter,
       ],
     }).sort({ date: -1 }).limit(100).lean(),
     // Only requests the owner sent out, and only for this driver's vehicle class (seats), once he has set one.
@@ -709,7 +725,7 @@ export async function listDriverTrips(isDemo: boolean, driver: any, quotesOn: bo
     return radius <= 0 || km === null || km <= radius;
   }).slice(0, 50);
   const byRef = new Map<string, any>();
-  for (const d of [...mine, ...near] as any[]) if (!byRef.has(d.reference)) byRef.set(d.reference, driverTripView(d, id));
+  for (const d of [...mine, ...near] as any[]) if (!byRef.has(d.reference)) byRef.set(d.reference, driverTripView(d, id, driver.phone));
   return [...byRef.values()];
 }
 
