@@ -2,8 +2,8 @@
  * Application Version and Release Configuration
  * Auto-synced with EAS Updates & Local Builds
  */
-export const CURRENT_RELEASE_VERSION = "v1.0.0";
-export const RELEASE_DESCRIPTION = "Initial base release";
+export const CURRENT_RELEASE_VERSION = "v1.0.1";
+export const RELEASE_DESCRIPTION = "Initial OTA update verification with atomic version sync and automatic boot-time discovery";
 export const APP_BINARY_VERSION = "v1.0.0 (Build 1)";
 export const ADMIN_NAME = "StayRide Admin";
 export const AUTHOR_CREDIT = "Built with ❤️ for StayRide";
@@ -18,6 +18,16 @@ export interface ReleaseHistoryItem {
 }
 
 export const INITIAL_RELEASE_HISTORY: ReleaseHistoryItem[] = [
+  {
+    version: "v1.0.1",
+    date: "Oct 23, 2026",
+    title: "Initial OTA update verification with atomic version sync and automatic boot-time discovery",
+    notes: [
+          "Initial OTA update verification with atomic version sync and automatic boot-time discovery"
+    ],
+    type: "ota",
+    isNativeBuild: false,
+  },
   {
     version: "v1.0.0",
     date: "Current Release",

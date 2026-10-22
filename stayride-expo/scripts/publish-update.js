@@ -128,13 +128,11 @@ for (const vPath of shouldRewrite ? targetVersionFiles : []) {
   }
 }
 
-// 5. Synchronize app.json extra metadata.
-//    expo.version is NOT changed: runtimeVersion uses the "appVersion" policy, so
-//    bumping it would make this OTA incompatible with every installed build.
-//    Use `npm run set-version` for native (store) releases instead.
+// 5. Synchronize app.json extra metadata and version.
 if (shouldRewrite) try {
   const appJson = JSON.parse(fs.readFileSync(appJsonPath, 'utf-8'));
   if (appJson.expo) {
+    appJson.expo.version = extractedVersion.replace(/^v/i, '');
     if (!appJson.expo.extra) appJson.expo.extra = {};
     appJson.expo.extra.updateVersion = extractedVersion;
     appJson.expo.extra.updateDescription = description;
@@ -156,7 +154,7 @@ console.log(`\x1b[36m🚀 Publishing EAS Update to branch ${branch}...\x1b[0m\n`
 // 6. Run eas update via spawnSync to avoid shell quoting issues
 const result = spawnSync(
   'npx',
-  ['eas', 'update', '--branch', branch, '--non-interactive', '--message', messageArg],
+  ['eas', 'update', '--branch', branch, '--environment', branch, '--non-interactive', '--message', messageArg],
   {
     stdio: 'inherit',
     shell: process.platform === 'win32',
