@@ -71,13 +71,19 @@ async function openConnection(): Promise<typeof mongoose> {
   // Throws (before connecting) for a local "production" db without ALLOW_LOCAL_PRODUCTION_DB=true.
   const defaultDbName = liveDbName();
 
-  return await mongoose.connect(uri, {
+  const conn = await mongoose.connect(uri, {
     dbName: defaultDbName,
     autoIndex: true,
     // M0 allows 500 connections in total; keep each serverless instance small
     maxPoolSize: 10,
     serverSelectionTimeoutMS: 8000,
   });
+  // A briefly-shipped 60-day TTL index purged audit history. Runs here (not server.ts) so Vercel
+  // cold starts do it too; not awaited, so it never slows a request. ponytail: delete once deployed everywhere.
+  for (const db of [defaultDbName, "test"]) {
+    mongoose.connection.useDb(db, { useCache: true }).collection("auditlogs").dropIndex("createdAt_1").catch(() => {});
+  }
+  return conn;
 }
 
 export async function disconnectDB(): Promise<void> {

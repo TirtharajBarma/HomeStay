@@ -35,9 +35,11 @@ export const CabsScreen: React.FC = () => {
   const tripStatuses = ['CONFIRMED', 'TRIP_STARTED', 'COMPLETED', 'CANCELLED', 'EXPIRED'];
 
   // Filtered lists
-  const requestedTrips = trips.filter((t) => requestedStatuses.includes(t.status) && t.source !== 'GUEST_WEB_LINK');
+  const guestWebTrips = trips.filter((t) => t.source === 'GUEST_WEB_LINK' && t.status === 'NEW_REQUEST');
+  const requestedTrips = trips.filter(
+    (t) => requestedStatuses.includes(t.status) && !(t.source === 'GUEST_WEB_LINK' && t.status === 'NEW_REQUEST')
+  );
   const confirmedTrips = trips.filter((t) => tripStatuses.includes(t.status));
-  const guestWebTrips = trips.filter((t) => t.source === 'GUEST_WEB_LINK');
   // Ask-for-cab links are only for guests currently checked in
   const checkedInGuests = guests.filter((g) =>
     bookings.some((b) => b.status === 'CHECKED_IN' && (b.guestId === g.id || b.phone === g.phone))

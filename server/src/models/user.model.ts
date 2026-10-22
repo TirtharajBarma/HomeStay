@@ -18,6 +18,7 @@ export interface IUser extends Document {
   location?: { lat: number; lng: number; updatedAt: Date } | null;
   vehicle?: { type?: string; model?: string; plate?: string; seats?: number; area?: string };
   pushTokens?: Array<{ token: string; platform: string; updatedAt: Date }>; // Expo tokens, newest last, max 10
+  whatsappAlerts?: boolean; // Driver preference: receive trip requests via WhatsApp in addition to push
   ratingSum?: number; // drivers: sum of owner star ratings
   ratingCount?: number;
   tokenVersion?: number; // bumped to revoke every session (logout-all, admin revoke/role change/delete)
@@ -46,6 +47,7 @@ const UserSchema = new Schema<IUser>(
     accountStatus: { type: String, enum: ["ACTIVE", "PENDING_APPROVAL", "BLOCKED"], default: "ACTIVE", index: true },
     statusReason: { type: String, default: "" },
     isAvailable: { type: Boolean, default: true },
+    whatsappAlerts: { type: Boolean, default: true },
     location: { type: { lat: Number, lng: Number, updatedAt: Date, _id: false }, default: null },
     vehicle: {
       type: { type: String, default: "" },

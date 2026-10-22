@@ -249,6 +249,7 @@ export interface DriverSessionProfile {
   seats?: number;
   available?: boolean;
   active?: boolean;
+  whatsappAlerts?: boolean;
   status?: 'ACTIVE' | 'PENDING_APPROVAL' | 'BLOCKED';
   statusReason?: string;
 }

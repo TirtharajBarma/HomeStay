@@ -92,6 +92,9 @@ export interface ICabRequest extends Document {
   needsReassignment: boolean; // paid trip whose driver was removed (blocked); admin must assign a new one
   previousDriverUserIds: string[]; // drivers this trip was taken away from (shown to them as REASSIGNED)
   rating?: { stars: number; comment: string; ratedAt: Date; ratedBy: string } | null;
+  guestRating?: { stars: number; comment: string; ratedAt: Date } | null;
+  biddingFallbackAlertSentAt?: Date | null;
+  completionReminderSentAt?: Date | null;
   agreedFare: number;
   advanceAmount: number;
   advancePaid: boolean;
@@ -118,6 +121,9 @@ export interface ICabRequest extends Document {
   adminNotes?: string;
   // false = a guest inquiry the owner has not yet sent to drivers; drivers cannot see or quote it
   dispatched?: boolean;
+  biddingClosesAt?: Date | null;
+  autoAccepted?: boolean;
+  autoCompleted?: boolean;
   // advance must be paid by then or the confirmed driver is released (lazy, see releaseUnpaidAdvances)
   advanceDueAt?: Date | null;
   // Razorpay link for the current advance (replaced if the trip is released and confirmed again)
@@ -264,6 +270,12 @@ const CabRequestSchema = new Schema<ICabRequest>(
       type: new Schema({ stars: Number, comment: String, ratedAt: Date, ratedBy: String }, { _id: false }),
       default: null,
     },
+    guestRating: {
+      type: new Schema({ stars: Number, comment: String, ratedAt: Date }, { _id: false }),
+      default: null,
+    },
+    biddingFallbackAlertSentAt: { type: Date, default: null },
+    completionReminderSentAt: { type: Date, default: null },
     agreedFare: { type: Number, default: 0 },
     advanceAmount: { type: Number, default: 0 },
     advancePaid: { type: Boolean, default: false },
@@ -291,6 +303,9 @@ const CabRequestSchema = new Schema<ICabRequest>(
     driverSettledAt: { type: Date, default: null },
     startedAt: { type: Date, default: null },
     completedAt: { type: Date, default: null },
+    biddingClosesAt: { type: Date, default: null },
+    autoAccepted: { type: Boolean, default: false },
+    autoCompleted: { type: Boolean, default: false },
     cancelledBy: { type: String, default: "" },
     remainingCashAmount: { type: Number, default: 0 },
     financialSnapshot: { type: FinancialSnapshotSchema, default: null },

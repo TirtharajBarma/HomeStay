@@ -40,6 +40,8 @@ const cfgOf = (isDemo: boolean) => CommissionService.getPlatformConfig(isDemo);
 
 export const cabModel = (isDemo: boolean) => getCabRequestModel(isDemo) as mongoose.Model<any>;
 export const payoutModel = (isDemo: boolean) => getPayoutRequestModel(isDemo) as unknown as mongoose.Model<any>;
+/** Audit scope of a cab request, so the admin's homestay / driver audit filters find it. */
+const scope = (d: any) => ({ tenantId: String(d?.propertyId || ''), driverId: String(d?.assignedDriverUserId || '') });
 
 export function userModel(isDemo = false): mongoose.Model<any> {
   // Demo users live only in "test", everyone else only in "production"; never fall back to the
@@ -49,7 +51,7 @@ export function userModel(isDemo = false): mongoose.Model<any> {
 
 const conflict = (message: string) => httpError(409, message, 'INVALID_STATE');
 
-const pushOwner = (isDemo: boolean, tenantKey: string, msg: PushMessage) => notify(isDemo, { email: tenantKey, role: 'owner' }, msg);
+export const pushOwner = (isDemo: boolean, tenantKey: string, msg: PushMessage) => notify(isDemo, { email: tenantKey, role: 'owner' }, msg);
 const pushUsers = (isDemo: boolean, ids: unknown[], msg: PushMessage) => {
   const valid = [...new Set(ids.map(String))].filter((id) => mongoose.Types.ObjectId.isValid(id));
   return valid.length ? notify(isDemo, { _id: { $in: valid } }, msg) : Promise.resolve();
@@ -149,7 +151,8 @@ export async function requestAdvance(tenantKey: string, isDemo: boolean, doc: an
       await cabModel(isDemo).updateOne({ _id: doc._id, status: 'AWAITING_ADVANCE_PAYMENT' }, { $set: { paymentLinkId: link.id, paymentLinkUrl: link.url }, $addToSet: { paymentLinkIds: link.id } });
       url = link.url;
     } else {
-      url = (await issueGuestLink(tenantKey, isDemo, { guestId: doc.guestId as any, guestName: doc.guestName, guestPhone: doc.guestPhone })).url;
+      const issued = await issueGuestLink(tenantKey, isDemo, { guestId: doc.guestId as any, guestName: doc.guestName, guestPhone: doc.guestPhone });
+      url = `${issued.url}&ref=${encodeURIComponent(doc.reference)}`;
     }
     await whatsapp(isDemo, doc.guestPhone, messages.quoteAcceptedGuestMessage(doc, url, cfg.advanceWindowMin));
   } catch (err: any) {
@@ -177,6 +180,9 @@ export function istDateTime(date: unknown, time: unknown): number | null {
 export async function expireStaleRequests(isDemo: boolean, extra: Record<string, any> = {}): Promise<number> {
   await releaseUnpaidAdvances(isDemo, extra); // same lazy hook: every list that shows requests runs it
   await expireOldQuotes(isDemo, extra);
+  await autoSelectLowestQuotes(isDemo, extra);
+  await checkBiddingFallbacks(isDemo, extra);
+  await sendCompletionReminders(isDemo, extra);
   const cutoff = Date.now() - (await cfgOf(isDemo)).requestExpiryHours * HOUR_MS;
   const Cab = cabModel(isDemo);
   // pickupAt < date + 1 day, so anything with date >= cutoff + 1 day cannot be stale yet.
@@ -282,9 +288,12 @@ export function containsContactInfo(text: string): boolean {
 export async function dispatchRequest(tenantKey: string, isDemo: boolean, reference: string) {
   const Cab = cabModel(isDemo);
   await expireStaleRequests(isDemo, { reference });
+  const cfg = await cfgOf(isDemo);
+  const windowMin = cfg.quoteBiddingWindowMin ?? 5;
+  const biddingClosesAt = new Date(Date.now() + windowMin * 60000);
   const updated = await Cab.findOneAndUpdate(
     { reference, propertyId: tenantKey, status: { $in: OPEN_STATUSES }, dispatched: false },
-    { $set: { dispatched: true } },
+    { $set: { dispatched: true, biddingClosesAt } },
     { returnDocument: 'after' }
   );
   if (updated) {
@@ -493,7 +502,7 @@ export async function ownerConfirmQuote(tenantKey: string, isDemo: boolean, refe
     }
   );
   if (!updated) throw conflict('This request already has a confirmed driver, or the quote changed. Refresh and try again.');
-  await audit(actor, 'cab.confirm_quote', 'CabRequest', String(doc._id), { reference, driverUserId, fare: priced.agreedFare }, isDemo);
+  await audit(actor, 'cab.confirm_quote', 'CabRequest', String(doc._id), { reference, driverUserId, fare: priced.agreedFare }, isDemo, scope(doc));
   // Driver: push + WhatsApp. Guest: WhatsApp with the advance to pay, but not the driver's phone yet.
   // The confirm is already committed: nothing below may fail the request.
   await Promise.allSettled([
@@ -564,13 +573,13 @@ export async function assignOwnFleet(
     { returnDocument: 'after', arrayFilters: [{ 'p.status': 'PENDING' }] }
   );
   if (!updated) throw conflict('This request already has a driver, or it is no longer open.');
-  await audit(actor, 'cab.assign_own_fleet', 'CabRequest', String(doc._id), { reference, ownDriverId: driver.id, fare, fee }, isDemo);
+  await audit(actor, 'cab.assign_own_fleet', 'CabRequest', String(doc._id), { reference, ownDriverId: driver.id, fare, fee }, isDemo, scope(doc));
   const quoted = (doc.quotes || []).filter((q: any) => q.status === 'PENDING').map((q: any) => q.driverId);
   await Promise.allSettled([
     pushUsers(isDemo, quoted, { title: 'Trip taken', body: `Trip ${reference} was given to another driver.`, data: tripData(updated, 'DRIVER_REMOVED') }),
     noFee
       ? Promise.all([
-          whatsapp(isDemo, driver.phone, messages.advancePaidDriverMessage(updated)),
+          whatsapp(isDemo, driver.phone, messages.advancePaidDriverMessage(updated, driverQuoteLink(isDemo, driver.id, updated.reference))),
           whatsapp(isDemo, updated.guestPhone, messages.advancePaidGuestMessage(updated)),
         ])
       : Promise.all([whatsapp(isDemo, driver.phone, messages.quoteAcceptedDriverMessage(driver.name, reference)), requestAdvance(tenantKey, isDemo, updated)]),
@@ -600,7 +609,7 @@ export async function cancelRequest(filter: Record<string, any>, isDemo: boolean
     { returnDocument: 'after' }
   );
   if (!updated) throw conflict('The trip changed meanwhile. Refresh and try again.');
-  await audit(actor, 'cab.cancel', 'CabRequest', String(doc._id), { reason, refundDue: doc.advancePaid ? doc.advanceAmount : 0 }, isDemo);
+  await audit(actor, 'cab.cancel', 'CabRequest', String(doc._id), { reason, refundDue: doc.advancePaid ? doc.advanceAmount : 0 }, isDemo, scope(doc));
   const msg = { title: 'Trip cancelled', body: `Trip ${doc.reference} was cancelled.`, data: tripData(doc, 'TRIP_CANCELLED') };
   const drivers = [doc.assignedDriverUserId, ...(doc.quotes || []).filter((q: any) => q.status === 'PENDING').map((q: any) => q.driverId)].filter(Boolean);
   await Promise.allSettled([
@@ -706,7 +715,8 @@ export async function listDriverTrips(isDemo: boolean, driver: any, quotesOn: bo
 
 /** A driver quotes, or revises their own quote, while the request is still open. */
 export async function driverSubmitQuote(isDemo: boolean, reference: string, driver: any, fareInput: unknown, notes: unknown) {
-  const quotedFare = parseFare(fareInput, (await cfgOf(isDemo)).maxFare);
+  const cfg = await cfgOf(isDemo);
+  const quotedFare = parseFare(fareInput, cfg.maxFare);
   const Model = cabModel(isDemo);
   const driverId = String(driver._id);
   const cleanNotes = typeof notes === 'string' ? notes.trim().slice(0, 300) : '';
@@ -714,6 +724,20 @@ export async function driverSubmitQuote(isDemo: boolean, reference: string, driv
     throw httpError(400, 'Notes cannot contain phone numbers, links or emails. Contact details are shared once the advance is paid.');
   }
   await expireStaleRequests(isDemo, { reference });
+
+  // Anti-gouging protection against unreasonable fares exceeding vehicle tier baselines
+  const existingReq: any = await Model.findOne({ reference, status: { $in: OPEN_STATUSES }, dispatched: { $ne: false } }).select('vehicleType').lean();
+  if (!existingReq) throw conflict('This request is no longer accepting quotes (or your quote was declined).');
+  const estFare = (cfg.vehicles as any)?.[existingReq.vehicleType]?.estFare;
+  if (estFare && estFare > 0) {
+    const ceiling = Math.max(estFare * 3.5, 15000);
+    if (quotedFare > ceiling) {
+      throw httpError(
+        400,
+        `Quoted fare exceeds the maximum permissible limit for this vehicle type (₹${ceiling.toLocaleString('en-IN')}). Please submit a competitive market fare.`
+      );
+    }
+  }
   const revise = () =>
     Model.findOneAndUpdate(
       { reference, status: { $in: OPEN_STATUSES }, dispatched: { $ne: false }, quotes: { $elemMatch: { driverId, status: { $in: ['PENDING', 'EXPIRED'] } } } },
@@ -725,6 +749,7 @@ export async function driverSubmitQuote(isDemo: boolean, reference: string, driv
           'quotes.$.status': 'PENDING', // an expired quote comes back to life with the new fare
           'quotes.$.counterFare': null,
           'quotes.$.counterAt': null,
+          'quotes.$.driverRating': ratingOf(driver).driverRating || 0,
           status: 'QUOTE_RECEIVED',
         },
       },
@@ -744,7 +769,7 @@ export async function driverSubmitQuote(isDemo: boolean, reference: string, driv
             driverPhone: driver.phone || '',
             driverVehicle: [driver.vehicle?.model, driver.vehicle?.plate].filter(Boolean).join(' ') || driver.vehicle?.type || '',
             vehicleType: driver.vehicle?.type || '',
-            driverRating: 0,
+            driverRating: ratingOf(driver).driverRating || 0,
             quotedFare,
             notes: cleanNotes,
             status: 'PENDING',
@@ -764,6 +789,9 @@ export async function driverSubmitQuote(isDemo: boolean, reference: string, driv
     body: `₹${quotedFare.toLocaleString('en-IN')} for trip ${reference}.`,
     data: tripData(updated, 'NEW_QUOTE'),
   });
+  if (cfg.quoteBiddingWindowMin === 0) {
+    autoSelectLowestQuotes(isDemo, { reference }).catch(() => {});
+  }
   return updated;
 }
 
@@ -785,7 +813,7 @@ export async function matchingDrivers(isDemo: boolean, doc: any, cfg: PlatformCo
   const vehicleMatch = { $or: [{ 'vehicle.type': doc.vehicleType }, { 'vehicle.type': { $in: [null, ''] } }, { 'vehicle.type': { $exists: false } }] };
   const all: any[] = await userModel(isDemo)
     .find({ role: 'driver', accountStatus: 'ACTIVE', isAvailable: { $ne: false }, ...vehicleMatch })
-    .select('_id phone location')
+    .select('_id phone location whatsappAlerts')
     .limit(2000)
     .lean();
   const scored = all.map((d) => ({ d, km: distanceKm(d.location, doc.homestayLocation) }));
@@ -807,10 +835,11 @@ export async function notifyNewRequest(isDemo: boolean, doc: any) {
     data: tripData(doc, 'NEW_REQUEST'),
   });
   // WhatsApp too, so drivers without the app (or not looking at it) still see it. Capped: each costs money.
+  // Drivers who opt out in the app (whatsappAlerts: false) only receive push notifications.
   if (isDemo || cfg.driverBroadcastMax <= 0) return;
   await Promise.allSettled(
     drivers
-      .filter((d) => d.phone)
+      .filter((d) => d.phone && d.whatsappAlerts !== false)
       .slice(0, cfg.driverBroadcastMax)
       .map((d) => whatsapp(isDemo, d.phone, messages.newRequestMessage(doc, driverQuoteLink(isDemo, d._id, doc.reference))))
   );
@@ -830,7 +859,7 @@ export async function startTrip(isDemo: boolean, filter: Record<string, any>, ac
     { status: 'TRIP_STARTED', startedAt: new Date() },
     'Trip can start only after the advance is paid and a driver is assigned.'
   );
-  await audit(actor, 'cab.start', 'CabRequest', String(updated._id), {}, isDemo);
+  await audit(actor, 'cab.start', 'CabRequest', String(updated._id), {}, isDemo, scope(updated));
   await pushOwner(isDemo, String(updated.propertyId), { title: 'Trip started', body: `Trip ${updated.reference} has started.`, data: tripData(updated, 'TRIP_STARTED') });
   return updated;
 }
@@ -842,13 +871,221 @@ export async function completeTrip(isDemo: boolean, filter: Record<string, any>,
   const driverShare = s ? s.advanceAmount - s.platformFeeAmount - s.homestayCommissionAmount : 0;
   const updated = await transition(
     isDemo,
-    { _id: doc._id, status: 'TRIP_STARTED' },
+    { _id: doc._id, status: { $in: ['TRIP_STARTED', 'CONFIRMED'] } },
     { status: 'COMPLETED', completedAt: new Date(), driverSettlementStatus: driverShare > 0 ? 'PENDING' : 'NONE' },
-    'Only a started trip can be completed.'
+    'Only a confirmed or started trip can be completed.'
   );
-  await audit(actor, 'cab.complete', 'CabRequest', String(doc._id), { driverShareOfAdvance: driverShare }, isDemo);
+  await audit(actor, 'cab.complete', 'CabRequest', String(doc._id), { driverShareOfAdvance: driverShare }, isDemo, scope(updated));
   await pushOwner(isDemo, String(updated.propertyId), { title: 'Trip completed', body: `Trip ${updated.reference} is complete. Rate your driver.`, data: tripData(updated, 'TRIP_COMPLETED') });
   return updated;
+}
+
+/**
+ * Automated quote auction picker:
+ * Finds open requests whose bidding window (quoteBiddingWindowMin) has closed,
+ * automatically selects the quote with the lowest fare, and confirms it.
+ */
+export async function autoSelectLowestQuotes(isDemo: boolean, extra: Record<string, any> = {}): Promise<number> {
+  const Cab = cabModel(isDemo);
+  const cfg = await cfgOf(isDemo);
+  const now = new Date();
+  const windowMin = cfg.quoteBiddingWindowMin ?? 5;
+  const cutoff = new Date(now.getTime() - windowMin * 60000);
+  const candidates: any[] = await Cab.find({
+    ...extra,
+    status: { $in: ['FINDING_DRIVER', 'QUOTE_RECEIVED'] },
+    dispatched: { $ne: false },
+    advancePaid: { $ne: true },
+    quotes: { $elemMatch: { status: 'PENDING' } },
+    $or: [
+      { biddingClosesAt: { $lte: now } },
+      ...(windowMin === 0 ? [{ biddingClosesAt: null }] : [{ biddingClosesAt: null, createdAt: { $lte: cutoff } }]),
+    ],
+  }).limit(50).lean();
+
+  let autoSelectedCount = 0;
+  for (const doc of candidates) {
+    const pendingQuotes = (doc.quotes || []).filter((q: any) => q.status === 'PENDING');
+    if (!pendingQuotes.length) continue;
+
+    // Lowest quotedFare first; if tied, highest rating; if tied, earliest quote
+    pendingQuotes.sort((a: any, b: any) => {
+      if (a.quotedFare !== b.quotedFare) return a.quotedFare - b.quotedFare;
+      if ((b.driverRating || 0) !== (a.driverRating || 0)) return (b.driverRating || 0) - (a.driverRating || 0);
+      return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+    });
+
+    const winningQuote = pendingQuotes[0];
+    try {
+      await ownerConfirmQuote(
+        String(doc.propertyId),
+        isDemo,
+        doc.reference,
+        String(winningQuote.driverId),
+        'system:auto-lowest-bid'
+      );
+      await Cab.updateOne({ _id: doc._id }, { $set: { autoAccepted: true } });
+      autoSelectedCount++;
+    } catch (err: any) {
+      console.warn(`[autoSelectLowestQuotes] Notice for ${doc.reference}:`, err?.message);
+    }
+  }
+  return autoSelectedCount;
+}
+
+/**
+ * Automated trip completion on start time:
+ * Once the trip's scheduled pickup timestamp arrives/passes, a confirmed or started trip
+ * is automatically completed and driver settlement share initialized.
+ */
+export async function autoCompleteTrips(isDemo: boolean, extra: Record<string, any> = {}): Promise<number> {
+  const Cab = cabModel(isDemo);
+  const now = Date.now();
+  const candidates: any[] = await Cab.find({
+    ...extra,
+    status: { $in: ['CONFIRMED', 'TRIP_STARTED'] },
+    advancePaid: true,
+  }).limit(50).lean();
+
+  let completedCount = 0;
+  for (const doc of candidates) {
+    const tripTimestamp = istDateTime(doc.date, doc.time) ?? Number(doc.date);
+    if (tripTimestamp <= now) {
+      try {
+        const s = doc.financialSnapshot;
+        const driverShare = s ? s.advanceAmount - s.platformFeeAmount - s.homestayCommissionAmount : 0;
+        const updated = await Cab.findOneAndUpdate(
+          { _id: doc._id, status: { $in: ['CONFIRMED', 'TRIP_STARTED'] }, advancePaid: true },
+          {
+            $set: {
+              status: 'COMPLETED',
+              startedAt: doc.startedAt || new Date(tripTimestamp),
+              completedAt: new Date(),
+              driverSettlementStatus: driverShare > 0 ? 'PENDING' : 'NONE',
+              autoCompleted: true,
+            },
+          },
+          { returnDocument: 'after' }
+        );
+        if (updated) {
+          completedCount++;
+          await audit('system:auto-complete', 'cab.complete', 'CabRequest', String(doc._id), { driverShareOfAdvance: driverShare, autoCompleted: true }, isDemo, scope(updated));
+          await pushOwner(isDemo, String(updated.propertyId), {
+            title: 'Trip completed',
+            body: `Trip ${updated.reference} reached its scheduled time and completed. Rate your driver.`,
+            data: tripData(updated, 'TRIP_COMPLETED'),
+          }).catch(() => {});
+        }
+      } catch (err: any) {
+        console.warn(`[autoCompleteTrips] Notice for ${doc.reference}:`, err?.message);
+      }
+    }
+  }
+  return completedCount;
+}
+
+/**
+ * Automated bidding timeout fallback:
+ * If an open dispatched request receives 0 driver quotes within the bidding window (or after 10 min),
+ * alert the homestay owner via push and WhatsApp so they can assign an in-house driver or broaden the radius.
+ */
+export async function checkBiddingFallbacks(isDemo: boolean, extra: Record<string, any> = {}): Promise<number> {
+  const Cab = cabModel(isDemo);
+  const now = new Date();
+  const cutoff10m = new Date(now.getTime() - 10 * 60000);
+
+  const candidates: any[] = await Cab.find({
+    ...extra,
+    status: 'FINDING_DRIVER',
+    dispatched: { $ne: false },
+    advancePaid: { $ne: true },
+    biddingFallbackAlertSentAt: null,
+    $or: [
+      { biddingClosesAt: { $lte: now } },
+      { createdAt: { $lte: cutoff10m } },
+    ],
+  }).limit(20).lean();
+
+  let alertedCount = 0;
+  for (const doc of candidates) {
+    const hasQuotes = (doc.quotes || []).some((q: any) => q.status === 'PENDING');
+    if (hasQuotes) continue;
+
+    const updated = await Cab.findOneAndUpdate(
+      { _id: doc._id, status: 'FINDING_DRIVER', biddingFallbackAlertSentAt: null },
+      { $set: { biddingFallbackAlertSentAt: new Date() } },
+      { returnDocument: 'after' }
+    );
+    if (!updated) continue;
+    alertedCount++;
+
+    await pushOwner(isDemo, String(doc.propertyId), {
+      title: 'No driver quotes yet',
+      body: `No drivers quoted for trip ${doc.reference}. Tap here to assign your own driver or expand radius.`,
+      data: tripData(doc, 'NO_QUOTES_FALLBACK'),
+    }).catch(() => {});
+
+    // WhatsApp alert to homestay owner if phone is available on their account
+    const ownerUser: any = await userModel(isDemo).findOne({ email: doc.propertyId, role: 'owner' }).select('phone').lean();
+    if (ownerUser?.phone) {
+      const ownerUrl = `${config.guestWebUrl}/cab-request?ref=${encodeURIComponent(doc.reference)}`;
+      await whatsapp(isDemo, ownerUser.phone, messages.biddingTimeoutOwnerMessage(doc, doc.homestayName || 'Homestay', ownerUrl)).catch(() => {});
+    }
+
+    await audit('system:bidding-fallback', 'cab.bidding_fallback', 'CabRequest', String(doc._id), { reference: doc.reference }, isDemo, scope(updated));
+  }
+  return alertedCount;
+}
+
+/**
+ * Automated trip completion reminders:
+ * Reminds drivers via WhatsApp and Push 2+ hours after scheduled pickup time to confirm
+ * remaining cash collection and tap "Complete Ride" on their direct web link or app.
+ */
+export async function sendCompletionReminders(isDemo: boolean, extra: Record<string, any> = {}): Promise<number> {
+  const Cab = cabModel(isDemo);
+  const now = Date.now();
+  const pickupCutoff = now - 2 * HOUR_MS;
+
+  const candidates: any[] = await Cab.find({
+    ...extra,
+    status: { $in: ['CONFIRMED', 'TRIP_STARTED'] },
+    advancePaid: true,
+    completionReminderSentAt: null,
+    assignedDriverPhone: { $exists: true, $nin: ['', null] },
+  }).limit(20).lean();
+
+  let remindedCount = 0;
+  for (const doc of candidates) {
+    const tripTimestamp = istDateTime(doc.date, doc.time) ?? Number(doc.date);
+    if (tripTimestamp > pickupCutoff) continue; // scheduled pickup was less than 2 hours ago
+
+    const updated = await Cab.findOneAndUpdate(
+      { _id: doc._id, status: { $in: ['CONFIRMED', 'TRIP_STARTED'] }, completionReminderSentAt: null },
+      { $set: { completionReminderSentAt: new Date() } },
+      { returnDocument: 'after' }
+    );
+    if (!updated) continue;
+    remindedCount++;
+
+    const driverId = doc.assignedDriverUserId || doc.assignedDriverId;
+    const directLink = driverQuoteLink(isDemo, driverId, doc.reference);
+
+    // 1. WhatsApp to driver
+    await whatsapp(isDemo, doc.assignedDriverPhone, messages.completionReminderDriverMessage(doc, directLink)).catch(() => {});
+
+    // 2. Push to driver app (if registered)
+    if (doc.assignedDriverUserId) {
+      await pushUsers(isDemo, [doc.assignedDriverUserId], {
+        title: 'Complete your ride',
+        body: `Have you completed trip ${doc.reference}? Please confirm cash collection of ₹${doc.remainingCashAmount}.`,
+        data: tripData(doc, 'COMPLETION_REMINDER'),
+      }).catch(() => {});
+    }
+
+    await audit('system:completion-reminder', 'cab.completion_reminder', 'CabRequest', String(doc._id), { reference: doc.reference, driverPhone: doc.assignedDriverPhone }, isDemo, scope(updated));
+  }
+  return remindedCount;
 }
 
 // ---------------------------------------------------------------------------
@@ -866,7 +1103,7 @@ export async function ownerCounterOffer(tenantKey: string, isDemo: boolean, refe
   if (!updated) throw conflict('This quote is no longer open. Refresh and try again.');
   const q = updated.quotes.find((x: any) => String(x.driverId) === String(driverId));
   if (fare === q.quotedFare) throw httpError(400, 'That is the driver\'s own fare: confirm the quote instead.');
-  await audit(actor, 'cab.counter_offer', 'CabRequest', String(updated._id), { reference, driverId, fare, quoted: q.quotedFare }, isDemo);
+  await audit(actor, 'cab.counter_offer', 'CabRequest', String(updated._id), { reference, driverId, fare, quoted: q.quotedFare }, isDemo, scope(updated));
   await Promise.allSettled([
     pushUsers(isDemo, [driverId], { title: 'Counter-offer', body: `The homestay offers ₹${fare.toLocaleString('en-IN')} for trip ${reference}.`, data: tripData(updated, 'QUOTE_COUNTER') }),
     whatsapp(isDemo, q.driverPhone, messages.quoteCounterMessage(q.driverName, reference, fare, driverQuoteLink(isDemo, driverId, reference))),
@@ -960,7 +1197,7 @@ export async function adminAssignDriver(isDemo: boolean, id: string, body: any, 
       previous && previous !== driverUserId ? { $addToSet: { previousDriverUserIds: previous } } : {}
     );
   }
-  await audit(actor, reassign ? 'cab.reassign_driver' : 'cab.assign_driver', 'CabRequest', id, { fare, driverUserId, name }, isDemo);
+  await audit(actor, reassign ? 'cab.reassign_driver' : 'cab.assign_driver', 'CabRequest', id, { fare, driverUserId, name }, isDemo, scope(updated));
   // Like the owner's confirm: the chosen driver's quote is accepted, everyone else's declined
   const declined = reassign
     ? []
@@ -984,7 +1221,7 @@ export async function adminAssignDriver(isDemo: boolean, id: string, body: any, 
   if (reassign) {
     // Advance already paid: the new driver and the guest get each other's details now, the owner is told
     pushes.push(
-      whatsapp(isDemo, phone, messages.advancePaidDriverMessage(updated)),
+      whatsapp(isDemo, phone, messages.advancePaidDriverMessage(updated, driverQuoteLink(isDemo, updated.assignedDriverUserId, updated.reference))),
       whatsapp(isDemo, updated.guestPhone, messages.advancePaidGuestMessage(updated)),
       pushOwner(isDemo, String(doc.propertyId), { title: 'New driver assigned', body: `StayRide assigned ${name} to trip ${doc.reference}.`, data: tripData(updated, 'TRIP_ASSIGNED') })
     );
@@ -1044,7 +1281,7 @@ async function applyAdvancePayment(isDemo: boolean, doc: any, p: { transactionId
     throw err;
   }
   const id = String(doc._id);
-  await audit(p.actor, 'payment.record', 'CabRequest', id, { transactionId: p.transactionId, amount: p.amount, method: p.method }, isDemo);
+  await audit(p.actor, 'payment.record', 'CabRequest', id, { transactionId: p.transactionId, amount: p.amount, method: p.method }, isDemo, scope(updated));
   const msg = { title: 'Advance received', body: `Trip ${doc.reference} is confirmed.`, data: tripData(doc, 'ADVANCE_PAID') };
   const commission = updated.financialSnapshot?.homestayCommissionAmount;
   const ownerMsg = { ...msg, body: `Trip ${doc.reference} is confirmed.${commission ? ` Your commission of ₹${commission.toLocaleString('en-IN')} is updated.` : ''}` };
@@ -1052,7 +1289,7 @@ async function applyAdvancePayment(isDemo: boolean, doc: any, p: { transactionId
   await Promise.allSettled([
     pushUsers(isDemo, [updated.assignedDriverUserId].filter(Boolean), msg),
     pushOwner(isDemo, String(doc.propertyId), ownerMsg),
-    whatsapp(isDemo, updated.assignedDriverPhone, messages.advancePaidDriverMessage(updated)),
+    whatsapp(isDemo, updated.assignedDriverPhone, messages.advancePaidDriverMessage(updated, driverQuoteLink(isDemo, updated.assignedDriverUserId, updated.reference))),
     whatsapp(isDemo, updated.guestPhone, messages.advancePaidGuestMessage(updated)),
   ]);
   return updated;
@@ -1083,7 +1320,7 @@ export async function recordGatewayPayment(linkId: string, paymentId: string, am
     { _id: doc._id, 'unmatchedPayments.paymentId': { $ne: paymentId } },
     { $push: { unmatchedPayments: { paymentId, amount: amountRupees, status: doc.status, at: new Date() } } }
   );
-  await audit('razorpay', 'payment.unmatched', 'CabRequest', String(doc._id), { paymentId, linkId, amount: amountRupees, status: doc.status }, isDemo);
+  await audit('razorpay', 'payment.unmatched', 'CabRequest', String(doc._id), { paymentId, linkId, amount: amountRupees, status: doc.status }, isDemo, scope(doc));
   return 'UNMATCHED';
 }
 
@@ -1116,7 +1353,7 @@ export async function adminVoidPayment(isDemo: boolean, id: string, reason: unkn
     { returnDocument: 'after' }
   );
   if (!updated) throw conflict('Only a confirmed, not-yet-started payment can be voided (a trip waiting for a new driver needs one first).');
-  await audit(actor, 'payment.void', 'CabRequest', id, { transactionId: doc.advancePaymentId, reason: why }, isDemo);
+  await audit(actor, 'payment.void', 'CabRequest', id, { transactionId: doc.advancePaymentId, reason: why }, isDemo, scope(updated));
   const msg = { title: 'Advance not received', body: `The advance for trip ${doc.reference} was not received. The trip waits for payment again.`, data: tripData(updated, 'ADVANCE_VOIDED') };
   await Promise.allSettled([
     pushOwner(isDemo, String(doc.propertyId), msg),
@@ -1135,7 +1372,7 @@ export async function adminMarkRefunded(isDemo: boolean, id: string, reference: 
     { refundStatus: 'REFUNDED', refundReference: ref, refundedAt: new Date() },
     'No pending refund on this request.'
   );
-  await audit(actor, 'payment.refund', 'CabRequest', id, { reference: ref, amount: updated.advanceAmount }, isDemo);
+  await audit(actor, 'payment.refund', 'CabRequest', id, { reference: ref, amount: updated.advanceAmount }, isDemo, scope(updated));
   if (updated.guestPhone) await whatsapp(isDemo, updated.guestPhone, messages.refundGuestMessage(updated, ref)).catch(() => {});
   return updated;
 }
@@ -1153,7 +1390,7 @@ export async function adminRefundUnmatched(isDemo: boolean, id: string, paymentI
     'No open unmatched payment with this id on this request.'
   );
   const amount = (updated.unmatchedPayments || []).find((u: any) => u.paymentId === pid)?.amount;
-  await audit(actor, 'payment.unmatched_refund', 'CabRequest', id, { paymentId: pid, reference: ref, amount }, isDemo);
+  await audit(actor, 'payment.unmatched_refund', 'CabRequest', id, { paymentId: pid, reference: ref, amount }, isDemo, scope(updated));
   return updated;
 }
 
@@ -1166,7 +1403,7 @@ export async function adminSettleDriver(isDemo: boolean, id: string, reference: 
     { driverSettlementStatus: 'SETTLED', driverSettlementRef: ref, driverSettledAt: new Date() },
     'No pending driver settlement on this request.'
   );
-  await audit(actor, 'driver.settle', 'CabRequest', id, { reference: ref }, isDemo);
+  await audit(actor, 'driver.settle', 'CabRequest', id, { reference: ref }, isDemo, scope(updated));
   return updated;
 }
 
@@ -1347,7 +1584,7 @@ export async function rejectPayout(isDemo: boolean, id: string, reason: unknown,
   }
   // Unlock its trips so they can be requested again (idempotent; payoutSummary/requestPayout also heal).
   await unlock();
-  await audit(actor, 'payout.reject', 'PayoutRequest', id, { reason: why, amount: updated.amount }, isDemo);
+  await audit(actor, 'payout.reject', 'PayoutRequest', id, { reason: why, amount: updated.amount }, isDemo, { tenantId: String(updated.tenantId) });
   await pushOwner(isDemo, updated.tenantId, { title: 'Payout request rejected', body: why, data: { type: 'PAYOUT_REJECTED' } });
   return updated;
 }
@@ -1372,7 +1609,45 @@ export async function rateDriver(tenantKey: string, isDemo: boolean, reference: 
   if (mongoose.Types.ObjectId.isValid(updated.assignedDriverUserId)) {
     await userModel(isDemo).updateOne({ _id: updated.assignedDriverUserId, role: 'driver' }, { $inc: { ratingSum: stars, ratingCount: 1 } });
   }
-  await audit(actor, 'cab.rate_driver', 'CabRequest', String(updated._id), { stars, driverUserId: updated.assignedDriverUserId }, isDemo);
+  await audit(actor, 'cab.rate_driver', 'CabRequest', String(updated._id), { stars, driverUserId: updated.assignedDriverUserId }, isDemo, scope(updated));
+  return updated;
+}
+
+/**
+ * Passenger / Guest driver rating:
+ * Allows the passenger on the web interface to submit a 1-5 star review and comment after the ride completes.
+ * Updates the driver's platform reputation and stores the guest review on the cab request.
+ */
+export async function rateDriverByGuest(isDemo: boolean, reference: string, body: any) {
+  const stars = body?.stars;
+  if (!Number.isInteger(stars) || stars < 1 || stars > 5) throw httpError(400, 'Stars must be a whole number from 1 to 5.');
+  const raw = body?.comment ?? '';
+  if (typeof raw !== 'string' || raw.trim().length > 300) throw httpError(400, 'Comment must be text of at most 300 characters.');
+  const comment = raw.trim();
+
+  const Cab = cabModel(isDemo);
+  const doc: any = await Cab.findOne({ reference, status: 'COMPLETED', assignedDriverUserId: { $nin: [null, ''] } }).lean();
+  if (!doc) throw httpError(404, 'Only a completed trip with an assigned driver can be rated.');
+  if (doc.guestRating) throw conflict('You have already rated this trip.');
+
+  const updateSet: any = {
+    guestRating: { stars, comment, ratedAt: new Date() },
+  };
+  if (!doc.rating) {
+    updateSet.rating = { stars, comment, ratedAt: new Date(), ratedBy: `guest:${doc.guestPhone || 'passenger'}` };
+  }
+
+  const updated: any = await Cab.findOneAndUpdate(
+    { reference, status: 'COMPLETED', guestRating: null },
+    { $set: updateSet },
+    { returnDocument: 'after' }
+  );
+  if (!updated) throw conflict('You have already rated this trip.');
+
+  if (mongoose.Types.ObjectId.isValid(updated.assignedDriverUserId)) {
+    await userModel(isDemo).updateOne({ _id: updated.assignedDriverUserId, role: 'driver' }, { $inc: { ratingSum: stars, ratingCount: 1 } });
+  }
+  await audit('guest', 'cab.rate_driver_by_guest', 'CabRequest', String(updated._id), { stars, comment, driverUserId: updated.assignedDriverUserId }, isDemo, scope(updated));
   return updated;
 }
 
@@ -1448,6 +1723,6 @@ export async function releaseDriverTrips(isDemo: boolean, driverUserId: string, 
   }
   if (notice) await pushUsers(isDemo, [id], { title: 'Driver account update', body: notice, data: { type: 'DRIVER_BLOCKED' } });
   if (!released.length) return;
-  await audit(actor, 'driver.trips_released', 'User', id, { references: released.map((d) => d.reference) }, isDemo);
+  await audit(actor, 'driver.trips_released', 'User', id, { references: released.map((d) => d.reference) }, isDemo, { driverId: id });
   await Promise.all(released.map((d) => pushOwner(isDemo, String(d.propertyId), removedMsg(d))));
 }

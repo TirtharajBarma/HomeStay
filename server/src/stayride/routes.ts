@@ -6,7 +6,7 @@ import { beginIdempotent } from './idempotency.js';
 import {
   OPEN_STATUSES, cabModel, payoutModel, userModel, parseFare, overlayTrips, ownerConfirmQuote, cancelRequest,
   driverTripView, listDriverTrips, driverSubmitQuote, startTrip, completeTrip, payoutSummary, requestPayout,
-  istDateTime, notifyNewRequest, rateDriver, ownerPayoutView, parseTime12, hashToken, readDriverQuoteToken, ownerCounterOffer, driverAcceptCounter, ownerCompleteTrip, onDriverStatusChange, issueGuestLink, sendAskCab, dispatchRequest, assignOwnFleet, recordGatewayPayment,
+  istDateTime, notifyNewRequest, rateDriver, rateDriverByGuest, ownerPayoutView, parseTime12, hashToken, readDriverQuoteToken, ownerCounterOffer, driverAcceptCounter, ownerCompleteTrip, onDriverStatusChange, issueGuestLink, sendAskCab, dispatchRequest, assignOwnFleet, recordGatewayPayment, pushOwner,
 } from './platform.js';
 import { CommissionService } from '../services/commission.service.js';
 import { publicConfig, PlatformConfig } from '../services/platform-config.js';
@@ -42,6 +42,8 @@ import jwt from 'jsonwebtoken';
 import { verifyToken, clerkClient } from '@clerk/express';
 import { verifyWebhook } from '@clerk/express/webhooks';
 import { config } from '../config/env.js';
+import uploadRoutes from '../routes/upload.routes.js';
+import telemetryRoutes from '../routes/telemetry.routes.js';
 
 interface StayRideAuthPayload {
   id: string;
@@ -993,16 +995,41 @@ stayrideV1Router.post('/public/guest-links/:token/cab-requests', async (req: Req
     clientRequestId,
     { guestNotes: str(req.body.notes, 500) }
   );
+  pushOwner(isDemo, tenantKey, {
+    title: 'New Guest Cab Inquiry',
+    body: `${input.guestName} requested a cab for ${input.pickup || 'homestay'}.`,
+    data: { type: 'NEW_REQUEST', reference: doc.reference, tripId: doc.tripId },
+  }).catch(() => {});
+
+  // Instant zero-touch dispatch to priority and nearby drivers
+  try {
+    await dispatchRequest(tenantKey, isDemo, doc.reference);
+  } catch (dispErr: any) {
+    console.warn(`[Auto-Dispatch] Notice for ${doc.reference}:`, dispErr?.message);
+  }
+
   return res.status(201).json({ reference: doc.reference, status: doc.status });
 });
 
 stayrideV1Router.get('/public/cab-requests/:reference', async (req: Request, res: Response) => {
-  const link = await findGuestLink(req.query.t);
-  if (!link) return invalidLink(res);
-  const doc: any = await cabModel(isDemoKey(link.tenantKey))
-    .findOne({ reference: String(req.params.reference), propertyId: link.tenantKey })
-    .lean();
+  let link = await findGuestLink(req.query.t);
+  let doc: any = null;
+  if (link) {
+    doc = await cabModel(isDemoKey(link.tenantKey))
+      .findOne({ reference: String(req.params.reference), propertyId: link.tenantKey })
+      .lean();
+  } else {
+    for (const isDemo of [false, true]) {
+      if (isDemo && !config.demoEnabled) break;
+      const found = await cabModel(isDemo).findOne({ reference: String(req.params.reference) }).lean();
+      if (found) {
+        doc = found;
+        break;
+      }
+    }
+  }
   if (!doc) return res.status(404).json({ error: { message: 'Cab request not found.' } });
+  const showContact = ['CONFIRMED', 'EN_ROUTE_PICKUP', 'ARRIVED_HOMESTAY', 'TRIP_STARTED', 'COMPLETED'].includes(doc.status);
   return res.json({
     id: doc.tripId ?? null,
     reference: doc.reference,
@@ -1010,12 +1037,40 @@ stayrideV1Router.get('/public/cab-requests/:reference', async (req: Request, res
     agreedFare: doc.agreedFare,
     advanceAmount: doc.advanceAmount,
     advancePaid: doc.advancePaid,
+    advanceDueAt: doc.advanceDueAt || null,
     remainingCashAmount: doc.remainingCashAmount,
+    paymentLinkUrl: doc.paymentLinkUrl || null,
     driverName: doc.assignedDriverName || '',
+    driverPhone: showContact ? doc.assignedDriverPhone || '' : '',
     vehicle: [doc.vehicleDetails?.model, doc.vehicleDetails?.plate].filter(Boolean).join(' '),
+    pickup: doc.pickup || '',
+    destinations: doc.destinations || [],
+    date: doc.date,
+    time: doc.time,
+    passengers: doc.passengers,
+    vehicleType: doc.vehicleType,
     refundStatus: doc.refundStatus,
     cancellationReason: doc.status === 'CANCELLED' ? doc.cancellationReason || '' : '',
+    guestRating: doc.guestRating || null,
+    biddingFallback: Boolean(doc.biddingFallbackAlertSentAt),
   });
+});
+
+stayrideV1Router.post('/public/cab-requests/:reference/rate', async (req: Request, res: Response) => {
+  const reference = String(req.params.reference);
+  let isDemo = false;
+  const link = await findGuestLink(req.query.t);
+  if (link) {
+    isDemo = isDemoKey(link.tenantKey);
+  } else {
+    const prodDoc = await cabModel(false).findOne({ reference }).select('_id').lean();
+    if (!prodDoc && config.demoEnabled) {
+      const demoDoc = await cabModel(true).findOne({ reference }).select('_id').lean();
+      if (demoDoc) isDemo = true;
+    }
+  }
+  const updated = await rateDriverByGuest(isDemo, reference, req.body);
+  return res.json({ success: true, guestRating: updated.guestRating });
 });
 
 // ==========================================
@@ -1035,9 +1090,12 @@ async function quoteLinkDriver(token: unknown, res: Response) {
     res.status(404).json({ error: { message: 'This link is invalid or has expired.' } });
     return null;
   }
-  const driver: any = mongoose.Types.ObjectId.isValid(link.driverId)
-    ? await getUserModel(link.isDemo).findOne({ _id: link.driverId, role: 'driver' }).lean()
-    : null;
+  let driver: any = null;
+  if (link.isDemo && String(link.driverId) === 'demo-driver-1') {
+    driver = { _id: 'demo-driver-1', name: 'Demo Driver', phone: '+919876543210', accountStatus: 'ACTIVE', role: 'driver' };
+  } else if (mongoose.Types.ObjectId.isValid(link.driverId)) {
+    driver = await getUserModel(link.isDemo).findOne({ _id: link.driverId, role: 'driver' }).lean();
+  }
   if (!driver || driver.accountStatus !== 'ACTIVE') {
     res.status(403).json({ error: { message: 'Your driver account is not active. Contact StayRide support.', code: 'DRIVER_NOT_ACTIVE' } });
     return null;
@@ -1076,6 +1134,20 @@ stayrideV1Router.post('/public/driver-quote/accept-counter', async (req: Request
   const ctx = await quoteLinkDriver(req.body?.t, res);
   if (!ctx) return;
   await driverAcceptCounter(ctx.isDemo, ctx.reference, ctx.driver);
+  return res.json(await quotePageView(ctx.isDemo, ctx.reference, ctx.driver));
+});
+
+stayrideV1Router.post('/public/driver-quote/start', async (req: Request, res: Response) => {
+  const ctx = await quoteLinkDriver(req.body?.t, res);
+  if (!ctx) return;
+  await startTrip(ctx.isDemo, { reference: ctx.reference, assignedDriverUserId: String(ctx.driver._id) }, `driver-web:${ctx.driver.name}`);
+  return res.json(await quotePageView(ctx.isDemo, ctx.reference, ctx.driver));
+});
+
+stayrideV1Router.post('/public/driver-quote/complete', async (req: Request, res: Response) => {
+  const ctx = await quoteLinkDriver(req.body?.t, res);
+  if (!ctx) return;
+  await completeTrip(ctx.isDemo, { reference: ctx.reference, assignedDriverUserId: String(ctx.driver._id) }, `driver-web:${ctx.driver.name}`);
   return res.json(await quotePageView(ctx.isDemo, ctx.reference, ctx.driver));
 });
 
@@ -1179,6 +1251,9 @@ stayrideV1Router.post('/auth/clerk-webhook', async (req: Request, res: Response)
 
 // Everything below requires a valid StayRide/Clerk session.
 stayrideV1Router.use(authenticateStayRide);
+// Cloudinary uploads and client error reports: signed-in app users only
+stayrideV1Router.use('/upload', uploadRoutes);
+stayrideV1Router.use('/telemetry', telemetryRoutes);
 
 // ==========================================
 // Change password for email/password (non-Clerk) accounts.
@@ -1287,6 +1362,15 @@ stayrideV1Router.patch('/driver/availability', driverGate, async (req: Request, 
     await getUserModel(false).updateOne({ _id: (req as any).driver._id }, { $set: { isAvailable: available } });
   }
   res.json({ success: true, available });
+});
+
+stayrideV1Router.patch('/driver/whatsapp-alerts', driverGate, async (req: Request, res: Response) => {
+  const isDemo = isDemoKey(authOf(req).tenantKey);
+  const enabled = req.body?.enabled !== false;
+  if (!isDemo) {
+    await getUserModel(false).updateOne({ _id: (req as any).driver._id }, { $set: { whatsappAlerts: enabled } });
+  }
+  res.json({ success: true, whatsappAlerts: enabled });
 });
 
 // Driver app reports where the driver is, so "nearby" requests are really nearby.
@@ -1635,15 +1719,51 @@ stayrideV1Router.get('/bookings', async (req: Request, res: Response) => {
 });
 
 stayrideV1Router.post('/bookings', async (req: Request, res: Response) => {
+  const { tenantKey, isDemo } = tenantOf(req);
   const created = await mutateReq(req, (s) => s.createBooking(req.body));
   res.status(201).json(created);
+
+  // Automated Ask-for-Cab WhatsApp on booking creation
+  if (created?.phone) {
+    loadReqStore(req)
+      .then((store) =>
+        sendAskCab(tenantKey, isDemo, store.homestay.name, {
+          guestId: created.guestId ?? created.id,
+          guestName: created.guestName || 'Guest',
+          guestPhone: created.phone,
+        })
+      )
+      .catch((err) => {
+        console.warn(`[Auto-AskCab] Booking notice for ${created.guestName}:`, err?.message);
+      });
+  }
 });
 
 const bookingAction = (fn: (s: StayRideMemoryStore, id: number, body: any) => any) => async (req: Request, res: Response) => {
   const b = await mutateReq(req, (s) => fn(s, Number(req.params.id), req.body));
   return b ? res.json(b) : notFound(res, 'Booking');
 };
-stayrideV1Router.post('/bookings/:id/check-in', bookingAction((s, id) => s.checkInBooking(id)));
+stayrideV1Router.post('/bookings/:id/check-in', async (req: Request, res: Response) => {
+  const { tenantKey, isDemo } = tenantOf(req);
+  const b = await mutateReq(req, (s) => s.checkInBooking(Number(req.params.id)));
+  if (!b) return notFound(res, 'Booking');
+  res.json(b);
+
+  // Automated Ask-for-Cab WhatsApp on check-in (cooldown safely suppresses if already sent recently)
+  if (b?.phone) {
+    loadReqStore(req)
+      .then((store) =>
+        sendAskCab(tenantKey, isDemo, store.homestay.name, {
+          guestId: b.guestId ?? b.id,
+          guestName: b.guestName || 'Guest',
+          guestPhone: b.phone,
+        })
+      )
+      .catch((err) => {
+        console.warn(`[Auto-AskCab] Check-in notice for ${b.guestName}:`, err?.message);
+      });
+  }
+});
 stayrideV1Router.post('/bookings/:id/check-out', bookingAction((s, id) => s.checkOutBooking(id)));
 stayrideV1Router.post('/bookings/:id/cancel', bookingAction((s, id) => s.cancelBooking(id)));
 stayrideV1Router.patch('/bookings/:id/payment', bookingAction((s, id, body) => s.setBookingPaid(id, Boolean(body?.paid))));
@@ -1934,19 +2054,26 @@ stayrideV1Router.post('/guest-links/send', requireFeature('guestCabLinks'), asyn
   const digits = (p: unknown) => String(p ?? '').replace(/\D/g, '').slice(-10);
   const guestId = Number(req.body.guestId);
   const guest = store.guests.find((g) => (Number.isFinite(guestId) && g.id === guestId) || digits(g.phone) === digits(guestPhone));
-  const checkedIn = guest && store.bookings.some((b) => b.status === 'CHECKED_IN' && (b.guestId === guest.id || digits(b.phone) === digits(guest.phone)));
-  if (!guest || !checkedIn) {
-    return res.status(400).json({ error: { message: 'Ask-for-Cab is only for guests who are checked in right now.', code: 'GUEST_NOT_CHECKED_IN' } });
+  const hasBooking = store.bookings.some((b) => (b.status === 'CONFIRMED' || b.status === 'CHECKED_IN') && (b.guestId === guest?.id || digits(b.phone) === digits(guestPhone)));
+  if (!guest && !hasBooking) {
+    return res.status(400).json({ error: { message: 'Ask-for-Cab is only for guests registered with this homestay or with a booking.', code: 'GUEST_NOT_FOUND' } });
   }
-  const { result, expiresAt } = await sendAskCab(tenantKey, isDemo, store.homestay.name, {
-    guestId: guest.id,
-    guestName: guest.name || guestName,
-    guestPhone: guest.phone,
-  });
-  if (result === 'FAILED') {
-    return res.status(502).json({ error: { message: 'Could not send the WhatsApp message. Please try again.', code: 'WHATSAPP_FAILED' } });
+  try {
+    const { result, expiresAt } = await sendAskCab(tenantKey, isDemo, store.homestay.name, {
+      guestId: guest?.id ?? (Number.isFinite(guestId) ? guestId : undefined),
+      guestName: guest?.name || guestName,
+      guestPhone: guest?.phone || guestPhone,
+    });
+    if (result === 'FAILED') {
+      return res.status(502).json({ error: { message: 'Could not send the WhatsApp message. Please try again.', code: 'WHATSAPP_FAILED' } });
+    }
+    return res.status(201).json({ sent: result === 'SENT', status: result, expiresAt });
+  } catch (err: any) {
+    if (err?.code === 'ASK_CAB_COOLDOWN' || err?.status === 429) {
+      return res.status(200).json({ sent: false, status: 'ALREADY_SENT', alreadySent: true, message: err.message });
+    }
+    throw err;
   }
-  return res.status(201).json({ sent: result === 'SENT', status: result, expiresAt });
 });
 
 // ==========================================

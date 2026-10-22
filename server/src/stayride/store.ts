@@ -263,7 +263,7 @@ export const FIELDS: Record<string, Record<string, FieldRule>> = {
   },
 };
 
-export const MAX_PHOTOS = 6;
+export const MAX_PHOTOS = 10;
 const MAX_PHOTO_BYTES = 400 * 1024;
 const DATA_IMAGE = /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/]+={0,2})$/;
 const bad = (message: string) => Object.assign(new Error(message), { status: 400, code: 'VALIDATION_ERROR' });
@@ -272,6 +272,8 @@ function checkPhoto(p: unknown): string {
   if (typeof p !== 'string') throw bad('Each photo must be an https URL or an image.');
   if (p.startsWith('https://')) {
     if (p.length > 1000) throw bad('Photo URL is too long (max 1000 characters).');
+    // New photos must be images uploaded to our own Cloudinary account (not any outside link)
+    if (!p.startsWith(CloudinaryService.deliveryPrefix())) throw bad('Photos must be uploaded from the StayRide app.');
     return p;
   }
   const m = DATA_IMAGE.exec(p);
@@ -1082,6 +1084,7 @@ import mongoose, { Schema, model } from 'mongoose';
 import crypto from 'node:crypto';
 import { getISTTimestamp } from '../utils/date.js';
 import { config, dbNameFor } from '../config/env.js';
+import { CloudinaryService } from '../services/cloudinary.service.js';
 
 export const StayRideTenantSchema = new Schema(
   {

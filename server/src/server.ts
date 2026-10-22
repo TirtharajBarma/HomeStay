@@ -4,7 +4,6 @@ import { config } from "./config/env.js";
 import { connectDB, disconnectDB } from "./config/db.js";
 import { seedDatabase } from "./data/seeds/seed.js";
 import { CronService } from "./services/cron.service.js";
-
 async function bootstrap() {
   try {
     // 1. Connect to MongoDB Atlas (or in-memory fallback during dev)

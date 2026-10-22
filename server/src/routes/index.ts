@@ -26,6 +26,7 @@ apiRouter.get("/", (_req, res) => {
 apiRouter.use("/auth", authRoutes);
 apiRouter.use("/admin", adminRoutes);
 
+
 // Legacy guest-website API: public listings/bookings/drivers. Off unless LEGACY_API_ENABLED=true.
 if (config.legacyApiEnabled) {
   apiRouter.use("/properties", propertyRoutes);

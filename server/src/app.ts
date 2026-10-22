@@ -10,6 +10,8 @@ import adminRoutes from "./routes/admin.routes.js";
 import stayrideV1Router from "./stayride/routes.js";
 import { errorHandler, notFoundHandler, httpError } from "./middlewares/error-handler.js";
 import { MongoRateLimitStore } from "./middlewares/rate-limit-store.js";
+import { mongoSanitize } from "./middlewares/sanitize.js";
+import { telemetryMiddleware } from "./utils/logger.js";
 
 const app = express();
 
@@ -23,12 +25,14 @@ app.use(
 // Vercel sits in front as one proxy hop; needed so rate limits key on the real client IP
 app.set("trust proxy", 1);
 
-// 2. HTTP Request Logging via Morgan
+// 2. HTTP Request Logging & Cloud Telemetry Stream (Axiom / Better Stack)
 // Guest-link tokens travel in the path/query; never write them to logs
 morgan.token("safe-url", (req: any) =>
   String(req.originalUrl || req.url).replace(/\?.*$/, "").replace(/(\/guest-links\/)[^/]+/, "$1[token]")
 );
 app.use(morgan(':remote-addr :method :safe-url :status :res[content-length] - :response-time ms'));
+app.use(telemetryMiddleware);
+
 
 // 3. HTTP Compression
 app.use(compression());
@@ -93,6 +97,8 @@ app.use((req, _res, next) => {
   req.body ??= {};
   next();
 });
+// 6b. NoSQL query and parameter sanitization (strips '$' and '.' operators)
+app.use(mongoSanitize);
 
 // 7. Health Check Endpoints
 app.get("/", (_req, res) => {
@@ -129,6 +135,8 @@ app.use("/api/v1", apiRouter);
 app.use("/v1/admin", adminRoutes);
 app.use("/v1", stayrideV1Router);
 app.use("/api/v1/stayride", stayrideV1Router);
+
+
 
 // 9. Error and 404 Handlers
 app.use(notFoundHandler);

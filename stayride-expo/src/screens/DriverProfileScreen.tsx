@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors, Shadows } from '../theme/colors';
 import { useStayRide } from '../data/store';
 import { reportOutcome } from '../utils/report';
+import { api } from '../data/api';
 
 export const DriverProfileScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -22,6 +23,7 @@ export const DriverProfileScreen: React.FC = () => {
   const { session, logout, setDriverOnline, pushEnabled } = useStayRide();
 
   const isOnline = session?.driver?.available !== false;
+  const [whatsappAlerts, setWhatsappAlerts] = useState(session?.driver?.whatsappAlerts !== false);
 
   // Only what the server returned for this driver; '—' when a field is missing
   const driver = session?.driver;
@@ -38,6 +40,23 @@ export const DriverProfileScreen: React.FC = () => {
           : 'New StayRide ride requests will appear in My Rides.'
         : 'You will not receive any new ride requests until you go online again.'
     );
+  };
+
+  const handleToggleWhatsAppAlerts = async (val: boolean) => {
+    setWhatsappAlerts(val);
+    try {
+      await api.patch('/driver/whatsapp-alerts', { enabled: val });
+      reportOutcome(
+        { ok: true, synced: true },
+        val ? 'WhatsApp Alerts Enabled' : 'WhatsApp Alerts Paused',
+        val
+          ? 'You will receive new trip requests on your WhatsApp number as well.'
+          : 'You will only receive trip alerts inside this app (no WhatsApp messages).'
+      );
+    } catch (err: any) {
+      setWhatsappAlerts(!val);
+      Alert.alert('Error', err?.message || 'Could not update notification preferences.');
+    }
   };
 
   const handleLogout = () => {
@@ -94,6 +113,26 @@ export const DriverProfileScreen: React.FC = () => {
             onValueChange={handleToggleOnline}
             trackColor={{ false: '#CBD5E1', true: '#86EFAC' }}
             thumbColor={isOnline ? '#16A34A' : '#94A3B8'}
+          />
+        </View>
+
+        {/* WhatsApp Notification Opt-out Toggle */}
+        <View style={styles.statusToggleCard}>
+          <View style={{ flex: 1, paddingRight: 8 }}>
+            <Text style={styles.toggleTitle}>
+              WhatsApp Trip Alerts
+            </Text>
+            <Text style={styles.toggleSub}>
+              {whatsappAlerts
+                ? 'Enabled: New trip requests are sent to your WhatsApp number too'
+                : 'Paused: You will only receive alerts inside this app (no WhatsApp)'}
+            </Text>
+          </View>
+          <Switch
+            value={whatsappAlerts}
+            onValueChange={handleToggleWhatsAppAlerts}
+            trackColor={{ false: '#CBD5E1', true: '#86EFAC' }}
+            thumbColor={whatsappAlerts ? '#16A34A' : '#94A3B8'}
           />
         </View>
 

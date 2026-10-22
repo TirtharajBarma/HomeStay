@@ -23,7 +23,9 @@ export type WhatsAppEvent =
   | 'QUOTE_COUNTER'
   | 'TRIP_ASSIGNED_DRIVER'
   | 'TRIP_CANCELLED_GUEST'
-  | 'REFUND_GUEST';
+  | 'REFUND_GUEST'
+  | 'COMPLETION_REMINDER_DRIVER'
+  | 'BIDDING_TIMEOUT_OWNER';
 
 export interface WhatsAppMessage {
   event: WhatsAppEvent;
@@ -38,7 +40,7 @@ export type WhatsAppResult = 'SENT' | 'SKIPPED' | 'FAILED';
 
 const enabled = () =>
   process.env.NODE_ENV !== 'test' &&
-  process.env.WHATSAPP_DISPATCH_MODE === 'cloud_api' &&
+  (process.env.WHATSAPP_DISPATCH_MODE === 'cloud_api' || process.env.WHATSAPP_DISPATCH_MODE === 'meta_cloud_api') &&
   Boolean(process.env.WHATSAPP_PHONE_NUMBER_ID && process.env.WHATSAPP_ACCESS_TOKEN);
 
 /** Digits only with country code; a bare 10-digit Indian number gets 91. null when it cannot be a phone. */

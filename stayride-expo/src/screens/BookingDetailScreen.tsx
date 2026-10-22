@@ -114,13 +114,15 @@ export const BookingDetailScreen: React.FC = () => {
             const outcome = await checkInBooking(booking.id);
             if (!outcome.ok) return reportOutcome(outcome, '', '');
             // Right moment to offer a cab: the guest just arrived and will need rides (StayRide earns on cabs)
-            const guest = guests.find((g) => g.id === booking.guestId);
-            if (!guest?.phone || features?.guestCabLinks === false) {
+            const guest = guests.find((g) => g.id === booking.guestId || (Boolean(g.phone) && g.phone === booking.phone));
+            const phone = guest?.phone || booking.phone;
+            const targetGuest = guest || (phone ? ({ id: booking.guestId || 0, name: booking.guestName, phone } as any) : null);
+            if (!phone || features?.guestCabLinks === false) {
               return Alert.alert('Checked in', `${booking.guestName} checked in to room ${booking.roomNumber}`);
             }
             Alert.alert('Checked in', `${booking.guestName} is in room ${booking.roomNumber}. Ask if they need a cab during their stay?`, [
               { text: 'Not now', style: 'cancel' },
-              { text: 'Send cab link', onPress: () => askForCab(askGuestForCab, guest) },
+              { text: 'Send cab link', onPress: () => askForCab(askGuestForCab, targetGuest) },
             ]);
           },
         },

@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
+import Constants from 'expo-constants';
 import { api } from '../data/api';
 
 // Push is best-effort: no permission, an emulator, Expo Go, or a build without FCM/APNs
@@ -36,7 +37,11 @@ export async function registerForPush(): Promise<string | null> {
       ({ status } = await Notifications.requestPermissionsAsync());
     }
     if (status !== 'granted') return null;
-    const { data: token } = await Notifications.getExpoPushTokenAsync();
+    const projectId =
+      Constants.expoConfig?.extra?.eas?.projectId ?? (Constants as any).easConfig?.projectId;
+    const { data: token } = await Notifications.getExpoPushTokenAsync(
+      projectId ? { projectId } : undefined
+    );
     await api.post('/push-token', { token, platform: Platform.OS === 'ios' ? 'ios' : 'android' });
     registeredToken = token;
     return token;

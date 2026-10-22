@@ -18,15 +18,32 @@ import { reportOutcome } from '../utils/report';
 
 export const DriverActiveRideScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
-  const { driverTrips, driverCompleteTrip } = useStayRide();
+  const { driverTrips, driverCompleteTrip, driverStartTrip } = useStayRide();
   const [completing, setCompleting] = useState(false);
+  const [starting, setStarting] = useState(false);
 
-  // Active ride from the server's list of trips assigned to this driver: TRIP_STARTED first, then CONFIRMED
+  // Active ride: TRIP_STARTED first, then the closest upcoming CONFIRMED ride by date
   const mine = driverTrips.filter((t) => t.assignedToMe);
-  const activeRide = mine.find((t) => t.status === 'TRIP_STARTED') || mine.find((t) => t.status === 'CONFIRMED');
+  const inProgress = mine.find((t) => t.status === 'TRIP_STARTED');
+  const upcomingConfirmed = [...mine]
+    .filter((t) => t.status === 'CONFIRMED')
+    .sort((a, b) => Number(a.date) - Number(b.date))[0];
+  const activeRide = inProgress || upcomingConfirmed;
+
   // Cash the driver collects, exactly as the server reports it
   const cashDue = typeof activeRide?.remainingCashAmount === 'number' ? formatINR(activeRide.remainingCashAmount) : '—';
   const fareText = activeRide?.fare ? formatINR(activeRide.fare) : '—';
+
+  const handleStartTrip = async () => {
+    if (!activeRide || starting) return;
+    setStarting(true);
+    try {
+      const outcome = await driverStartTrip(activeRide.reference);
+      reportOutcome(outcome, 'Ride Started', 'Navigate safely to pickup.');
+    } finally {
+      setStarting(false);
+    }
+  };
 
   const handleOpenGoogleMaps = () => {
     if (!activeRide) return;
@@ -204,6 +221,18 @@ export const DriverActiveRideScreen: React.FC = () => {
                 </View>
               )}
             </View>
+
+            {/* Start Ride Button: when trip is CONFIRMED and waiting to start */}
+            {activeRide.status === 'CONFIRMED' && (
+              <TouchableOpacity
+                style={[styles.completeBtn, { backgroundColor: '#0284C7' }]}
+                onPress={handleStartTrip}
+                disabled={starting}
+              >
+                <Ionicons name="play-circle" size={22} color="#FFFFFF" />
+                <Text style={styles.completeBtnText}>{starting ? 'Starting…' : 'Start Ride'}</Text>
+              </TouchableOpacity>
+            )}
 
             {/* Complete Ride Button: only after the server recorded the start */}
             {activeRide.status === 'TRIP_STARTED' && (

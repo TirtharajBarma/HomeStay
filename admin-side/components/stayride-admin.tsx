@@ -1647,6 +1647,54 @@ function OperationsSettings({ demo }: TabProps) {
   const setVehicle = (k: string, field: string, value: unknown) =>
     setCfg((c: Any) => ({ ...c, vehicles: { ...c.vehicles, [k]: { ...c.vehicles[k], [field]: value } } }));
 
+  const updateRouteField = (index: number, field: string, val: unknown) => {
+    setCfg((c: Any) => {
+      const routes = [...(c.routePresets || [])];
+      if (!routes[index]) return c;
+      routes[index] = { ...routes[index], [field]: val };
+      return { ...c, routePresets: routes };
+    });
+  };
+
+  const updateRouteFare = (index: number, vKey: string, val: number) => {
+    setCfg((c: Any) => {
+      const routes = [...(c.routePresets || [])];
+      if (!routes[index]) return c;
+      routes[index] = {
+        ...routes[index],
+        fares: {
+          ...(routes[index].fares || {}),
+          [vKey]: val,
+        },
+      };
+      return { ...c, routePresets: routes };
+    });
+  };
+
+  const addRoutePreset = () => {
+    setCfg((c: Any) => {
+      const routes = [...(c.routePresets || [])];
+      routes.push({
+        id: `route-${Date.now().toString(36)}`,
+        name: "New Hill Route",
+        category: "SIGHTSEEING",
+        duration: "approx 2 hrs",
+        description: "Scenic hill route",
+        fares: { Sedan: 2200, SUV: 2800, "7-seater": 3200, "9-seater": 4200 },
+      });
+      return { ...c, routePresets: routes };
+    });
+  };
+
+  const removeRoutePreset = (index: number) => {
+    if (!window.confirm("Remove this route preset?")) return;
+    setCfg((c: Any) => {
+      const routes = [...(c.routePresets || [])];
+      routes.splice(index, 1);
+      return { ...c, routePresets: routes };
+    });
+  };
+
   async function save(e: React.FormEvent) {
     e.preventDefault();
     if (!cfg || !data) return;
@@ -1719,6 +1767,113 @@ function OperationsSettings({ demo }: TabProps) {
               ))}
             </tbody>
           </table>
+
+          {/* Route-Specific Benchmark Pricing */}
+          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+              <div>
+                <h4 className="text-sm font-semibold text-slate-200">Route-Specific Benchmark Pricing</h4>
+                <p className="text-[11px] text-slate-400">
+                  Calibrate fixed benchmark fares across vehicle tiers for popular Darjeeling and Sikkim hill routes. Displayed in the guest booking wizard and used as baseline estimates for driver bidding.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={addRoutePreset}
+                className="self-start sm:self-auto rounded-lg bg-emerald-700/80 hover:bg-emerald-600 px-3 py-1.5 text-[11px] font-semibold text-white transition-colors"
+              >
+                + Add Route Preset
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {(cfg.routePresets || []).map((route: Any, idx: number) => (
+                <div key={route.id || idx} className="rounded-lg border border-slate-800/80 bg-slate-950/60 p-3 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 flex-1">
+                      <div>
+                        <span className="text-[10px] text-slate-400">Route Name</span>
+                        <input
+                          className={`${input} w-full mt-0.5 font-medium`}
+                          value={route.name || ""}
+                          onChange={(e) => updateRouteField(idx, "name", e.target.value)}
+                          placeholder="e.g. Bagdogra Airport Transfer"
+                        />
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400">Category</span>
+                        <select
+                          className={`${input} w-full mt-0.5`}
+                          value={route.category || "SIGHTSEEING"}
+                          onChange={(e) => updateRouteField(idx, "category", e.target.value)}
+                        >
+                          <option value="AIRPORT_STATION">Airport / Station</option>
+                          <option value="SIGHTSEEING">Sightseeing</option>
+                          <option value="DAY_EXCURSION">Day Excursion</option>
+                          <option value="LOCAL_DROP">Local Drop</option>
+                        </select>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400">Duration / Distance</span>
+                        <input
+                          className={`${input} w-full mt-0.5`}
+                          value={route.duration || ""}
+                          onChange={(e) => updateRouteField(idx, "duration", e.target.value)}
+                          placeholder="e.g. approx 3 hrs (70 km)"
+                        />
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeRoutePreset(idx)}
+                      className="text-xs text-rose-400 hover:text-rose-300 px-2 py-1 transition-colors self-end sm:self-center"
+                      title="Delete route preset"
+                    >
+                      Delete
+                    </button>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] text-slate-400">Description / Subtext</span>
+                    <input
+                      className={`${input} w-full mt-0.5 text-xs text-slate-300`}
+                      value={route.description || ""}
+                      onChange={(e) => updateRouteField(idx, "description", e.target.value)}
+                      placeholder="e.g. One-way hill descent / climb transfer via Rohini route"
+                    />
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-800/60">
+                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-1.5">
+                      Fares per Vehicle Tier (₹)
+                    </span>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {VEHICLE_KEYS.map((vKey) => (
+                        <div key={vKey} className="flex items-center gap-1.5 bg-slate-900/80 px-2.5 py-1.5 rounded-md border border-slate-800">
+                          <span className="text-[11px] font-mono text-slate-400 min-w-[50px]">{vKey}:</span>
+                          <span className="text-xs text-slate-500">₹</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="50"
+                            className="w-full bg-transparent text-xs font-semibold text-white focus:outline-none"
+                            value={route.fares?.[vKey] ?? ""}
+                            onChange={(e) => updateRouteFare(idx, vKey, Number(e.target.value))}
+                            placeholder="0"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {(!cfg.routePresets || cfg.routePresets.length === 0) && (
+                <div className="text-center py-4 text-xs text-slate-500">
+                  No route presets configured yet. Defaults from server will apply until customized.
+                </div>
+              )}
+            </div>
+          </div>
 
           <label className="block text-slate-300">
             Sightseeing presets (one per line)

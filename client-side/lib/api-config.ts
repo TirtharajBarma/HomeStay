@@ -42,14 +42,18 @@ export const API_ENDPOINTS = {
       `${API_BASE_URL}/stayride/public/guest-links/${encodeURIComponent(token)}`,
     submit: (token: string) =>
       `${API_BASE_URL}/stayride/public/guest-links/${encodeURIComponent(token)}/cab-requests`,
-    status: (reference: string, token: string) =>
-      `${API_BASE_URL}/stayride/public/cab-requests/${encodeURIComponent(reference)}?t=${encodeURIComponent(token)}`,
+    status: (reference: string, token?: string) =>
+      `${API_BASE_URL}/stayride/public/cab-requests/${encodeURIComponent(reference)}${token ? `?t=${encodeURIComponent(token)}` : ""}`,
+    rate: (reference: string, token?: string) =>
+      `${API_BASE_URL}/stayride/public/cab-requests/${encodeURIComponent(reference)}/rate${token ? `?t=${encodeURIComponent(token)}` : ""}`,
   },
   // Driver quote page (signed link from the WhatsApp message)
   driverQuote: {
     view: (token: string) => `${API_BASE_URL}/stayride/public/driver-quote?t=${encodeURIComponent(token)}`,
     quote: () => `${API_BASE_URL}/stayride/public/driver-quote/quote`,
     acceptCounter: () => `${API_BASE_URL}/stayride/public/driver-quote/accept-counter`,
+    start: () => `${API_BASE_URL}/stayride/public/driver-quote/start`,
+    complete: () => `${API_BASE_URL}/stayride/public/driver-quote/complete`,
   },
   legal: (doc: string) => `${API_BASE_URL}/stayride/public/legal/${encodeURIComponent(doc)}`,
   newsletter: {

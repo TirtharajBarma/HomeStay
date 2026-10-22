@@ -77,12 +77,14 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
           role: "admin",
         };
         window.localStorage.setItem(USER_KEY, JSON.stringify(user));
+        document.cookie = `${TOKEN_KEY}=${storedToken}; path=/; SameSite=Lax; max-age=86400`;
         if (cancelled) return;
         setToken(storedToken);
         setAdmin(user);
       } catch {
         if (!cancelled) {
           clearAdminSession();
+          document.cookie = `${TOKEN_KEY}=; path=/; max-age=0`;
           setToken(null);
           setAdmin(null);
         }
@@ -102,6 +104,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
       setAdmin(newAdmin);
       window.localStorage.setItem(TOKEN_KEY, newToken);
       window.localStorage.setItem(USER_KEY, JSON.stringify(newAdmin));
+      document.cookie = `${TOKEN_KEY}=${newToken}; path=/; SameSite=Lax; max-age=86400`;
       router.push("/");
     },
     [router]
@@ -111,6 +114,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
     setToken(null);
     setAdmin(null);
     clearAdminSession();
+    document.cookie = `${TOKEN_KEY}=; path=/; max-age=0`;
     router.push("/login");
   }, [router]);
 

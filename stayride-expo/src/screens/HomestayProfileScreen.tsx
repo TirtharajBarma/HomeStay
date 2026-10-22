@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, Alert, ActivityIndicator, Image } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,10 +11,11 @@ import { PlatformSelect } from '../components/PlatformSelect';
 import { Colors, Radii, Shadows } from '../theme/colors';
 import { FormScroll } from '../components/FormScroll';
 import { LocationPicker, PickedLocation } from '../components/LocationPicker';
+import { uploadPhoto, isImagePhoto, photoUrl } from '../services/photoUploader';
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
-const PHOTO_PRESETS = ['Front elevation', 'Deluxe room', 'Valley view balcony', 'Dining hall', 'Rooftop garden', 'Reception', 'Garden view', 'Family room', 'Kitchen', 'Bonfire area'];
+const MAX_PHOTOS = 10; // same limit as the server (MAX_PHOTOS in server/src/stayride/store.ts)
 
 const AMENITIES: { label: string; icon: IconName }[] = [
   { label: 'Free Wi-Fi', icon: 'wifi' },
@@ -51,8 +53,9 @@ export const HomestayProfileScreen: React.FC = () => {
   const [editVisible, setEditVisible] = useState(false);
   const [pinVisible, setPinVisible] = useState(false);
   const [amenitiesVisible, setAmenitiesVisible] = useState(false);
-  const [photosVisible, setPhotosVisible] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(''); // progress text while photos upload
+  const [viewing, setViewing] = useState<string | null>(null);
 
   // Edit form (copied from the saved profile when opened)
   const [name, setName] = useState('');
@@ -66,11 +69,12 @@ export const HomestayProfileScreen: React.FC = () => {
   const [checkInTime, setCheckInTime] = useState('12:00 PM');
   const [checkOutTime, setCheckOutTime] = useState('11:00 AM');
   const [amenityDraft, setAmenityDraft] = useState<string[]>([]);
-  const [photoDraft, setPhotoDraft] = useState<string[]>([]);
 
   const hasPin = typeof homestay.latitude === 'number' && typeof homestay.longitude === 'number';
   const amenities = homestay.amenities || [];
-  const photos = homestay.photos || [];
+  // Older profiles may hold text labels ("Deluxe room") instead of photos: they are not shown and are
+  // dropped on the next photo save
+  const photos = (homestay.photos || []).filter(isImagePhoto);
 
   const openEdit = () => {
     setName(homestay.name || '');
@@ -120,6 +124,33 @@ export const HomestayProfileScreen: React.FC = () => {
     if (!outcome.ok) Alert.alert('Not saved', outcome.error || 'Could not save the location. Please try again.');
     else Alert.alert('Location saved', loc.address || 'Your homestay pin is saved.');
   };
+
+  // Pick → upload each straight to Cloudinary → save the URLs on the homestay (synced via the server)
+  const addPhotos = async () => {
+    const room = MAX_PHOTOS - photos.length;
+    const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: true, selectionLimit: room, quality: 0.7 });
+    if (picked.canceled || !picked.assets?.length) return;
+    const assets = picked.assets.slice(0, room);
+    const urls: string[] = [];
+    try {
+      for (const [i, a] of assets.entries()) {
+        setUploading(`Uploading ${i + 1} of ${assets.length}…`);
+        urls.push(await uploadPhoto(a));
+      }
+    } catch (e: any) {
+      Alert.alert('Upload failed', `${e?.message || 'Could not upload the photo.'}${urls.length ? ` ${urls.length} photo(s) uploaded before this are kept.` : ''}`);
+    } finally {
+      setUploading('');
+    }
+    // ponytail: removed/failed-to-save images stay in Cloudinary; add a cleanup job if storage grows
+    if (urls.length) save({ photos: [...photos, ...urls] }, undefined, urls.length === assets.length ? 'Photos added' : undefined);
+  };
+
+  const removePhoto = (p: string) =>
+    Alert.alert('Remove photo?', 'It will no longer show on your homestay profile.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Remove', style: 'destructive', onPress: () => save({ photos: photos.filter((x) => x !== p) }, () => setViewing(null)) },
+    ]);
 
   const toggle = (list: string[], item: string) => (list.includes(item) ? list.filter((x) => x !== item) : [...list, item]);
   const initial = (homestay.name || 'H').trim().charAt(0).toUpperCase();
@@ -231,30 +262,40 @@ export const HomestayProfileScreen: React.FC = () => {
           )}
         </View>
 
-        {/* Photo highlights */}
-        <View style={styles.sectionRow}>
-          <Text style={styles.section}>Photo highlights · {photos.length}</Text>
-          <TouchableOpacity
-            onPress={() => {
-              setPhotoDraft(photos);
-              setPhotosVisible(true);
-            }}
-            hitSlop={8}
-          >
-            <Text style={styles.sectionAction}>Edit</Text>
-          </TouchableOpacity>
-        </View>
-        <View style={[styles.card, styles.chipWrap]}>
-          {photos.length === 0 ? (
-            <Text style={styles.placeholder}>Choose which spaces you have photos of.</Text>
-          ) : (
-            photos.map((p) => (
-              <View key={p} style={[styles.chip, styles.chipGrey]}>
-                <Ionicons name="image-outline" size={14} color={Colors.textSecondary} />
-                <Text style={styles.chipText}>{p}</Text>
-              </View>
-            ))
-          )}
+        {/* Photos */}
+        <Text style={styles.section}>
+          Photos · {photos.length}/{MAX_PHOTOS}
+        </Text>
+        <View style={styles.card}>
+          {photos.length === 0 ? <Text style={[styles.placeholder, { marginBottom: 10 }]}>Add photos of your rooms, views and common areas.</Text> : null}
+          <View style={styles.photoGrid}>
+            {photos.map((p) => (
+              <TouchableOpacity key={p} style={styles.photoTile} onPress={() => setViewing(p)} accessibilityRole="imagebutton" accessibilityLabel="View photo">
+                <Image source={{ uri: photoUrl(p, 400) }} style={styles.photoImg} />
+              </TouchableOpacity>
+            ))}
+            {photos.length < MAX_PHOTOS ? (
+              <TouchableOpacity
+                style={[styles.photoTile, styles.photoAdd]}
+                onPress={addPhotos}
+                disabled={Boolean(uploading) || saving}
+                accessibilityRole="button"
+                accessibilityLabel="Add photos"
+              >
+                {uploading ? (
+                  <>
+                    <ActivityIndicator color={Colors.brandPrimaryDark} />
+                    <Text style={styles.photoAddText}>{uploading}</Text>
+                  </>
+                ) : (
+                  <>
+                    <Ionicons name="add" size={26} color={Colors.brandPrimaryDark} />
+                    <Text style={styles.photoAddText}>Add photos</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            ) : null}
+          </View>
         </View>
       </ScrollView>
 
@@ -340,11 +381,25 @@ export const HomestayProfileScreen: React.FC = () => {
         </View>
       </Modal>
 
-      {/* Amenities / photos: tick what you have, save once */}
+      {/* Full-screen photo with remove */}
+      <Modal visible={Boolean(viewing)} transparent animationType="fade" onRequestClose={() => setViewing(null)}>
+        <View style={[styles.viewer, { paddingTop: insets.top, paddingBottom: Math.max(insets.bottom, 16) }]}>
+          <View style={styles.viewerBar}>
+            <TouchableOpacity onPress={() => setViewing(null)} hitSlop={10} accessibilityLabel="Close">
+              <Ionicons name="close" size={26} color={Colors.white} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => viewing && removePhoto(viewing)} disabled={saving} hitSlop={10} accessibilityLabel="Remove photo">
+              {saving ? <ActivityIndicator color={Colors.white} /> : <Ionicons name="trash-outline" size={24} color={Colors.white} />}
+            </TouchableOpacity>
+          </View>
+          {viewing ? <Image source={{ uri: photoUrl(viewing, 1600) }} style={{ flex: 1 }} resizeMode="contain" /> : null}
+        </View>
+      </Modal>
+
+      {/* Amenities: tick what you have, save once */}
       {(
         [
           [amenitiesVisible, setAmenitiesVisible, 'Amenities', AMENITIES.map((a) => a.label), amenityDraft, setAmenityDraft, 'amenities'],
-          [photosVisible, setPhotosVisible, 'Photo highlights', PHOTO_PRESETS, photoDraft, setPhotoDraft, 'photos'],
         ] as const
       ).map(([visible, setVisible, title, options, draft, setDraft, field]) => (
         <Modal key={field} visible={visible} transparent animationType="slide" onRequestClose={() => setVisible(false)}>
@@ -439,4 +494,11 @@ const styles = StyleSheet.create({
   pinField: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   pinFieldText: { fontSize: 15, color: Colors.textPrimary, lineHeight: 20 },
   pickText: { fontSize: 13, fontWeight: '600', color: Colors.textPrimary },
+  photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  photoTile: { width: '31%', aspectRatio: 1, borderRadius: 12, overflow: 'hidden', backgroundColor: Colors.statusGreyBg },
+  photoImg: { width: '100%', height: '100%' },
+  photoAdd: { alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderStyle: 'dashed', borderColor: Colors.brandPrimary, backgroundColor: Colors.brandPrimaryLight, padding: 6 },
+  photoAddText: { fontSize: 11, fontWeight: '700', color: Colors.brandPrimaryDark, marginTop: 4, textAlign: 'center' },
+  viewer: { flex: 1, backgroundColor: 'rgba(0,0,0,0.95)' },
+  viewerBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12 },
 });

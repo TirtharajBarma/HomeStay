@@ -21,9 +21,8 @@ export const askCabMessage = (guestName: string, homestayName: string, link: str
   event: 'ASK_CAB',
   params: [guestName, homestayName, link],
   text:
-    `Namaste ${guestName}! 🙏\n` +
-    `Need an airport pickup, sightseeing or a hill cab during your stay at ${homestayName}?\n\n` +
-    `Tell us where you want to go and we will find a verified local driver:\n${link}`,
+    `Namaste ${guestName}.\n` +
+    `If you need an airport transfer, sightseeing, or a local hill cab during your stay at ${homestayName}, please share your itinerary and we will arrange a verified driver for you:\n${link}`,
 });
 
 /** quoteLink: the driver's own page to quote without opening the app (WhatsApp-only drivers). */
@@ -34,8 +33,8 @@ export const newRequestMessage = (doc: any, quoteLink: string): Built => {
     params,
     text:
       `New trip request from ${params[0]}\n` +
-      `Route: ${params[1]}\nWhen: ${params[2]}\nVehicle: ${doc.vehicleType}\n\n` +
-      `Send your fare here (no app needed):\n${params[3]}`,
+      `Route: ${params[1]}\nPickup: ${params[2]}\nVehicle: ${doc.vehicleType}\n\n` +
+      `Submit your fare quote here:\n${params[3]}`,
   };
 };
 
@@ -44,7 +43,7 @@ export const quoteCounterMessage = (driverName: string, reference: string, count
   return {
     event: 'QUOTE_COUNTER',
     params,
-    text: `Hi ${params[0]}, the homestay offers ${params[2]} for trip ${params[1]}. Accept it or keep your fare here:\n${params[3]}`,
+    text: `Hello ${params[0]}, the homestay has made a counter-offer of ${params[2]} for trip ${params[1]}. You can accept this offer or keep your original fare here:\n${params[3]}`,
   };
 };
 
@@ -54,14 +53,14 @@ export const advanceExpiredGuestMessage = (doc: any): Built => {
   return {
     event: 'ADVANCE_EXPIRED_GUEST',
     params,
-    text: `Hi ${params[0]}, your cab hold expired because the advance was not received in time. Please contact ${params[1]} to book again.`,
+    text: `Hello ${params[0]}, the temporary hold on your cab booking has expired. Please contact ${params[1]} if you would like to request a new cab.`,
   };
 };
 
 export const quoteAcceptedDriverMessage = (driverName: string, reference: string): Built => ({
   event: 'QUOTE_ACCEPTED_DRIVER',
   params: [driverName, reference],
-  text: `Hi ${driverName}, your quote for trip ${reference} was accepted. The trip is yours once the guest pays the advance. We will send the guest details then.`,
+  text: `Hello ${driverName}, your fare quote for trip ${reference} has been accepted. The booking will be confirmed once the guest completes the advance payment. Passenger contact details will be shared then.`,
 });
 
 /** Guest sees the driver and the advance to pay, but not the driver's phone yet. */
@@ -72,10 +71,10 @@ export const quoteAcceptedGuestMessage = (doc: any, link: string, windowMin: num
     event: 'QUOTE_ACCEPTED_GUEST',
     params,
     text:
-      `Hi ${params[0]}, your cab is almost booked! 🚗\n` +
-      `Driver: ${params[1]}\nVehicle: ${params[2]}\nFare: ${params[3]}\n\n` +
-      `Pay the advance of ${params[4]} ${params[6]} to confirm. The balance goes to the driver in cash.\n${params[5]}\n\n` +
-      `The driver's phone number is shared once the advance is paid.`,
+      `Namaste ${params[0]}, a driver has been reserved on hold for your trip.\n` +
+      `Driver: ${params[1]}\nVehicle: ${params[2]}\nTotal Fare: ${params[3]}\n\n` +
+      `Please pay the advance of ${params[4]} ${params[6]} to confirm your booking. The remaining balance is paid directly to the driver in cash.\n${params[5]}\n\n` +
+      `The driver's direct contact number will be provided once the advance is recorded.`,
   };
 };
 
@@ -86,32 +85,33 @@ export const advancePaidGuestMessage = (doc: any): Built => {
     event: 'ADVANCE_PAID_GUEST',
     params,
     text:
-      `Hi ${params[0]}, your cab is confirmed! ✅\n` +
-      `Driver: ${params[1]} (${params[2]})\nVehicle: ${params[3]}\nRoute: ${params[4]}\nWhen: ${params[5]}\n` +
-      `Pay the driver ${params[6]} in cash on the trip.`,
+      `Namaste ${params[0]}, your cab booking is confirmed.\n` +
+      `Driver: ${params[1]} (${params[2]})\nVehicle: ${params[3]}\nRoute: ${params[4]}\nPickup: ${params[5]}\n\n` +
+      `Please pay the balance of ${params[6]} in cash to your driver at the end of the trip.`,
   };
 };
 
 /** After the advance: the driver gets the guest's phone and the plan. */
-export const advancePaidDriverMessage = (doc: any): Built => {
+export const advancePaidDriverMessage = (doc: any, driverLink?: string): Built => {
   const params = [doc.assignedDriverName || 'Driver', doc.guestName, doc.guestPhone || '', routeText(doc), whenText(doc), rupees(doc.remainingCashAmount)];
+  const linkText = driverLink ? `\n\nManage trip & tap to complete:\n${driverLink}` : '';
   return {
     event: 'ADVANCE_PAID_DRIVER',
     params,
     text:
-      `Hi ${params[0]}, the advance is paid. Trip confirmed! ✅\n` +
-      `Guest: ${params[1]} (${params[2]})\nRoute: ${params[3]}\nWhen: ${params[4]}\n` +
-      `Collect ${params[5]} in cash from the guest.`,
+      `Hello ${params[0]}, the advance payment is received and trip ${doc.reference || ''} is confirmed.\n` +
+      `Passenger: ${params[1]} (${params[2]})\nRoute: ${params[3]}\nPickup: ${params[4]}\n\n` +
+      `Please collect the balance of ${params[5]} in cash directly from the passenger.${linkText}`,
   };
 };
 
 /** The trip was cancelled (by the homestay or StayRide); a paid advance is refunded. */
 export const tripCancelledGuestMessage = (doc: any): Built => {
-  const params = [doc.guestName, doc.reference, whenText(doc), doc.advancePaid ? `Your advance of ${rupees(doc.advanceAmount)} will be refunded.` : 'Nothing was charged.'];
+  const params = [doc.guestName, doc.reference, whenText(doc), doc.advancePaid ? `Your advance of ${rupees(doc.advanceAmount)} will be refunded.` : 'No charge was made.'];
   return {
     event: 'TRIP_CANCELLED_GUEST',
     params,
-    text: `Hi ${params[0]}, your cab trip ${params[1]} on ${params[2]} was cancelled. ${params[3]}`,
+    text: `Hello ${params[0]}, your cab request ${params[1]} for ${params[2]} has been cancelled. ${params[3]}`,
   };
 };
 
@@ -135,5 +135,32 @@ export const tripAssignedDriverMessage = (homestayName: string, trip: { driverNa
     text:
       `Hi ${params[0]}, ${params[1]} has assigned you a trip.\n` +
       `Guest: ${params[2]} (${params[3]})\nRoute: ${params[4]}\nWhen: ${params[5]}`,
+  };
+};
+
+/** Automated ride completion reminder for drivers 2+ hours past pickup time. */
+export const completionReminderDriverMessage = (doc: any, driverLink: string): Built => {
+  const params = [doc.assignedDriverName || 'Driver', doc.guestName, rupees(doc.remainingCashAmount), doc.reference, driverLink];
+  return {
+    event: 'COMPLETION_REMINDER_DRIVER',
+    params,
+    text:
+      `Hello ${params[0]},\n` +
+      `Have you completed the trip for ${params[1]} (${params[3]})?\n` +
+      `Please confirm cash collection of ${params[2]} and tap to complete the ride:\n${params[4]}`,
+  };
+};
+
+/** Alert to homestay owner when 0 bids arrive within the bidding window. */
+export const biddingTimeoutOwnerMessage = (doc: any, homestayName: string, ownerUrl: string): Built => {
+  const params = [homestayName, doc.guestName, doc.reference, routeText(doc), ownerUrl];
+  return {
+    event: 'BIDDING_TIMEOUT_OWNER',
+    params,
+    text:
+      `Namaste ${params[0]},\n` +
+      `No driver bids have been received yet for ${params[1]}'s cab request (${params[2]}).\n` +
+      `Route: ${params[3]}\n\n` +
+      `Please tap here to assign an in-house driver or expand the search radius:\n${params[4]}`,
   };
 };
