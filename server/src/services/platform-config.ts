@@ -88,6 +88,7 @@ export const WHATSAPP_EVENTS = [
   'REFUND_GUEST',
   'COMPLETION_REMINDER_DRIVER',
   'BIDDING_TIMEOUT_OWNER',
+  'DRIVER_WELCOME',
 ] as const;
 
 export const DEFAULT_ROUTE_PRESETS: RoutePreset[] = [

@@ -162,11 +162,14 @@ function CabRequestFormContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get("t") || "";
   const refParam = searchParams.get("ref") || "";
+  const homestayParam = searchParams.get("h") || searchParams.get("homestay") || "";
 
   // Multi-step form state: 1 = Route, 2 = Schedule & Vehicle, 3 = Guest Details & Review
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
 
-  const [linkState, setLinkState] = useState<"loading" | "valid" | "invalid">("loading");
+  const [linkState, setLinkState] = useState<"loading" | "valid" | "invalid">(() =>
+    !token && !refParam && !homestayParam ? "invalid" : "loading"
+  );
   const [link, setLink] = useState<GuestLink | null>(null);
 
   const [pickup, setPickup] = useState("");
@@ -193,7 +196,11 @@ function CabRequestFormContent() {
   const [notes, setNotes] = useState("");
 
   // Submission & Lifecycle
-  const [clientRequestId] = useState(() => crypto.randomUUID());
+  const [clientRequestId] = useState(() =>
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `req_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
+  );
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -252,21 +259,77 @@ function CabRequestFormContent() {
   };
 
   const currentFareEstimate = getEstimatedFare(vehicleType);
-  const estimatedAdvance = Math.max(300, Math.round(currentFareEstimate.fare * 0.15));
+  const estimatedAdvance = Math.max(200, Math.round(currentFareEstimate.fare * 0.10));
+
+  const fetchStatus = async (reference: string) => {
+    setStatusLoading(true);
+    try {
+      const data = await apiFetch<CabRequestStatus>(API_ENDPOINTS.cabRequests.status(reference, token));
+      setTripStatus(data);
+    } catch {
+      // Ignored: network retry will refresh
+    } finally {
+      setStatusLoading(false);
+    }
+  };
 
   // Load guest link data
   useEffect(() => {
+    let cancelled = false;
     if (!token) {
       if (refParam) {
-        setLinkState("valid");
-        fetchStatus(refParam);
+        apiFetch<CabRequestStatus>(API_ENDPOINTS.cabRequests.status(refParam, token))
+          .then((data) => {
+            if (!cancelled) {
+              setTripStatus(data);
+              setLinkState("valid");
+            }
+          })
+          .catch(() => {
+            if (!cancelled) setLinkState("valid");
+          });
+        return () => {
+          cancelled = true;
+        };
+      }
+      if (homestayParam) {
+        interface PropertyResponse {
+          success?: boolean;
+          data?: { name?: string; town?: string };
+          name?: string;
+        }
+        apiFetch<PropertyResponse>(API_ENDPOINTS.properties.bySlug(homestayParam))
+          .then((res) => {
+            const prop = res?.data || res;
+            if (prop && prop.name) {
+              setPickup(prop.name);
+              setLink({
+                homestayName: prop.name,
+                pickup: prop.name,
+                guestName: "",
+                guestPhone: "",
+                expiresAt: Date.now() + 86400000 * 7,
+                config: {
+                  pickupTimes: FALLBACK_TIMES,
+                  bookingHorizonDays: 30,
+                  vehicles: FALLBACK_VEHICLES,
+                  sightseeingPresets: [],
+                  routePresets: [],
+                  upiId: "stayride@okhdfcbank",
+                  supportPhone: "919830041000",
+                },
+              });
+              setLinkState("valid");
+            } else {
+              setLinkState("invalid");
+            }
+          })
+          .catch(() => setLinkState("invalid"));
         return;
       }
-      setLinkState("invalid");
       return;
     }
 
-    let cancelled = false;
     apiFetch<GuestLink>(API_ENDPOINTS.cabRequests.guestLink(token))
       .then((data) => {
         if (cancelled) return;
@@ -286,19 +349,7 @@ function CabRequestFormContent() {
     return () => {
       cancelled = true;
     };
-  }, [token, refParam]);
-
-  const fetchStatus = async (reference: string) => {
-    setStatusLoading(true);
-    try {
-      const data = await apiFetch<CabRequestStatus>(API_ENDPOINTS.cabRequests.status(reference, token));
-      setTripStatus(data);
-    } catch {
-      // Ignored: network retry will refresh
-    } finally {
-      setStatusLoading(false);
-    }
-  };
+  }, [token, refParam, homestayParam]);
 
   // Status polling every 10 seconds while active
   useEffect(() => {
@@ -345,8 +396,9 @@ function CabRequestFormContent() {
           guestRating: { stars: selectedRating, comment: ratingComment, ratedAt: new Date().toISOString() },
         });
       }
-    } catch (err: any) {
-      setRatingError(err?.message || "Failed to submit review. Please try again.");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to submit review. Please try again.";
+      setRatingError(msg);
     } finally {
       setSubmittingRating(false);
     }
@@ -401,8 +453,14 @@ function CabRequestFormContent() {
         clientRequestId,
       };
 
+      const submitEndpoint = token
+        ? API_ENDPOINTS.cabRequests.submit(token)
+        : homestayParam
+          ? API_ENDPOINTS.cabRequests.bySlugSubmit(homestayParam)
+          : API_ENDPOINTS.cabRequests.submit("");
+
       const res = await apiFetch<{ reference: string; status: string }>(
-        API_ENDPOINTS.cabRequests.submit(token),
+        submitEndpoint,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -412,8 +470,9 @@ function CabRequestFormContent() {
 
       setConfirmedTrip({ reference: res.reference, status: res.status });
       await fetchStatus(res.reference);
-    } catch (err: any) {
-      setErrorMessage(err?.message || "Failed to submit request. Please try again.");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to submit request. Please try again.";
+      setErrorMessage(msg);
     } finally {
       setSubmitting(false);
     }
@@ -609,9 +668,20 @@ function CabRequestFormContent() {
                     </div>
                   </div>
 
-                  <p className="text-xs text-[#57606A] leading-relaxed">
-                    Total fare: <strong className="text-[#1F2328]">{formatInr(tripStatus.agreedFare)}</strong>. Please pay the advance of {formatInr(tripStatus.advanceAmount)} to confirm your driver. The balance ({formatInr(tripStatus.remainingCashAmount)}) is paid directly to your driver in cash.
-                  </p>
+                  <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/60 p-3 space-y-1.5 text-xs">
+                    <div className="flex justify-between items-center text-[#24292F]">
+                      <span>Total Trip Fare:</span>
+                      <strong className="font-bold">{formatInr(tripStatus.agreedFare)}</strong>
+                    </div>
+                    <div className="flex justify-between items-center text-[#57606A]">
+                      <span>Online Booking Fee (Pay now):</span>
+                      <strong className="text-emerald-800">{formatInr(tripStatus.advanceAmount)}</strong>
+                    </div>
+                    <div className="pt-1.5 border-t border-emerald-200 flex justify-between items-center text-emerald-950 font-bold">
+                      <span>Driver Cash Fare (Pay driver at destination):</span>
+                      <span className="text-sm font-extrabold text-emerald-700">{formatInr(tripStatus.remainingCashAmount)}</span>
+                    </div>
+                  </div>
 
                   {/* 1-Tap UPI Intent Button (Opens PhonePe / GPay on Android) */}
                   <div>
@@ -739,7 +809,7 @@ function CabRequestFormContent() {
                         ))}
                       </div>
                       {(tripStatus?.guestRating?.comment || ratingComment) && (
-                        <p className="text-xs text-[#57606A] italic">"{tripStatus?.guestRating?.comment || ratingComment}"</p>
+                        <p className="text-xs text-[#57606A] italic">&quot;{tripStatus?.guestRating?.comment || ratingComment}&quot;</p>
                       )}
                     </div>
                   ) : (
@@ -1073,7 +1143,7 @@ function CabRequestFormContent() {
                 <div className="space-y-2">
                   <label className="text-xs font-semibold text-[#57606A] block">Pickup Time</label>
                   <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5">
-                    {timeOptions.slice(0, 8).map((t) => (
+                    {timeOptions.map((t) => (
                       <button
                         key={t}
                         type="button"
@@ -1127,7 +1197,7 @@ function CabRequestFormContent() {
                       const isSelected = vehicleType === v.value;
                       const copy = VEHICLE_COPY[v.value] || { description: "Verified local mountain cab.", tag: "Available", icon: "directions_car" };
                       const routeFare = getEstimatedFare(v.value).fare;
-                      const advEst = Math.max(300, Math.round(routeFare * 0.15));
+                      const advEst = Math.max(200, Math.round(routeFare * 0.10));
 
                       return (
                         <div
@@ -1255,12 +1325,16 @@ function CabRequestFormContent() {
                     <span className="font-semibold text-[#1F2328]">{vehicleType} · {passengers} Pax</span>
                   </div>
                   <div className="flex justify-between border-t border-[#E1E4E8] pt-2">
-                    <span className="text-[#57606A]">Estimated Benchmark Fare:</span>
-                    <span className="font-bold text-[#1F2328]">{formatInr(currentFareEstimate.fare)}</span>
+                    <span className="text-[#57606A]">Driver Cash Fare (to driver):</span>
+                    <span className="font-semibold text-[#1F2328]">{formatInr(currentFareEstimate.fare - estimatedAdvance)}</span>
                   </div>
                   <div className="flex justify-between text-emerald-800">
-                    <span className="font-medium">Estimated Advance Escrow (~15%):</span>
+                    <span className="font-medium">Online Booking Fee (~10%):</span>
                     <span className="font-bold">{formatInr(estimatedAdvance)}</span>
+                  </div>
+                  <div className="flex justify-between border-t border-[#E1E4E8] pt-1.5 font-bold text-[#1F2328]">
+                    <span>Total Estimated Fare:</span>
+                    <span className="text-sm font-extrabold text-emerald-700">{formatInr(currentFareEstimate.fare)}</span>
                   </div>
                 </div>
 

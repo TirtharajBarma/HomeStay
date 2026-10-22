@@ -4,6 +4,10 @@ export const API_BASE_URL = (
   .trim()
   .replace(/\/+$/, "");
 
+if (typeof window !== "undefined" && process.env.NODE_ENV === "production" && !process.env.NEXT_PUBLIC_API_URL) {
+  console.warn("WARNING: NEXT_PUBLIC_API_URL is unset in production. Requests may fail if backend is remote.");
+}
+
 export const API_ENDPOINTS = {
   login: () => `${API_BASE_URL}/auth/login`,
   me: () => `${API_BASE_URL}/auth/me`,

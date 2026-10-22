@@ -1058,8 +1058,9 @@ function CabRequestCard({ c, demo, onChanged }: { c: Any; demo: boolean; onChang
   }
   function settleDriver() {
     const due = typeof s.driverShareOfAdvance === "number" ? s.driverShareOfAdvance : undefined;
-    const reference = ask(`Transfer reference (UTR) for driver ${c.assignedDriverName} (due ${inr(due)}):`);
-    if (reference && window.confirm(`Record driver settlement of ${inr(due)} with reference ${reference}?`)) post("driver-settled", { reference });
+    const dest = c.assignedDriverPhone ? `(Phone/UPI: ${c.assignedDriverPhone})` : "";
+    const reference = ask(`Transfer reference (UTR) for driver ${c.assignedDriverName} ${dest} (due ${inr(due)}):`);
+    if (reference && window.confirm(`Record driver settlement of ${inr(due)} to ${c.assignedDriverName} ${dest} with reference ${reference}?`)) post("driver-settled", { reference });
   }
 
   return (
@@ -1595,15 +1596,17 @@ const NUM_FIELDS: { key: string; label: string; hint: string }[] = [
   { key: "maxOpenRequestsPerPhone", label: "Open requests per guest phone", hint: "Abuse limit on the public guest page." },
   { key: "maxFare", label: "Maximum fare ₹", hint: "Sanity cap on any quote or assignment." },
   { key: "quoteValidityHours", label: "Driver quote valid for (hours)", hint: "After this a quote expires and the driver can quote again. 0 = never." },
+  { key: "quoteBiddingWindowMin", label: "Driver bidding window (minutes)", hint: "Wait time for driver bids before auto-accepting lowest quote. 0 = instant on first bid." },
 ];
 
 // Business details shown in the app's Privacy Policy, Terms and Refund pages (required before publishing)
-const BUSINESS_FIELDS: { key: string; label: string }[] = [
+const BUSINESS_FIELDS: { key: string; label: string; hint?: string }[] = [
   { key: "name", label: "Brand name" },
   { key: "legalName", label: "Registered business name" },
   { key: "address", label: "Registered address (city, state)" },
   { key: "email", label: "Support email" },
   { key: "phone", label: "Support phone" },
+  { key: "upiId", label: "Platform Collection UPI ID (VPA)", hint: "VPA for advance booking fee payments (e.g. stayride@okhdfcbank)" },
   { key: "grievanceOfficer", label: "Grievance Officer name" },
   { key: "grievanceEmail", label: "Grievance email" },
   { key: "website", label: "Website" },
@@ -1620,6 +1623,11 @@ const WHATSAPP_EVENTS: { key: string; label: string }[] = [
   { key: "ADVANCE_PAID_DRIVER", label: "Driver: trip confirmed + guest details" },
   { key: "ADVANCE_EXPIRED_GUEST", label: "Guest: hold expired (advance not paid)" },
   { key: "TRIP_ASSIGNED_DRIVER", label: "Own driver: trip assigned" },
+  { key: "TRIP_CANCELLED_GUEST", label: "Guest: trip cancelled notification" },
+  { key: "REFUND_GUEST", label: "Guest: advance refund notification" },
+  { key: "COMPLETION_REMINDER_DRIVER", label: "Driver: trip completion & cash confirmation reminder" },
+  { key: "BIDDING_TIMEOUT_OWNER", label: "Owner: bidding window closed without driver quotes" },
+  { key: "DRIVER_WELCOME", label: "Driver: public signup welcome alert" },
 ];
 
 function OperationsSettings({ demo }: TabProps) {
@@ -2025,10 +2033,18 @@ export function AuditTab({ demo }: TabProps) {
                 {items.map((l, i) => (
                   <tr key={rid(l) || i} className="align-top">
                     <td className="p-3 whitespace-nowrap text-slate-400">{dt(l.createdAt)}</td>
-                    <td className="p-3 text-slate-200">{l.actor}</td>
-                    <td className="p-3 font-mono text-blue-300">{l.action}</td>
-                    <td className="p-3 text-slate-300">{l.targetType} <span className="font-mono text-slate-500">{l.targetId}</span></td>
-                    <td className="p-3"><pre className="max-w-md whitespace-pre-wrap break-all text-[10px] text-slate-400">{JSON.stringify(l.details ?? {}, null, 1)}</pre></td>
+                    <td className="p-3 text-slate-200">
+                      <div className="font-semibold text-slate-100">{l.actorDisplayName || l.actor}</div>
+                      {l.actorDisplayName && l.actor !== l.actorDisplayName && (
+                        <div className="font-mono text-[10px] text-slate-500">{l.actor}</div>
+                      )}
+                    </td>
+                    <td className="p-3 font-mono text-emerald-400 font-semibold">{l.action}</td>
+                    <td className="p-3 text-slate-300">
+                      <div className="font-semibold text-slate-200">{l.targetLabel || l.targetType}</div>
+                      <span className="font-mono text-[10px] text-slate-500">{l.targetId}</span>
+                    </td>
+                    <td className="p-3"><pre className="max-w-md whitespace-pre-wrap break-all text-[10px] text-slate-400 font-mono bg-slate-900/40 p-2 rounded">{JSON.stringify(l.details ?? {}, null, 1)}</pre></td>
                   </tr>
                 ))}
               </tbody>

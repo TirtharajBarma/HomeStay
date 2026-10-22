@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Playfair_Display, Plus_Jakarta_Sans } from "next/font/google";
 
 import "./globals.css";
@@ -13,16 +13,23 @@ const jakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
 });
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#059669",
+};
+
 export const metadata: Metadata = {
   title: {
-    default: "Meadowfall Homestay | Boutique Tea Estate Stays",
-    template: "%s | Meadowfall Homestay",
+    default: "StayRide | Mountain Homestays & Verified Cab Network",
+    template: "%s | StayRide",
   },
   description:
-    "Six handcrafted hillside cottages, lofts and cabins above the Ging tea terraces in Darjeeling, West Bengal — hosted by Anuradha & Tenzin.",
+    "Verified mountain homestays and authentic cab transfers across Darjeeling, Sikkim, and the Eastern Himalayas.",
   openGraph: {
-    siteName: "Meadowfall Homestay",
-    locale: "en_US",
+    siteName: "StayRide",
+    locale: "en_IN",
     type: "website",
   },
 };

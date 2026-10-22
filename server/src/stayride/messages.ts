@@ -71,10 +71,11 @@ export const quoteAcceptedGuestMessage = (doc: any, link: string, windowMin: num
     event: 'QUOTE_ACCEPTED_GUEST',
     params,
     text:
-      `Namaste ${params[0]}, a driver has been reserved on hold for your trip.\n` +
-      `Driver: ${params[1]}\nVehicle: ${params[2]}\nTotal Fare: ${params[3]}\n\n` +
-      `Please pay the advance of ${params[4]} ${params[6]} to confirm your booking. The remaining balance is paid directly to the driver in cash.\n${params[5]}\n\n` +
-      `The driver's direct contact number will be provided once the advance is recorded.`,
+      `Namaste ${params[0]}, a verified driver is reserved for your trip.\n` +
+      `Driver: ${params[1]}\nVehicle: ${params[2]}\nTotal Fare: ${params[3]}\n` +
+      `Driver Cash Fare: ${rupees(doc.remainingCashAmount)}\n\n` +
+      `Please pay the advance booking fee of ${params[4]} ${params[6]} to confirm your cab. The remaining balance is paid directly in cash to your driver at destination.\n${params[5]}\n\n` +
+      `Driver contact details will be shared immediately upon advance confirmation.`,
   };
 };
 
@@ -87,7 +88,7 @@ export const advancePaidGuestMessage = (doc: any): Built => {
     text:
       `Namaste ${params[0]}, your cab booking is confirmed.\n` +
       `Driver: ${params[1]} (${params[2]})\nVehicle: ${params[3]}\nRoute: ${params[4]}\nPickup: ${params[5]}\n\n` +
-      `Please pay the balance of ${params[6]} in cash to your driver at the end of the trip.`,
+      `Please pay the driver cash fare of ${params[6]} directly to your driver at the end of the trip.`,
   };
 };
 
@@ -99,9 +100,9 @@ export const advancePaidDriverMessage = (doc: any, driverLink?: string): Built =
     event: 'ADVANCE_PAID_DRIVER',
     params,
     text:
-      `Hello ${params[0]}, the advance payment is received and trip ${doc.reference || ''} is confirmed.\n` +
+      `Hello ${params[0]}, the online booking fee is received and trip ${doc.reference || ''} is confirmed.\n` +
       `Passenger: ${params[1]} (${params[2]})\nRoute: ${params[3]}\nPickup: ${params[4]}\n\n` +
-      `Please collect the balance of ${params[5]} in cash directly from the passenger.${linkText}`,
+      `Collect your cash fare of ${params[5]} directly from the passenger at drop-off.${linkText}`,
   };
 };
 
@@ -162,5 +163,19 @@ export const biddingTimeoutOwnerMessage = (doc: any, homestayName: string, owner
       `No driver bids have been received yet for ${params[1]}'s cab request (${params[2]}).\n` +
       `Route: ${params[3]}\n\n` +
       `Please tap here to assign an in-house driver or expand the search radius:\n${params[4]}`,
+  };
+};
+
+/** Welcome alert to newly registered drivers on StayRide */
+export const driverWelcomeMessage = (driverName: string, vehiclePlate: string): Built => {
+  const params = [driverName, vehiclePlate];
+  return {
+    event: 'DRIVER_WELCOME',
+    params,
+    text:
+      `Namaste ${params[0]}!\n` +
+      `Your driver registration (${params[1]}) has been submitted to StayRide.\n\n` +
+      `Our operations team will review your vehicle details shortly. Once approved, you will receive trip booking alerts directly on this WhatsApp number.\n\n` +
+      `Happy driving with StayRide!`,
   };
 };

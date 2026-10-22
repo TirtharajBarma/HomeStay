@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
-  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -38,7 +37,6 @@ export const UpdatesScreen: React.FC = () => {
     isDownloading,
     downloadProgress,
     activeVersion,
-    activeRelease,
     availableRelease,
     history,
     updateId,
@@ -211,7 +209,7 @@ export const UpdatesScreen: React.FC = () => {
         {/* ── 2. What's New In Available Update ── */}
         {isUpdateAvailable && availableRelease && (
           <View style={styles.card}>
-            <Text style={styles.cardHeader}>What's New in {availableRelease.version}</Text>
+            <Text style={styles.cardHeader}>{"What's New in "}{availableRelease.version}</Text>
             {availableRelease.notes.map((note, idx) => (
               <Text key={idx} style={styles.bulletItem}>• {note}</Text>
             ))}

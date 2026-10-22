@@ -41,7 +41,7 @@ const UserSchema = new Schema<IUser>(
     role: { type: String, enum: ["guest", "owner", "admin", "driver"], default: "guest", index: true },
     phone: { type: String, default: "" },
     avatar: { type: String, default: "" },
-    clerkId: { type: String, sparse: true, index: true },
+    clerkId: { type: String, sparse: true, unique: true, index: true },
     propertyId: { type: Schema.Types.ObjectId, ref: "Property" },
     // Admin-controlled. Only ACTIVE accounts may use the app; drivers start PENDING_APPROVAL.
     accountStatus: { type: String, enum: ["ACTIVE", "PENDING_APPROVAL", "BLOCKED"], default: "ACTIVE", index: true },

@@ -27,34 +27,38 @@ export const DonutChart: React.FC<DonutChartProps> = ({
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
 
-  let accumulatedPercent = 0;
+  const computedSlices = React.useMemo(() => {
+    const result: (Slice & { rotation: number; strokeDashoffset: number })[] = [];
+    let acc = 0;
+    for (const slice of slices) {
+      const rotation = (acc * 360) / total;
+      const strokeDashoffset = circumference - (slice.value / total) * circumference;
+      acc += slice.value;
+      result.push({ ...slice, rotation, strokeDashoffset });
+    }
+    return result;
+  }, [slices, total, circumference]);
 
   return (
     <View style={styles.container}>
       <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
         <Svg width={size} height={size}>
           <G rotation="-90" origin={`${size / 2}, ${size / 2}`}>
-            {slices.map((slice, i) => {
-              const strokeDashoffset = circumference - (slice.value / total) * circumference;
-              const rotation = (accumulatedPercent * 360) / total;
-              accumulatedPercent += slice.value;
-
-              return (
-                <Circle
-                  key={i}
-                  cx={size / 2}
-                  cy={size / 2}
-                  r={radius}
-                  stroke={slice.color}
-                  strokeWidth={strokeWidth}
-                  strokeDasharray={`${circumference} ${circumference}`}
-                  strokeDashoffset={strokeDashoffset}
-                  fill="transparent"
-                  origin={`${size / 2}, ${size / 2}`}
-                  rotation={rotation}
-                />
-              );
-            })}
+            {computedSlices.map((slice, i) => (
+              <Circle
+                key={i}
+                cx={size / 2}
+                cy={size / 2}
+                r={radius}
+                stroke={slice.color}
+                strokeWidth={strokeWidth}
+                strokeDasharray={`${circumference} ${circumference}`}
+                strokeDashoffset={slice.strokeDashoffset}
+                fill="transparent"
+                origin={`${size / 2}, ${size / 2}`}
+                rotation={slice.rotation}
+              />
+            ))}
           </G>
         </Svg>
         <View style={styles.centerLabel}>

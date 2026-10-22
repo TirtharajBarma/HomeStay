@@ -17,6 +17,7 @@ export type Review = {
 };
 
 export type Stay = {
+  code?: string;
   slug: string;
   name: string;
   wing: string;
@@ -52,6 +53,7 @@ export const kindFilters = [
 
 export const estateImages = estate;
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Raw = Record<string, any>;
 const str = (v: unknown) => (typeof v === "string" ? v : "");
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
@@ -94,6 +96,44 @@ function toStay(r: Raw): Stay | null {
   } as Stay;
 }
 
+/** Maps a Property document to a Stay for dedicated /h/[slug] portals */
+function propertyToStay(p: Raw): Stay {
+  const name = str(p.name) || "Mountain Homestay";
+  const slug = str(p.slug) || "homestay";
+  const defaultImage = p.rooms?.[0]?.image || "https://images.unsplash.com/photo-1544644181-1484b3fdfc62?auto=format&fit=crop&w=1200&q=80";
+  return {
+    code: slug,
+    slug,
+    name,
+    wing: `${str(p.town) || "Darjeeling"}, ${str(p.region) || "West Bengal"}`,
+    kind: "cottage",
+    kindLabel: "Dedicated Homestay",
+    petFriendly: true,
+    price: num(p.rooms?.[0]?.nightly) || num(p.rooms?.[0]?.price) || 2400,
+    maxGuests: num(p.rooms?.[0]?.maxGuests) || 4,
+    occupancy: p.rooms?.length ? `${p.rooms.length} Room${p.rooms.length > 1 ? "s" : ""}` : "Estate & Cab Portal",
+    bedIcon: "cottage",
+    blurb: str(p.bio) || `Welcome to ${name}. Peaceful mountain stay in ${str(p.town) || "Darjeeling"}.`,
+    amenities: ["Verified Local Host", "Mountain Transfers", "Door-to-door Cab", "Home Cooked Meals"],
+    highlight: { icon: "verified", label: "Verified Estate" },
+    rating: 4.9,
+    reviewCount: 14,
+    eyebrow: `${str(p.town) || "Darjeeling"} Hills`,
+    intro: str(p.bio) || `Welcome to ${name}. View accommodation details, contact your host directly, or book your door-to-door hill cab transfer.`,
+    image: defaultImage,
+    imageAlt: name,
+    gallery: p.rooms?.[0]?.gallery?.length ? p.rooms[0].gallery : [{ src: defaultImage, alt: name, caption: name }],
+    facts: [
+      { icon: "cottage", label: "Property", value: "Mountain Homestay" },
+      { icon: "location_on", label: "Location", value: str(p.address) || str(p.town) || "Darjeeling" },
+      { icon: "schedule", label: "Check-in", value: str(p.checkInTime) || "12:00 PM" },
+      { icon: "directions_car", label: "Transfers", value: "Available on request" },
+    ],
+    story: [str(p.bio) || "A tranquil mountain retreat offering authentic Himalayan hospitality and door-to-door cab services."],
+    reviews: [],
+  };
+}
+
 /** Live stays from the API. On failure returns an error message and no stays (never a static fallback). */
 export async function getLiveStays(): Promise<{ stays: Stay[]; error: string | null }> {
   try {
@@ -109,11 +149,26 @@ export async function getLiveStays(): Promise<{ stays: Stay[]; error: string | n
   }
 }
 
-/** A live stay by slug or code; undefined when it does not exist or the API is unavailable. */
+/** A live stay by slug or code; checks rooms first, then resolves homestay property directly. */
 export async function getLiveStay(slug: string): Promise<Stay | undefined> {
   if (!slug) return undefined;
+  const clean = slug.toLowerCase().trim();
   const { stays } = await getLiveStays();
-  return stays.find(
-    (s) => s.slug === slug || s.slug === slug.toLowerCase() || (s as any).code === slug || (s as any).code === slug.toUpperCase()
+  const found = stays.find(
+    (s: Stay & { code?: string }) => s.slug.toLowerCase() === clean || s.code?.toLowerCase() === clean
   );
+  if (found) return found;
+
+  // Fallback: Resolve homestay property by slug
+  try {
+    const res = await fetch(API_ENDPOINTS.properties.bySlug(clean), { cache: "no-store" });
+    const json = await res.json().catch(() => null);
+    if (res.ok && json?.success && json.data) {
+      return propertyToStay(json.data);
+    }
+  } catch {
+    // Network or server error on fallback
+  }
+
+  return undefined;
 }

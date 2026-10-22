@@ -70,10 +70,10 @@ const LocationSchema = new Schema<IEstateLocation>(
 const PropertySchema = new Schema<IProperty>(
   {
     ownerId: { type: Schema.Types.ObjectId, ref: "User", index: true },
-    slug: { type: String, lowercase: true, trim: true, index: true },
+    slug: { type: String, lowercase: true, trim: true, unique: true, sparse: true, index: true },
     name: { type: String, required: true },
     role: { type: String, default: "Estate Owner & Host" },
-    email: { type: String, required: true },
+    email: { type: String, required: true, index: true },
     phone: { type: String, required: true },
     address: { type: String, required: true },
     town: { type: String, default: "Darjeeling" },
@@ -113,6 +113,25 @@ const PropertySchema = new Schema<IProperty>(
   },
   { timestamps: true }
 );
+
+PropertySchema.pre("validate", async function (this: any) {
+  if (!this.slug && this.name) {
+    let base = `${this.name}`
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "");
+    if (!base) base = "homestay";
+    let candidate = base;
+    let counter = 1;
+    const Model = this.constructor as any;
+    if (Model && typeof Model.findOne === "function") {
+      while (await Model.findOne({ slug: candidate, _id: { $ne: this._id } })) {
+        candidate = `${base}-${counter++}`;
+      }
+    }
+    this.slug = candidate;
+  }
+});
 
 PropertySchema.pre("save", function () {
   this.updatedAtIST = getISTTimestamp();

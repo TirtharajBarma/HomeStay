@@ -1,4 +1,5 @@
 import { Property, type IProperty, type IEstateLocation } from "../models/property.model.js";
+import { Room } from "../models/room.model.js";
 import { initialProperty } from "../data/seeds/profile.seed.js";
 
 export class PropertyService {
@@ -50,8 +51,18 @@ export class PropertyService {
     return await Property.find().sort({ createdAt: -1 });
   }
 
-  static async getPropertyBySlug(slug: string): Promise<IProperty | null> {
-    return await Property.findOne({ slug: slug.toLowerCase() });
+  static async getPropertyBySlug(slug: string): Promise<any | null> {
+    const clean = String(slug || "").trim().toLowerCase();
+    let prop = await Property.findOne({ slug: clean }).lean();
+    if (!prop && clean.includes("@")) {
+      prop = await Property.findOne({ email: clean }).lean();
+    }
+    if (!prop && clean.match(/^[0-9a-fA-F]{24}$/)) {
+      prop = await Property.findById(clean).lean();
+    }
+    if (!prop) return null;
+    const rooms = await Room.find({ propertyId: (prop as any)._id }).lean();
+    return { ...prop, rooms };
   }
 
   static async addLocation(location: Partial<IEstateLocation>, ownerId?: string): Promise<IProperty> {

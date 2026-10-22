@@ -188,10 +188,11 @@ export async function confirmReservation(
         "The reservation server did not return a confirmation, so this booking is NOT confirmed. Please contact the homestay before trying again.",
       errors: {},
     };
-  } catch (apiErr: any) {
+  } catch (apiErr: unknown) {
+    const msg = apiErr instanceof Error ? apiErr.message : "network error";
     return {
       status: "error",
-      message: `Unable to reach the reservation server (${apiErr?.message || "network error"}). Your booking is NOT confirmed.`,
+      message: `Unable to reach the reservation server (${msg}). Your booking is NOT confirmed.`,
       errors: {},
     };
   }

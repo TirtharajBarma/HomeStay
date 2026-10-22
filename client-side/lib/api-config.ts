@@ -25,6 +25,10 @@ export const API_ENDPOINTS = {
     quote: (slug: string) => `${API_BASE_URL}/stays/${slug}/quote`,
     availabilityGrid: (days = 14) => `${API_BASE_URL}/rooms/availability/grid?days=${days}`,
   },
+  properties: {
+    bySlug: (slug: string) => `${API_BASE_URL}/properties/${encodeURIComponent(slug)}`,
+  },
+  driverSignup: () => `${API_BASE_URL}/stayride/public/driver-signup`,
   reservations: {
     create: () => `${API_BASE_URL}/reservations`,
     detail: (reference: string) => `${API_BASE_URL}/reservations/${reference}`,
@@ -42,6 +46,8 @@ export const API_ENDPOINTS = {
       `${API_BASE_URL}/stayride/public/guest-links/${encodeURIComponent(token)}`,
     submit: (token: string) =>
       `${API_BASE_URL}/stayride/public/guest-links/${encodeURIComponent(token)}/cab-requests`,
+    bySlugSubmit: (slug: string) =>
+      `${API_BASE_URL}/stayride/public/properties/${encodeURIComponent(slug)}/cab-requests`,
     status: (reference: string, token?: string) =>
       `${API_BASE_URL}/stayride/public/cab-requests/${encodeURIComponent(reference)}${token ? `?t=${encodeURIComponent(token)}` : ""}`,
     rate: (reference: string, token?: string) =>

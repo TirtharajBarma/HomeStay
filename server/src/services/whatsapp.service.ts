@@ -25,7 +25,8 @@ export type WhatsAppEvent =
   | 'TRIP_CANCELLED_GUEST'
   | 'REFUND_GUEST'
   | 'COMPLETION_REMINDER_DRIVER'
-  | 'BIDDING_TIMEOUT_OWNER';
+  | 'BIDDING_TIMEOUT_OWNER'
+  | 'DRIVER_WELCOME';
 
 export interface WhatsAppMessage {
   event: WhatsAppEvent;
@@ -48,6 +49,13 @@ export function toWhatsAppNumber(phone: unknown): string | null {
   const digits = String(phone ?? '').replace(/\D/g, '');
   const full = digits.length === 10 ? `91${digits}` : digits;
   return /^\d{11,15}$/.test(full) ? full : null;
+}
+
+/** Pre-filled native wa.me link for manual dispatch fallback when Cloud API is unconfigured */
+export function getWhatsAppNativeLink(phone: unknown, text: string): string {
+  const to = toWhatsAppNumber(phone);
+  if (!to) return '';
+  return `https://wa.me/${to}?text=${encodeURIComponent(text)}`;
 }
 
 // templateName: from the admin's settings; the WHATSAPP_TPL_<EVENT> env var is the older fallback

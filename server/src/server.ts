@@ -38,7 +38,19 @@ async function bootstrap() {
     const shutdown = async (signal: string) => {
       console.log(`\n${signal} received. Closing HTTP server & database...`);
       CronService.stopWorker();
+      // Force shutdown if server hangs on open keep-alive connections
+      const forceTimer = setTimeout(() => {
+        console.error("Forceful shutdown after timeout.");
+        process.exit(1);
+      }, 10000);
+      forceTimer.unref();
+
+      if (typeof (server as any).closeIdleConnections === "function") {
+        (server as any).closeIdleConnections();
+      }
+
       server.close(async () => {
+        clearTimeout(forceTimer);
         console.log("HTTP server closed.");
         await disconnectDB();
         process.exit(0);
@@ -47,6 +59,16 @@ async function bootstrap() {
 
     process.on("SIGTERM", () => shutdown("SIGTERM"));
     process.on("SIGINT", () => shutdown("SIGINT"));
+
+    process.on("unhandledRejection", (reason, promise) => {
+      console.error("Unhandled Rejection at:", promise, "reason:", reason);
+    });
+
+    process.on("uncaughtException", (err) => {
+      console.error("Uncaught Exception:", err);
+      // Give logger a chance to flush then exit
+      setTimeout(() => process.exit(1), 1000).unref();
+    });
   } catch (err) {
     console.error("❌ Fatal error during server bootstrap:", err);
     process.exit(1);

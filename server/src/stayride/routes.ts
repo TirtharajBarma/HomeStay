@@ -9,6 +9,9 @@ import {
   istDateTime, notifyNewRequest, rateDriver, rateDriverByGuest, ownerPayoutView, parseTime12, hashToken, readDriverQuoteToken, ownerCounterOffer, driverAcceptCounter, ownerCompleteTrip, onDriverStatusChange, issueGuestLink, sendAskCab, dispatchRequest, assignOwnFleet, recordGatewayPayment, pushOwner,
 } from './platform.js';
 import { CommissionService } from '../services/commission.service.js';
+import { sendWhatsApp, getWhatsAppNativeLink } from '../services/whatsapp.service.js';
+import { PropertyService } from '../services/property.service.js';
+import { driverWelcomeMessage } from './messages.js';
 import { publicConfig, PlatformConfig } from '../services/platform-config.js';
 import { verifyWebhookSignature } from '../services/payment-gateway.service.js';
 import { buildIcs, feedFor, setImports, syncRoom, syncAll, storeForExportToken } from './ical.js';
@@ -1011,6 +1014,68 @@ stayrideV1Router.post('/public/guest-links/:token/cab-requests', async (req: Req
   return res.status(201).json({ reference: doc.reference, status: doc.status });
 });
 
+stayrideV1Router.post('/public/properties/:slug/cab-requests', async (req: Request, res: Response) => {
+  const slug = String(req.params.slug || '').trim().toLowerCase();
+  let tenantKey = '';
+  let isDemo = false;
+
+  if (slug === 'demo' || slug === 'demo-homestay') {
+    tenantKey = 'demo@stayride.in';
+    isDemo = true;
+  } else {
+    const prop = await PropertyService.getPropertyBySlug(slug);
+    if (!prop) {
+      return res.status(404).json({ error: { message: 'Homestay not found for this slug.' } });
+    }
+    tenantKey = prop.email || String(prop._id);
+    isDemo = isDemoKey(tenantKey);
+  }
+
+  const input = tripInput(req.body);
+  const clientRequestId = str(req.body.clientRequestId, 64);
+  if (!input.guestName || !input.phone) return res.status(400).json({ error: { message: 'Guest name and phone number are required.' } });
+  if (!clientRequestId) return res.status(400).json({ error: { message: 'clientRequestId is required.' } });
+  if (input.destinations.length < 1) return res.status(400).json({ error: { message: 'Add between 1 and 6 destinations.' } });
+
+  const cfg = await CommissionService.getPlatformConfig(isDemo);
+  const inputError = vehicleError(cfg, input.vehicleType) || validateSchedule(input, cfg);
+  if (inputError) return res.status(400).json({ error: { message: inputError } });
+  const Cab = cabModel(isDemo);
+
+  // Idempotent retries: same clientRequestId returns the original request.
+  const existing: any = await Cab.findOne({ clientRequestId, propertyId: tenantKey }).lean();
+  if (existing) return res.status(201).json({ reference: existing.reference, status: existing.status });
+
+  // Abuse cap per phone.
+  if ((await Cab.countDocuments({ propertyId: tenantKey, guestPhone: input.phone, status: { $in: OPEN_STATUSES } })) >= cfg.maxOpenRequestsPerPhone) {
+    return res.status(429).json({ error: { message: 'Too many open requests. Please contact your homestay.' } });
+  }
+
+  const { doc } = await createPlatformTrip(
+    tenantKey,
+    isDemo,
+    (store) => withEstimate(cfg, store.createTrip({ ...input, pickup: input.pickup || store.homestay.location || store.homestay.name }, 'HOMESTAY_WEB_PORTAL')),
+    'HOMESTAY_WEB_PORTAL',
+    clientRequestId,
+    { guestNotes: str(req.body.notes, 500) }
+  );
+
+  pushOwner(isDemo, tenantKey, {
+    title: 'New Guest Cab Request',
+    body: `${input.guestName} requested a cab transfer from your homestay portal.`,
+    data: { type: 'NEW_REQUEST', reference: doc.reference, tripId: doc.tripId },
+  }).catch(() => {});
+
+  // Instant zero-touch dispatch to priority and nearby drivers
+  try {
+    await dispatchRequest(tenantKey, isDemo, doc.reference);
+  } catch (dispErr: any) {
+    console.warn(`[Auto-Dispatch] Notice for ${doc.reference}:`, dispErr?.message);
+  }
+
+  return res.status(201).json({ reference: doc.reference, status: doc.status });
+});
+
 stayrideV1Router.get('/public/cab-requests/:reference', async (req: Request, res: Response) => {
   let link = await findGuestLink(req.query.t);
   let doc: any = null;
@@ -1029,7 +1094,12 @@ stayrideV1Router.get('/public/cab-requests/:reference', async (req: Request, res
     }
   }
   if (!doc) return res.status(404).json({ error: { message: 'Cab request not found.' } });
-  const showContact = ['CONFIRMED', 'EN_ROUTE_PICKUP', 'ARRIVED_HOMESTAY', 'TRIP_STARTED', 'COMPLETED'].includes(doc.status);
+
+  const phoneParam = String(req.query.phone || '').replace(/\D/g, '');
+  const guestPhoneDigits = String(doc.guestPhone || '').replace(/\D/g, '');
+  const isVerifiedGuest = Boolean(link || (phoneParam && guestPhoneDigits.endsWith(phoneParam)));
+  const showContact = isVerifiedGuest && ['CONFIRMED', 'EN_ROUTE_PICKUP', 'ARRIVED_HOMESTAY', 'TRIP_STARTED', 'COMPLETED'].includes(doc.status);
+
   return res.json({
     id: doc.tripId ?? null,
     reference: doc.reference,
@@ -1041,7 +1111,9 @@ stayrideV1Router.get('/public/cab-requests/:reference', async (req: Request, res
     remainingCashAmount: doc.remainingCashAmount,
     paymentLinkUrl: doc.paymentLinkUrl || null,
     driverName: doc.assignedDriverName || '',
-    driverPhone: showContact ? doc.assignedDriverPhone || '' : '',
+    driverPhone: showContact
+      ? (doc.assignedDriverPhone || '')
+      : (doc.assignedDriverPhone ? String(doc.assignedDriverPhone).replace(/(\d{2})\d{4}(\d{4})/, '$1****$2') : ''),
     vehicle: [doc.vehicleDetails?.model, doc.vehicleDetails?.plate].filter(Boolean).join(' '),
     pickup: doc.pickup || '',
     destinations: doc.destinations || [],
@@ -1149,6 +1221,101 @@ stayrideV1Router.post('/public/driver-quote/complete', async (req: Request, res:
   if (!ctx) return;
   await completeTrip(ctx.isDemo, { reference: ctx.reference, assignedDriverUserId: String(ctx.driver._id) }, `driver-web:${ctx.driver.name}`);
   return res.json(await quotePageView(ctx.isDemo, ctx.reference, ctx.driver));
+});
+
+// ==========================================
+// Public Driver Web Signup (App-less Onboarding)
+// ==========================================
+stayrideV1Router.post('/public/driver-signup', async (req: Request, res: Response) => {
+  const { name, phone, vehicleType, vehicleNumber, vehicleModel, area } = req.body || {};
+  const cleanName = str(name, 100);
+  const cleanPhone = String(phone || '').replace(/\D/g, '').slice(-10);
+  const cleanPlate = str(vehicleNumber, 30).toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const cleanArea = str(area, 100);
+  const cleanModel = str(vehicleModel, 50);
+  const vt = VEHICLE_TYPES.includes(vehicleType) ? vehicleType : 'SUV';
+
+  if (!cleanName || cleanName.length < 2) {
+    return res.status(400).json({ error: { message: 'Your full name is required.' } });
+  }
+  if (!cleanPhone || cleanPhone.length !== 10) {
+    return res.status(400).json({ error: { message: 'A valid 10-digit mobile number is required.' } });
+  }
+  if (!cleanPlate || cleanPlate.length < 5) {
+    return res.status(400).json({ error: { message: 'A valid vehicle registration number plate is required.' } });
+  }
+  if (!cleanArea) {
+    return res.status(400).json({ error: { message: 'Please select or enter your operating base town.' } });
+  }
+
+  try {
+    const UserModel = getUserModel(false);
+    const existing = await UserModel.findOne({
+      $or: [{ phone: cleanPhone }, { 'vehicle.plate': cleanPlate }],
+    });
+
+    if (existing) {
+      if (existing.role === 'driver') {
+        if (existing.accountStatus === 'ACTIVE') {
+          return res.json({
+            success: true,
+            status: 'ACTIVE',
+            message: 'Your account is already active. You will receive trip requests directly on WhatsApp.',
+          });
+        }
+        return res.json({
+          success: true,
+          status: 'PENDING_APPROVAL',
+          message: 'Your registration is already received and under review. We will alert you on WhatsApp once approved.',
+        });
+      }
+      return res.status(409).json({ error: { message: 'This phone number is already registered with StayRide.' } });
+    }
+
+    const dummyEmail = `driver_${cleanPhone}@driver.stayride.in`;
+    const user = await UserModel.create({
+      termsAcceptedAt: new Date(),
+      termsVersion: LEGAL_VERSION,
+      name: cleanName,
+      email: dummyEmail,
+      password: crypto.randomBytes(32).toString('hex'),
+      phone: cleanPhone,
+      role: 'driver',
+      accountStatus: 'PENDING_APPROVAL',
+      isAvailable: true,
+      whatsappAlerts: true,
+      vehicle: {
+        type: vt,
+        model: cleanModel || vt,
+        plate: cleanPlate,
+        area: cleanArea,
+      },
+    });
+
+    // Automated WhatsApp welcome alert using dedicated DRIVER_WELCOME template
+    const welcome = driverWelcomeMessage(cleanName, cleanPlate);
+    sendWhatsApp(false, {
+      event: welcome.event as any,
+      to: cleanPhone,
+      params: welcome.params,
+      text: welcome.text,
+    }).catch(() => {});
+
+    return res.status(201).json({
+      success: true,
+      status: 'PENDING_APPROVAL',
+      message: 'Registration submitted successfully! Our team will verify your vehicle and notify you on WhatsApp.',
+      driver: {
+        name: user.name,
+        phone: user.phone,
+        vehicleType: vt,
+        plate: cleanPlate,
+        area: cleanArea,
+      },
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: { message: err?.message || 'Could not process driver registration.' } });
+  }
 });
 
 // Legal pages (app + web): public, so they can be read before signing up
@@ -2059,15 +2226,19 @@ stayrideV1Router.post('/guest-links/send', requireFeature('guestCabLinks'), asyn
     return res.status(400).json({ error: { message: 'Ask-for-Cab is only for guests registered with this homestay or with a booking.', code: 'GUEST_NOT_FOUND' } });
   }
   try {
-    const { result, expiresAt } = await sendAskCab(tenantKey, isDemo, store.homestay.name, {
+    const { result, expiresAt, url } = await sendAskCab(tenantKey, isDemo, store.homestay.name, {
       guestId: guest?.id ?? (Number.isFinite(guestId) ? guestId : undefined),
       guestName: guest?.name || guestName,
       guestPhone: guest?.phone || guestPhone,
     });
+    const nativeLink = getWhatsAppNativeLink(
+      guest?.phone || guestPhone,
+      `Namaste ${guest?.name || guestName}! Plan your cab transfers and sightseeing directly with verified mountain drivers for your stay at ${store.homestay.name}:\n\n${url}`
+    );
     if (result === 'FAILED') {
-      return res.status(502).json({ error: { message: 'Could not send the WhatsApp message. Please try again.', code: 'WHATSAPP_FAILED' } });
+      return res.status(200).json({ sent: false, status: 'FAILED', error: 'WhatsApp delivery failed. You can share via native WhatsApp link.', expiresAt, url, nativeLink });
     }
-    return res.status(201).json({ sent: result === 'SENT', status: result, expiresAt });
+    return res.status(201).json({ sent: result === 'SENT', status: result, expiresAt, url, nativeLink });
   } catch (err: any) {
     if (err?.code === 'ASK_CAB_COOLDOWN' || err?.status === 429) {
       return res.status(200).json({ sent: false, status: 'ALREADY_SENT', alreadySent: true, message: err.message });

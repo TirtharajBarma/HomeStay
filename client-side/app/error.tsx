@@ -1,0 +1,37 @@
+"use client";
+
+import { useEffect } from "react";
+
+export default function Error({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string };
+  reset: () => void;
+}) {
+  useEffect(() => {
+    console.error("StayRide Client Error:", error);
+  }, [error]);
+
+  return (
+    <div className="min-h-screen bg-[#F6F8FA] flex items-center justify-center p-6 text-[#1F2328]">
+      <div className="max-w-md w-full bg-white rounded-2xl border border-[#D0D7DE] p-6 shadow-sm text-center space-y-4">
+        <div className="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center mx-auto text-xl font-bold">
+          !
+        </div>
+        <div>
+          <h2 className="text-base font-bold text-[#1F2328]">Something went wrong</h2>
+          <p className="text-xs text-[#57606A] mt-1">
+            {error?.message || "An unexpected error occurred while loading this page."}
+          </p>
+        </div>
+        <button
+          onClick={() => reset()}
+          className="w-full rounded-xl bg-emerald-600 py-2.5 text-xs font-bold text-white hover:bg-emerald-700 transition-colors cursor-pointer"
+        >
+          Try Again
+        </button>
+      </div>
+    </div>
+  );
+}

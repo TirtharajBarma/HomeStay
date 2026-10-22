@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TextInput,
   TouchableOpacity,
   Switch,
@@ -28,22 +27,22 @@ export const NewGuestScreen: React.FC = () => {
 
   const editingGuest = guestId ? guests.find((g) => g.id === guestId) : null;
 
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
-  const [notes, setNotes] = useState('');
+  const [name, setName] = useState(() => editingGuest?.name || '');
+  const [phone, setPhone] = useState(() => editingGuest?.phone || '');
+  const [email, setEmail] = useState(() => editingGuest?.email || '');
+  const [notes, setNotes] = useState(() => editingGuest?.notes || '');
   // Marketing is opt-in: the owner switches it on only when the guest agrees
-  const [consent, setConsent] = useState(false);
+  const [consent, setConsent] = useState(() => editingGuest?.marketingConsent ?? false);
 
-  useEffect(() => {
-    if (editingGuest) {
-      setName(editingGuest.name);
-      setPhone(editingGuest.phone);
-      setEmail(editingGuest.email || '');
-      setNotes(editingGuest.notes || '');
-      setConsent(editingGuest.marketingConsent);
-    }
-  }, [editingGuest]);
+  const [syncedGuestId, setSyncedGuestId] = useState<number | undefined>(editingGuest?.id);
+  if (editingGuest && editingGuest.id !== syncedGuestId) {
+    setSyncedGuestId(editingGuest.id);
+    setName(editingGuest.name);
+    setPhone(editingGuest.phone);
+    setEmail(editingGuest.email || '');
+    setNotes(editingGuest.notes || '');
+    setConsent(editingGuest.marketingConsent);
+  }
 
   const handleSave = async () => {
     const trimmedName = name.trim();

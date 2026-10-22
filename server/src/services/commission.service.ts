@@ -191,12 +191,19 @@ export class CommissionService {
     const agreedFare = Math.round(fare);
     const platformFeeAmount = Math.round((agreedFare * pfPercent) / 100);
     const homestayCommissionAmount = Math.round((agreedFare * hcPercent) / 100);
-    const driverPayoutAmount = agreedFare - platformFeeAmount - homestayCommissionAmount;
-    // Advance covers at least PF + HC (the platform must collect what it pays out), never more than the fare.
+    const totalCommission = platformFeeAmount + homestayCommissionAmount;
+
+    // Advance collected online from guest is strictly for StayRide platform fee + homestay commission.
+    // It respects the minimum advance floor (minAdvanceAmount) and never exceeds the total agreed fare.
     const advanceAmount = Math.min(
       agreedFare,
-      Math.max(minAdvanceAmount, Math.round((agreedFare * advancePercent) / 100), platformFeeAmount + homestayCommissionAmount)
+      Math.max(minAdvanceAmount, totalCommission, Math.round((agreedFare * advancePercent) / 100))
     );
+
+    const driverShareOfAdvance = Math.max(0, advanceAmount - totalCommission);
+    const remainingCashToDriver = Math.max(0, agreedFare - advanceAmount);
+    const driverPayoutAmount = remainingCashToDriver + driverShareOfAdvance;
+
     return {
       agreedFare,
       platformFeeRate: pfPercent / 100,
@@ -205,12 +212,57 @@ export class CommissionService {
       homestayCommissionRate: hcPercent / 100,
       homestayCommissionPercent: hcPercent,
       homestayCommissionAmount,
-      driverPayoutRate: Math.max(0, 1 - (pfPercent + hcPercent) / 100),
+      driverPayoutRate: agreedFare > 0 ? driverPayoutAmount / agreedFare : 0,
       driverPayoutAmount,
-      advanceRate: advancePercent / 100,
+      advanceRate: agreedFare > 0 ? advanceAmount / agreedFare : 0,
       advanceAmount,
-      remainingCashToDriver: agreedFare - advanceAmount,
-      driverShareOfAdvance: advanceAmount - platformFeeAmount - homestayCommissionAmount,
+      remainingCashToDriver,
+      driverShareOfAdvance,
     };
+  }
+
+  /**
+   * Given the net cash the driver wants in hand, calculate the total guest fare and breakdown
+   * so the driver is guaranteed 100% of their net cash quote.
+   */
+  static fromDriverNetCash(
+    driverCash: number,
+    pfPercent: number,
+    hcPercent: number,
+    minAdvanceAmount: number
+  ): CommissionCalculationResult {
+    if (!Number.isFinite(driverCash) || driverCash <= 0) throw new Error("Driver cash fare must be a positive number.");
+    const netCash = Math.round(driverCash);
+    const combinedRate = (pfPercent + hcPercent) / 100;
+    const naturalFee = combinedRate > 0 && combinedRate < 1 ? Math.round(netCash * (combinedRate / (1 - combinedRate))) : 0;
+    const advanceAmount = Math.max(minAdvanceAmount, naturalFee);
+    const agreedFare = netCash + advanceAmount;
+
+    const totalPct = pfPercent + hcPercent;
+    const platformFeeAmount = totalPct > 0 ? Math.round(advanceAmount * (pfPercent / totalPct)) : 0;
+    const homestayCommissionAmount = advanceAmount - platformFeeAmount;
+    const remainingCashToDriver = netCash;
+    const driverPayoutAmount = netCash;
+
+    return {
+      agreedFare,
+      platformFeeRate: pfPercent / 100,
+      platformFeePercent: pfPercent,
+      platformFeeAmount,
+      homestayCommissionRate: hcPercent / 100,
+      homestayCommissionPercent: hcPercent,
+      homestayCommissionAmount,
+      driverPayoutRate: agreedFare > 0 ? driverPayoutAmount / agreedFare : 0,
+      driverPayoutAmount,
+      advanceRate: agreedFare > 0 ? advanceAmount / agreedFare : 0,
+      advanceAmount,
+      remainingCashToDriver,
+      driverShareOfAdvance: 0,
+    };
+  }
+
+  static async calculateGrossFromDriverCash(driverCash: number, tenantKey?: string, isDemo = false): Promise<CommissionCalculationResult> {
+    const { pfPercent, hcPercent, minAdvanceAmount } = await this.getEffectiveRates(tenantKey, isDemo);
+    return this.fromDriverNetCash(driverCash, pfPercent, hcPercent, minAdvanceAmount);
   }
 }

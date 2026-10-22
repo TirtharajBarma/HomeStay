@@ -184,8 +184,8 @@ export class AuthService {
       email = verifiedEmail;
       name = info?.name || info?.given_name || verifiedEmail.split("@")[0];
       avatar = info?.picture || "";
-    } else if (config.isDeployed) {
-      // No token to verify: never trust a bare email in a deployed environment.
+    } else if (config.isDeployed || config.nodeEnv === "production" || process.env.ALLOW_DEV_OAUTH_MOCK !== "true") {
+      // No token to verify: never trust a bare email in production or standard environments.
       throw new Error("A valid Google credential is required.");
     }
 

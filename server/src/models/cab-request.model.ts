@@ -323,6 +323,9 @@ CabRequestSchema.index(
   { name: "unique_advance_payment_id", unique: true, partialFilterExpression: { advancePaymentId: { $type: "string", $gt: "" } } }
 );
 CabRequestSchema.index({ propertyId: 1, status: 1 }, { name: "property_status" });
+CabRequestSchema.index({ status: 1, date: 1 }, { name: "status_date" });
+CabRequestSchema.index({ status: 1, advanceDueAt: 1 }, { name: "status_advance_due" });
+CabRequestSchema.index({ assignedDriverUserId: 1, status: 1 }, { name: "driver_status" });
 // Idempotency keys are per homestay (the old global unique "clientRequestId_1" is dropped by scripts/migrate-indexes.ts).
 CabRequestSchema.index(
   { propertyId: 1, clientRequestId: 1 },

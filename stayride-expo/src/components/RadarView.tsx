@@ -8,9 +8,9 @@ interface RadarViewProps {
 }
 
 export const RadarView: React.FC<RadarViewProps> = ({ size = 180 }) => {
-  const pulse1 = useRef(new Animated.Value(0)).current;
-  const pulse2 = useRef(new Animated.Value(0)).current;
-  const pulse3 = useRef(new Animated.Value(0)).current;
+  const [pulse1] = React.useState(() => new Animated.Value(0));
+  const [pulse2] = React.useState(() => new Animated.Value(0));
+  const [pulse3] = React.useState(() => new Animated.Value(0));
 
   useEffect(() => {
     const createAnim = (anim: Animated.Value, delay: number) => {

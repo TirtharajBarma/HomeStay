@@ -8,10 +8,10 @@ export const SplashScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { session, loading } = useStayRide();
 
-  const logoScale = useRef(new Animated.Value(0.6)).current;
-  const logoAlpha = useRef(new Animated.Value(0)).current;
-  const contentAlpha = useRef(new Animated.Value(0)).current;
-  const contentY = useRef(new Animated.Value(40)).current;
+  const [logoScale] = React.useState(() => new Animated.Value(0.6));
+  const [logoAlpha] = React.useState(() => new Animated.Value(0));
+  const [contentAlpha] = React.useState(() => new Animated.Value(0));
+  const [contentY] = React.useState(() => new Animated.Value(40));
 
   useEffect(() => {
     Animated.parallel([

@@ -434,8 +434,9 @@ export function useAppUpdateManager(): AppUpdateInfo {
     return parseReleasePayload(msg, ver || undefined);
   }, [isUpdateAvailable, isUpdatePending, manualStatus, checkedManifest, downloadedUpdate, availableUpdate, storedMessage]);
 
+  const [currentTime] = useState(() => Date.now());
   const daysRemainingBeforeAutoUpdate = discoveredAt
-    ? Math.max(0, Math.ceil((discoveredAt + TWO_DAYS_MS - Date.now()) / (24 * 60 * 60 * 1000)))
+    ? Math.max(0, Math.ceil((discoveredAt + TWO_DAYS_MS - currentTime) / (24 * 60 * 60 * 1000)))
     : null;
 
   const handleCheckForUpdates = useCallback(async () => {

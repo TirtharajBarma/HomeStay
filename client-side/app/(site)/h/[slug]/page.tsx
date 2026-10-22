@@ -127,10 +127,17 @@ export default async function DedicatedHomestayPage({
           </span>
           <h2 className="mt-1 font-serif text-2xl font-bold text-primary sm:text-3xl">Need a cab during your stay?</h2>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-on-surface-variant">
-            Ask your host for a cab. StayRide sends you a secure link on WhatsApp where you choose your stops,
-            date and vehicle. Verified local drivers quote their fare, you pay a small advance to StayRide,
-            and the rest in cash to the driver.
+            Ask your host for a cab or request directly online. StayRide sends verified local drivers for airport/railway transfers, sunrise sightseeing, and day excursions. You pay a small online advance booking fee, and the rest directly in cash to your driver at destination.
           </p>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <a
+              href={`/cab-request?h=${encodeURIComponent(slug)}`}
+              className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-on-primary shadow transition hover:opacity-95"
+            >
+              <Icon name="local_taxi" className="text-lg" />
+              <span>Book Cab Transfer from {stay.name}</span>
+            </a>
+          </div>
         </div>
       </section>
 

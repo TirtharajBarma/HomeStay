@@ -122,7 +122,7 @@ export async function sendAskCab(tenantKey: string, isDemo: boolean, homestayNam
   const link = await issueGuestLink(tenantKey, isDemo, guest);
   const result = await whatsapp(isDemo, guest.guestPhone, messages.askCabMessage(guest.guestName, homestayName || 'our homestay', link.url));
   if (result === 'SENT') await Links.updateOne({ _id: link.id }, { $set: { sentAt: new Date() } });
-  return { result, expiresAt: link.expiresAt };
+  return { result, expiresAt: link.expiresAt, url: link.url };
 }
 
 const dueAt = (cfg: PlatformConfig) => (cfg.advanceWindowMin > 0 ? new Date(Date.now() + cfg.advanceWindowMin * 60000) : null);

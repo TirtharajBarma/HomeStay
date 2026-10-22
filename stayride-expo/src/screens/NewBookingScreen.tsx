@@ -47,18 +47,17 @@ export const NewBookingScreen: React.FC = () => {
   // Leaving this form ends the submission: a reopened form gets a fresh Idempotency-Key
   useEffect(() => () => api.clearIdempotencyKeys('/bookings'), []);
 
-  const [guestName, setGuestName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [selectedGuest, setSelectedGuest] = useState<Guest | null>(null);
+  const initialRoom = presetRoomId ? rooms.find((r) => r.id === presetRoomId) || null : null;
+  const initialGuest = guestId ? guests.find((item) => item.id === guestId) || null : null;
+
+  const [guestName, setGuestName] = useState(() => initialGuest?.name || '');
+  const [phone, setPhone] = useState(() => initialGuest?.phone || '');
+  const [selectedGuest, setSelectedGuest] = useState<Guest | null>(() => initialGuest);
 
   // Opened from the occupancy calendar: that room and night are preselected
-  const [selectedRoom, setSelectedRoom] = useState<Room | null>(() => rooms.find((r) => r.id === presetRoomId) || null);
+  const [selectedRoom, setSelectedRoom] = useState<Room | null>(() => initialRoom);
   const [source, setSource] = useState('StayRide link');
   const [guestsCount, setGuestsCount] = useState('1');
-  const [amount, setAmount] = useState('');
-  // Money received while booking: an advance, the full amount, or nothing yet
-  const [received, setReceived] = useState('');
-  const [receivedMethod, setReceivedMethod] = useState<PaymentMethod>('UPI');
 
   // Dates: default checkIn = today midnight, checkOut = in 2 days
   const now = new Date();
@@ -67,27 +66,26 @@ export const NewBookingScreen: React.FC = () => {
   const [checkIn, setCheckIn] = useState<number>(presetCheckIn ?? todayMs);
   const [checkOut, setCheckOut] = useState<number>((presetCheckIn ?? todayMs) + (presetCheckIn ? 1 : 2) * dayMs);
 
+  const nights = Math.max(1, Math.round((checkOut - checkIn) / dayMs));
+  const [amount, setAmount] = useState(() => (initialRoom ? String(initialRoom.price * (presetCheckIn ? 1 : 2)) : ''));
+  // Money received while booking: an advance, the full amount, or nothing yet
+  const [received, setReceived] = useState('');
+  const [receivedMethod, setReceivedMethod] = useState<PaymentMethod>('UPI');
+
   const [datesPickerVisible, setDatesPickerVisible] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    if (guestId) {
-      const g = guests.find((item) => item.id === guestId);
-      if (g) {
-        setSelectedGuest(g);
-        setGuestName(g.name);
-        setPhone(g.phone);
-      }
+  // Synchronize guest info during render without triggering effect waterfalls
+  const [syncedGuestId, setSyncedGuestId] = useState<number | undefined>(initialGuest?.id);
+  if (guestId && (!selectedGuest || syncedGuestId !== guestId)) {
+    const g = guests.find((item) => item.id === guestId);
+    if (g) {
+      setSyncedGuestId(guestId);
+      setSelectedGuest(g);
+      setGuestName(g.name);
+      setPhone(g.phone);
     }
-  }, [guestId, guests]);
-
-  const nights = Math.max(1, Math.round((checkOut - checkIn) / dayMs));
-
-  useEffect(() => {
-    if (selectedRoom) {
-      setAmount(String(selectedRoom.price * nights));
-    }
-  }, [selectedRoom, checkIn, checkOut]);
+  }
 
   const fmtLong = (ms: number) =>
     new Date(ms).toLocaleDateString('en-IN', {
@@ -390,6 +388,10 @@ export const NewBookingScreen: React.FC = () => {
               onChange={(inMs, outMs) => {
                 setCheckIn(inMs);
                 setCheckOut(outMs);
+                const n = Math.max(1, Math.round((outMs - inMs) / dayMs));
+                if (selectedRoom) {
+                  setAmount(String(selectedRoom.price * n));
+                }
                 setDatesPickerVisible(false);
               }}
             />

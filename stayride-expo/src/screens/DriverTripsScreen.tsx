@@ -57,15 +57,23 @@ export const DriverTripsScreen: React.FC = () => {
     const raw = (quoteInputs[trip.reference] || '').replace(/[₹,\s]/g, '');
     const amount = /^\d+$/.test(raw) ? parseInt(raw, 10) : 0;
     if (!amount || amount <= 0) {
-      Alert.alert('Invalid Fare', 'Please enter your quoted fare.');
+      Alert.alert('Invalid Fare', 'Please enter the in-hand cash fare you want to collect.');
       return;
     }
 
+    const cash = amount;
+    const fee = Math.max(200, Math.round(cash * 0.10));
+    const total = cash + fee;
+
     setSubmittingId(trip.reference);
-    const outcome = await driverQuote(trip.reference, amount);
+    const outcome = await driverQuote(trip.reference, total);
     setSubmittingId(null);
     if (outcome.ok) setRevising((prev) => ({ ...prev, [trip.reference]: false }));
-    reportOutcome(outcome, 'Quote Submitted', `Your quote of ₹${amount.toLocaleString()} was sent.`);
+    reportOutcome(
+      outcome,
+      'Quote Submitted',
+      `Your quote of ₹${cash.toLocaleString()} in-hand cash was sent (Passenger total bill: ₹${total.toLocaleString()}).`
+    );
   };
 
   const handleCallPassenger = (phone: string) => {
@@ -314,13 +322,13 @@ export const DriverTripsScreen: React.FC = () => {
                       <View style={styles.quotedBox}>
                         <Ionicons name="checkmark-circle" size={18} color="#059669" />
                         <Text style={styles.quotedText}>
-                          Quoted ₹{myQuote?.quotedFare.toLocaleString()} —{' '}
+                          Quoted ₹{Math.round((myQuote?.quotedFare ?? 0) * 0.90).toLocaleString()} in-hand (Passenger bill: ₹{myQuote?.quotedFare.toLocaleString()}) —{' '}
                           {myQuote?.status === 'REJECTED' ? 'Not selected' : myQuote?.status === 'EXPIRED' ? 'Expired, quote again' : 'Awaiting Host Confirmation'}
                         </Text>
                         {canRevise && (
                           <TouchableOpacity
                             onPress={() => {
-                              handleQuoteChange(t.reference, String(myQuote?.quotedFare ?? ''));
+                              handleQuoteChange(t.reference, String(Math.round((myQuote?.quotedFare ?? 0) * 0.90)));
                               setRevising((prev) => ({ ...prev, [t.reference]: true }));
                             }}
                           >
@@ -329,30 +337,57 @@ export const DriverTripsScreen: React.FC = () => {
                         )}
                       </View>
                     ) : (
-                      <View style={styles.quoteRow}>
-                        <View style={styles.inputWrap}>
-                          <Text style={styles.rupeePrefix}>₹</Text>
-                          <TextInput
-                            style={styles.quoteInput}
-                            keyboardType="numeric"
-                            value={inputValue}
-                            onChangeText={(val) => handleQuoteChange(t.reference, val)}
-                            placeholder="Fare"
-                          />
+                      <View>
+                        <View style={styles.chipRow}>
+                          {[1800, 2200, 2800, 3500].map((amt) => (
+                            <TouchableOpacity
+                              key={amt}
+                              style={[styles.chip, Number(inputValue) === amt && styles.chipActive]}
+                              onPress={() => handleQuoteChange(t.reference, String(amt))}
+                            >
+                              <Text style={[styles.chipText, Number(inputValue) === amt && styles.chipTextActive]}>
+                                ₹{amt.toLocaleString('en-IN')}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
                         </View>
-                        <TouchableOpacity
-                          style={styles.quoteBtn}
-                          onPress={() => handleSendQuote(t)}
-                          disabled={submittingId === t.reference}
-                        >
-                          <Text style={styles.quoteBtnText}>
-                            {submittingId === t.reference ? 'Sending…' : hasQuoted ? 'Update' : 'Send Quote'}
-                          </Text>
-                        </TouchableOpacity>
-                        {hasQuoted && (
-                          <TouchableOpacity onPress={() => setRevising((prev) => ({ ...prev, [t.reference]: false }))}>
-                            <Text style={styles.reviseText}>Cancel</Text>
+                        <View style={styles.quoteRow}>
+                          <View style={styles.inputWrap}>
+                            <Text style={styles.rupeePrefix}>₹</Text>
+                            <TextInput
+                              style={styles.quoteInput}
+                              keyboardType="numeric"
+                              value={inputValue}
+                              onChangeText={(val) => handleQuoteChange(t.reference, val)}
+                              placeholder="In-hand cash"
+                            />
+                          </View>
+                          <TouchableOpacity
+                            style={styles.quoteBtn}
+                            onPress={() => handleSendQuote(t)}
+                            disabled={submittingId === t.reference || !(Number(inputValue) > 0)}
+                          >
+                            <Text style={styles.quoteBtnText}>
+                              {submittingId === t.reference ? 'Sending…' : hasQuoted ? 'Update' : 'Send Quote'}
+                            </Text>
                           </TouchableOpacity>
+                          {hasQuoted && (
+                            <TouchableOpacity onPress={() => setRevising((prev) => ({ ...prev, [t.reference]: false }))}>
+                              <Text style={styles.reviseText}>Cancel</Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                        {Number(inputValue) > 0 && (
+                          <View style={styles.quoteLiveBreakdown}>
+                            <View style={styles.breakdownRow}>
+                              <Text style={styles.breakdownLabel}>Cash you collect at drop-off:</Text>
+                              <Text style={styles.breakdownCash}>₹{Number(inputValue).toLocaleString('en-IN')}</Text>
+                            </View>
+                            <View style={styles.breakdownRow}>
+                              <Text style={styles.breakdownSub}>Online Booking Fee (guest pays StayRide):</Text>
+                              <Text style={styles.breakdownSub}>+₹{Math.max(200, Math.round(Number(inputValue) * 0.10)).toLocaleString('en-IN')}</Text>
+                            </View>
+                          </View>
                         )}
                       </View>
                     )}
@@ -850,5 +885,60 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 6,
     lineHeight: 18,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  chip: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+  },
+  chipActive: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#059669',
+  },
+  chipText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#334155',
+  },
+  chipTextActive: {
+    color: '#047857',
+  },
+  quoteLiveBreakdown: {
+    marginTop: 8,
+    padding: 10,
+    backgroundColor: '#F0FDF4',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    gap: 4,
+  },
+  breakdownRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  breakdownLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#064E3B',
+  },
+  breakdownCash: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#047857',
+  },
+  breakdownSub: {
+    fontSize: 10,
+    color: '#64748B',
   },
 });

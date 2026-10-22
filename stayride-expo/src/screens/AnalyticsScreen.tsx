@@ -26,7 +26,7 @@ export const AnalyticsScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
   const { trips } = useStayRide();
 
-  const now = Date.now();
+  const [now] = React.useState(() => Date.now());
   const dayMs = 86400000;
   const cutoff = now - 30 * dayMs;
 
