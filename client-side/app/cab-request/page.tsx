@@ -134,6 +134,7 @@ type CabRequestStatus = {
   refundStatus?: "NONE" | "PENDING" | "REFUNDED" | null;
   guestRating?: { stars: number; comment?: string; ratedAt: string } | null;
   biddingFallback?: boolean;
+  config?: PublicConfig;
 };
 
 const REFUND_LABELS: Record<string, string> = { PENDING: "Refund in progress", REFUNDED: "Refunded" };
@@ -320,6 +321,26 @@ function CabRequestFormContent() {
                 },
               });
               setLinkState("valid");
+
+              // Dynamically fetch live platform config configured by admin
+              apiFetch<{ config: PublicConfig }>(API_ENDPOINTS.platform.publicConfig())
+                .then((cfgRes) => {
+                  if (cancelled || !cfgRes?.config) return;
+                  const live = cfgRes.config;
+                  setLink((prev) => prev ? {
+                    ...prev,
+                    config: {
+                      pickupTimes: live.pickupTimes || prev.config?.pickupTimes || FALLBACK_TIMES,
+                      bookingHorizonDays: live.bookingHorizonDays || prev.config?.bookingHorizonDays || 30,
+                      vehicles: live.vehicles || prev.config?.vehicles || FALLBACK_VEHICLES,
+                      sightseeingPresets: live.sightseeingPresets || prev.config?.sightseeingPresets || [],
+                      routePresets: live.routePresets || prev.config?.routePresets || [],
+                      upiId: live.upiId || prev.config?.upiId || "stayride@okhdfcbank",
+                      supportPhone: live.supportPhone || prev.config?.supportPhone || "919830041000",
+                    },
+                  } : prev);
+                })
+                .catch(() => {});
             } else {
               setLinkState("invalid");
             }
@@ -478,8 +499,8 @@ function CabRequestFormContent() {
     }
   };
 
-  const activeUpiId = link?.config?.upiId || process.env.NEXT_PUBLIC_UPI_ID || "stayride@upi";
-  const activeSupportPhone = (link?.config?.supportPhone || process.env.NEXT_PUBLIC_SUPPORT_PHONE || "919800000001").replace(/\D/g, "");
+  const activeUpiId = tripStatus?.config?.upiId || link?.config?.upiId || process.env.NEXT_PUBLIC_UPI_ID || "stayride@upi";
+  const activeSupportPhone = (tripStatus?.config?.supportPhone || link?.config?.supportPhone || process.env.NEXT_PUBLIC_SUPPORT_PHONE || "919800000001").replace(/\D/g, "");
 
   if (linkState === "loading") {
     return (

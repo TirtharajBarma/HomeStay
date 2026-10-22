@@ -951,6 +951,11 @@ const invalidLink = (res: Response) => res.status(404).json({ error: { message: 
 // ==========================================
 // Public Guest Web Cab Requests (secure token link, no login)
 // ==========================================
+stayrideV1Router.get('/public/config', async (_req: Request, res: Response) => {
+  const cfg = await CommissionService.getPlatformConfig(false);
+  return res.json({ config: publicConfig(cfg) });
+});
+
 stayrideV1Router.get('/public/guest-links/:token', async (req: Request, res: Response) => {
   const link = await activeGuestLink(req.params.token);
   if (!link) return invalidLink(res);
@@ -1079,16 +1084,19 @@ stayrideV1Router.post('/public/properties/:slug/cab-requests', async (req: Reque
 stayrideV1Router.get('/public/cab-requests/:reference', async (req: Request, res: Response) => {
   let link = await findGuestLink(req.query.t);
   let doc: any = null;
+  let isDemo = false;
   if (link) {
-    doc = await cabModel(isDemoKey(link.tenantKey))
+    isDemo = isDemoKey(link.tenantKey);
+    doc = await cabModel(isDemo)
       .findOne({ reference: String(req.params.reference), propertyId: link.tenantKey })
       .lean();
   } else {
-    for (const isDemo of [false, true]) {
-      if (isDemo && !config.demoEnabled) break;
-      const found = await cabModel(isDemo).findOne({ reference: String(req.params.reference) }).lean();
+    for (const demoCandidate of [false, true]) {
+      if (demoCandidate && !config.demoEnabled) break;
+      const found = await cabModel(demoCandidate).findOne({ reference: String(req.params.reference) }).lean();
       if (found) {
         doc = found;
+        isDemo = demoCandidate;
         break;
       }
     }
@@ -1125,6 +1133,7 @@ stayrideV1Router.get('/public/cab-requests/:reference', async (req: Request, res
     cancellationReason: doc.status === 'CANCELLED' ? doc.cancellationReason || '' : '',
     guestRating: doc.guestRating || null,
     biddingFallback: Boolean(doc.biddingFallbackAlertSentAt),
+    config: publicConfig(await CommissionService.getPlatformConfig(isDemo)),
   });
 });
 
