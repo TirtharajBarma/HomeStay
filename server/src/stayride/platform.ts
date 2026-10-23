@@ -23,6 +23,7 @@ import { getPayoutRequestModel } from '../models/payout-request.model.js';
 import { User } from '../models/user.model.js';
 import { audit } from '../models/audit-log.model.js';
 import { CommissionService } from '../services/commission.service.js';
+import { logger } from '../utils/logger.js';
 import { httpError } from '../middlewares/error-handler.js';
 import { tenantDbModel } from '../utils/tenant-model.js';
 import { notify, PushMessage } from '../services/push.service.js';
@@ -869,11 +870,28 @@ export async function notifyNewRequest(isDemo: boolean, doc: any) {
   if (!CommissionService.globalFeatures(settings).driverQuotes.enabled) return;
   const cfg = CommissionService.platformConfig(settings);
   const drivers = await matchingDrivers(isDemo, doc, cfg);
+
+  console.log(`[cab:dispatch] ref=${doc.reference} matchingDrivers=${drivers.length} maxBroadcast=${cfg.driverBroadcastMax}`);
+  logger.info(`[Cab Broadcast] ${doc.reference}: dispatched to ${drivers.length} matching driver(s)`, {
+    action: 'cab.dispatch',
+    tenantId: String(doc.propertyId),
+    metadata: {
+      reference: doc.reference,
+      vehicleType: doc.vehicleType,
+      homestay: doc.homestayName,
+      matchingDriversCount: drivers.length,
+      driverIds: drivers.map((d) => String(d._id)),
+      driverPhones: drivers.map((d) => d.phone),
+      maxBroadcastCap: cfg.driverBroadcastMax,
+    },
+  });
+
   await pushUsers(isDemo, drivers.map((d) => d._id), {
     title: 'New trip request',
     body: `${doc.vehicleType || 'Cab'} from ${doc.homestayName || 'a homestay'}. Send your quote.`,
     data: tripData(doc, 'NEW_REQUEST'),
   });
+
   // WhatsApp too, so drivers without the app (or not looking at it) still see it. Capped: each costs money.
   // Drivers who opt out in the app (whatsappAlerts: false) only receive push notifications.
   if (isDemo || cfg.driverBroadcastMax <= 0) return;

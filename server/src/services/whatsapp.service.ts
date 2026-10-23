@@ -9,6 +9,8 @@
 // approved template name (e.g. WHATSAPP_TPL_ASK_CAB) and its body variables {{1}}, {{2}}... are filled
 // from `params` in order. Without a template name the plain `text` is sent, which Meta delivers only
 // inside the 24-hour reply window (fine for testing with the free test number).
+import { logger } from '../utils/logger.js';
+
 const TIMEOUT_MS = 4000;
 const API_VERSION = process.env.WHATSAPP_API_VERSION || 'v21.0';
 
@@ -61,8 +63,26 @@ export function getWhatsAppNativeLink(phone: unknown, text: string): string {
 // templateName: from the admin's settings; the WHATSAPP_TPL_<EVENT> env var is the older fallback
 export async function sendWhatsApp(isDemo: boolean, msg: WhatsAppMessage, language = 'en', templateName?: string): Promise<WhatsAppResult> {
   const to = toWhatsAppNumber(msg.to);
-  // Demo tenants never message real phones.
-  if (isDemo || !to || !enabled()) return 'SKIPPED';
+  const isMetaEnabled = enabled();
+
+  // If unconfigured or demo, log the simulated message so developers can see it in Axiom and console!
+  if (isDemo || !to || !isMetaEnabled) {
+    const reason = isDemo ? 'DEMO_TENANT' : !to ? 'INVALID_PHONE' : 'META_API_NOT_CONFIGURED';
+    console.log(`[whatsapp:simulated] event=${msg.event} to=${to || msg.to} reason=${reason} text="${msg.text.slice(0, 90)}..."`);
+    logger.info(`[WhatsApp Simulated] ${msg.event} to ${to || msg.to} (${reason})`, {
+      action: 'whatsapp.dispatch',
+      metadata: {
+        event: msg.event,
+        to: to || msg.to,
+        status: 'SKIPPED',
+        reason,
+        previewText: msg.text.slice(0, 160),
+        params: msg.params,
+        metaCloudApiEnabled: isMetaEnabled,
+      },
+    });
+    return 'SKIPPED';
+  }
 
   const template = templateName || process.env[`WHATSAPP_TPL_${msg.event}`];
   const body = template
@@ -89,11 +109,25 @@ export async function sendWhatsApp(isDemo: boolean, msg: WhatsAppMessage, langua
     });
     if (!res.ok) {
       console.warn(`[whatsapp] ${msg.event} failed (HTTP ${res.status})`);
+      logger.warn(`[WhatsApp Failed] ${msg.event} to ${to} (HTTP ${res.status})`, {
+        action: 'whatsapp.dispatch',
+        metadata: { event: msg.event, to, status: 'FAILED', httpStatus: res.status },
+      });
       return 'FAILED';
     }
+    console.log(`[whatsapp:sent] event=${msg.event} to=${to}`);
+    logger.info(`[WhatsApp Sent] ${msg.event} to ${to}`, {
+      action: 'whatsapp.dispatch',
+      metadata: { event: msg.event, to, status: 'SENT' },
+    });
     return 'SENT';
-  } catch {
-    console.warn(`[whatsapp] ${msg.event} failed (network)`);
+  } catch (err: any) {
+    console.warn(`[whatsapp] ${msg.event} failed (network: ${err?.message})`);
+    logger.error(`[WhatsApp Error] ${msg.event} to ${to}`, {
+      action: 'whatsapp.dispatch',
+      error: { message: err?.message || 'Network error' },
+      metadata: { event: msg.event, to, status: 'FAILED' },
+    });
     return 'FAILED';
   } finally {
     clearTimeout(timer);

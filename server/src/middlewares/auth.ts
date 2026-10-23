@@ -43,7 +43,7 @@ export function verifyToken(req: Request, res: Response, next: NextFunction) {
     if (err.name === "TokenExpiredError") {
       return res.status(401).json({
         success: false,
-        error: "JWT token has expired (15m validity). Please log in again to renew your session.",
+        error: "JWT token has expired. Please refresh your session or log in again.",
         expired: true,
       });
     }

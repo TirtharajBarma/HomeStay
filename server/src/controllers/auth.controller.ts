@@ -34,6 +34,35 @@ export class AuthController {
     }
   }
 
+  static async refresh(req: Request, res: Response) {
+    try {
+      const authHeader = req.headers.authorization;
+      const token =
+        (authHeader && authHeader.startsWith("Bearer ") ? authHeader.split(" ")[1] : null) ||
+        req.body?.token ||
+        req.body?.refreshToken;
+
+      if (!token || typeof token !== "string") {
+        return res.status(400).json({
+          success: false,
+          error: "Token is required for session refresh.",
+        });
+      }
+
+      const result = await AuthService.refreshToken(token.trim());
+      res.json({
+        success: true,
+        message: "Token refreshed successfully.",
+        data: result,
+      });
+    } catch (err: any) {
+      res.status(401).json({
+        success: false,
+        error: err.message || "Session refresh failed.",
+      });
+    }
+  }
+
   static async google(req: Request, res: Response) {
     try {
       const result = await AuthService.googleAuth(req.body);

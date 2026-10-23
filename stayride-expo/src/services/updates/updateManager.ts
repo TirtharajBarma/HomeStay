@@ -125,12 +125,14 @@ export function extractUpdateMessage(manifest: any): string | null {
     }
   }
 
+  // 1. Direct extra update fields from app.json / EAS
   if (parsed?.extra?.expoClient?.extra?.easUpdateMessage) return String(parsed.extra.expoClient.extra.easUpdateMessage);
   if (parsed?.extra?.expoClient?.extra?.updateMessage) return String(parsed.extra.expoClient.extra.updateMessage);
   if (parsed?.extra?.updateMessage) return String(parsed.extra.updateMessage);
   if (parsed?.extra?.easUpdateMessage) return String(parsed.extra.easUpdateMessage);
   if (parsed?.extra?.expoClient?.extra?.updateDescription) return String(parsed.extra.expoClient.extra.updateDescription);
 
+  // 2. Metadata object / JSON string from EAS Update
   if (parsed?.metadata) {
     if (typeof parsed.metadata === 'object' && parsed.metadata !== null) {
       if (parsed.metadata.message) return String(parsed.metadata.message);
@@ -140,15 +142,21 @@ export function extractUpdateMessage(manifest: any): string | null {
       try {
         const metaObj = JSON.parse(parsed.metadata);
         if (metaObj?.message) return String(metaObj.message);
+        if (metaObj?.msg) return String(metaObj.msg);
       } catch {
-        if (!parsed.metadata.startsWith('{')) return String(parsed.metadata).trim();
+        if (!parsed.metadata.startsWith('{') && parsed.metadata.trim().length > 0) {
+          return String(parsed.metadata).trim();
+        }
       }
     }
   }
 
+  // 3. Extra EAS / expoClient objects
   if (parsed?.extra?.expoClient?.extra?.eas?.message) return String(parsed.extra.expoClient.extra.eas.message);
   if (parsed?.extra?.eas?.message) return String(parsed.extra.eas.message);
+  if (parsed?.extra?.message) return String(parsed.extra.message);
   if (parsed?.message) return String(parsed.message);
+  if (parsed?.raw?.metadata?.message) return String(parsed.raw.metadata.message);
 
   return null;
 }
@@ -164,19 +172,47 @@ export function extractManifestVersion(manifest: any): string | null {
     }
   }
 
+  // 1. Direct explicit updateVersion in extra
   if (parsed?.extra?.expoClient?.extra?.updateVersion) return String(parsed.extra.expoClient.extra.updateVersion);
   if (parsed?.extra?.updateVersion) return String(parsed.extra.updateVersion);
-  if (parsed?.extra?.expoClient?.version) {
-    const v = String(parsed.extra.expoClient.version).trim();
-    return v.startsWith('v') ? v : `v${v}`;
-  }
 
+  // 2. Extract version tag from the EAS update message (e.g. "v1.0.2: Fix split settlement")
   const msg = extractUpdateMessage(parsed);
+  let msgVersion: string | null = null;
   if (msg) {
     const match = msg.match(/(?:^|[\s:(\[-])(?:version|ver|v)?\s*(\d+\.\d+(?:\.\d+)?)/i);
-    if (match && match[1]) return `v${match[1]}`;
+    if (match && match[1]) {
+      msgVersion = `v${match[1]}`;
+    }
   }
-  return null;
+
+  // 3. Fallback to expoClient version from app.json
+  let appVersion: string | null = null;
+  if (parsed?.extra?.expoClient?.version) {
+    const v = String(parsed.extra.expoClient.version).trim();
+    appVersion = v.startsWith('v') ? v : `v${v}`;
+  } else if (parsed?.version) {
+    const v = String(parsed.version).trim();
+    appVersion = v.startsWith('v') ? v : `v${v}`;
+  }
+
+  // If message has an explicit version tag (e.g. "v1.0.2"), prefer it over the static base version
+  if (msgVersion) {
+    if (!appVersion || semverCompare(msgVersion, appVersion) >= 0) {
+      return msgVersion;
+    }
+  }
+
+  return appVersion || msgVersion;
+}
+
+/**
+ * Calculates next patch semver bump (e.g. v1.0.1 -> v1.0.2).
+ */
+export function getNextIncrementedVersion(currentVersion: string): string {
+  const sem = parseSemVer(currentVersion);
+  if (!sem) return currentVersion;
+  return `v${sem.major}.${sem.minor}.${sem.patch + 1}`;
 }
 
 // ── Release Payload Parser ──────────────────────────────────
@@ -263,20 +299,33 @@ export async function getReleaseHistory(): Promise<ReleaseHistoryItem[]> {
     const raw = await AsyncStorage.getItem(RELEASE_HISTORY_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        // Ensure CURRENT_RELEASE_VERSION is in history
+        const hasCurrent = parsed.some((h: ReleaseHistoryItem) => h.version === CURRENT_RELEASE_VERSION);
+        if (!hasCurrent && INITIAL_RELEASE_HISTORY[0]) {
+          return [INITIAL_RELEASE_HISTORY[0], ...parsed.filter((h: ReleaseHistoryItem) => h.version !== CURRENT_RELEASE_VERSION)].slice(0, 15);
+        }
+        return parsed;
+      }
     }
   } catch {}
   return INITIAL_RELEASE_HISTORY;
 }
 
-export async function recordAppliedRelease(release: ParsedRelease): Promise<void> {
+export async function recordAppliedRelease(release: ParsedRelease, updateDate?: Date): Promise<void> {
   try {
     const history = await getReleaseHistory();
-    const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const dateStr = (updateDate || new Date()).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
     const newItem: ReleaseHistoryItem = {
       version: release.version,
       date: dateStr,
+      title: release.summary,
       notes: release.notes,
+      type: 'ota',
       isNativeBuild: release.isNativeRequired,
     };
     const filtered = history.filter((h) => h.version !== release.version);
@@ -284,16 +333,27 @@ export async function recordAppliedRelease(release: ParsedRelease): Promise<void
   } catch {}
 }
 
-export async function getActiveAppVersion(): Promise<string> {
+export async function getActiveAppVersion(manifest?: any): Promise<string> {
   try {
-    // Prefer extra.updateVersion: expo.version is the runtime (binary) version and
-    // is no longer bumped per OTA.
+    const targetManifest = manifest || Updates.manifest;
+    const manifestVer = extractManifestVersion(targetManifest);
+    if (manifestVer) {
+      const vStr = `v${String(manifestVer).replace(/^v/i, '')}`;
+      await AsyncStorage.setItem(ACTIVE_VERSION_KEY, vStr);
+      return vStr;
+    }
+    const cached = await AsyncStorage.getItem(ACTIVE_VERSION_KEY);
+    if (cached) return cached;
+  } catch {}
+  return CURRENT_RELEASE_VERSION;
+}
+
+export function getActiveAppVersionSync(): string {
+  try {
     const manifestVer = extractManifestVersion(Updates.manifest);
     if (manifestVer) {
       return `v${String(manifestVer).replace(/^v/i, '')}`;
     }
-    const cached = await AsyncStorage.getItem(ACTIVE_VERSION_KEY);
-    if (cached) return cached;
   } catch {}
   return CURRENT_RELEASE_VERSION;
 }
@@ -319,12 +379,13 @@ export async function checkAndAutoApplyUpdates(): Promise<void> {
 
       const msg = extractUpdateMessage(checkResult.manifest);
       const manifestVer = extractManifestVersion(checkResult.manifest);
-      const targetVer = manifestVer || parseReleasePayload(msg).version;
+      const targetVer = manifestVer || (msg ? parseReleasePayload(msg).version : null);
       const activeVer = await getActiveAppVersion();
 
       // Guard: Never downgrade active build
       if (!checkResult.isRollBackToEmbedded && targetVer && semverCompare(targetVer, activeVer) <= 0) {
         await AsyncStorage.removeItem(DISCOVERED_KEY);
+        await AsyncStorage.removeItem(PENDING_MESSAGE_KEY);
         return;
       }
 
@@ -333,23 +394,22 @@ export async function checkAndAutoApplyUpdates(): Promise<void> {
 
       if (msg) await AsyncStorage.setItem(PENDING_MESSAGE_KEY, msg);
 
+      // Pre-fetch the update in background so it's ready to apply
+      const fetchResult = await Updates.fetchUpdateAsync();
+
       const autoApplyVal = await AsyncStorage.getItem(AUTO_APPLY_48H_KEY);
       const isAutoApplyEnabled = autoApplyVal !== 'false';
 
-      // 48-hour silent auto-apply: only download once the grace period has passed
-      // (a fetched update is applied by expo-updates on the next launch). Never
-      // reloadAsync() here — that would restart the app mid-session and lose input.
-      if (isAutoApplyEnabled && now - firstSeen >= TWO_DAYS_MS) {
-        const fetchResult = await Updates.fetchUpdateAsync();
-        if (fetchResult.isNew) {
-          if (msg) {
-            await AsyncStorage.setItem(ACTIVE_MESSAGE_KEY, msg);
-            await AsyncStorage.setItem(ACTIVE_VERSION_KEY, parsed.version);
-            await recordAppliedRelease(parsed);
-          }
-          await AsyncStorage.removeItem(DISCOVERED_KEY);
-          await AsyncStorage.removeItem(PENDING_MESSAGE_KEY);
+      // 48-hour silent auto-apply: if 48h elapsed, record and apply immediately
+      if (fetchResult.isNew && isAutoApplyEnabled && now - firstSeen >= TWO_DAYS_MS) {
+        if (msg) {
+          await AsyncStorage.setItem(ACTIVE_MESSAGE_KEY, msg);
+          await AsyncStorage.setItem(ACTIVE_VERSION_KEY, parsed.version);
+          await recordAppliedRelease(parsed);
         }
+        await AsyncStorage.removeItem(DISCOVERED_KEY);
+        await AsyncStorage.removeItem(PENDING_MESSAGE_KEY);
+        await Updates.reloadAsync();
       }
     } else {
       await AsyncStorage.removeItem(DISCOVERED_KEY);
@@ -366,7 +426,7 @@ export function useAppUpdateManager(): AppUpdateInfo {
   const [discoveredAt, setDiscoveredAt] = useState<number | null>(null);
   const [lastCheckedAt, setLastCheckedAt] = useState<number | null>(null);
   const [storedMessage, setStoredMessage] = useState<string | null>(null);
-  const [activeVersion, setActiveVersion] = useState<string>(CURRENT_RELEASE_VERSION);
+  const [activeVersion, setActiveVersion] = useState<string>(() => getActiveAppVersionSync());
   const [history, setHistory] = useState<ReleaseHistoryItem[]>(INITIAL_RELEASE_HISTORY);
   const [manualStatus, setManualStatus] = useState<UpdateStatus>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -386,6 +446,7 @@ export function useAppUpdateManager(): AppUpdateInfo {
   } = Updates.useUpdates();
 
   useEffect(() => {
+    let isMounted = true;
     async function loadData() {
       const isEmbedded = Boolean(currentlyRunning.isEmbeddedLaunch || !currentlyRunning.updateId);
       // Evict stale OTA keys if running fresh embedded binary
@@ -393,28 +454,64 @@ export function useAppUpdateManager(): AppUpdateInfo {
         await AsyncStorage.multiRemove([ACTIVE_VERSION_KEY, ACTIVE_MESSAGE_KEY, PENDING_MESSAGE_KEY, DISCOVERED_KEY]).catch(() => {});
       }
 
-      const ver = isEmbedded ? CURRENT_RELEASE_VERSION : await getActiveAppVersion();
+      const ver = isEmbedded ? CURRENT_RELEASE_VERSION : await getActiveAppVersion(currentlyRunning.manifest || Updates.manifest);
       const hist = await getReleaseHistory();
-      setActiveVersion(ver);
-      setHistory(hist);
+
+      if (isMounted) {
+        setActiveVersion(ver);
+        setHistory(hist);
+      }
+
+      // If running an OTA update and this version isn't in history yet, record it
+      if (!isEmbedded && ver !== CURRENT_RELEASE_VERSION) {
+        const hasVer = hist.some((h) => h.version === ver);
+        if (!hasVer) {
+          const liveMsg = extractUpdateMessage(currentlyRunning.manifest) || extractUpdateMessage(Updates.manifest);
+          const parsed = parseReleasePayload(liveMsg, ver);
+          await recordAppliedRelease(parsed);
+          const updatedHist = await getReleaseHistory();
+          if (isMounted) setHistory(updatedHist);
+        }
+      }
 
       const discVal = await AsyncStorage.getItem(DISCOVERED_KEY);
-      if (discVal) setDiscoveredAt(parseInt(discVal, 10));
+      if (isMounted && discVal) setDiscoveredAt(parseInt(discVal, 10));
 
       const lastCheckedVal = await AsyncStorage.getItem(LAST_CHECKED_KEY);
-      if (lastCheckedVal) setLastCheckedAt(parseInt(lastCheckedVal, 10));
+      if (isMounted && lastCheckedVal) setLastCheckedAt(parseInt(lastCheckedVal, 10));
 
       const pendMsg = await AsyncStorage.getItem(PENDING_MESSAGE_KEY);
       const activeMsg = await AsyncStorage.getItem(ACTIVE_MESSAGE_KEY);
-      setStoredMessage(isEmbedded ? RELEASE_DESCRIPTION : (pendMsg || activeMsg));
+      const liveMsg = extractUpdateMessage(currentlyRunning.manifest) || extractUpdateMessage(Updates.manifest);
+      if (isMounted) {
+        setStoredMessage(isEmbedded ? RELEASE_DESCRIPTION : (pendMsg || liveMsg || activeMsg));
+      }
 
       const autoOtaVal = await AsyncStorage.getItem(AUTO_OTA_KEY);
       const autoApplyVal = await AsyncStorage.getItem(AUTO_APPLY_48H_KEY);
-      setAutoOtaEnabledState(autoOtaVal !== 'false');
-      setAutoApply48hEnabledState(autoApplyVal !== 'false');
+      if (isMounted) {
+        setAutoOtaEnabledState(autoOtaVal !== 'false');
+        setAutoApply48hEnabledState(autoApplyVal !== 'false');
+      }
     }
     loadData();
+
+    return () => {
+      isMounted = false;
+    };
   }, [currentlyRunning]);
+
+  // Reactive listener to incoming updates
+  useEffect(() => {
+    const updateManifest = downloadedUpdate?.manifest || availableUpdate?.manifest;
+    if (updateManifest) {
+      const msg = extractUpdateMessage(updateManifest);
+      if (msg) {
+        setStoredMessage(msg);
+        AsyncStorage.setItem(PENDING_MESSAGE_KEY, msg).catch(() => {});
+      }
+    }
+  }, [availableUpdate, downloadedUpdate]);
 
   const isUpdatePending = hookPending || manualStatus === 'downloaded';
   const isUpdateAvailable = hookAvailable || manualStatus === 'available';
@@ -423,16 +520,39 @@ export function useAppUpdateManager(): AppUpdateInfo {
     isDownloading && typeof hookDownloadProgress === 'number' ? hookDownloadProgress : null;
 
   const activeRelease = useMemo(() => {
-    return parseReleasePayload(storedMessage, activeVersion);
-  }, [storedMessage, activeVersion]);
+    const isEmbedded = Boolean(currentlyRunning.isEmbeddedLaunch || !currentlyRunning.updateId);
+    if (isEmbedded) {
+      return parseReleasePayload(RELEASE_DESCRIPTION, CURRENT_RELEASE_VERSION);
+    }
+    const liveMsg =
+      extractUpdateMessage(currentlyRunning?.manifest) ||
+      extractUpdateMessage(Updates.manifest) ||
+      storedMessage;
+    return parseReleasePayload(liveMsg, activeVersion);
+  }, [currentlyRunning, storedMessage, activeVersion]);
 
   const availableRelease = useMemo(() => {
     if (!isUpdateAvailable && !isUpdatePending && manualStatus !== 'native_required') return null;
     const targetManifest = checkedManifest || downloadedUpdate?.manifest || availableUpdate?.manifest;
     const msg = extractUpdateMessage(targetManifest) || storedMessage;
-    const ver = extractManifestVersion(targetManifest);
-    return parseReleasePayload(msg, ver || undefined);
-  }, [isUpdateAvailable, isUpdatePending, manualStatus, checkedManifest, downloadedUpdate, availableUpdate, storedMessage]);
+    const manifestVer = extractManifestVersion(targetManifest);
+
+    let targetVersion = manifestVer;
+    if (!targetVersion && msg) {
+      const match = msg.match(/(?:^|[\s:(\[-])(?:version|ver|v)?\s*(\d+\.\d+(?:\.\d+)?)/i);
+      if (match && match[1]) targetVersion = `v${match[1]}`;
+    }
+    if (!targetVersion) {
+      const topHistory = history.find((h) => h.version !== activeVersion);
+      targetVersion = topHistory?.version || getNextIncrementedVersion(activeVersion);
+    }
+
+    if (targetVersion && semverCompare(targetVersion, activeVersion) <= 0) {
+      return null;
+    }
+
+    return parseReleasePayload(msg, targetVersion || undefined);
+  }, [isUpdateAvailable, isUpdatePending, manualStatus, checkedManifest, downloadedUpdate, availableUpdate, storedMessage, activeVersion, history]);
 
   const [currentTime] = useState(() => Date.now());
   const daysRemainingBeforeAutoUpdate = discoveredAt
@@ -452,10 +572,37 @@ export function useAppUpdateManager(): AppUpdateInfo {
       await AsyncStorage.setItem(LAST_CHECKED_KEY, now.toString());
 
       const result = await Updates.checkForUpdateAsync();
-      if (result.isAvailable) {
+      if (result.isAvailable || result.isRollBackToEmbedded) {
         setCheckedManifest(result.manifest);
         const msg = extractUpdateMessage(result.manifest);
-        const parsed = parseReleasePayload(msg);
+        const manifestVer = extractManifestVersion(result.manifest);
+
+        let targetVersion = manifestVer;
+        if (!targetVersion && msg) {
+          const match = msg.match(/(?:^|[\s:(\[-])(?:version|ver|v)?\s*(\d+\.\d+(?:\.\d+)?)/i);
+          if (match && match[1]) targetVersion = `v${match[1]}`;
+        }
+        if (!targetVersion) {
+          const topHistory = history.find((h) => h.version !== activeVersion);
+          targetVersion = topHistory?.version || getNextIncrementedVersion(activeVersion);
+        }
+
+        if (!result.isRollBackToEmbedded && targetVersion && semverCompare(targetVersion, activeVersion) <= 0) {
+          setCheckedManifest(null);
+          setManualStatus('up_to_date');
+          await AsyncStorage.removeItem(DISCOVERED_KEY);
+          await AsyncStorage.removeItem(PENDING_MESSAGE_KEY);
+          setDiscoveredAt(null);
+          return;
+        }
+
+        const parsed = parseReleasePayload(msg, targetVersion || undefined);
+
+        if (msg) {
+          setStoredMessage(msg);
+          await AsyncStorage.setItem(PENDING_MESSAGE_KEY, msg);
+        }
+
         if (parsed.isNativeRequired) {
           setManualStatus('native_required');
         } else {
@@ -464,13 +611,17 @@ export function useAppUpdateManager(): AppUpdateInfo {
           await AsyncStorage.setItem(DISCOVERED_KEY, now.toString());
         }
       } else {
+        setCheckedManifest(null);
         setManualStatus('up_to_date');
+        await AsyncStorage.removeItem(DISCOVERED_KEY);
+        await AsyncStorage.removeItem(PENDING_MESSAGE_KEY);
+        setDiscoveredAt(null);
       }
     } catch {
       setManualStatus('error');
       setErrorMessage('Unable to check for updates. Check internet connection.');
     }
-  }, []);
+  }, [activeVersion, history]);
 
   const handleDownloadUpdate = useCallback(async () => {
     if (!Updates.isEnabled) return;
@@ -479,7 +630,10 @@ export function useAppUpdateManager(): AppUpdateInfo {
     try {
       const result = await Updates.fetchUpdateAsync();
       const msg = extractUpdateMessage(result.manifest);
-      if (msg) await AsyncStorage.setItem(PENDING_MESSAGE_KEY, msg);
+      if (msg) {
+        setStoredMessage(msg);
+        await AsyncStorage.setItem(PENDING_MESSAGE_KEY, msg);
+      }
       setManualStatus('downloaded');
     } catch {
       setManualStatus('error');
@@ -491,13 +645,13 @@ export function useAppUpdateManager(): AppUpdateInfo {
 
   const handleRestartToApply = useCallback(async () => {
     try {
-      // Record the downloaded (pending) update, not the currently active one.
-      if (availableRelease) {
-        if (availableRelease.rawMessage) {
-          await AsyncStorage.setItem(ACTIVE_MESSAGE_KEY, availableRelease.rawMessage);
+      const targetRelease = availableRelease || (storedMessage ? parseReleasePayload(storedMessage, activeVersion) : null);
+      if (targetRelease) {
+        if (targetRelease.rawMessage) {
+          await AsyncStorage.setItem(ACTIVE_MESSAGE_KEY, targetRelease.rawMessage);
         }
-        await AsyncStorage.setItem(ACTIVE_VERSION_KEY, availableRelease.version);
-        await recordAppliedRelease(availableRelease);
+        await AsyncStorage.setItem(ACTIVE_VERSION_KEY, targetRelease.version);
+        await recordAppliedRelease(targetRelease);
       }
       await AsyncStorage.removeItem(PENDING_MESSAGE_KEY);
       await AsyncStorage.removeItem(DISCOVERED_KEY);
@@ -505,7 +659,7 @@ export function useAppUpdateManager(): AppUpdateInfo {
     } catch {
       Updates.reloadAsync().catch(() => {});
     }
-  }, [availableRelease]);
+  }, [availableRelease, storedMessage, activeVersion]);
 
   return {
     isEnabled: Updates.isEnabled,

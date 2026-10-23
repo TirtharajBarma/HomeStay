@@ -168,12 +168,13 @@ function CabRequestFormContent() {
   const token = searchParams.get("t") || "";
   const refParam = searchParams.get("ref") || "";
   const homestayParam = searchParams.get("h") || searchParams.get("homestay") || "";
+  const isNoLink = !token && !refParam && !homestayParam;
 
   // Multi-step form state: 1 = Route, 2 = Schedule & Vehicle, 3 = Guest Details & Review
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
 
   const [linkState, setLinkState] = useState<"loading" | "valid" | "invalid">(() =>
-    !token && !refParam && !homestayParam ? "invalid" : "loading"
+    isNoLink ? "invalid" : "loading"
   );
   const [link, setLink] = useState<GuestLink | null>(null);
 
@@ -322,7 +323,7 @@ function CabRequestFormContent() {
                   sightseeingPresets: [],
                   routePresets: [],
                   upiId: "stayride@okhdfcbank",
-                  supportPhone: "919830041000",
+                  supportPhone: process.env.NEXT_PUBLIC_SUPPORT_PHONE?.replace(/[^0-9]/g, "") || "919883757307",
                 },
               });
               setLinkState("valid");
@@ -341,7 +342,7 @@ function CabRequestFormContent() {
                       sightseeingPresets: live.sightseeingPresets || prev.config?.sightseeingPresets || [],
                       routePresets: live.routePresets || prev.config?.routePresets || [],
                       upiId: live.upiId || prev.config?.upiId || "stayride@okhdfcbank",
-                      supportPhone: live.supportPhone || prev.config?.supportPhone || "919830041000",
+                      supportPhone: live.supportPhone || prev.config?.supportPhone || process.env.NEXT_PUBLIC_SUPPORT_PHONE?.replace(/[^0-9]/g, "") || "919883757307",
                     },
                   } : prev);
                 })
@@ -520,6 +521,61 @@ function CabRequestFormContent() {
   }
 
   if (linkState === "invalid") {
+    if (isNoLink) {
+      return (
+        <div className="min-h-screen bg-[#F8F9FA] flex items-center justify-center p-6 text-[#1F2328]">
+          <div className="max-w-md w-full rounded-2xl border border-[#D0D7DE] bg-white p-8 text-center space-y-5 shadow-xs">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-800 border border-emerald-100 shadow-xs">
+              <Icon name="local_taxi" className="text-3xl text-emerald-700" />
+            </div>
+
+            <div>
+              <span className="inline-block rounded-full bg-emerald-100 px-3 py-1 text-[11px] font-bold text-emerald-900 uppercase tracking-wider">
+                Exclusive Guest Concierge
+              </span>
+              <h1 className="mt-2 text-xl font-extrabold text-[#1F2328]">
+                StayRide Hill Cabs
+              </h1>
+              <p className="mt-2 text-xs sm:text-sm text-[#57606A] leading-relaxed">
+                StayRide Hill Cabs are arranged exclusively for guests of our partner homestays. Check your WhatsApp for your private booking link, or ask your host to send you a booking invite.
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-4 text-left text-xs space-y-2 text-[#24292F]">
+              <div className="flex items-center gap-2">
+                <Icon name="verified" className="text-emerald-700 text-sm" />
+                <span>Door-to-door mountain airport & station transfers</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Icon name="payments" className="text-emerald-700 text-sm" />
+                <span>100% direct cash fare to mountain drivers</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Icon name="chat" className="text-emerald-700 text-sm" />
+                <span>Direct WhatsApp coordination & tracking</span>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 pt-2">
+              <Link
+                href="/#accommodations"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-800 px-5 py-3 text-xs font-bold text-white shadow-xs hover:bg-emerald-900 transition-colors"
+              >
+                <Icon name="cottage" className="text-sm" />
+                <span>View Partner Homestays</span>
+              </Link>
+              <Link
+                href="/"
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#D0D7DE] bg-white px-5 py-2.5 text-xs font-semibold text-[#1F2328] hover:bg-[#F6F8FA] transition-colors"
+              >
+                Return to Home
+              </Link>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="min-h-screen bg-[#F8F9FA] flex items-center justify-center p-6">
         <div className="max-w-md w-full rounded-2xl border border-[#D0D7DE] bg-white p-8 text-center space-y-4 shadow-sm">

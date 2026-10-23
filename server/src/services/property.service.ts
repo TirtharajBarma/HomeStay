@@ -1,6 +1,7 @@
 import { Property, type IProperty, type IEstateLocation } from "../models/property.model.js";
 import { Room } from "../models/room.model.js";
 import { initialProperty } from "../data/seeds/profile.seed.js";
+import { getStayRideTenantModel } from "../stayride/store.js";
 
 export class PropertyService {
   static async getProfile(ownerId?: string): Promise<IProperty> {
@@ -47,8 +48,53 @@ export class PropertyService {
     return prop;
   }
 
-  static async getAllProperties(): Promise<IProperty[]> {
-    return await Property.find().sort({ createdAt: -1 });
+  static async getAllProperties(): Promise<any[]> {
+    const properties: any[] = await Property.find({ status: { $ne: "suspended" as any } }).sort({ createdAt: -1 }).lean();
+    return await Promise.all(
+      properties.map(async (prop: any) => {
+        let rooms = await Room.find({ propertyId: (prop as any)._id }).lean();
+        let photos = (prop as any).photos || [];
+        if (prop.email) {
+          try {
+            const tenantDoc: any = await getStayRideTenantModel(false)
+              .findOne({ tenantId: prop.email.toLowerCase().trim() })
+              .lean();
+            if (tenantDoc?.data) {
+              const tenantRooms = tenantDoc.data.rooms || [];
+              const tenantHomestay = tenantDoc.data.homestay || {};
+              if (Array.isArray(tenantHomestay.photos) && tenantHomestay.photos.length) {
+                photos = [...tenantHomestay.photos, ...photos];
+              }
+              if ((!rooms || rooms.length === 0) && tenantRooms.length > 0) {
+                rooms = tenantRooms.map((tr: any) => ({
+                  _id: `tr_${tr.id}`,
+                  code: `${(prop as any).slug || "stay"}-${tr.number || tr.id}`,
+                  slug: `${(prop as any).slug || "stay"}-${tr.number || tr.id}`,
+                  name: `${tr.type || "Room"} ${tr.number}`,
+                  number: tr.number,
+                  floor: tr.floor,
+                  note: tr.note,
+                  propertyId: (prop as any)._id,
+                  homestayName: prop.name,
+                  location: prop.address || prop.town || "Darjeeling",
+                  category: tr.type || "Standard",
+                  kind: "cottage",
+                  kindLabel: tr.type || "Standard Room",
+                  status: tr.status === "MAINTENANCE" ? "Maintenance" : "Active",
+                  petFriendly: true,
+                  maxGuests: tr.type === "Family" ? 4 : tr.type === "Suite" ? 3 : 2,
+                  occupancy: tr.type === "Family" ? "4 Guests" : "2 Guests",
+                  nightly: Number(tr.price) || 2000,
+                  price: Number(tr.price) || 2000,
+                  amenities: ["Mountain View", "Verified Host", "Door-to-door Cab Transfer", "Hot Water Geyser"],
+                }));
+              }
+            }
+          } catch {}
+        }
+        return { ...prop, photos, rooms };
+      })
+    );
   }
 
   static async getPropertyBySlug(slug: string): Promise<any | null> {
@@ -60,9 +106,66 @@ export class PropertyService {
     if (!prop && clean.match(/^[0-9a-fA-F]{24}$/)) {
       prop = await Property.findById(clean).lean();
     }
+    if (!prop) {
+      try {
+        const tenantByLink: any = await getStayRideTenantModel(false)
+          .findOne({
+            $or: [
+              { "data.homestay.link": new RegExp(`/${clean}$`, "i") },
+              { tenantId: clean },
+            ],
+          })
+          .lean();
+        if (tenantByLink) {
+          prop = await Property.findOne({ email: tenantByLink.tenantId }).lean();
+        }
+      } catch {}
+    }
     if (!prop) return null;
-    const rooms = await Room.find({ propertyId: (prop as any)._id }).lean();
-    return { ...prop, rooms };
+
+    let rooms = await Room.find({ propertyId: (prop as any)._id }).lean();
+    let photos = (prop as any).photos || [];
+
+    if (prop.email) {
+      try {
+        const tenantDoc: any = await getStayRideTenantModel(false)
+          .findOne({ tenantId: prop.email.toLowerCase().trim() })
+          .lean();
+        if (tenantDoc?.data) {
+          const tenantRooms = tenantDoc.data.rooms || [];
+          const tenantHomestay = tenantDoc.data.homestay || {};
+          if (Array.isArray(tenantHomestay.photos) && tenantHomestay.photos.length) {
+            photos = [...tenantHomestay.photos, ...photos];
+          }
+          if ((!rooms || rooms.length === 0) && tenantRooms.length > 0) {
+            rooms = tenantRooms.map((tr: any) => ({
+              _id: `tr_${tr.id}`,
+              code: `${(prop as any).slug || "stay"}-${tr.number || tr.id}`,
+              slug: `${(prop as any).slug || "stay"}-${tr.number || tr.id}`,
+              name: `${tr.type || "Room"} ${tr.number}`,
+              number: tr.number,
+              floor: tr.floor,
+              note: tr.note,
+              propertyId: (prop as any)._id,
+              homestayName: prop.name,
+              location: prop.address || prop.town || "Darjeeling",
+              category: tr.type || "Standard",
+              kind: "cottage",
+              kindLabel: tr.type || "Standard Room",
+              status: tr.status === "MAINTENANCE" ? "Maintenance" : "Active",
+              petFriendly: true,
+              maxGuests: tr.type === "Family" ? 4 : tr.type === "Suite" ? 3 : 2,
+              occupancy: tr.type === "Family" ? "4 Guests" : "2 Guests",
+              nightly: Number(tr.price) || 2000,
+              price: Number(tr.price) || 2000,
+              amenities: ["Mountain View", "Verified Host", "Door-to-door Cab Transfer", "Hot Water Geyser"],
+            }));
+          }
+        }
+      } catch {}
+    }
+
+    return { ...prop, photos, rooms };
   }
 
   static async addLocation(location: Partial<IEstateLocation>, ownerId?: string): Promise<IProperty> {

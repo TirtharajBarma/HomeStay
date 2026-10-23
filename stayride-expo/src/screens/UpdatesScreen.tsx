@@ -207,7 +207,7 @@ export const UpdatesScreen: React.FC = () => {
         </View>
 
         {/* ── 2. What's New In Available Update ── */}
-        {isUpdateAvailable && availableRelease && (
+        {(isUpdateAvailable || isUpdatePending) && availableRelease && (
           <View style={styles.card}>
             <Text style={styles.cardHeader}>{"What's New in "}{availableRelease.version}</Text>
             {availableRelease.notes.map((note, idx) => (

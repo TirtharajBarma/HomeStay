@@ -23,8 +23,9 @@ export class AuthService {
       propertyId: user.propertyId ? user.propertyId.toString() : undefined,
     };
 
-    const expiresIn = config.jwtExpiresIn || "15m";
-    const expiresInSeconds = 15 * 60;
+    const isAdmin = user.role === "admin";
+    const expiresIn = isAdmin ? "30d" : (config.jwtExpiresIn || "30d");
+    const expiresInSeconds = 30 * 24 * 60 * 60; // 30 days
     const token = jwt.sign(payload, config.jwtSecret, { expiresIn: expiresIn as any });
     return { token, expiresIn, expiresInSeconds };
   }
@@ -134,6 +135,65 @@ export class AuthService {
         role: user.role,
         phone: user.phone,
         propertyId: property?._id,
+        propertySlug: property?.slug,
+        propertyName: property?.name,
+      },
+      token,
+      expiresIn,
+      expiresInSeconds,
+    };
+  }
+
+  static async refreshToken(oldToken: string) {
+    let decoded: any;
+    try {
+      // Decode and verify signature, allowing expired tokens within grace renewal window
+      decoded = jwt.verify(oldToken, config.jwtSecret, { ignoreExpiration: true });
+    } catch {
+      throw new Error("Invalid token signature.");
+    }
+
+    if (!decoded || !decoded.id) {
+      throw new Error("Malformed token payload.");
+    }
+
+    if (decoded.aud === "stayride") {
+      throw new Error("Invalid token audience.");
+    }
+
+    // Allow renewal up to 60 days after issue
+    const nowSec = Math.floor(Date.now() / 1000);
+    if (decoded.exp && nowSec - decoded.exp > 60 * 24 * 3600) {
+      throw new Error("Session has expired beyond renewal window. Please log in again.");
+    }
+
+    const user: any = await tenantDbModel(false, "User", User.schema).findById(decoded.id);
+    if (!user) {
+      throw new Error("User account no longer exists.");
+    }
+
+    if (user.accountStatus === "BLOCKED") {
+      throw new Error("User account is blocked.");
+    }
+
+    if ((decoded.tv ?? 0) !== (user.tokenVersion ?? 0)) {
+      throw new Error("Session has been revoked. Please sign in again.");
+    }
+
+    let property: any = null;
+    if (user.role === "owner") {
+      property = await this.ensureOwnerProperty(user);
+    }
+
+    const { token, expiresIn, expiresInSeconds } = this.generateToken(user);
+    return {
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        phone: user.phone,
+        propertyId: property?._id || user.propertyId,
         propertySlug: property?.slug,
         propertyName: property?.name,
       },

@@ -74,7 +74,7 @@ export default async function DedicatedHomestayPage({
                 <span>Book Cab Transfer</span>
               </a>
               <a
-                href="https://wa.me/919830041000?text=Hello!%20I%20have%20a%20confirmed%20booking%20at%20your%20homestay."
+                href={`https://wa.me/${(stay.phone || "919830041000").replace(/[^0-9]/g, "")}?text=${encodeURIComponent(`Hello! I have a confirmed booking at ${stay.name}.`)}`}
                 target="_blank"
                 rel="noreferrer"
                 className="flex items-center gap-2 rounded-xl border border-outline-variant/60 bg-surface px-4 py-2.5 text-sm font-semibold text-on-surface hover:bg-surface-container"
@@ -117,6 +117,95 @@ export default async function DedicatedHomestayPage({
 
       {/* 3. High-Quality Photo Gallery */}
       <StayGallery stay={stay} />
+
+      {/* 3b. Accommodations & Rooms (Live from StayRide Host App) */}
+      {stay.rooms && stay.rooms.length > 0 ? (
+        <section className="my-10 scroll-mt-20">
+          <div className="mb-6 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <span className="text-xs font-bold uppercase tracking-wider text-secondary">
+                Rooms &amp; Tariffs
+              </span>
+              <h2 className="font-serif text-2xl font-bold text-primary sm:text-3xl">
+                Available Rooms at {stay.name}
+              </h2>
+            </div>
+            <p className="text-xs text-on-surface-variant">
+              Live inventory maintained by your host via StayRide
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {stay.rooms.map((room) => {
+              const cleanPhone = (stay.phone || "919830041000").replace(/[^0-9]/g, "");
+              const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(
+                `Hello! I would like to inquire about booking ${room.type || "Room"} ${room.number} at ${stay.name}.`
+              )}`;
+              const isAvailable = room.status !== "MAINTENANCE" && room.status !== "Maintenance";
+
+              return (
+                <div
+                  key={room.id || room.number}
+                  className="flex flex-col justify-between overflow-hidden rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-5 shadow-sm transition hover:shadow-md"
+                >
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <span className="rounded-lg bg-surface-container px-2.5 py-1 text-xs font-semibold text-on-surface">
+                        {room.floor || "Main Cottage"}
+                      </span>
+                      <span
+                        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                          isAvailable
+                            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                            : "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                        }`}
+                      >
+                        <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                        {isAvailable ? "Available" : "Maintenance"}
+                      </span>
+                    </div>
+
+                    <h3 className="mt-3 font-serif text-xl font-bold text-primary">
+                      {room.type || "Standard"} • Room {room.number}
+                    </h3>
+                    {room.note ? (
+                      <p className="mt-1 text-xs text-on-surface-variant line-clamp-2">
+                        {room.note}
+                      </p>
+                    ) : null}
+
+                    <div className="mt-4 flex items-baseline gap-1">
+                      <span className="font-serif text-2xl font-bold text-primary">
+                        ₹{room.price ? room.price.toLocaleString("en-IN") : "2,000"}
+                      </span>
+                      <span className="text-xs text-on-surface-variant">/ night</span>
+                    </div>
+                  </div>
+
+                  <div className="mt-6 flex flex-col gap-2 pt-4 border-t border-outline-variant/30">
+                    <a
+                      href={waUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-xs font-semibold text-on-primary shadow transition hover:opacity-95"
+                    >
+                      <Icon name="chat" className="text-base" />
+                      <span>Book on WhatsApp</span>
+                    </a>
+                    <a
+                      href={`/cab-request?homestay=${encodeURIComponent(stay.slug)}`}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl border border-outline-variant/60 bg-surface py-2 text-xs font-semibold text-on-surface hover:bg-surface-container"
+                    >
+                      <Icon name="local_taxi" className="text-base text-secondary" />
+                      <span>Arrange Hill Cab Transfer</span>
+                    </a>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
 
       {/* 4. Cabs: requested through the secure StayRide link the host sends on WhatsApp */}
       <section id="cab-transfers" className="my-12 scroll-mt-20">
@@ -209,7 +298,7 @@ export default async function DedicatedHomestayPage({
 
             <div className="mt-4 space-y-3">
               <a
-                href="https://wa.me/919830041000?text=Hello%20Host,%20I%20have%20questions%20regarding%20my%20stay."
+                href={`https://wa.me/${(stay.phone || "919830041000").replace(/[^0-9]/g, "")}?text=${encodeURIComponent(`Hello Host, I am inquiring regarding my stay at ${stay.name}.`)}`}
                 target="_blank"
                 rel="noreferrer"
                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-xs font-semibold text-on-primary shadow transition hover:opacity-95"
@@ -219,7 +308,7 @@ export default async function DedicatedHomestayPage({
               </a>
 
               <a
-                href="tel:+919830041000"
+                href={`tel:${stay.phone || "+919830041000"}`}
                 className="flex w-full items-center justify-center gap-2 rounded-xl border border-outline-variant/50 bg-surface py-3 text-xs font-semibold text-on-surface hover:bg-surface-container"
               >
                 <Icon name="call" className="text-base text-primary" />

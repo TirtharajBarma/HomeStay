@@ -191,7 +191,7 @@ interface StayRideContextType {
   sendCampaign: (id: number) => Promise<ActionOutcome>;
   createGuestLink: (data: { guestId?: number; guestName: string; guestPhone: string }) => Promise<{ url: string; expiresAt: number }>;
   /** StayRide sends the cab-request link to the guest from the company WhatsApp number. */
-  askGuestForCab: (data: { guestId?: number; guestName: string; guestPhone: string }) => Promise<{ sent: boolean; status: 'SENT' | 'SKIPPED' }>;
+  askGuestForCab: (data: { guestId?: number; guestName: string; guestPhone: string }) => Promise<{ sent: boolean; status: 'SENT' | 'SKIPPED'; nativeLink?: string; url?: string }>;
 
   updateHomestay: (data: Partial<Homestay>) => Promise<ActionOutcome>;
   /** Pin the homestay on the map (nearby drivers are matched from here). */
@@ -1615,7 +1615,7 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const askGuestForCab = async (data: { guestId?: number; guestName: string; guestPhone: string }) => {
     const res = await api.post('/guest-links/send', data);
     if (!res?.status) throw new Error('Server did not confirm the message.');
-    return res as { sent: boolean; status: 'SENT' | 'SKIPPED' };
+    return res as { sent: boolean; status: 'SENT' | 'SKIPPED'; nativeLink?: string; url?: string };
   };
 
   // ------------------------- Profile & Auth Actions -------------------------

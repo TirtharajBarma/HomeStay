@@ -1,6 +1,6 @@
 {
   "name": "stayride-expo",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "main": "index.ts",
   "dependencies": {
     "@clerk/expo": "^4.11.0",
@@ -53,6 +53,7 @@
     "web": "EXPO_ROUTER_DISABLE_RN_NAVIGATION_CHECK=1 expo start --web",
     "update": "node scripts/publish-update.js",
     "set-version": "node scripts/set-version.js",
+    "typecheck": "tsc --noEmit",
     "lint": "expo lint"
   },
   "private": true

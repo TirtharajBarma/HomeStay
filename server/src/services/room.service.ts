@@ -1,5 +1,7 @@
 import { Room, type IRoom } from "../models/room.model.js";
 import { Booking } from "../models/booking.model.js";
+import { Property } from "../models/property.model.js";
+import { getStayRideTenantModel } from "../stayride/store.js";
 
 export interface RoomFilters {
   category?: string;
@@ -49,17 +51,99 @@ export class RoomService {
       query.maxGuests = { $gte: Number(filters.guests) };
     }
 
-    return await Room.find(query).sort({ code: 1 });
+    const rooms: any[] = await Room.find(query).sort({ code: 1 }).lean();
+
+    // If query is broad (not filtered by a specific legacy property/owner), also include real rooms created by mobile app hosts
+    if (!filters.propertyId && !filters.ownerId) {
+      try {
+        const liveProps: any[] = await Property.find({ status: { $ne: "suspended" as any } }).lean();
+        const TenantModel = getStayRideTenantModel(false);
+        for (const lp of liveProps) {
+          if (!lp.email) continue;
+          const tenantDoc: any = await TenantModel.findOne({ tenantId: lp.email.toLowerCase().trim() }).lean();
+          const trs = tenantDoc?.data?.rooms || [];
+          const photos = tenantDoc?.data?.homestay?.photos || [];
+          for (const tr of trs) {
+            const code = `${lp.slug || "stay"}-${tr.number || tr.id}`;
+            if (!rooms.some((r) => r.code === code || r.slug === code)) {
+              rooms.push({
+                _id: `tr_${tr.id}`,
+                code,
+                slug: code,
+                name: `${tr.type || "Room"} ${tr.number}`,
+                homestayName: lp.name,
+                location: lp.address || lp.town || "Darjeeling",
+                category: tr.type || "Standard",
+                kind: "cottage",
+                kindLabel: tr.type || "Standard Room",
+                status: tr.status === "MAINTENANCE" ? "Maintenance" : "Active",
+                petFriendly: true,
+                maxGuests: tr.type === "Family" ? 4 : tr.type === "Suite" ? 3 : 2,
+                occupancy: tr.type === "Family" ? "4 Guests" : "2 Guests",
+                nightly: Number(tr.price) || 2000,
+                price: Number(tr.price) || 2000,
+                propertyId: (lp as any)._id,
+                image: photos[0] || "https://images.unsplash.com/photo-1544644181-1484b3fdfc62?auto=format&fit=crop&w=1200&q=80",
+                amenities: ["Mountain View", "Verified Host", "Door-to-door Cab Transfer"],
+              });
+            }
+          }
+        }
+      } catch {}
+    }
+
+    return rooms as IRoom[];
   }
 
-  static async getRoomByCodeOrSlug(codeOrSlug: string, propertyId?: string): Promise<IRoom | null> {
+  static async getRoomByCodeOrSlug(codeOrSlug: string, propertyId?: string): Promise<any | null> {
     const query: any = {
       $or: [{ code: codeOrSlug }, { slug: codeOrSlug }],
     };
     if (propertyId) {
       query.propertyId = propertyId;
     }
-    return await Room.findOne(query);
+    const found = await Room.findOne(query).lean();
+    if (found) return found;
+
+    // Check tenant rooms
+    try {
+      const TenantModel = getStayRideTenantModel(false);
+      const clean = String(codeOrSlug || "").toLowerCase().trim();
+      const liveProps: any[] = await Property.find({ status: { $ne: "suspended" as any } }).lean();
+      for (const lp of liveProps) {
+        if (!lp.email) continue;
+        const tenantDoc: any = await TenantModel.findOne({ tenantId: lp.email.toLowerCase().trim() }).lean();
+        const trs = tenantDoc?.data?.rooms || [];
+        const photos = tenantDoc?.data?.homestay?.photos || [];
+        for (const tr of trs) {
+          const code = `${lp.slug || "stay"}-${tr.number || tr.id}`.toLowerCase();
+          if (code === clean || String(tr.number).toLowerCase() === clean) {
+            return {
+              _id: `tr_${tr.id}`,
+              code,
+              slug: code,
+              name: `${tr.type || "Room"} ${tr.number}`,
+              homestayName: lp.name,
+              location: lp.address || lp.town || "Darjeeling",
+              category: tr.type || "Standard",
+              kind: "cottage",
+              kindLabel: tr.type || "Standard Room",
+              status: tr.status === "MAINTENANCE" ? "Maintenance" : "Active",
+              petFriendly: true,
+              maxGuests: tr.type === "Family" ? 4 : tr.type === "Suite" ? 3 : 2,
+              occupancy: tr.type === "Family" ? "4 Guests" : "2 Guests",
+              nightly: Number(tr.price) || 2000,
+              price: Number(tr.price) || 2000,
+              propertyId: (lp as any)._id,
+              image: photos[0] || "https://images.unsplash.com/photo-1544644181-1484b3fdfc62?auto=format&fit=crop&w=1200&q=80",
+              amenities: ["Mountain View", "Verified Host", "Door-to-door Cab Transfer"],
+            };
+          }
+        }
+      }
+    } catch {}
+
+    return null;
   }
 
   static calculateQuote(

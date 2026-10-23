@@ -26,6 +26,7 @@ export const API_ENDPOINTS = {
     availabilityGrid: (days = 14) => `${API_BASE_URL}/rooms/availability/grid?days=${days}`,
   },
   properties: {
+    list: () => `${API_BASE_URL}/properties`,
     bySlug: (slug: string) => `${API_BASE_URL}/properties/${encodeURIComponent(slug)}`,
   },
   driverSignup: () => `${API_BASE_URL}/stayride/public/driver-signup`,

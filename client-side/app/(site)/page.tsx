@@ -25,7 +25,7 @@ import { estateImages, kindFilters, getLiveStays, type Stay } from "@/lib/stays"
 
 export const metadata: Metadata = {
   description:
-    "Handcrafted hillside cottages, tea terraces and hearth retreats above Darjeeling, West Bengal — hosted by Anuradha & Tenzin.",
+    "Handcrafted hillside cottages, tea terraces and verified door-to-door hill transfers across Darjeeling & Sikkim — powered by StayRide.",
 };
 
 const MAX_GUESTS = 4;
@@ -56,11 +56,10 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
               <span>Darjeeling, West Bengal</span>
             </div>
             <h1 className="mb-4 font-display text-display-mobile font-semibold tracking-tight text-primary md:text-display">
-              Restful Stays in Darjeeling
+              Restful Stays &amp; Transit in the Hills
             </h1>
             <p className="mx-auto max-w-2xl text-body-lg text-on-surface-variant">
-              Handcrafted hillside cottages, working tea terraces &amp; hearth retreats hosted by
-              Eleanor &amp; Thomas.
+              Handcrafted mountain cottages, working tea retreats &amp; verified door-to-door cab transfers hosted by local Himalayan families.
             </p>
           </div>
 
@@ -186,11 +185,10 @@ function Experiences() {
             The Homestay Difference
           </span>
           <h2 className="mt-1 font-display text-headline-lg-mobile font-semibold text-primary md:text-headline-lg">
-            What makes a stay at Meadowfall special
+            What makes a StayRide journey special
           </h2>
           <p className="mt-2 text-body-lg text-on-surface-variant">
-            We operate intentionally with only six spaces, allowing Eleanor &amp; Thomas to nurture
-            an atmosphere of unhurried luxury and genuine countryside warmth.
+            Connect directly with verified local homestay owners and regional hill drivers for an authentic, unhurried Himalayan experience.
           </p>
         </div>
 
@@ -242,7 +240,7 @@ function Testimonials() {
             Voices from the Valley
           </h2>
           <p className="text-body-sm text-on-surface-variant">
-            Reflections from travellers who found respite at Meadowfall.
+            Reflections from travellers exploring the Himalayan foothills with StayRide.
           </p>
         </div>
 

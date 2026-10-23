@@ -22,12 +22,13 @@ import { useStayRide } from '../data/store';
 import { api, DEFAULT_BASE_URL, VERCEL_CLOUD_URL } from '../data/api';
 import { Header } from '../components/Header';
 import { CURRENT_RELEASE_VERSION } from '../constants/version';
-import { getActiveAppVersion } from '../services/updates/updateManager';
+import { useAppUpdateManager } from '../services/updates/updateManager';
 import { confirmLogoutAll } from '../utils/report';
 
 export const MoreScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
+  const updateInfo = useAppUpdateManager();
   const {
     homestay,
     campaigns,
@@ -44,7 +45,6 @@ export const MoreScreen: React.FC = () => {
   const { signOut } = useClerk();
   const { user: clerkUser, isLoaded: isClerkUserLoaded } = useUser();
   const [backendLive, setBackendLive] = useState<boolean | null>(null);
-  const [activeVersion, setActiveVersion] = useState(CURRENT_RELEASE_VERSION);
 
   // Clerk users without a password yet (e.g. Google sign-in) set one without entering a current password
   const needsCurrentPassword = !clerkUser || clerkUser.passwordEnabled;
@@ -118,12 +118,6 @@ export const MoreScreen: React.FC = () => {
     api.checkHealth().then((live) => setBackendLive(live));
   }, []);
 
-  // Show the version actually running (OTA-aware), mirroring the Updates screen
-  useEffect(() => {
-    if (Updates.isEmbeddedLaunch || !Updates.updateId) return;
-    getActiveAppVersion().then(setActiveVersion).catch(() => {});
-  }, []);
-
   const handleLogout = () => {
     Alert.alert('Log Out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
@@ -175,7 +169,8 @@ export const MoreScreen: React.FC = () => {
     title: string,
     subtitle: string,
     onPress: () => void,
-    isDestructive = false
+    isDestructive = false,
+    badge?: React.ReactNode
   ) => {
     return (
       <TouchableOpacity style={styles.rowItem} onPress={onPress} activeOpacity={0.7}>
@@ -194,7 +189,14 @@ export const MoreScreen: React.FC = () => {
             {subtitle}
           </Text>
         </View>
-        <Ionicons name="chevron-forward" size={16} color={Colors.textSecondary} />
+        {badge ? (
+          <View style={styles.rowRightBadgeContainer}>
+            {badge}
+            <Ionicons name="chevron-forward" size={16} color={Colors.textSecondary} />
+          </View>
+        ) : (
+          <Ionicons name="chevron-forward" size={16} color={Colors.textSecondary} />
+        )}
       </TouchableOpacity>
     );
   };
@@ -281,9 +283,46 @@ export const MoreScreen: React.FC = () => {
           {renderRow(
             'cloud-download-outline',
             'Software Updates',
-            `Version ${activeVersion} · Check & install OTA updates`,
-            () => navigation.navigate('Updates')
+            updateInfo.isUpdatePending
+              ? 'Update downloaded · Restart required'
+              : updateInfo.isUpdateAvailable
+              ? `New ${updateInfo.availableRelease?.version || 'update'} available for download`
+              : `Version ${updateInfo.activeVersion} · Check & install OTA updates`,
+            () => navigation.navigate('Updates'),
+            false,
+            updateInfo.isUpdatePending ? (
+              <View style={styles.badgeReady}>
+                <View style={styles.badgeDotGreen} />
+                <Text style={styles.badgeTextGreen}>READY</Text>
+              </View>
+            ) : updateInfo.isUpdateAvailable ? (
+              <View style={styles.badgeAvail}>
+                <Text style={styles.badgeTextPeach}>NEW</Text>
+              </View>
+            ) : (
+              <View style={styles.badgeVersion}>
+                <Text style={styles.badgeTextVersion}>{updateInfo.activeVersion}</Text>
+              </View>
+            )
           )}
+
+          {/* App Version & Channel Row */}
+          <View style={styles.versionRowItem}>
+            <View style={styles.rowIconCircle}>
+              <Ionicons name="phone-portrait-outline" size={18} color={Colors.brandPrimary} />
+            </View>
+            <View style={styles.rowTextContainer}>
+              <Text style={styles.rowTitle}>App Version</Text>
+              <Text style={styles.rowSubtitle} numberOfLines={1}>
+                {updateInfo.activeVersion} {updateInfo.isEmbeddedLaunch ? '(Base)' : '(OTA)'} · Channel {updateInfo.channel || 'preview'}
+              </Text>
+            </View>
+            {updateInfo.updateId ? (
+              <View style={styles.otaHashBadge}>
+                <Text style={styles.otaHashText}>#{updateInfo.updateId.substring(0, 8)}</Text>
+              </View>
+            ) : null}
+          </View>
         </View>
 
         {/* Account & Security Group */}
@@ -337,6 +376,17 @@ export const MoreScreen: React.FC = () => {
             </View>
           </>
         )}
+
+        {/* Footer Credit & Version */}
+        <View style={styles.footerWrap}>
+          <Text style={styles.footerBrandTitle}>STAYRIDE HOST</Text>
+          <Text style={styles.footerVersionText}>
+            Version {updateInfo.activeVersion} {updateInfo.isEmbeddedLaunch ? '· Base' : '· OTA'}
+          </Text>
+          <Text style={styles.footerSubText}>
+            StayRide Partner App for Homestay Hosts
+          </Text>
+        </View>
       </ScrollView>
 
       {/* Set Password Modal */}
@@ -590,5 +640,99 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
     color: Colors.white,
+  },
+  rowRightBadgeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  badgeReady: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#DCFCE7',
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    gap: 5,
+  },
+  badgeDotGreen: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#16A34A',
+  },
+  badgeTextGreen: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#16A34A',
+    letterSpacing: 0.5,
+  },
+  badgeAvail: {
+    backgroundColor: '#FFEDD5',
+    borderWidth: 1,
+    borderColor: '#FDBA74',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  badgeTextPeach: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#EA580C',
+    letterSpacing: 0.5,
+  },
+  badgeVersion: {
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  badgeTextVersion: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+  },
+  versionRowItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 13,
+    paddingHorizontal: 14,
+  },
+  otaHashBadge: {
+    backgroundColor: '#EDE9FE',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  otaHashText: {
+    fontSize: 11,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    fontWeight: '600',
+    color: Colors.brandPrimary,
+  },
+  footerWrap: {
+    alignItems: 'center',
+    marginTop: 28,
+    marginBottom: 16,
+    gap: 4,
+  },
+  footerBrandTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    color: Colors.textSecondary,
+  },
+  footerVersionText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+  },
+  footerSubText: {
+    fontSize: 11,
+    color: Colors.textSecondary,
   },
 });

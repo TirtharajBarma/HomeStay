@@ -16,6 +16,18 @@ export type Review = {
   tone: "clay" | "sage" | "sand";
 };
 
+export type StayRoom = {
+  id?: string | number;
+  number: string;
+  type: string;
+  floor?: string;
+  price: number;
+  status?: string;
+  note?: string;
+  amenities?: string[];
+  image?: string;
+};
+
 export type Stay = {
   code?: string;
   slug: string;
@@ -42,6 +54,9 @@ export type Stay = {
   facts: { icon: string; label: string; value: string }[];
   story: string[];
   reviews: Review[];
+  phone?: string;
+  email?: string;
+  rooms?: StayRoom[];
 };
 
 export const kindFilters = [
@@ -96,11 +111,35 @@ function toStay(r: Raw): Stay | null {
   } as Stay;
 }
 
-/** Maps a Property document to a Stay for dedicated /h/[slug] portals */
+/** Maps a Property document to a Stay for dedicated /h/[slug] portals and marketplace listings */
 function propertyToStay(p: Raw): Stay {
   const name = str(p.name) || "Mountain Homestay";
   const slug = str(p.slug) || "homestay";
-  const defaultImage = p.rooms?.[0]?.image || "https://images.unsplash.com/photo-1544644181-1484b3fdfc62?auto=format&fit=crop&w=1200&q=80";
+  const rawRooms = Array.isArray(p.rooms) ? p.rooms : [];
+  const photos = Array.isArray(p.photos) && p.photos.length ? p.photos : [];
+  const defaultImage = photos[0] || rawRooms[0]?.image || "https://images.unsplash.com/photo-1544644181-1484b3fdfc62?auto=format&fit=crop&w=1200&q=80";
+
+  const roomPrices = rawRooms.map((r: any) => num(r.price) || num(r.nightly)).filter((pr: number) => pr > 0);
+  const minPrice = roomPrices.length ? Math.min(...roomPrices) : 2400;
+
+  const galleryShots: GalleryShot[] = photos.length
+    ? photos.map((src: string, i: number) => ({ src, alt: `${name} Photo ${i + 1}`, caption: name }))
+    : rawRooms[0]?.gallery?.length
+      ? rawRooms[0].gallery
+      : [{ src: defaultImage, alt: name, caption: name }];
+
+  const mappedRooms: StayRoom[] = rawRooms.map((r: any) => ({
+    id: r.id || r._id,
+    number: str(r.number) || "101",
+    type: str(r.type) || "Standard Room",
+    floor: str(r.floor) || "Main Cottage",
+    price: num(r.price) || num(r.nightly) || 2000,
+    status: str(r.status) || "Available",
+    note: str(r.note) || "",
+    amenities: Array.isArray(r.amenities) ? r.amenities : ["Mountain View", "Geyser", "Verified Host"],
+    image: r.image || photos[0] || defaultImage,
+  }));
+
   return {
     code: slug,
     slug,
@@ -109,9 +148,9 @@ function propertyToStay(p: Raw): Stay {
     kind: "cottage",
     kindLabel: "Dedicated Homestay",
     petFriendly: true,
-    price: num(p.rooms?.[0]?.nightly) || num(p.rooms?.[0]?.price) || 2400,
-    maxGuests: num(p.rooms?.[0]?.maxGuests) || 4,
-    occupancy: p.rooms?.length ? `${p.rooms.length} Room${p.rooms.length > 1 ? "s" : ""}` : "Estate & Cab Portal",
+    price: minPrice,
+    maxGuests: num(rawRooms[0]?.maxGuests) || 4,
+    occupancy: mappedRooms.length ? `${mappedRooms.length} Room${mappedRooms.length > 1 ? "s" : ""}` : "Estate & Cab Portal",
     bedIcon: "cottage",
     blurb: str(p.bio) || `Welcome to ${name}. Peaceful mountain stay in ${str(p.town) || "Darjeeling"}.`,
     amenities: ["Verified Local Host", "Mountain Transfers", "Door-to-door Cab", "Home Cooked Meals"],
@@ -122,7 +161,7 @@ function propertyToStay(p: Raw): Stay {
     intro: str(p.bio) || `Welcome to ${name}. View accommodation details, contact your host directly, or book your door-to-door hill cab transfer.`,
     image: defaultImage,
     imageAlt: name,
-    gallery: p.rooms?.[0]?.gallery?.length ? p.rooms[0].gallery : [{ src: defaultImage, alt: name, caption: name }],
+    gallery: galleryShots,
     facts: [
       { icon: "cottage", label: "Property", value: "Mountain Homestay" },
       { icon: "location_on", label: "Location", value: str(p.address) || str(p.town) || "Darjeeling" },
@@ -131,19 +170,55 @@ function propertyToStay(p: Raw): Stay {
     ],
     story: [str(p.bio) || "A tranquil mountain retreat offering authentic Himalayan hospitality and door-to-door cab services."],
     reviews: [],
+    phone: str(p.phone) || "+919830041000",
+    email: str(p.email) || "",
+    rooms: mappedRooms,
   };
 }
 
-/** Live stays from the API. On failure returns an error message and no stays (never a static fallback). */
+/** Live stays from the API. Prioritizes real registered properties, with fallback to rooms. */
 export async function getLiveStays(): Promise<{ stays: Stay[]; error: string | null }> {
   try {
-    const res = await fetch(API_ENDPOINTS.stays.list(), { cache: "no-store" });
-    const json = await res.json().catch(() => null);
-    if (!res.ok || !json?.success || !Array.isArray(json.data)) {
-      const err = json?.error;
-      return { stays: [], error: (typeof err === "string" ? err : err?.message) || "Stays could not be loaded right now." };
+    const propPromise = fetch(API_ENDPOINTS.properties.list(), { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null);
+
+    const roomPromise = fetch(API_ENDPOINTS.stays.list(), { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null);
+
+    const [propJson, roomJson] = await Promise.all([propPromise, roomPromise]);
+
+    const propertyStays: Stay[] = [];
+    if (propJson?.success && Array.isArray(propJson.data)) {
+      for (const p of propJson.data) {
+        const stay = propertyToStay(p);
+        if (stay) propertyStays.push(stay);
+      }
     }
-    return { stays: json.data.map(toStay).filter((s: Stay | null): s is Stay => s !== null), error: null };
+
+    const roomStays: Stay[] = [];
+    if (roomJson?.success && Array.isArray(roomJson.data)) {
+      for (const r of roomJson.data) {
+        const stay = toStay(r);
+        if (stay) roomStays.push(stay);
+      }
+    }
+
+    // Real properties take priority; then include standalone rooms if their property isn't already listed
+    const combined: Stay[] = [...propertyStays];
+    for (const r of roomStays) {
+      if (!combined.some((s) => s.slug === r.slug)) {
+        combined.push(r);
+      }
+    }
+
+    if (combined.length === 0) {
+      const err = propJson?.error || roomJson?.error;
+      return { stays: [], error: (typeof err === "string" ? err : err?.message) || "No stays available at this time." };
+    }
+
+    return { stays: combined, error: null };
   } catch {
     return { stays: [], error: "Stays could not be loaded right now. Please check your connection and try again." };
   }

@@ -18,10 +18,18 @@ export async function connectDB(): Promise<typeof mongoose> {
   if (mongoose.connection.readyState === 1) {
     return mongoose;
   }
-  connecting ??= openConnection().catch((err) => {
-    connecting = null; // let the next request retry
-    throw err;
-  });
+  if (mongoose.connection.readyState === 2 && connecting) {
+    return connecting;
+  }
+  connecting = openConnection()
+    .then((conn) => {
+      connecting = null;
+      return conn;
+    })
+    .catch((err) => {
+      connecting = null; // let the next request retry
+      throw err;
+    });
   return connecting;
 }
 
@@ -62,10 +70,12 @@ async function openConnection(): Promise<typeof mongoose> {
 
   mongoose.connection.on("error", (err) => {
     console.error("❌ MongoDB connection error:", err);
+    connecting = null;
   });
 
   mongoose.connection.on("disconnected", () => {
     console.warn("⚠️  MongoDB disconnected");
+    connecting = null;
   });
 
   // Throws (before connecting) for a local "production" db without ALLOW_LOCAL_PRODUCTION_DB=true.

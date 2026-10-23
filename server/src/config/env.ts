@@ -34,7 +34,7 @@ export const config = {
   // Guest website API (stays catalog, properties, reservations). Enabled by default unless explicitly disabled.
   legacyApiEnabled: process.env.LEGACY_API_ENABLED !== "false",
   jwtSecret,
-  jwtExpiresIn: process.env.JWT_EXPIRES_IN || "15m",
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN || "30d",
   googleClientId: process.env.GOOGLE_CLIENT_ID || "",
   clerkPublishableKey: process.env.CLERK_PUBLISHABLE_KEY || process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY || "",
   clerkSecretKey: process.env.CLERK_SECRET_KEY || "",

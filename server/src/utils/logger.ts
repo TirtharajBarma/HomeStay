@@ -78,7 +78,7 @@ class TelemetryLogger {
         this.queue.splice(0, 50); // drop oldest to preserve latest critical events
       }
       this.queue.push(payload);
-      if (this.queue.length >= this.batchSize) {
+      if (this.queue.length >= this.batchSize || process.env.VERCEL) {
         this.flush();
       }
     }

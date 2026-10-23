@@ -78,7 +78,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
         };
         window.localStorage.setItem(USER_KEY, JSON.stringify(user));
         const secureFlag = typeof window !== "undefined" && window.location.protocol === "https:" ? "; Secure" : "";
-        document.cookie = `${TOKEN_KEY}=${storedToken}; path=/; SameSite=Lax; max-age=604800${secureFlag}`;
+        document.cookie = `${TOKEN_KEY}=${storedToken}; path=/; SameSite=Lax; max-age=2592000${secureFlag}`;
         if (cancelled) return;
         setToken(storedToken);
         setAdmin(user);
@@ -99,6 +99,44 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // Silent background session renewal: refreshes token every 6 hours while the dashboard tab remains open
+  useEffect(() => {
+    if (!token) return;
+    const interval = setInterval(async () => {
+      try {
+        const storedToken = window.localStorage.getItem(TOKEN_KEY);
+        if (!storedToken) return;
+        const res = await fetch(API_ENDPOINTS.refresh(), {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${storedToken}`,
+          },
+          body: JSON.stringify({ token: storedToken }),
+        });
+        if (res.ok) {
+          const json = await res.json();
+          const refreshedToken = json?.data?.token;
+          const refreshedUser = json?.data?.user;
+          if (refreshedToken) {
+            window.localStorage.setItem(TOKEN_KEY, refreshedToken);
+            if (refreshedUser) {
+              window.localStorage.setItem(USER_KEY, JSON.stringify(refreshedUser));
+              setAdmin(refreshedUser);
+            }
+            const secureFlag = window.location.protocol === "https:" ? "; Secure" : "";
+            document.cookie = `${TOKEN_KEY}=${refreshedToken}; path=/; SameSite=Lax; max-age=2592000${secureFlag}`;
+            setToken(refreshedToken);
+          }
+        }
+      } catch {
+        // Silent failure; next API call with apiFetch will attempt refresh on 401
+      }
+    }, 6 * 60 * 60 * 1000); // 6 hours
+
+    return () => clearInterval(interval);
+  }, [token]);
+
   const login = useCallback(
     (newToken: string, newAdmin: AdminUser) => {
       setToken(newToken);
@@ -106,7 +144,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
       window.localStorage.setItem(TOKEN_KEY, newToken);
       window.localStorage.setItem(USER_KEY, JSON.stringify(newAdmin));
       const secureFlag = typeof window !== "undefined" && window.location.protocol === "https:" ? "; Secure" : "";
-      document.cookie = `${TOKEN_KEY}=${newToken}; path=/; SameSite=Lax; max-age=604800${secureFlag}`;
+      document.cookie = `${TOKEN_KEY}=${newToken}; path=/; SameSite=Lax; max-age=2592000${secureFlag}`;
       router.push("/");
     },
     [router]

@@ -10,6 +10,7 @@ if (typeof window !== "undefined" && process.env.NODE_ENV === "production" && !p
 
 export const API_ENDPOINTS = {
   login: () => `${API_BASE_URL}/auth/login`,
+  refresh: () => `${API_BASE_URL}/auth/refresh`,
   me: () => `${API_BASE_URL}/auth/me`,
   overview: () => `${API_BASE_URL}/admin/overview`,
   settlePayout: () => `${API_BASE_URL}/admin/payouts/settle`,
@@ -48,10 +49,52 @@ export function clearAdminSession(): void {
   window.localStorage.removeItem(USER_STORAGE_KEY);
 }
 
+let isRefreshing = false;
+let refreshPromise: Promise<string | null> | null = null;
+
+async function attemptSilentTokenRefresh(currentToken: string): Promise<string | null> {
+  if (isRefreshing && refreshPromise) {
+    return refreshPromise;
+  }
+  isRefreshing = true;
+  refreshPromise = (async () => {
+    try {
+      const res = await fetch(API_ENDPOINTS.refresh(), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${currentToken}`,
+        },
+        body: JSON.stringify({ token: currentToken }),
+      });
+      if (!res.ok) return null;
+      const json = await res.json();
+      const newToken = json?.data?.token;
+      const newUser = json?.data?.user;
+      if (newToken && typeof window !== "undefined") {
+        window.localStorage.setItem(TOKEN_STORAGE_KEY, newToken);
+        if (newUser) {
+          window.localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(newUser));
+        }
+        const secureFlag = window.location.protocol === "https:" ? "; Secure" : "";
+        document.cookie = `${TOKEN_STORAGE_KEY}=${newToken}; path=/; SameSite=Lax; max-age=2592000${secureFlag}`;
+        return newToken;
+      }
+      return null;
+    } catch {
+      return null;
+    } finally {
+      isRefreshing = false;
+      refreshPromise = null;
+    }
+  })();
+  return refreshPromise;
+}
+
 /**
- * `fetch` with the admin bearer token attached. Any 401 (expired/invalid/revoked session), and any
- * 403 from the admin API (no longer an admin, blocked), clears the stored session, stores the reason
- * for the login page and redirects there.
+ * `fetch` with the admin bearer token attached. Any 401 triggers an automatic silent token refresh
+ * and request retry. If the session is permanently expired, invalid or revoked (or a 403 occurs on an
+ * admin API), it clears the stored session and redirects to the login page.
  */
 export async function apiFetch(
   url: string,
@@ -61,7 +104,18 @@ export async function apiFetch(
   const headers = new Headers(init.headers);
   const token = getAdminToken();
   if (token && !headers.has("Authorization")) headers.set("Authorization", `Bearer ${token}`);
-  const res = await fetch(url, { ...init, headers });
+  let res = await fetch(url, { ...init, headers });
+
+  // If 401 and we have a token, attempt silent background refresh once before kicking user out
+  const isAuthEndpoint = url.includes("/auth/refresh") || url.includes("/auth/login");
+  if (res.status === 401 && !isAuthEndpoint && token && typeof window !== "undefined") {
+    const refreshedToken = await attemptSilentTokenRefresh(token);
+    if (refreshedToken) {
+      headers.set("Authorization", `Bearer ${refreshedToken}`);
+      res = await fetch(url, { ...init, headers });
+    }
+  }
+
   const isAdminApi = url.startsWith(`${API_BASE_URL}/admin`);
   if (!skipAuthRedirect && (res.status === 401 || (res.status === 403 && isAdminApi))) {
     const body = await res.clone().json().catch(() => ({}));

@@ -8,36 +8,36 @@ import { MobileNav, type NavLink } from "./mobile-nav";
 const navLinks = [
   {
     href: "/#accommodations",
-    label: "Our Accommodations",
-    hint: "Six handcrafted hillside stays",
+    label: "Homestays",
+    hint: "Verified local mountain stays",
     icon: "cottage",
     active: true,
   },
   {
     href: "/#experiences",
     label: "Experiences",
-    hint: "Breakfast, trails & hearth quiet",
+    hint: "Local cuisine, trails & tea gardens",
     icon: "spa",
     active: false,
   },
   {
     href: "/cab-request",
     label: "Hill Cabs",
-    hint: "Airport, station & local tours",
+    hint: "Bagdogra, NJP & local transfers",
     icon: "local_taxi",
     active: false,
   },
   {
     href: "/#story",
-    label: "Our Story",
-    hint: "Twelve years on the hillside",
+    label: "About StayRide",
+    hint: "Empowering Himalayan hosts & drivers",
     icon: "menu_book",
     active: false,
   },
   {
     href: "/#contact",
-    label: "Host Contact",
-    hint: hosts.phone,
+    label: "Support",
+    hint: "Direct guest & host desk",
     icon: "phone_in_talk",
     active: false,
   },
@@ -48,15 +48,15 @@ export function SiteHeader() {
     <header className="sticky top-0 z-50 w-full border-b border-outline-variant/40 bg-surface/90 backdrop-blur-md shadow-navbar">
       <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-2 px-4 py-3 sm:px-6 sm:py-4">
         <Link href="/" className="group flex min-h-11 min-w-0 items-center gap-2.5 sm:gap-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-container text-surface-container-lowest transition-transform duration-200 group-hover:scale-105">
-            <Icon name="forest" className="text-[20px]" />
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-on-primary transition-transform duration-200 group-hover:scale-105">
+            <Icon name="local_taxi" className="text-[20px]" />
           </span>
           <span className="flex min-w-0 flex-col">
             <span className="truncate font-display text-headline-sm font-semibold tracking-tight text-primary sm:text-headline-md">
-              Meadowfall Homestay
+              StayRide
             </span>
             <span className="-mt-0.5 hidden text-label-sm tracking-wider text-outline xs:block sm:block">
-              ESTATE &amp; RETREAT
+              HIMALAYAN STAYS &amp; CABS
             </span>
           </span>
         </Link>
@@ -109,15 +109,15 @@ export function SiteHeader() {
 export function BrandLockup() {
   return (
     <Link href="/" className="group flex min-h-11 min-w-0 items-center gap-2.5 sm:gap-3">
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-container text-on-primary-container transition-transform duration-200 group-hover:scale-95">
-        <Icon name="nature" className="text-lg" />
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-on-primary transition-transform duration-200 group-hover:scale-95">
+        <Icon name="local_taxi" className="text-lg" />
       </span>
       <span className="flex min-w-0 flex-col">
         <span className="truncate font-display text-headline-sm font-semibold leading-tight tracking-tight text-primary sm:text-headline-md">
-          Meadowfall Homestay
+          StayRide
         </span>
         <span className="hidden text-label-sm font-medium tracking-wider text-on-surface-variant sm:block">
-          RETREAT &amp; TEA ESTATE
+          HIMALAYAN STAYS &amp; CABS
         </span>
       </span>
     </Link>

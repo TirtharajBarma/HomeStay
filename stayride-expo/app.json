@@ -3,7 +3,7 @@
     "name": "StayRide",
     "slug": "stayride",
     "scheme": "stayride",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -52,12 +52,14 @@
       "eas": {
         "projectId": "0bdb67a8-8671-40a4-93e5-925504d907ee"
       },
-      "updateVersion": "v1.0.1",
-      "updateDescription": "Initial OTA update verification with atomic version sync and automatic boot-time discovery",
+      "updateVersion": "v1.0.2",
+      "updateDescription": "Dynamic settings version badge • Live OTA discovery • Enhanced changelog and release notes",
       "updateNotes": [
-        "Initial OTA update verification with atomic version sync and automatic boot-time discovery"
+        "Live OTA version display and Apple-style update badges in settings",
+        "Real-time background update discovery and instant restart",
+        "Enhanced changelog and release notes parser"
       ],
-      "easUpdateMessage": "v1.0.1: Initial OTA update verification with atomic version sync and automatic boot-time discovery"
+      "easUpdateMessage": "v1.0.2: Dynamic settings version badge • Live OTA discovery • Enhanced changelog and release notes"
     },
     "plugins": [
       "./plugins/with-ios-local-no-push",

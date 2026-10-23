@@ -16,6 +16,7 @@ const router = Router();
 
 // Admin portal sign-in
 router.post("/login", validate(LoginSchema, "body"), AuthController.login);
+router.post("/refresh", AuthController.refresh);
 router.get("/me", verifyToken, AuthController.me);
 
 // Legacy guest-website sign-in (self-serve register, OTP with no SMS provider, PIN driver login)

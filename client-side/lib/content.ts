@@ -1,12 +1,14 @@
+const defaultSupportPhone = process.env.NEXT_PUBLIC_SUPPORT_PHONE || "+91 98837 57307";
+
 export const hosts = {
-  names: "Anuradha & Tenzin Dorjee",
-  since: "Stewards of Meadowfall since 2012",
-  email: "hosts@meadowfall.in",
-  bookingEmail: "stay@meadowfall.in",
-  phone: "+91 98320 44127",
-  phoneHref: "tel:+919832044127",
-  location: "Ging Tea Estate Road, Darjeeling",
-  region: "Darjeeling, West Bengal",
+  names: "Verified Himalayan Hosts",
+  since: "StayRide Network",
+  email: "support@stayride.in",
+  bookingEmail: "bookings@stayride.in",
+  phone: defaultSupportPhone,
+  phoneHref: `tel:${defaultSupportPhone.replace(/\s+/g, "")}`,
+  location: "Darjeeling & Sikkim Hills",
+  region: "Eastern Himalayas",
   replyTime: "≤ 1 hr reply",
 };
 
@@ -143,12 +145,12 @@ export const valueBadges = [
 ];
 
 export const estateStory = [
-  "When we first walked the abandoned Ging tea bungalow thirteen years ago, it had four leaky roofs, a dead orchard, and the best view in the district. We could see Singalila from the veranda then, and we still can — most mornings, until the cloud settles in.",
-  "Meadowfall is a working tea estate that happens to take in six guests. The pruning, plucking, firing, and grading happen around you; the rooms are the old bungalow family quarters, kept with the same plain wood and brass the Dorjees have used for three generations. We live on the grounds, cook the breakfast, and stand in the gate with a flask of tea when you arrive.",
+  "StayRide was built directly in the Himalayan foothills of Darjeeling and Sikkim to connect travelers with authentic homestay hospitality and transparent, reliable door-to-door mountain transportation.",
+  "Every homestay on our network is owned and operated by local families. From warm cups of fresh-plucked garden tea to verified local drivers meeting you right at Bagdogra or NJP station, we connect you directly with the people who call these hills home.",
 ];
 
 export const hostQuote =
-  "We lay the bukhari stove, change the linen, and set out the second-flush before you reach the gate — whatever the road did to you on the way up.";
+  "We connect you directly with verified local mountain families and professional drivers — fair pricing, warm hospitality, and no middlemen.";
 
 export const arrivalWindows = [
   { value: "2-4", label: "2:00 PM – 4:00 PM", note: "Hot chai and a host at the gate" },

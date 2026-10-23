@@ -23,7 +23,7 @@ import { getLiveStay } from "@/lib/stays";
 
 export const metadata: Metadata = {
   title: "Secure Reservation",
-  description: "Complete your Meadowfall Homestay reservation with free cancellation.",
+  description: "Complete your verified StayRide homestay reservation with free cancellation.",
 };
 
 export default async function CheckoutPage({

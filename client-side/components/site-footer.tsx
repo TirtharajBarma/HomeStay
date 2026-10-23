@@ -8,29 +8,31 @@ import { NewsletterForm } from "./newsletter-form";
 const linkClass =
   "inline-flex min-h-11 items-center text-body-sm text-on-surface-variant transition-colors duration-150 hover:text-primary";
 
+const supportPhone = process.env.NEXT_PUBLIC_SUPPORT_PHONE || "+91 98837 57307";
+
 const columns = [
   {
     title: "Stay & Rest",
     links: [
-      { href: "/#accommodations", label: "The Accommodations" },
-      { href: "/#experiences", label: "Retreat Experiences" },
-      { href: "/#story", label: "Estate Story" },
+      { href: "/#accommodations", label: "Browse Homestays" },
+      { href: "/#experiences", label: "Local Experiences" },
+      { href: "/#story", label: "About StayRide" },
     ],
   },
   {
-    title: "Homestay Guide",
+    title: "Transit & Drivers",
     links: [
-      { href: "/stays/ging-tea-cottage#house-rules", label: "House Rules & Policies" },
-      { href: "/#story", label: "Host Eleanor & Thomas" },
-      { href: "/#contact", label: "Directions & Arrival" },
+      { href: "/cab-request", label: "Hill Cabs & Transfers" },
+      { href: "/join-driver", label: "Drive with Us (Driver Sign-Up)" },
+      { href: "/#contact", label: "Local Pickup Locations" },
     ],
   },
   {
-    title: "Keep in Touch",
+    title: "Support & Desk",
     links: [
-      { href: hosts.phoneHref, label: hosts.phone },
-      { href: `mailto:${hosts.email}`, label: hosts.email },
-      { href: `mailto:${hosts.bookingEmail}`, label: hosts.bookingEmail },
+      { href: `tel:${supportPhone.replace(/\s+/g, "")}`, label: supportPhone },
+      { href: "mailto:support@stayride.in", label: "support@stayride.in" },
+      { href: "https://wa.me/919883757307", label: "WhatsApp Support" },
     ],
   },
 ];
@@ -41,21 +43,19 @@ export function SiteFooter() {
       <div className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-8 px-4 py-12 sm:px-6 md:flex-row">
         <div className="w-full max-w-md">
           <div className="mb-3 flex items-center gap-3">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary-container text-surface-container-lowest">
-              <Icon name="forest" className="text-[18px]" />
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-on-primary">
+              <Icon name="local_taxi" className="text-[18px]" />
             </span>
             <span className="font-display text-headline-md font-semibold text-primary">
-              Meadowfall Homestay
+              StayRide
             </span>
           </div>
           <p className="mb-4 text-body-sm text-on-surface-variant">
-            An intimate tea-estate retreat above Darjeeling. Quiet hillside stays,
-            sourdough breakfasts, and open hearth fires.
+            Authentic Himalayan homestays, local host hospitality, and verified door-to-door hill transfers across Darjeeling, Kalimpong, and Sikkim.
           </p>
           <NewsletterForm />
           <p className="mt-4 text-body-sm text-outline">
-            © 2024 Meadowfall Homestay &amp; Retreat Estate. Crafted with tactile care for tranquil
-            living.
+            © {new Date().getFullYear()} StayRide Network. Connecting travelers with authentic hosts and local drivers.
           </p>
         </div>
 

@@ -1454,7 +1454,16 @@ stayrideV1Router.get('/cron/ical-sync', async (req: Request, res: Response) => {
   if (!secret || given.length !== secret.length || !crypto.timingSafeEqual(Buffer.from(given), Buffer.from(secret))) {
     return res.status(401).json({ error: { message: 'Unauthorized' } });
   }
-  return res.json({ ok: true, ...(await syncAll(false)) });
+  try {
+    const result = await syncAll(false);
+    return res.json({ ok: true, ...result });
+  } catch (syncErr: any) {
+    console.warn('[CRON /ical-sync] Sync execution warning:', syncErr?.message || syncErr);
+    if (syncErr?.code === 'DB_UNAVAILABLE' || syncErr?.status === 503) {
+      return res.status(503).json({ ok: false, error: 'Database temporarily unavailable; sync deferred to next cycle.' });
+    }
+    throw syncErr;
+  }
 });
 
 // Razorpay payment-link webhook (raw body; signature checked before anything is read).
