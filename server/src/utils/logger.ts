@@ -16,6 +16,7 @@ interface LogPayload {
   timestamp: string;
   service: string;
   environment: string;
+  action?: string;
   tenantId?: string;
   driverId?: string;
   userId?: string;
@@ -72,6 +73,10 @@ class TelemetryLogger {
 
     // 2. Queue for background cloud streaming if tokens exist
     if (this.isLiveToken(this.axiomToken) || this.isLiveToken(this.logtailToken)) {
+      // Memory safeguard: Cap queue size at 500 items to prevent RAM buildup if network is slow
+      if (this.queue.length >= 500) {
+        this.queue.splice(0, 50); // drop oldest to preserve latest critical events
+      }
       this.queue.push(payload);
       if (this.queue.length >= this.batchSize) {
         this.flush();
@@ -169,16 +174,22 @@ export function telemetryMiddleware(req: Request, res: Response, next: NextFunct
       return;
     }
 
-    const user: any = (req as any).user;
+    const stayrideUser: any = (req as any).stayrideUser;
+    const user: any = (req as any).user || stayrideUser;
     const tenantId =
       (req.headers["x-tenant-id"] as string) ||
       (req.headers["x-tenant-key"] as string) ||
       (req as any).tenantId ||
+      stayrideUser?.tenantKey ||
       user?.tenantId ||
       user?.propertyId;
-    const driverId = (req.headers["x-driver-id"] as string) || (req as any).driverId || user?.driverId;
-    const userId = user?._id || user?.id;
-    const userRole = user?.role;
+    const driverId =
+      (req.headers["x-driver-id"] as string) ||
+      (req as any).driverId ||
+      (stayrideUser?.role === "driver" ? stayrideUser.id : undefined) ||
+      user?.driverId;
+    const userId = user?._id || user?.id || stayrideUser?.id;
+    const userRole = user?.role || stayrideUser?.role;
 
     const level = res.statusCode >= 500 ? "error" : res.statusCode >= 400 ? "warn" : "info";
 

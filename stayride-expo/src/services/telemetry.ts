@@ -51,6 +51,42 @@ class MobileTelemetry {
   }
 
   /**
+   * Track screen view transition across all mobile screens.
+   */
+  public trackScreen(screen: string, extra?: Record<string, any>) {
+    try {
+      api.post('/telemetry/event', {
+        event: 'screen_view',
+        screen,
+        tenantId: this.tenantId,
+        driverId: this.driverId,
+        platform: Platform.OS,
+        details: extra,
+      }).catch(() => {});
+    } catch {
+      // Ignored: telemetry must never crash the app
+    }
+  }
+
+  /**
+   * Track high-impact UI user action (button click, modal open, form submit).
+   */
+  public trackAction(action: string, screen: string, details?: Record<string, any>) {
+    try {
+      api.post('/telemetry/event', {
+        event: action,
+        screen,
+        tenantId: this.tenantId,
+        driverId: this.driverId,
+        platform: Platform.OS,
+        details,
+      }).catch(() => {});
+    } catch {
+      // Ignored
+    }
+  }
+
+  /**
    * Install global uncaught exception listener for React Native.
    */
   public initGlobalErrorHandler() {

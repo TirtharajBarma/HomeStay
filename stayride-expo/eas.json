@@ -22,16 +22,6 @@
         "EXPO_PUBLIC_API_URL": "https://home-stay-ten.vercel.app/v1"
       }
     },
-    "testing": {
-      "distribution": "internal",
-      "android": {
-        "buildType": "apk"
-      },
-      "channel": "testing",
-      "env": {
-        "EXPO_PUBLIC_API_URL": "https://home-stay-ten.vercel.app/v1"
-      }
-    },
     "production-apk": {
       "distribution": "internal",
       "android": {

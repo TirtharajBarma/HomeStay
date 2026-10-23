@@ -48,7 +48,7 @@ interface ApiClient {
   post(path: string, body?: unknown): Promise<unknown>;
   put(path: string, body?: unknown): Promise<unknown>;
   patch(path: string, body?: unknown): Promise<unknown>;
-  delete(path: string): Promise<unknown>;
+  delete(path: string, body?: unknown): Promise<unknown>;
 }
 
 const BACKOFF_BASE_MS = 3000;

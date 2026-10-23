@@ -4,6 +4,7 @@ import { Room } from "../models/room.model.js";
 import { Guest } from "../models/guest.model.js";
 import { RoomService } from "./room.service.js";
 import { NotificationService } from "./notification.service.js";
+import { logger } from "../utils/logger.js";
 
 export interface CreateBookingDTO {
   stay?: string; // slug or roomCode
@@ -193,6 +194,33 @@ export class BookingService {
       console.warn("Booking notification dispatch notice:", notifErr);
     }
 
+    logger.info(
+      `[BOOKING CREATED] Ref ${booking.reference} | Room: ${booking.roomName} (${booking.roomCode}) | Guest: ${booking.guestName} (${booking.email}) | Nights: ${booking.nights} | Total: ₹${booking.totalAmount} (Due today: ₹${booking.dueToday}, Bal: ₹${booking.balanceDue}) | Owner: ${booking.ownerId}`,
+      {
+        action: "booking_created",
+        tenantId: String(booking.propertyId || booking.ownerId || ""),
+        userId: booking.email,
+        userRole: "GUEST",
+        metadata: {
+          reference: booking.reference,
+          roomCode: booking.roomCode,
+          roomName: booking.roomName,
+          checkIn: booking.checkIn,
+          checkOut: booking.checkOut,
+          nights: booking.nights,
+          party: booking.party,
+          nightlyRate: booking.nightlyRate,
+          roomTotal: booking.roomTotal,
+          cleaningFee: booking.cleaningFee,
+          taxAmount: booking.taxAmount,
+          totalAmount: booking.totalAmount,
+          dueToday: booking.dueToday,
+          balanceDue: booking.balanceDue,
+          plan: booking.plan,
+        },
+      }
+    );
+
     return booking;
   }
 
@@ -228,6 +256,23 @@ export class BookingService {
       { status: "cancelled" },
       { returnDocument: "after" }
     );
+    if (booking) {
+      logger.info(
+        `[BOOKING CANCELLED] Ref ${booking.reference} | Room: ${booking.roomName} (${booking.roomCode}) | Guest: ${booking.guestName} (${booking.email})`,
+        {
+          action: "booking_cancelled",
+          tenantId: String(booking.propertyId || booking.ownerId || ""),
+          userId: booking.email,
+          userRole: "GUEST",
+          metadata: {
+            reference: booking.reference,
+            roomCode: booking.roomCode,
+            guestName: booking.guestName,
+            status: "cancelled",
+          },
+        }
+      );
+    }
     return booking;
   }
 }

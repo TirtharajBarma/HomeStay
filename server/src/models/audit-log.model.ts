@@ -1,5 +1,6 @@
 import mongoose, { Schema } from "mongoose";
 import { dbNameFor } from "../config/env.js";
+import { logger } from "../utils/logger.js";
 
 export interface AuditLogDocument {
   actor: string;
@@ -132,6 +133,14 @@ export async function audit(
       tenantId: String(tenantId || ""),
       driverId: String(driverId || ""),
       details: safeDetails,
+    });
+
+    logger.info(`[AUDIT] ${action} on ${targetType}:${targetId}`, {
+      tenantId: String(tenantId || ""),
+      driverId: String(driverId || ""),
+      userId: actor,
+      userRole: actorRole,
+      metadata: safeDetails,
     });
   } catch (err) {
     // Non-blocking: log the error to console without breaking user response

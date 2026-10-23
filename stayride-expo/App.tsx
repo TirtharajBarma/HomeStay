@@ -9,6 +9,7 @@ import { StayRideProvider, useStayRide } from './src/data/store';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { checkAndAutoApplyUpdates } from './src/services/updates/updateManager';
 import { onPushTap } from './src/services/push';
+import { telemetry } from './src/services/telemetry';
 
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
@@ -24,6 +25,11 @@ const SessionWatcher: React.FC = () => {
   useEffect(() => {
     sessionRef.current = session;
     syncRef.current = sync;
+    if (session) {
+      const tenantKey = session.owner?.email;
+      const driverId = session.driver?.id ? String(session.driver.id) : undefined;
+      telemetry.setContext(tenantKey, driverId);
+    }
   });
 
   // Notification tap: refresh, then open the trip when the payload names one
@@ -77,6 +83,8 @@ const SessionWatcher: React.FC = () => {
 
 export default function App() {
   useEffect(() => {
+    // Install global uncaught exception reporter
+    telemetry.initGlobalErrorHandler();
     // Non-blocking OTA check on app startup (fire-and-forget)
     checkAndAutoApplyUpdates().catch(() => {});
   }, []);
@@ -99,7 +107,17 @@ export default function App() {
     <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
       <SafeAreaProvider>
         <StayRideProvider>
-          <NavigationContainer ref={navigationRef}>
+          <NavigationContainer
+            ref={navigationRef}
+            onReady={() => {
+              const route = navigationRef.getCurrentRoute();
+              if (route) telemetry.trackScreen(route.name);
+            }}
+            onStateChange={() => {
+              const route = navigationRef.getCurrentRoute();
+              if (route) telemetry.trackScreen(route.name);
+            }}
+          >
             <StatusBar style="light" />
             <RootNavigator />
             <SessionWatcher />

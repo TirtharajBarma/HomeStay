@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import { config } from "../config/env.js";
+import { logger } from "../utils/logger.js";
 
 export interface BookingNotificationPayload {
   reference: string;
@@ -116,11 +117,24 @@ The reservation schedule and CRM have been updated automatically.
           subject: ownerSubject,
           text: ownerBody,
         });
+        logger.info(`[EMAIL SENT] Booking confirmation dispatched to ${data.guestEmail}`, {
+          tenantId: data.ownerEmail,
+          metadata: { reference: data.reference, guest: data.guestName, room: data.roomName, amount: data.totalAmount },
+        });
         return { guestNotified: true, ownerNotified: true };
-      } catch (err) {
+      } catch (err: any) {
         console.warn("SMTP email dispatch notice:", err);
+        logger.warn(`[EMAIL FAILED] SMTP dispatch error to ${data.guestEmail}: ${err?.message}`, {
+          tenantId: data.ownerEmail,
+          metadata: { reference: data.reference, error: String(err) },
+        });
       }
     }
+
+    logger.info(`[EMAIL CONSOLE] Booking alert logged for ${data.guestEmail}`, {
+      tenantId: data.ownerEmail,
+      metadata: { reference: data.reference, guest: data.guestName, amount: data.totalAmount },
+    });
 
     // In-memory / Console fallback during development or when SMTP is not configured
     console.log(`\n📧 [EMAIL DISPATCH TO GUEST] -> ${data.guestEmail}`);
@@ -187,11 +201,24 @@ Please arrive 10 minutes prior to pickup time.
           subject: driverSubject,
           text: driverBody,
         });
+        logger.info(`[EMAIL SENT] Cab transfer alert dispatched to ${data.guestEmail} and driver ${driverEmail}`, {
+          driverId: driverEmail,
+          metadata: { reference: data.reference, guest: data.guestName, fare: data.fareAmount, driver: data.driverName },
+        });
         return { guestNotified: true, driverNotified: true };
-      } catch (err) {
+      } catch (err: any) {
         console.warn("SMTP cab dispatch email notice:", err);
+        logger.warn(`[EMAIL FAILED] SMTP cab dispatch error: ${err?.message}`, {
+          driverId: driverEmail,
+          metadata: { reference: data.reference, error: String(err) },
+        });
       }
     }
+
+    logger.info(`[EMAIL CONSOLE] Cab transfer logged for ${data.guestEmail}`, {
+      driverId: driverEmail,
+      metadata: { reference: data.reference, guest: data.guestName, fare: data.fareAmount },
+    });
 
     console.log(`\n🚖 [EMAIL DISPATCH TO GUEST] -> ${data.guestEmail}`);
     console.log(`   Subject: ${guestSubject}`);

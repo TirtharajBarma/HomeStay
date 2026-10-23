@@ -11,6 +11,22 @@ export default function GlobalError({
 }) {
   useEffect(() => {
     console.error("StayRide Global Unhandled Error:", error);
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://home-stay-ten.vercel.app/api/v1";
+      fetch(`${apiUrl}/telemetry/report`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: error?.message || "Guest Web Global Error",
+          screen: "GlobalBoundary",
+          platform: "web-guest",
+          stack: error?.stack,
+          extra: { digest: error?.digest },
+        }),
+      }).catch(() => {});
+    } catch {
+      // Ignored
+    }
   }, [error]);
 
   return (

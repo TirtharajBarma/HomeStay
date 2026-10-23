@@ -47,6 +47,7 @@ import { verifyWebhook } from '@clerk/express/webhooks';
 import { config } from '../config/env.js';
 import uploadRoutes from '../routes/upload.routes.js';
 import telemetryRoutes from '../routes/telemetry.routes.js';
+import { logger } from '../utils/logger.js';
 
 interface StayRideAuthPayload {
   id: string;
@@ -241,10 +242,21 @@ stayrideV1Router.post('/auth/login', async (req: Request, res: Response) => {
 
     // S2: one message for unknown email and wrong password (no account-existence leak).
     if (!user || !(await user.comparePassword(cleanPass))) {
+      logger.warn(`[AUTH FAILED] Invalid login credentials for: ${cleanEmail}`, {
+        action: "auth_failed",
+        userId: cleanEmail,
+        ip: req.ip,
+      });
       return res.status(401).json({ error: { message: 'Invalid email or password.', code: 'INVALID_CREDENTIALS' } });
     }
 
     if (user.role === 'admin') {
+      logger.warn(`[AUTH FAILED] Administrator tried signing into mobile app: ${cleanEmail}`, {
+        action: "auth_failed_admin_mobile",
+        userId: cleanEmail,
+        userRole: "admin",
+        ip: req.ip,
+      });
       return res.status(403).json({
         error: {
           message: 'Access Denied: You are an Administrator. The mobile app is strictly for Homestay Hosts and Cab Drivers. Please use the Web Control Tower.',
@@ -259,6 +271,12 @@ stayrideV1Router.post('/auth/login', async (req: Request, res: Response) => {
     const userRole = user.role as 'owner' | 'driver';
 
     if (user.accountStatus === 'BLOCKED') {
+      logger.warn(`[AUTH FAILED] Suspended account login attempt: ${cleanEmail}`, {
+        action: "auth_failed_blocked",
+        userId: cleanEmail,
+        userRole: user.role,
+        ip: req.ip,
+      });
       return res.status(403).json({ error: { message: 'This account is blocked. Contact StayRide support.', code: 'ACCOUNT_BLOCKED' } });
     }
 
@@ -275,6 +293,14 @@ stayrideV1Router.post('/auth/login', async (req: Request, res: Response) => {
 
       const { accessToken, refreshToken } = issueTokens(tokenPayload);
 
+      logger.info(`[AUTH SUCCESS] Driver authenticated: ${user.name} (${user.email})`, {
+        action: "driver_login_success",
+        driverId: String(user._id),
+        userId: user.email,
+        userRole: "driver",
+        ip: req.ip,
+      });
+
       return res.json({
         accessToken,
         refreshToken,
@@ -287,6 +313,13 @@ stayrideV1Router.post('/auth/login', async (req: Request, res: Response) => {
     const tenantKey = cleanEmail;
     const account = await CommissionService.getAccountState(tenantKey, false);
     if (account.blocked) {
+      logger.warn(`[AUTH FAILED] Suspended homestay login attempt: ${cleanEmail}`, {
+        action: "auth_failed_homestay_blocked",
+        tenantId: tenantKey,
+        userId: cleanEmail,
+        userRole: "owner",
+        ip: req.ip,
+      });
       return res.status(403).json({ error: { message: `Your homestay account is suspended by StayRide${account.blockReason ? `: ${account.blockReason}` : '.'}`, code: 'ACCOUNT_BLOCKED' } });
     }
     const store = await tenantManager.load(tenantKey);
@@ -301,6 +334,14 @@ stayrideV1Router.post('/auth/login', async (req: Request, res: Response) => {
     };
 
     const { accessToken, refreshToken } = issueTokens(tokenPayload);
+
+    logger.info(`[AUTH SUCCESS] Owner authenticated: ${store.homestay.ownerName || user.name} (${user.email}, ${store.homestay.name})`, {
+      action: "owner_login_success",
+      tenantId: tenantKey,
+      userId: user.email,
+      userRole: "owner",
+      ip: req.ip,
+    });
 
     return res.json({
       accessToken,
@@ -396,6 +437,21 @@ stayrideV1Router.post('/auth/signup', async (req: Request, res: Response) => {
         isDemo: false,
         tv: (userDoc as any).tokenVersion || 0,
       });
+
+      logger.info(`[SIGNUP] Driver account registered: ${cleanName} (${cleanEmail}, Phone: ${cleanPhone}, Vehicle: ${vehicleNumber})`, {
+        action: "driver_registered",
+        driverId: userDoc._id.toString(),
+        userId: cleanEmail,
+        userRole: "driver",
+        metadata: {
+          name: cleanName,
+          phone: cleanPhone,
+          vehicleType,
+          vehicleNumber,
+          area,
+        },
+      });
+
       return res.status(201).json({ accessToken, refreshToken, role: 'driver', driver: driverProfile(userDoc) });
     }
 
@@ -433,7 +489,18 @@ stayrideV1Router.post('/auth/signup', async (req: Request, res: Response) => {
       await (userDoc as any).save();
     }
 
-    console.log(`✅ Production user registered: ${cleanEmail} (${cleanHomestay})`);
+    logger.info(`[SIGNUP] Homestay host registered: ${cleanName} (${cleanEmail}, Homestay: ${cleanHomestay}, Location: ${cleanLocation})`, {
+      action: "owner_registered",
+      tenantId: tenantKey,
+      userId: cleanEmail,
+      userRole: "owner",
+      metadata: {
+        ownerName: cleanName,
+        homestayName: cleanHomestay,
+        location: cleanLocation,
+        phone: cleanPhone,
+      },
+    });
 
     const tokenPayload: StayRideAuthPayload = {
       id: userDoc._id.toString(),

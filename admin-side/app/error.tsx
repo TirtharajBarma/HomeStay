@@ -11,6 +11,21 @@ export default function AdminError({
 }) {
   useEffect(() => {
     console.error("StayRide Admin Tower Error:", error);
+    try {
+      fetch("/api/v1/telemetry/report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: error?.message || "Admin Tower UI Error",
+          screen: "AdminTower",
+          platform: "web-admin",
+          stack: error?.stack,
+          extra: { digest: error?.digest },
+        }),
+      }).catch(() => {});
+    } catch {
+      // Ignored
+    }
   }, [error]);
 
   return (

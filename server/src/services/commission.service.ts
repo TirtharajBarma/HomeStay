@@ -1,6 +1,7 @@
 import { getCommissionSettingsModel, ICommissionSettings } from "../models/commission-settings.model.js";
 import { getTenantControlModel, FEATURE_KEYS, FeatureKey } from "../models/tenant-control.model.js";
 import { resolvePlatformConfig, PlatformConfig } from "./platform-config.js";
+import { logger } from "../utils/logger.js";
 
 export interface CommissionCalculationResult {
   agreedFare: number;
@@ -183,7 +184,27 @@ export class CommissionService {
   /** Exact split for an agreed fare. Integer rupees; PF + HC + driver always equals the fare. */
   static async calculateSplit(fare: number, tenantKey?: string, isDemo = false): Promise<CommissionCalculationResult> {
     const { pfPercent, hcPercent, advancePercent, minAdvanceAmount } = await this.getEffectiveRates(tenantKey, isDemo);
-    return this.split(fare, pfPercent, hcPercent, advancePercent, minAdvanceAmount);
+    const split = this.split(fare, pfPercent, hcPercent, advancePercent, minAdvanceAmount);
+    logger.info(
+      `[CALCULATION] Fare split for ₹${split.agreedFare}: Platform fee ₹${split.platformFeeAmount} (${split.platformFeePercent}%), Homestay comm ₹${split.homestayCommissionAmount} (${split.homestayCommissionPercent}%), Driver payout ₹${split.driverPayoutAmount}, Advance ₹${split.advanceAmount}, Cash to driver ₹${split.remainingCashToDriver}`,
+      {
+        action: "calculate_split",
+        tenantId: tenantKey,
+        metadata: {
+          isDemo,
+          agreedFare: split.agreedFare,
+          platformFeeAmount: split.platformFeeAmount,
+          platformFeePercent: split.platformFeePercent,
+          homestayCommissionAmount: split.homestayCommissionAmount,
+          homestayCommissionPercent: split.homestayCommissionPercent,
+          driverPayoutAmount: split.driverPayoutAmount,
+          advanceAmount: split.advanceAmount,
+          remainingCashToDriver: split.remainingCashToDriver,
+          driverShareOfAdvance: split.driverShareOfAdvance,
+        },
+      }
+    );
+    return split;
   }
 
   static split(fare: number, pfPercent: number, hcPercent: number, advancePercent: number, minAdvanceAmount: number): CommissionCalculationResult {
@@ -244,7 +265,7 @@ export class CommissionService {
     const remainingCashToDriver = netCash;
     const driverPayoutAmount = netCash;
 
-    return {
+    const result: CommissionCalculationResult = {
       agreedFare,
       platformFeeRate: pfPercent / 100,
       platformFeePercent: pfPercent,
@@ -259,6 +280,22 @@ export class CommissionService {
       remainingCashToDriver,
       driverShareOfAdvance: 0,
     };
+
+    logger.info(
+      `[CALCULATION] Driver net cash ₹${driverCash} -> Total fare ₹${agreedFare} (Advance ₹${advanceAmount}, PF ₹${platformFeeAmount}, HC ₹${homestayCommissionAmount})`,
+      {
+        action: "from_driver_net_cash",
+        metadata: {
+          driverCash,
+          agreedFare,
+          advanceAmount,
+          platformFeeAmount,
+          homestayCommissionAmount,
+        },
+      }
+    );
+
+    return result;
   }
 
   static async calculateGrossFromDriverCash(driverCash: number, tenantKey?: string, isDemo = false): Promise<CommissionCalculationResult> {
