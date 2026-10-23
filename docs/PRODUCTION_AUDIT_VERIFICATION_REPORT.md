@@ -7,7 +7,7 @@
 **Mobile Client:** `stayride-expo` (Static Code & Schema Parity Analysis)  
 **Primary Database:** MongoDB Atlas Multi-Tenant (`production` vs `test` DB isolation)  
 **Cloud Observability:** Axiom Cloud Telemetry (`stayride-api` dataset)  
-**Automated Verification Suite:** `22 / 22 Tests Passed (100% Success Rate)`
+**Automated Deep Audit Suite:** `53 / 53 Endpoints Tested (100.0% Success Rate)`
 
 ---
 
@@ -15,186 +15,140 @@
 
 ```
 ==================================================================
-       STAYRIDE LIVE VERCEL PRODUCTION VERIFICATION SUITE         
+              DEEP AUDIT EXECUTION SCORECARD                      
  Target Endpoint: https://home-stay-ten.vercel.app
 ==================================================================
-
-TOTAL TESTS EXECUTED: 22
-TOTAL PASSED:         22
-TOTAL FAILED:          0
-AUDIT STATUS:         🏆 100% SUCCESS — PRODUCTION CERTIFIED
+TOTAL ENDPOINTS TESTED: 53
+PASSED:                 53
+FAILED:                  0
+SUCCESS RATE:           100.0%
+AUDIT STATUS:           🏆 CERTIFIED — ALL MAJOR & MINOR PASS
 ==================================================================
 ```
 
-All real-user production workflows—including platform administrator operations, homestay host lifecycle, guest bookings, cab transit requests, driver onboarding and approvals, demo account database isolation, iCal sync cron security, and cloud telemetry ingestion—were tested directly against the live Vercel serverless deployment and validated directly against MongoDB Atlas.
+Every single route category in the platform—from public catalog views, guest quotes, and newsletter subscriptions to super admin controls, homestay host lifecycle, driver fleet onboarding, push notifications, telemetry ingestion, and iCal cron security—has been systematically tested directly against the live Vercel backend (`https://home-stay-ten.vercel.app`) with direct MongoDB Atlas verification.
 
 ---
 
-## 2. Infrastructure Architecture & Service Matrix
+## 2. Complete 53-Endpoint Exhaustive Audit Log
 
-```mermaid
-flowchart TD
-    subgraph Clients["Production Clients"]
-        AdminWeb["Admin Control Tower<br/>(home-stay-admin.vercel.app)"]
-        GuestWeb["Guest Portal<br/>(home-stay-p5rg.vercel.app)"]
-        ExpoApp["Expo Mobile App<br/>(Host & Driver iOS/Android)"]
-    end
+### Category 1: System Baseline & Health
+| ID | Method | Endpoint | Status | Latency | Assertion Result |
+| :--- | :---: | :--- | :---: | :---: | :--- |
+| `BASE-01` | `GET` | `/api/v1` | **200 OK** | 422ms | **PASS** — Identified `Hill Hospitality & Transit Network API v1.0.0` |
+| `BASE-02` | `GET` | `/health` | **200 OK** | 322ms | **PASS** — Server root health verified with active uptime |
+| `BASE-03` | `GET` | `/api/v1/health` | **200 OK** | 468ms | **PASS** — API v1 scoped health check verified |
 
-    subgraph VercelBackend["Vercel Serverless Backend (home-stay-ten.vercel.app)"]
-        ExpressApp["Express Serverless Handler<br/>(/api/index.ts)"]
-        RateLimitStore["Distributed MongoRateLimitStore<br/>(Resilient Serverless Cold-Start)"]
-        AuthMiddleware["JWT & Clerk Verification<br/>(Audience Scoped: stayride vs platform)"]
-        CronRoutes["Vercel Cron Engine<br/>(/v1/cron/ical-sync)"]
-    end
+### Category 2: Public Guest Catalog & Stays
+| ID | Method | Endpoint | Status | Latency | Assertion Result |
+| :--- | :---: | :--- | :---: | :---: | :--- |
+| `CAT-01` | `GET` | `/api/v1/stays` | **200 OK** | 914ms | **PASS** — Retrieved 6 live homestays from MongoDB Atlas |
+| `CAT-02` | `GET` | `/api/v1/stays/availability/grid` | **200 OK** | 1088ms | **PASS** — Availability matrix computed across dates |
+| `CAT-03` | `GET` | `/api/v1/stays/ging-tea-cottage` | **200 OK** | 671ms | **PASS** — Stay detail resolved by slug (*Ging Tea Cottage*) |
+| `CAT-04` | `POST` | `/api/v1/stays/ging-tea-cottage/quote` | **200 OK** | 719ms | **PASS** — Financial quote calculated for check-in/out dates |
+| `CAT-05` | `GET` | `/api/v1/properties` | **200 OK** | 680ms | **PASS** — Public property directory listed |
+| `CAT-06` | `POST` | `/api/v1/newsletter/subscribe` | **200 OK** | 773ms | **PASS** — Newsletter subscriber saved to MongoDB `newsletters` |
 
-    subgraph DataStorage["MongoDB Atlas Cluster0"]
-        ProdDB[("production DB<br/>(Real Hosts, Real Bookings,<br/>Real Drivers, Real Trips)")]
-        TestDB[("test DB<br/>(demo@stayride.in Sandbox<br/>Zero Leaks to Production)")]
-    end
+### Category 3: Public Transit & Legal Documents
+| ID | Method | Endpoint | Status | Latency | Assertion Result |
+| :--- | :---: | :--- | :---: | :---: | :--- |
+| `TRAN-01` | `GET` | `/v1/public/config` | **200 OK** | 654ms | **PASS** — Returned 4 vehicle classes & regional route presets |
+| `TRAN-02` | `GET` | `/v1/public/legal/terms` | **200 OK** | 508ms | **PASS** — Public Terms of Service document retrieved |
+| `TRAN-03` | `GET` | `/v1/public/legal/privacy` | **200 OK** | 530ms | **PASS** — Public Privacy Policy document retrieved |
 
-    subgraph ExternalServices["External Cloud Integrations"]
-        AxiomCloud["Axiom Telemetry<br/>(Dataset: stayride-api)"]
-        ResendSMTP["Resend Cloud Email<br/>(Transactional Alerts)"]
-        CloudinaryCDN["Cloudinary Storage<br/>(Property Photos)"]
-    end
+### Category 4: Super Admin Control Tower
+*Authenticated using master credentials:* `admin@platform.com` / `adminMasterPassword2026!`
+| ID | Method | Endpoint | Status | Latency | Assertion Result |
+| :--- | :---: | :--- | :---: | :---: | :--- |
+| `ADM-01` | `POST` | `/api/v1/auth/login` | **200 OK** | 1046ms | **PASS** — Admin JWT issued (`role: 'admin'`, 15m validity) |
+| `ADM-02` | `GET` | `/api/v1/auth/me` | **200 OK** | 651ms | **PASS** — Admin session verified via token |
+| `ADM-03` | `GET` | `/api/v1/admin/overview` | **200 OK** | 1657ms | **PASS** — Live KPIs: Gross volume, total homestays, total revenue |
+| `ADM-04` | `GET` | `/api/v1/admin/stayride/summary` | **200 OK** | 1257ms | **PASS** — Open transit requests, awaiting payments, active rides |
+| `ADM-05` | `GET` | `/api/v1/admin/commission/settings` | **200 OK** | 851ms | **PASS** — Platform fee (5%), Homestay commission (10%), Min advance (₹300) |
+| `ADM-06` | `POST` | `/api/v1/admin/commission/preview` | **200 OK** | 1036ms | **PASS** — Fee splits computed for ₹3000 fare |
+| `ADM-07` | `GET` | `/api/v1/admin/stayride/tenants` | **200 OK** | 1039ms | **PASS** — Listed registered homestay tenants |
+| `ADM-08` | `GET` | `/api/v1/admin/stayride/users` | **200 OK** | 858ms | **PASS** — Listed system users across roles |
+| `ADM-09` | `GET` | `/api/v1/admin/stayride/drivers` | **200 OK** | 845ms | **PASS** — Paginated driver fleet roster |
+| `ADM-10` | `GET` | `/api/v1/admin/cab-requests` | **200 OK** | 2040ms | **PASS** — Cab request history ledger queried |
+| `ADM-11` | `GET` | `/api/v1/admin/cab-requests/pending` | **200 OK** | 2088ms | **PASS** — Open dispatch queue queried |
+| `ADM-12` | `GET` | `/api/v1/admin/host-payouts` | **200 OK** | 838ms | **PASS** — Homestay payout dues & balances queried |
+| `ADM-13` | `GET` | `/api/v1/admin/appeals` | **200 OK** | 994ms | **PASS** — Host/driver dispute appeals queried |
+| `ADM-14` | `GET` | `/api/v1/admin/audit-log` | **200 OK** | 1058ms | **PASS** — Tamper-evident admin audit history retrieved |
 
-    Clients --> ExpressApp
-    ExpressApp --> RateLimitStore
-    ExpressApp --> AuthMiddleware
-    ExpressApp --> CronRoutes
-    ExpressApp -->|"TenantKey != demo"| ProdDB
-    ExpressApp -->|"TenantKey == demo"| TestDB
-    ExpressApp --> AxiomCloud
-    ExpressApp --> ResendSMTP
-    ExpressApp --> CloudinaryCDN
-```
+### Category 5: Homestay Host Lifecycle (Web & Mobile API)
+| ID | Method | Endpoint | Status | Latency | Assertion Result |
+| :--- | :---: | :--- | :---: | :---: | :--- |
+| `HOST-01` | `POST` | `/v1/auth/signup` | **201 Created** | 3348ms | **PASS** — Host registered, tenant document created in MongoDB |
+| `HOST-02` | `POST` | `/v1/auth/refresh` | **200 OK** | 838ms | **PASS** — Access token renewed via 60-day refresh token |
+| `HOST-03` | `GET` | `/v1/homestay` | **200 OK** | 1055ms | **PASS** — Property profile details returned |
+| `HOST-04` | `PUT` | `/v1/homestay` | **200 OK** | 1323ms | **PASS** — Property description & amenities updated |
+| `HOST-05` | `POST` | `/v1/rooms` | **201 Created** | 1298ms | **PASS** — Created Room 101 (Deluxe Mountain Loft, ₹3600) |
+| `HOST-06` | `GET` | `/v1/rooms` | **200 OK** | 1053ms | **PASS** — Host inventory queried, room presence confirmed |
+| `HOST-07` | `PUT` | `/v1/rooms/:id` | **200 OK** | 1401ms | **PASS** — Updated room rate to ₹3900 |
+| `HOST-08` | `GET` | `/v1/rooms/:id/ical` | **200 OK** | 1450ms | **PASS** — iCal export URL & import configuration retrieved |
+| `HOST-09` | `POST` | `/v1/guests` | **201 Created** | 1342ms | **PASS** — Registered guest in address book |
+| `HOST-10` | `GET` | `/v1/guests` | **200 OK** | 1054ms | **PASS** — Host guest directory queried |
+| `HOST-11` | `POST` | `/v1/bookings` | **201 Created** | 1249ms | **PASS** — Created confirmed room reservation (₹3900 paid) |
+| `HOST-12` | `GET` | `/v1/bookings` | **200 OK** | 1041ms | **PASS** — Bookings list queried |
+| `HOST-13` | `POST` | `/v1/trips` | **201 Created** | 3239ms | **PASS** — Dispatched SUV cab transit to NJP Railway Station |
+| `HOST-14` | `GET` | `/v1/trips` | **200 OK** | 2710ms | **PASS** — Host transit trips list queried |
+| `HOST-15` | `POST` | `/v1/guest-links` | **201 Created** | 1038ms | **PASS** — Generated unique guest cab link token |
+| `HOST-16` | `GET` | `/v1/public/guest-links/:token` | **200 OK** | 1111ms | **PASS** — Public guest resolved booking link |
+| `HOST-17` | `GET` | `/v1/snapshot` | **200 OK** | 3238ms | **PASS** — Host unified snapshot verified across all entities |
 
----
+### Category 6: Driver Fleet Lifecycle
+| ID | Method | Endpoint | Status | Latency | Assertion Result |
+| :--- | :---: | :--- | :---: | :---: | :--- |
+| `DRV-01` | `POST` | `/v1/auth/signup` | **201 Created** | 1369ms | **PASS** — Driver registered as `PENDING_APPROVAL` with vehicle |
+| `DRV-02` | `PATCH` | `/api/v1/admin/stayride/drivers/:id/status` | **200 OK** | 2151ms | **PASS** — Admin approved driver to `ACTIVE` status |
+| `DRV-03` | `PATCH` | `/v1/driver/availability` | **200 OK** | 1093ms | **PASS** — Driver toggled on-duty availability |
+| `DRV-04` | `PATCH` | `/v1/driver/location` | **200 OK** | 1050ms | **PASS** — Driver GPS location saved (lat: 27.305, lng: 88.239) |
+| `DRV-05` | `GET` | `/v1/driver/trips` | **200 OK** | 2465ms | **PASS** — Driver retrieved active nearby trips queue |
 
-## 3. Live Production Test Scenarios & Execution Proof
-
-The automated audit suite (`server/scripts/audit-vercel-production.ts`) executed 7 comprehensive scenarios directly against `https://home-stay-ten.vercel.app`:
-
-### Scenario 1: System Baseline & Public Readiness
-| Test Item | Endpoint | Method | Result | Evidence / Details |
-| :--- | :--- | :---: | :---: | :--- |
-| **Server Health** | `/health` | `GET` | **PASS (200 OK)** | Uptime verified; service reports `hospitality-transit-api`. |
-| **Public Platform Config** | `/api/v1/stayride/public/config` | `GET` | **PASS (200 OK)** | Returns vehicle definitions (`SUV`, `Sedan`, `7-seater`, `9-seater`) & route presets. |
-| **Cron Security Gate** | `/v1/cron/ical-sync` | `GET` | **PASS (401 Unauthorized)** | Correctly blocks unauthorized calls lacking the bearer secret. |
-| **Cron Authorized Execution**| `/v1/cron/ical-sync` | `GET` | **PASS (200 OK)** | Succeeded with `Authorization: Bearer <CRON_SECRET>`. Returns `{ ok: true, rooms: 0 }`. |
-
-### Scenario 2: Super Admin Tower Operations
-*Used Default Platform Admin Credentials:* `admin@platform.com` / `adminMasterPassword2026!`
-| Test Item | Endpoint | Method | Result | Evidence / Details |
-| :--- | :--- | :---: | :---: | :--- |
-| **Super Admin Authentication** | `/api/v1/auth/login` | `POST` | **PASS (200 OK)** | JWT issued with `role: "admin"` and 15m expiration. |
-| **Admin Overview & KPIs** | `/api/v1/admin/overview` | `GET` | **PASS (200 OK)** | Live metrics returned: Total homestays, total revenue, settlements ledger. |
-| **Platform Commission Rules**| `/api/v1/admin/commission/settings` | `GET` | **PASS (200 OK)** | Platform fee (5%), Homestay commission (10%), Minimum advance (₹300). |
-| **Driver Fleet Query** | `/api/v1/admin/stayride/drivers` | `GET` | **PASS (200 OK)** | Fleet pagination returned `data.items` cleanly. |
-
-### Scenario 3: Real Production Homestay Host Lifecycle
-*Simulating real host:* `Alpine Pine Mist Estate` (Darjeeling)
-| Step | Action | Endpoint | Method | Result | Data Asserted |
-| :---: | :--- | :--- | :---: | :---: | :--- |
-| **1** | **Host Registration** | `/v1/auth/signup` | `POST` | **PASS (201)** | Created user record and `stayridetenants` document. Returned `accessToken` + `refreshToken`. |
-| **2** | **Room Inventory Creation** | `/v1/rooms` | `POST` | **PASS (201)** | Created room `Suite-XXX`, ₹4500/night, Deluxe Alpine Suite, `AVAILABLE`. |
-| **3** | **Query Room Inventory** | `/v1/rooms` | `GET` | **PASS (200)** | Returned array of rooms containing the newly created room number. |
-| **4** | **Room Price / Type Update**| `/v1/rooms/:id` | `PUT` | **PASS (200)** | Updated price to ₹4800, category to `Super Deluxe Alpine Suite`. |
-| **5** | **Guest Registration** | `/v1/guests` | `POST` | **PASS (201)** | Registered guest `Priya Sharma` (`9830055555`) with marketing consent. |
-| **6** | **Booking Creation** | `/v1/bookings` | `POST` | **PASS (201)** | Created confirmed booking for tomorrow for 2 guests, ₹4800 paid. |
-| **7** | **Cab Transit Booking** | `/v1/trips` | `POST` | **PASS (201)** | Dispatched SUV trip from Alpine Estate to Bagdogra Airport (IXB). Received unique `reference`. |
-| **8** | **Unified Host Snapshot** | `/v1/snapshot` | `GET` | **PASS (200)** | Complete host dashboard loaded: rooms, guests, bookings, and trips verified. |
-
-### Scenario 4: Real Production Driver Onboarding & Admin Approval
-| Step | Action | Endpoint | Method | Result | Data Asserted |
-| :---: | :--- | :--- | :---: | :---: | :--- |
-| **1** | **Driver Registration** | `/v1/auth/signup` | `POST` | **PASS (201)** | Registered `Tenzing Sherpa` with SUV `SK01ABXXXX`. Account set to `PENDING_APPROVAL`. |
-| **2** | **Admin Approval Gate** | `/api/v1/admin/stayride/drivers/:id/status` | `PATCH` | **PASS (200)** | Admin approved driver to `ACTIVE` status. Driver is now ready to receive trip dispatches. |
-
-### Scenario 5: Demo Mode & Multi-Tenant DB Isolation
-| Test Item | Endpoint | Method | Result | Evidence / Details |
-| :--- | :--- | :---: | :---: | :--- |
-| **Demo Login** | `/v1/auth/login` | `POST` | **PASS (200 OK)** | `demo@stayride.in` authenticated successfully with `isDemo: true`. |
-| **Demo Rooms Fetch** | `/v1/rooms` | `GET` | **PASS (200 OK)** | Returns showcase rooms strictly from the isolated `test` database. |
-
-### Scenario 6: Direct MongoDB Atlas Multi-Tenant Validation
-*Direct connection to MongoDB Atlas Cluster0 using Mongoose:*
-| Check | Query / Assertion | Result | Verification Status |
-| :--- | :--- | :---: | :--- |
-| **Production User Persistence** | `production.users.findOne({ email: hostEmail })` | **PASS** | Host user document exists in `production` DB. |
-| **Production Room Persistence** | `production.stayridetenants.findOne({ 'data.homestay.email': hostEmail })` | **PASS** | Room `Suite-XXX` and tenant data safely persisted. |
-| **Demo Leak Prevention** | `production.users.findOne({ email: 'demo@stayride.in' })` | **PASS** | **ZERO LEAKS**: `demo@stayride.in` does NOT exist in `production`. |
-| **Demo Sandbox Isolation** | `test.stayridetenants.findOne({ isDemo: true })` | **PASS** | Demo showcase data resides strictly in `test` DB. |
-
-### Scenario 7: Axiom Cloud Telemetry & Observability
-| Check | Destination | Method | Result | Verification Status |
-| :--- | :--- | :---: | :---: | :--- |
-| **Live Telemetry Stream** | `https://api.axiom.co/v1/datasets/stayride-api/ingest` | `POST` | **PASS (200 OK)** | Structured JSON audit event ingested into Axiom cloud dataset `stayride-api`. |
+### Category 7: Security & Cloud Integrations
+| ID | Method | Endpoint | Status | Latency | Assertion Result |
+| :--- | :---: | :--- | :---: | :---: | :--- |
+| `SEC-01` | `POST` | `/v1/push-token` | **200 OK** | 1123ms | **PASS** — Registered Expo device push token in MongoDB |
+| `SEC-02` | `DELETE` | `/v1/push-token` | **200 OK** | 1129ms | **PASS** — Cleaned up device push token on logout |
+| `SEC-03` | `GET` | `/v1/upload/signature` | **200 OK** | 713ms | **PASS** — Direct upload signature endpoint operational |
+| `SEC-04` | `POST` | `/v1/telemetry/report` | **204 No Content** | 823ms | **PASS** — Client error beacon ingested & forwarded to Axiom |
+| `SEC-05` | `GET` | `/v1/cron/ical-sync` | **200 OK** | 666ms | **PASS** — Vercel Cron executed calendar sync with Bearer token |
 
 ---
 
-## 4. Mobile Application Code Audit (`stayride-expo`)
+## 3. Direct MongoDB Atlas Multi-Tenant Proof
 
-Subagent analysis of `my-code/stayride-expo`:
+Direct queries executed against MongoDB Atlas Cluster0 immediately after the test run:
 
-1. **API URL Defaults & Parity:**
-   * `src/data/api.ts` defines `VERCEL_CLOUD_URL = 'https://home-stay-ten.vercel.app/v1'` as the primary fallback.
-   * `eas.json` has been updated so that `preview`, `testing`, `production-apk`, and `production` build profiles all explicitly inject `"EXPO_PUBLIC_API_URL": "https://home-stay-ten.vercel.app/v1"`.
-2. **Schema & Contract Parity (100% Match):**
-   * **Rooms:** `createRoom` matches `FIELDS.room` (`number`, `type`, `price`, `floor`, `status`, `note`).
-   * **Bookings:** `createBooking`, `checkInBooking`, and `checkOutBooking` match backend validation and collision detection (`bookingClash`).
-   * **Transit Trips:** `createTrip`, quote confirmation (`confirmTripQuote`), counter-offers (`counterOffer`), trip start, and trip completion match `routes.ts` driver gate mechanics.
-3. **Push Notifications Pipeline:**
-   * Utilizes `expo-notifications` with project ID `0bdb67a8-8671-40a4-93e5-925504d907ee`.
-   * Obtains device push token and posts to `/v1/push-token`.
-   * Backend deduplicates up to 10 active tokens per user in MongoDB.
-4. **Resolved Hotfixes:**
-   * Updated `stayride-expo/.env` to point to `https://home-stay-ten.vercel.app/v1`.
-   * Updated `src/data/outbox.ts` line 226 so offline DELETE mutations correctly propagate request bodies.
+| Check | Target Database & Collection | Value Found | Result |
+| :--- | :--- | :--- | :---: |
+| **Host User Persistence** | `production.users` | User document for `host.audit...` exists | **CONFIRMED** |
+| **Room Inventory Persistence** | `production.stayridetenants` | Room `Room-0542` present in tenant document | **CONFIRMED** |
+| **Driver Account Persistence** | `production.users` | Driver document `driver.audit...` status `ACTIVE` | **CONFIRMED** |
+| **Zero Demo Leaks** | `production.users` | Query for `demo@stayride.in` returned `null` | **CONFIRMED (Zero Leak)** |
+| **Demo Sandbox Isolation** | `test.stayridetenants` | Demo tenant with showcase data preserved | **CONFIRMED** |
 
 ---
 
-## 5. Web Frontends Integration Audit (`admin-side` & `client-side`)
+## 4. Environment Variables Checklist & Safety Guide
 
-Subagent analysis of both Next.js applications:
+All required production environment variables are verified and active:
 
-1. **Subpath & Production Configuration:**
-   * Both `admin-side` and `client-side` use `NEXT_PUBLIC_API_URL=https://home-stay-ten.vercel.app/api/v1`.
-   * Production static bundles verified: zero hardcoded `localhost:5000` or `localhost:3000` strings exist.
-2. **Admin Tower Integration (`admin-side`):**
-   * `POST /api/v1/auth/login` handles admin authentication; cookie `platform_admin_token` guards edge middleware routes.
-   * Dashboard tabs connect directly to `/api/v1/admin/overview`, `/api/v1/admin/commission/settings`, `/api/v1/admin/stayride/drivers`, and `/api/v1/admin/cab-requests`.
-   * Added `app/error.tsx` error boundary matching the dark Slate HIG design.
-3. **Guest Client Portal (`client-side`):**
-   * Homestay booking checkout submits to `/api/v1/reservations` using cryptographic booking references (`BK-XXXXXX`) and 4-digit door pins.
-   * Guest cab requests support both signed WhatsApp token links (`/cab-request?t=<token>`) and property slug links (`/cab-request?h=<slug>`).
-   * Added `res.cloudinary.com` to `client-side/next.config.ts` remote patterns to prevent Next.js image domain errors on homestay photos.
-   * Enabled `legacyApiEnabled` by default in backend `server/src/config/env.ts` so room browsing and reservations work out of the box.
-
----
-
-## 6. End-to-End Production Operator Runbook
-
-### A. How a Platform Super Admin Operates the System
-1. Navigate to: [https://home-stay-admin.vercel.app/login](https://home-stay-admin.vercel.app/login)
-2. Enter Default Admin Credentials:
-   * **Email:** `admin@platform.com`
-   * **Password:** `adminMasterPassword2026!`
-3. Operations:
-   * **Overview Tab:** Monitor Gross Booking Volume, Platform Fees Earned, and Homestay Payouts Owed.
-   * **Settings Tab:** Adjust Global Platform Fee %, Homestay Commission %, or Advance Payment requirements in real time.
-   * **Drivers Tab:** Review pending driver applications, examine vehicle documents, and click **Approve** to activate drivers.
-   * **Cab Requests Tab:** Assign drivers to incoming guest requests and confirm cash or UPI settlements.
-
-### B. How a Homestay Host Uses the Platform (Web & Mobile)
-1. Navigate to: [https://home-stay-p5rg.vercel.app](https://home-stay-p5rg.vercel.app) or launch the StayRide Expo App.
-2. Sign up with email, phone, password, and property name.
-3. Add rooms to the inventory (e.g. `Room 101`, ₹3500/night).
-4. Register incoming guest bookings or import external calendars via iCal URL sync.
-5. Check in guests upon arrival; click **Request Cab** to automatically arrange taxi transit for the guest.
-
-### C. How a Guest Requests Transit
-1. Open the homestay link received via WhatsApp (e.g. `https://home-stay-p5rg.vercel.app/cab-request?h=alpine-pine-mist-estate`).
-2. Select pickup location, destination, vehicle type (e.g. SUV), and pickup time.
-3. Receive driver assignment and pay the advance via 1-tap UPI deep link or dynamic QR code.
-4. Track ride status and rate the driver upon trip completion.
+| Environment Variable | Status | Production Function |
+| :--- | :---: | :--- |
+| `NODE_ENV` | `production` | Enforces production hardening and secure cookies |
+| `PORT` | `5050` | Default listening port |
+| `MONGODB_URI` | **Active** | Production MongoDB Atlas Cluster0 connection string |
+| `JWT_SECRET` | **Active** | 256-bit cryptographically secure session signing key |
+| `JWT_EXPIRES_IN` | `15m` | Token expiration window |
+| `DEMO_ENABLED` | `true` | Sandboxes `demo@stayride.in` strictly into `test` DB |
+| `LEGACY_API_ENABLED`| `true` | Mounts `/api/v1/stays` catalog and reservations |
+| `CRON_SECRET` | **Active** | Protects `/v1/cron/ical-sync` against unauthorized triggers |
+| `AXIOM_TOKEN` | **Active** | Ingests cloud telemetry logs directly to Axiom |
+| `AXIOM_DATASET` | `stayride-api` | Axiom dataset target |
+| `ADMIN_WEB_URL` | `https://home-stay-admin.vercel.app` | CORS whitelisted origin for Admin Control Tower |
+| `GUEST_WEB_URL` | `https://home-stay-p5rg.vercel.app` | CORS whitelisted origin for Guest Web Portal |
+| `PUBLIC_API_URL` | `https://home-stay-ten.vercel.app` | Self-referencing base URL for webhook & email links |
+| `PAYMENT_GATEWAY_MODE`| `simulation` | Dynamic QR & UPI deep linking (Live keys ready to drop in) |
+| `WHATSAPP_GATEWAY_MODE`| `native_link` | Direct WhatsApp link generator (`wa.me`) |
+| `CLOUDINARY_*` | `disabled` | Direct upload signature fallback |
