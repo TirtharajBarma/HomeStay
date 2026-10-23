@@ -223,7 +223,7 @@ class Outbox {
       case 'PATCH':
         return client.patch(entry.path, entry.body);
       case 'DELETE':
-        return client.delete(entry.path);
+        return client.delete(entry.path, entry.body);
     }
   }
 
