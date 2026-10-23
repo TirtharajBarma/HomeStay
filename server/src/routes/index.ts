@@ -7,6 +7,8 @@ import driverRoutes from "./driver.routes.js";
 import analyticsRoutes from "./analytics.routes.js";
 import authRoutes from "./auth.routes.js";
 import adminRoutes from "./admin.routes.js";
+import uploadRoutes from "./upload.routes.js";
+import telemetryRoutes from "./telemetry.routes.js";
 import { IcalController } from "../controllers/ical.controller.js";
 import { verifyToken, requireRole } from "../middlewares/auth.js";
 import { Newsletter } from "../models/newsletter.model.js";
@@ -25,6 +27,8 @@ apiRouter.get("/", (_req, res) => {
 
 apiRouter.use("/auth", authRoutes);
 apiRouter.use("/admin", adminRoutes);
+apiRouter.use("/upload", uploadRoutes);
+apiRouter.use("/telemetry", telemetryRoutes);
 
 
 // Legacy guest-website API: public listings/bookings/drivers. Off unless LEGACY_API_ENABLED=true.
