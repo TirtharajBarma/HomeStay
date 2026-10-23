@@ -152,6 +152,17 @@ export const LoginScreen: React.FC = () => {
   const goStep = (next: number) => {
     const error = next === 2 && !role ? 'Choose how you will use StayRide.' : next === 3 ? detailsError() : null;
     if (error) return Alert.alert('Almost there', error);
+    if (next === 3 && role === 'owner' && !coords) {
+      Alert.alert(
+        'Pin Exact Homestay Location?',
+        'In mountain areas, driver GPS navigation needs your exact gate location to prevent drivers getting lost. Would you like to pin your location on the map now?',
+        [
+          { text: 'Set on Map', onPress: () => setMapVisible(true) },
+          { text: 'Set Later in Settings', style: 'default', onPress: () => setStep(next) },
+        ]
+      );
+      return;
+    }
     setStep(next);
   };
 
@@ -469,12 +480,34 @@ export const LoginScreen: React.FC = () => {
       {role === 'owner' ? (
         <>
           {field('business-outline', { placeholder: 'Homestay name', value: homestayName, onChangeText: setHomestayName })}
-          <TouchableOpacity style={styles.pinBtn} onPress={() => setMapVisible(true)} accessibilityRole="button">
-            <Ionicons name="location" size={18} color={Colors.brandPrimaryDark} />
+          <TouchableOpacity
+            style={[
+              styles.pinBtn,
+              coords
+                ? { backgroundColor: '#ECFDF5', borderColor: '#10B981', borderWidth: 1 }
+                : { backgroundColor: '#FFFBEB', borderColor: '#F59E0B', borderWidth: 1 },
+            ]}
+            onPress={() => setMapVisible(true)}
+            accessibilityRole="button"
+          >
+            <View
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 18,
+                backgroundColor: coords ? '#10B981' : '#F59E0B',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Ionicons name={coords ? 'checkmark' : 'navigate'} size={20} color={Colors.white} />
+            </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.pinTitle}>{coords ? 'Homestay pinned on map' : 'Pin your homestay on the map'}</Text>
+              <Text style={styles.pinTitle}>{coords ? 'Homestay Pinned on Map' : 'Set Exact Location on Map'}</Text>
               <Text style={styles.pinSub} numberOfLines={2}>
-                {coords ? location || `${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)}` : 'So nearby drivers get your cab requests (you can do this later)'}
+                {coords
+                  ? location || `${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)}`
+                  : 'Drag map or use GPS pin so drivers reach your homestay gate.'}
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={16} color={Colors.textSecondary} />

@@ -160,6 +160,29 @@ const STATUS_FRIENDLY_LABELS: Record<string, string> = {
 const toLocalYmd = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
+const toTime24 = (t12: string) => {
+  if (!t12) return "09:00";
+  const match = t12.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!match) return "09:00";
+  let h = parseInt(match[1], 10);
+  const m = match[2];
+  const ampm = match[3].toUpperCase();
+  if (ampm === "PM" && h < 12) h += 12;
+  if (ampm === "AM" && h === 12) h = 0;
+  return `${String(h).padStart(2, "0")}:${m}`;
+};
+
+const toTime12 = (t24: string) => {
+  if (!t24) return "09:00 AM";
+  const parts = t24.split(":");
+  if (parts.length < 2) return "09:00 AM";
+  let h = parseInt(parts[0], 10);
+  const m = parts[1];
+  const ampm = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${String(h12).padStart(2, "0")}:${m} ${ampm}`;
+};
+
 const formatInr = (n: number | null | undefined) =>
   typeof n === "number" ? `₹${n.toLocaleString("en-IN")}` : "—";
 
@@ -361,7 +384,11 @@ function CabRequestFormContent() {
       .then((data) => {
         if (cancelled) return;
         setLink(data);
-        setPickup(data.pickup || "");
+        const resolvedPickup =
+          data.homestayName && data.pickup && !data.pickup.toLowerCase().includes(data.homestayName.toLowerCase())
+            ? `${data.homestayName}, ${data.pickup}`
+            : data.pickup || data.homestayName || "";
+        setPickup(resolvedPickup);
         if (data.guestName) setGuestName(data.guestName);
         if (data.guestPhone) setGuestPhone(data.guestPhone);
         setLinkState("valid");
@@ -1076,31 +1103,101 @@ function CabRequestFormContent() {
                   <p className="text-xs text-[#57606A]">Select a popular mountain route or customize your itinerary.</p>
                 </div>
 
-                {/* Pickup Location */}
-                <div className="space-y-1.5">
+                {/* Pickup Location Mode */}
+                <div className="space-y-2.5">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-semibold text-[#57606A] flex items-center gap-1">
+                    <label className="text-xs font-bold text-[#1F2328] flex items-center gap-1.5">
                       <Icon name="location_on" className="text-xs text-emerald-700" />
-                      <span>Pickup Location (Homestay)</span>
+                      <span>Pickup Point</span>
                     </label>
+                    <span className="text-[11px] text-[#57606A]">Where will driver meet you?</span>
+                  </div>
+
+                  {/* 2-Option Segmented Selector */}
+                  <div className="grid grid-cols-2 gap-2 p-1 bg-[#F6F8FA] border border-[#D0D7DE] rounded-xl">
                     <button
                       type="button"
-                      onClick={() => setCustomPickup(!customPickup)}
-                      className="text-[11px] font-semibold text-emerald-700 hover:underline cursor-pointer"
+                      onClick={() => {
+                        setCustomPickup(false);
+                        const homestayLoc = link?.pickup
+                          ? (link.homestayName && !link.pickup.toLowerCase().includes(link.homestayName.toLowerCase())
+                              ? `${link.homestayName}, ${link.pickup}`
+                              : link.pickup)
+                          : link?.homestayName || "Homestay gate";
+                        setPickup(homestayLoc);
+                      }}
+                      className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        !customPickup
+                          ? "bg-white text-emerald-950 shadow-xs border border-emerald-600/30"
+                          : "text-[#57606A] hover:text-[#1F2328]"
+                      }`}
                     >
-                      {customPickup ? "Use Default" : "Change Pickup"}
+                      <Icon name="home" className="text-sm text-emerald-700" />
+                      <span>At the Homestay</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setCustomPickup(true)}
+                      className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        customPickup
+                          ? "bg-white text-emerald-950 shadow-xs border border-emerald-600/30"
+                          : "text-[#57606A] hover:text-[#1F2328]"
+                      }`}
+                    >
+                      <Icon name="flight_land" className="text-sm text-emerald-700" />
+                      <span>Airport / Station / Other</span>
                     </button>
                   </div>
-                  <input
-                    type="text"
-                    value={pickup}
-                    readOnly={!customPickup}
-                    onChange={(e) => setPickup(e.target.value)}
-                    className={`w-full rounded-xl border border-[#D0D7DE] px-3.5 py-2.5 text-xs text-[#1F2328] ${
-                      customPickup ? "bg-white focus:border-emerald-600" : "bg-[#F6F8FA]"
-                    }`}
-                    placeholder="Enter pickup address"
-                  />
+
+                  {!customPickup ? (
+                    /* Homestay Pickup Card */
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3.5 space-y-1.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-bold text-emerald-950">{link?.homestayName || "Verified Partner Homestay"}</span>
+                            <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[9px] font-extrabold text-emerald-800 uppercase tracking-wide">
+                              Verified Stay
+                            </span>
+                          </div>
+                          <p className="mt-1 text-xs text-emerald-900 leading-snug font-medium">
+                            {pickup || `${link?.homestayName || "Homestay"}, Darjeeling`}
+                          </p>
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-emerald-800/80 pt-1 border-t border-emerald-200/60">
+                        Driver receives verified GPS coordinates and navigates straight to your homestay gate.
+                      </p>
+                    </div>
+                  ) : (
+                    /* Custom Pickup Input with Quick Airport/Station Chips */
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap gap-1.5">
+                        {["Bagdogra Airport (IXB)", "NJP Railway Station", "Darjeeling Mall / Chowrasta", "Siliguri Junction"].map((preset) => (
+                          <button
+                            key={preset}
+                            type="button"
+                            onClick={() => setPickup(preset)}
+                            className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold transition-colors cursor-pointer ${
+                              pickup === preset
+                                ? "bg-emerald-100 border-emerald-400 text-emerald-900 font-bold"
+                                : "bg-[#F6F8FA] border-[#D0D7DE] text-[#24292F] hover:bg-[#E1E4E8]"
+                            }`}
+                          >
+                            + {preset}
+                          </button>
+                        ))}
+                      </div>
+                      <input
+                        type="text"
+                        value={pickup}
+                        onChange={(e) => setPickup(e.target.value)}
+                        className="w-full rounded-xl border border-[#D0D7DE] bg-white px-3.5 py-2.5 text-xs text-[#1F2328] focus:border-emerald-600 focus:outline-none shadow-xs"
+                        placeholder="Enter specific gate, airport terminal, or landmark address"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* Mode Switch: Popular Routes vs Custom */}
@@ -1189,9 +1286,16 @@ function CabRequestFormContent() {
 
                                 <div className="text-right shrink-0">
                                   <span className="text-[10px] text-[#57606A] block">From</span>
-                                  <span className="text-xs font-extrabold text-[#1F2328]">
+                                  <span className="text-sm font-extrabold text-emerald-800">
                                     {formatInr(route.fares.Sedan || route.fares.SUV)}
                                   </span>
+                                  <div className="text-[10px] text-[#57606A] font-medium mt-0.5">
+                                    {route.fares.Sedan && route.fares.SUV ? (
+                                      <span>Sedan {formatInr(route.fares.Sedan)} · SUV {formatInr(route.fares.SUV)}</span>
+                                    ) : (
+                                      <span>Fixed Rate</span>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
                             </div>
@@ -1278,23 +1382,69 @@ function CabRequestFormContent() {
                 </div>
 
                 {/* Time Selection */}
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold text-[#57606A] block">Pickup Time</label>
-                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5">
-                    {timeOptions.map((t) => (
-                      <button
-                        key={t}
-                        type="button"
-                        onClick={() => setTime(t)}
-                        className={`rounded-lg py-2 text-center text-xs font-bold transition-all cursor-pointer ${
-                          time === t
-                            ? "bg-emerald-600 text-white shadow-xs"
-                            : "bg-[#F6F8FA] border border-[#D0D7DE] text-[#24292F] hover:bg-[#E1E4E8]"
-                        }`}
-                      >
-                        {t}
-                      </button>
-                    ))}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-[#57606A] block">Pickup Time</label>
+                    <span className="text-[11px] text-emerald-800 font-bold bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                      <Icon name="schedule" className="text-xs text-emerald-700" />
+                      <span>{time}</span>
+                    </span>
+                  </div>
+
+                  {/* Native Clock Dialer / Time Picker */}
+                  <div className="relative flex items-center">
+                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-emerald-700">
+                      <Icon name="alarm" className="text-base" />
+                    </div>
+                    <input
+                      type="time"
+                      value={toTime24(time)}
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          setTime(toTime12(e.target.value));
+                        }
+                      }}
+                      className="w-full rounded-xl border border-[#D0D7DE] bg-white py-2.5 pl-10 pr-24 text-sm font-bold text-[#1F2328] focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600 shadow-xs cursor-pointer"
+                    />
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-[11px] text-[#57606A] font-medium">
+                      Tap for clock
+                    </div>
+                  </div>
+
+                  {/* Quick Mountain Departure Shortcuts */}
+                  <div className="space-y-1.5 pt-1">
+                    <span className="text-[11px] text-[#57606A] font-medium">Popular Mountain Departures:</span>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                      {[
+                        { label: "04:00 AM", sub: "Tiger Hill Sunrise" },
+                        { label: "07:30 AM", sub: "Flight / Train Drop" },
+                        { label: "09:30 AM", sub: "Check-out Transfer" },
+                        { label: "10:30 AM", sub: "Day Sightseeing" },
+                        { label: "02:00 PM", sub: "Afternoon Tour" },
+                        { label: "06:00 PM", sub: "Dinner / Mall Road" },
+                      ].map((slot) => {
+                        const isMatch = time === slot.label;
+                        return (
+                          <button
+                            key={slot.label}
+                            type="button"
+                            onClick={() => setTime(slot.label)}
+                            className={`flex flex-col items-start px-2.5 py-2 rounded-xl text-left border transition-all cursor-pointer ${
+                              isMatch
+                                ? "bg-emerald-600 text-white border-emerald-600 shadow-xs ring-1 ring-emerald-600"
+                                : "bg-[#F6F8FA] border-[#D0D7DE] text-[#24292F] hover:bg-[#E1E4E8]"
+                            }`}
+                          >
+                            <span className={`text-xs font-bold leading-none ${isMatch ? "text-white" : "text-[#1F2328]"}`}>
+                              {slot.label}
+                            </span>
+                            <span className={`text-[10px] mt-1 line-clamp-1 ${isMatch ? "text-emerald-100" : "text-[#57606A]"}`}>
+                              {slot.sub}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
 
