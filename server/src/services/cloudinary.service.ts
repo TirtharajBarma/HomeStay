@@ -31,7 +31,14 @@ export class CloudinaryService {
   }
 
   public static isConfigured(): boolean {
-    return Boolean(this.cloudName && this.apiKey && this.apiSecret);
+    return Boolean(
+      this.cloudName &&
+      this.apiKey &&
+      this.apiSecret &&
+      this.cloudName !== "none" &&
+      this.cloudName !== "disabled" &&
+      !this.cloudName.includes("placeholder")
+    );
   }
 
   /** URL prefix of images stored in this account; anything else is refused as a homestay photo. */

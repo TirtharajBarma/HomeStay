@@ -43,9 +43,13 @@ class TelemetryLogger {
   private readonly logtailToken = process.env.LOGTAIL_SOURCE_TOKEN || "";
   private readonly environment = process.env.NODE_ENV || "development";
 
+  private isLiveToken(t: string): boolean {
+    return Boolean(t && t !== "disabled" && t !== "none" && !t.includes("placeholder"));
+  }
+
   constructor() {
     // Start background flusher if third-party streaming is configured
-    if (this.axiomToken || this.logtailToken) {
+    if (this.isLiveToken(this.axiomToken) || this.isLiveToken(this.logtailToken)) {
       this.flushTimer = setInterval(() => this.flush(), this.flushIntervalMs);
       if (this.flushTimer.unref) this.flushTimer.unref();
     }
@@ -67,7 +71,7 @@ class TelemetryLogger {
     }
 
     // 2. Queue for background cloud streaming if tokens exist
-    if (this.axiomToken || this.logtailToken) {
+    if (this.isLiveToken(this.axiomToken) || this.isLiveToken(this.logtailToken)) {
       this.queue.push(payload);
       if (this.queue.length >= this.batchSize) {
         this.flush();
@@ -80,7 +84,7 @@ class TelemetryLogger {
     const batch = this.queue.splice(0, this.batchSize);
 
     try {
-      if (this.axiomToken) {
+      if (this.isLiveToken(this.axiomToken)) {
         // Stream to Axiom (500 GB free tier)
         await fetch(`https://api.axiom.co/v1/datasets/${this.axiomDataset}/ingest`, {
           method: "POST",
@@ -90,7 +94,7 @@ class TelemetryLogger {
           },
           body: JSON.stringify(batch),
         }).catch(() => {});
-      } else if (this.logtailToken) {
+      } else if (this.isLiveToken(this.logtailToken)) {
         // Stream to Better Stack / Logtail (1 GB free tier)
         await fetch("https://in.logtail.com", {
           method: "POST",

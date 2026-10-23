@@ -37,9 +37,18 @@ export class NotificationService {
 
   private static getTransporter(): MailTransporter | null {
     if (this.transporter) return this.transporter;
-    if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
+    const host = process.env.SMTP_HOST || "";
+    const isConfigured = Boolean(
+      host &&
+      process.env.SMTP_USER &&
+      process.env.SMTP_PASS &&
+      host !== "disabled" &&
+      host !== "none" &&
+      !host.includes("placeholder")
+    );
+    if (isConfigured) {
       this.transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST,
+        host,
         port: parseInt(process.env.SMTP_PORT || "587", 10),
         secure: process.env.SMTP_SECURE === "true",
         auth: {
