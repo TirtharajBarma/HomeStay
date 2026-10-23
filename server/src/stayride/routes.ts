@@ -388,7 +388,14 @@ stayrideV1Router.post('/auth/signup', async (req: Request, res: Response) => {
 
     // DRIVER SIGNUP FLOW
     if (userRole === 'driver') {
-      const { accessToken, refreshToken } = issueTokens({ id: userDoc._id.toString(), email: cleanEmail, role: 'driver', tenantKey: cleanEmail, isDemo: false });
+      const { accessToken, refreshToken } = issueTokens({
+        id: userDoc._id.toString(),
+        email: cleanEmail,
+        role: 'driver',
+        tenantKey: cleanEmail,
+        isDemo: false,
+        tv: (userDoc as any).tokenVersion || 0,
+      });
       return res.status(201).json({ accessToken, refreshToken, role: 'driver', driver: driverProfile(userDoc) });
     }
 
@@ -434,6 +441,7 @@ stayrideV1Router.post('/auth/signup', async (req: Request, res: Response) => {
       role: 'owner',
       tenantKey,
       isDemo: false,
+      tv: (userDoc as any).tokenVersion || 0,
     };
 
     const { accessToken, refreshToken } = issueTokens(tokenPayload);

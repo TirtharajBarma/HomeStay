@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import type { Options, Store, ClientRateLimitInfo } from "express-rate-limit";
 import { httpError } from "./error-handler.js";
+import { connectDB } from "../config/db.js";
 
 /**
  * express-rate-limit Store shared by every serverless instance: one Mongo document per client key
@@ -18,8 +19,13 @@ export class MongoRateLimitStore implements Store {
     this.windowMs = options.windowMs;
   }
 
-  private coll() {
-    if (mongoose.connection.readyState !== 1 || !mongoose.connection.db) throw httpError(503, "Service temporarily unavailable. Please retry.", "DB_UNAVAILABLE");
+  private async coll() {
+    if (mongoose.connection.readyState !== 1 || !mongoose.connection.db) {
+      await connectDB().catch(() => {});
+    }
+    if (mongoose.connection.readyState !== 1 || !mongoose.connection.db) {
+      throw httpError(503, "Service temporarily unavailable. Please retry.", "DB_UNAVAILABLE");
+    }
     const coll = mongoose.connection.db.collection<{ _id: string; hits: number; resetTime: Date }>("ratelimits");
     this.indexes ??= coll.createIndex({ resetTime: 1 }, { expireAfterSeconds: 0 }).catch(() => (this.indexes = null));
     return coll;
@@ -38,7 +44,8 @@ export class MongoRateLimitStore implements Store {
     ];
     for (let attempt = 0; ; attempt++) {
       try {
-        const doc = await this.coll().findOneAndUpdate({ _id: this.prefix + key }, update, { upsert: true, returnDocument: "after" });
+        const collection = await this.coll();
+        const doc = await collection.findOneAndUpdate({ _id: this.prefix + key }, update, { upsert: true, returnDocument: "after" });
         return { totalHits: doc?.hits ?? 1, resetTime: doc?.resetTime };
       } catch (err: any) {
         // Two first hits for the same key can race on the upsert; the loser simply retries.
@@ -48,10 +55,16 @@ export class MongoRateLimitStore implements Store {
   }
 
   async decrement(key: string) {
-    await this.coll().updateOne({ _id: this.prefix + key, resetTime: { $gt: new Date() }, hits: { $gt: 0 } }, { $inc: { hits: -1 } });
+    try {
+      const collection = await this.coll();
+      await collection.updateOne({ _id: this.prefix + key, resetTime: { $gt: new Date() }, hits: { $gt: 0 } }, { $inc: { hits: -1 } });
+    } catch {}
   }
 
   async resetKey(key: string) {
-    await this.coll().deleteOne({ _id: this.prefix + key });
+    try {
+      const collection = await this.coll();
+      await collection.deleteOne({ _id: this.prefix + key });
+    } catch {}
   }
 }

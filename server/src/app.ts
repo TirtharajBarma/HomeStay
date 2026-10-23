@@ -75,7 +75,7 @@ const strictLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   store: new MongoRateLimitStore("s:"),
-  passOnStoreError: false,
+  passOnStoreError: true,
   message: { error: { message: "Too many attempts, please try again after 15 minutes", code: "RATE_LIMITED" } },
 });
 app.use(
