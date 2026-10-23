@@ -31,9 +31,8 @@ export const config = {
   isPreview,
   // Shared demo account (demo@stayride.in). Off on Vercel unless DEMO_ENABLED=true.
   demoEnabled: process.env.DEMO_ENABLED !== undefined ? process.env.DEMO_ENABLED === "true" : !onVercel,
-  // Old /api/v1 guest-website + legacy owner API. Off unless LEGACY_API_ENABLED=true: it predates
-  // StayRide's blocking/feature/commission controls and exposes public PII endpoints.
-  legacyApiEnabled: process.env.LEGACY_API_ENABLED === "true",
+  // Guest website API (stays catalog, properties, reservations). Enabled by default unless explicitly disabled.
+  legacyApiEnabled: process.env.LEGACY_API_ENABLED !== "false",
   jwtSecret,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || "15m",
   googleClientId: process.env.GOOGLE_CLIENT_ID || "",
