@@ -19,7 +19,7 @@ import * as Updates from 'expo-updates';
 import { Colors, Radii, Shadows } from '../theme/colors';
 import { KeyboardAwareOverlay } from '../components/KeyboardAwareOverlay';
 import { useStayRide } from '../data/store';
-import { api, DEFAULT_BASE_URL } from '../data/api';
+import { api, DEFAULT_BASE_URL, VERCEL_CLOUD_URL } from '../data/api';
 import { Header } from '../components/Header';
 import { CURRENT_RELEASE_VERSION } from '../constants/version';
 import { getActiveAppVersion } from '../services/updates/updateManager';
@@ -145,11 +145,20 @@ export const MoreScreen: React.FC = () => {
   const handleServerConfig = () => {
     Alert.alert(
       'Backend Server Configuration',
-      `Status: ${backendLive ? '🟢 Connected' : '🔴 Unreachable / Offline'}\n\nEndpoint:\n${api.getBaseUrl()}\n\n• For physical phone on Wi-Fi: use your PC LAN IP (e.g. http://192.168.0.111:5050/v1)\n• For production cloud: set your HTTPS domain URL.`,
+      `Status: ${backendLive ? '🟢 Connected' : '🔴 Unreachable / Offline'}\n\nCurrent Endpoint:\n${api.getBaseUrl()}\n\n• Vercel Cloud: Live internet server for field testing.\n• Local Wi-Fi: Developer PC LAN (from .env).`,
       [
-        { text: 'OK', style: 'cancel' },
+        { text: 'Close', style: 'cancel' },
         {
-          text: 'Reset to LAN Default',
+          text: 'Connect Vercel Cloud',
+          onPress: async () => {
+            api.setBaseUrl(VERCEL_CLOUD_URL);
+            const live = await api.checkHealth();
+            setBackendLive(live);
+            Alert.alert('Switched to Vercel Cloud', `Endpoint set to: ${VERCEL_CLOUD_URL}\nStatus: ${live ? 'Online' : 'Offline (check Vercel env keys)'}`);
+          },
+        },
+        {
+          text: 'Reset to Local / .env',
           onPress: async () => {
             api.setBaseUrl(DEFAULT_BASE_URL);
             const live = await api.checkHealth();

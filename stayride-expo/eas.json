@@ -17,9 +17,26 @@
       "android": {
         "buildType": "apk"
       },
-      "channel": "preview",
+      "channel": "preview"
+    },
+    "testing": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "channel": "testing",
       "env": {
-        "EXPO_PUBLIC_API_URL": "http://192.168.0.123:5050/v1"
+        "EXPO_PUBLIC_API_URL": "https://home-stay-ten.vercel.app/v1"
+      }
+    },
+    "production-apk": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "channel": "production",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://home-stay-ten.vercel.app/v1"
       }
     },
     "production": {
@@ -32,7 +49,7 @@
       },
       "channel": "production",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api.stayride.in/v1"
+        "EXPO_PUBLIC_API_URL": "https://home-stay-ten.vercel.app/v1"
       }
     }
   },

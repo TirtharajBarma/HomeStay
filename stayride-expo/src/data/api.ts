@@ -1,10 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { UserSession } from '../types';
 
-// Release builds must get the API URL from EXPO_PUBLIC_API_URL; the LAN fallback is dev-only.
-// For physical devices in development, set EXPO_PUBLIC_API_URL or change it in More Settings.
+// Release builds default to EXPO_PUBLIC_API_URL or the Vercel production server.
+export const VERCEL_CLOUD_URL = 'https://home-stay-ten.vercel.app/v1';
 export const DEFAULT_BASE_URL =
-  process.env.EXPO_PUBLIC_API_URL || (__DEV__ ? 'http://192.168.0.111:5050/v1' : '');
+  process.env.EXPO_PUBLIC_API_URL || VERCEL_CLOUD_URL;
 
 export const API_CONFIG_ERROR = DEFAULT_BASE_URL
   ? null
@@ -53,8 +53,8 @@ class ApiService {
       if (stored) {
         this.session = JSON.parse(stored);
       }
-      // A saved override is a dev convenience only; release builds always use the env URL.
-      const savedUrl = __DEV__ ? await AsyncStorage.getItem('stayride_base_url') : null;
+      // A saved override allows instant switching between Wi-Fi and Vercel Cloud from More Settings
+      const savedUrl = await AsyncStorage.getItem('stayride_base_url');
       if (savedUrl && !savedUrl.includes('10.0.2.2')) {
         this.baseUrl = savedUrl;
       }
