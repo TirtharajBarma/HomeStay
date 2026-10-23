@@ -131,6 +131,10 @@ type CabRequestStatus = {
   time?: string | null;
   passengers?: number | null;
   vehicleType?: string | null;
+  pickupOtp?: string | null;
+  guestBudget?: number | null;
+  quotesCount?: number | null;
+  biddingClosesAt?: string | number | null;
   refundStatus?: "NONE" | "PENDING" | "REFUNDED" | null;
   guestRating?: { stars: number; comment?: string; ratedAt: string } | null;
   biddingFallback?: boolean;
@@ -195,6 +199,7 @@ function CabRequestFormContent() {
   const [guestName, setGuestName] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
   const [notes, setNotes] = useState("");
+  const [guestBudget, setGuestBudget] = useState("");
 
   // Submission & Lifecycle
   const [clientRequestId] = useState(() =>
@@ -471,6 +476,7 @@ function CabRequestFormContent() {
         guestName: guestName.trim(),
         phone: cleanPhone,
         notes: notes.trim(),
+        guestBudget: guestBudget ? Number(guestBudget) : undefined,
         clientRequestId,
       };
 
@@ -659,11 +665,15 @@ function CabRequestFormContent() {
                       <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-600" />
                     </div>
                     <span className="text-xs font-bold text-blue-900 uppercase tracking-wide">
-                      Broadcasting to Nearby Mountain Drivers
+                      {tripStatus?.quotesCount && tripStatus.quotesCount > 0
+                        ? `${tripStatus.quotesCount} Mountain Driver Quote(s) Received`
+                        : "Broadcasting to Nearby Mountain Drivers"}
                     </span>
                   </div>
                   <p className="text-xs text-blue-800 leading-relaxed">
-                    Your trip has been dispatched to verified hill drivers in this valley. Lowest market bid will be automatically confirmed in 5 minutes.
+                    {tripStatus?.quotesCount && tripStatus.quotesCount > 0
+                      ? "Mountain drivers in this valley have submitted competitive quotes. Lowest market bid will be automatically locked."
+                      : "Your trip has been dispatched to verified hill drivers in this valley. Lowest market bid will be automatically confirmed in 5 minutes."}
                   </p>
                   {tripStatus?.biddingFallback && (
                     <div className="rounded-lg bg-amber-50 border border-amber-300 p-2.5 text-xs text-amber-900 font-medium">
@@ -702,6 +712,19 @@ function CabRequestFormContent() {
                       <span>Driver Cash Fare (Pay driver at destination):</span>
                       <span className="text-sm font-extrabold text-emerald-700">{formatInr(tripStatus.remainingCashAmount)}</span>
                     </div>
+                  </div>
+
+                  {/* Advance Policy & Cancellation Notice */}
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] leading-relaxed text-amber-900 space-y-1">
+                    <div className="flex items-center gap-1.5 font-bold text-amber-950">
+                      <Icon name="info" className="text-xs text-amber-700" /> Non-Refundable Vehicle Reservation Fee
+                    </div>
+                    <p>
+                      This advance locks in your verified mountain driver exclusively for your schedule. Once paid, verified driver contact details are released instantly.
+                    </p>
+                    <p className="text-amber-800">
+                      <strong>Cancellation Policy:</strong> To protect mountain drivers against empty hill runs and avoid offline platform bypass, this advance is strictly non-refundable once driver details are unlocked (except in cases of driver cancellation, breakdown, or official road blockage).
+                    </p>
                   </div>
 
                   {/* 1-Tap UPI Intent Button (Opens PhonePe / GPay on Android) */}
@@ -753,7 +776,7 @@ function CabRequestFormContent() {
                   </div>
 
                   {/* WhatsApp Verification */}
-                  <div className="pt-1 text-center">
+                  <div className="pt-1 text-center space-y-2">
                     <a
                       href={`https://wa.me/${activeSupportPhone}?text=${encodeURIComponent(`Namaste, I have paid the advance of ₹${tripStatus.advanceAmount} for cab reference ${tripStatus.reference}. Please confirm my booking.`)}`}
                       target="_blank"
@@ -762,6 +785,16 @@ function CabRequestFormContent() {
                     >
                       <Icon name="chat" className="text-sm" /> Share Payment Screenshot on WhatsApp
                     </a>
+                    <div className="pt-1 border-t border-amber-200/60">
+                      <a
+                        href={`https://wa.me/${activeSupportPhone}?text=${encodeURIComponent(`Namaste, regarding cab request ${tripStatus.reference}: my budget is around ₹${tripStatus.guestBudget || currentFareEstimate.fare}, but quote is ₹${tripStatus.agreedFare}. Can you assist?`)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#57606A] hover:text-[#1F2328] hover:underline"
+                      >
+                        <Icon name="chat" className="text-xs text-emerald-700" /> Need a Different Fare or Vehicle? Chat with Host
+                      </a>
+                    </div>
                   </div>
                 </div>
               )}
@@ -813,6 +846,34 @@ function CabRequestFormContent() {
                       <span className="font-bold text-base text-emerald-900">{formatInr(tripStatus.remainingCashAmount)}</span>
                     </div>
                   )}
+
+                  {tripStatus?.pickupOtp && (
+                    <div className="rounded-xl border border-emerald-300 bg-white p-3.5 shadow-xs">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 text-emerald-800">
+                            <Icon name="key" className="text-base" />
+                          </div>
+                          <div>
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-900">
+                              Boarding Verification PIN
+                            </span>
+                            <p className="text-[11px] text-[#57606A]">Share with driver upon vehicle boarding to start trip</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center font-mono text-xl font-extrabold tracking-widest text-emerald-800 bg-emerald-50 px-3 py-1 rounded-lg border border-emerald-200">
+                          {tripStatus.pickupOtp}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/60 p-2.5 text-[11px] leading-relaxed text-emerald-950 flex items-start gap-2">
+                    <Icon name="check_circle" className="text-xs text-emerald-700 mt-0.5 shrink-0" />
+                    <span>
+                      <strong>Driver Allocated:</strong> For coordination or minor pickup adjustments, contact your driver directly. Note: Advance payments are non-refundable once driver contact details are released.
+                    </span>
+                  </div>
                 </div>
               )}
 
@@ -1326,6 +1387,22 @@ function CabRequestFormContent() {
                       placeholder="e.g. 3 large bags, need luggage roof rack"
                       className="w-full rounded-xl border border-[#D0D7DE] px-3.5 py-2.5 text-xs text-[#1F2328] focus:border-emerald-600 focus:outline-none"
                     />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-[#57606A] block mb-1">
+                      Target Budget (Optional, ₹)
+                    </label>
+                    <input
+                      type="number"
+                      value={guestBudget}
+                      onChange={(e) => setGuestBudget(e.target.value.replace(/\D/g, ""))}
+                      placeholder={`e.g. ${currentFareEstimate.fare}`}
+                      className="w-full rounded-xl border border-[#D0D7DE] px-3.5 py-2.5 text-xs text-[#1F2328] focus:border-emerald-600 focus:outline-none"
+                    />
+                    <p className="mt-1 text-[11px] text-[#57606A]">
+                      Helps nearby verified mountain drivers quote matching your expectation.
+                    </p>
                   </div>
                 </div>
 

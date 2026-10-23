@@ -160,7 +160,7 @@ interface StayRideContextType {
   cancelTrip: (tripId: number, reason?: string) => Promise<ActionOutcome>;
   rateTrip: (tripId: number, stars: number, comment?: string) => Promise<ActionOutcome>;
   driverQuote: (reference: string, quotedFare: number, notes?: string) => Promise<ActionOutcome>;
-  driverStartTrip: (reference: string) => Promise<ActionOutcome>;
+  driverStartTrip: (reference: string, otp?: string) => Promise<ActionOutcome>;
   /** Driver takes the homestay's counter-offer: the trip is confirmed at that fare. */
   driverAcceptCounter: (reference: string) => Promise<ActionOutcome>;
   driverCompleteTrip: (reference: string) => Promise<ActionOutcome>;
@@ -1444,8 +1444,8 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       },
     });
 
-  const driverStartTrip = async (reference: string): Promise<ActionOutcome> => {
-    const outcome = await submit('POST', `/driver/trips/${encodeURIComponent(reference)}/start`, {});
+  const driverStartTrip = async (reference: string, otp?: string): Promise<ActionOutcome> => {
+    const outcome = await submit('POST', `/driver/trips/${encodeURIComponent(reference)}/start`, { otp });
     if (outcome.synced) await refreshDriverTrips().catch(() => {});
     return outcome;
   };

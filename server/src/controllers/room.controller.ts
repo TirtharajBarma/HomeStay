@@ -56,38 +56,50 @@ export class RoomController {
   }
 
   static async updateRoom(req: Request, res: Response) {
+    const user = (req as any).user;
     const codeOrSlug = (req.params.codeOrSlug || req.params.id) as string;
-    const room = await RoomService.updateRoom(codeOrSlug, req.body);
+    const ownerId = user?.role === "admin" ? undefined : user?.id;
+    const propertyId = user?.role === "admin" ? undefined : user?.propertyId;
+    const room = await RoomService.updateRoom(codeOrSlug, req.body, propertyId, ownerId);
     if (!room) {
-      return res.status(404).json({ success: false, error: "Room not found" });
+      return res.status(404).json({ success: false, error: "Room not found or unauthorized" });
     }
     res.json({ success: true, data: room });
   }
 
   static async deleteRoom(req: Request, res: Response) {
+    const user = (req as any).user;
     const codeOrSlug = (req.params.codeOrSlug || req.params.id) as string;
-    const deleted = await RoomService.deleteRoom(codeOrSlug);
+    const ownerId = user?.role === "admin" ? undefined : user?.id;
+    const propertyId = user?.role === "admin" ? undefined : user?.propertyId;
+    const deleted = await RoomService.deleteRoom(codeOrSlug, propertyId, ownerId);
     if (!deleted) {
-      return res.status(404).json({ success: false, error: "Room not found" });
+      return res.status(404).json({ success: false, error: "Room not found or unauthorized" });
     }
     res.json({ success: true, message: "Room deleted successfully" });
   }
 
   static async setMaintenanceHold(req: Request, res: Response) {
+    const user = (req as any).user;
     const codeOrSlug = (req.params.codeOrSlug || req.params.id) as string;
+    const ownerId = user?.role === "admin" ? undefined : user?.id;
+    const propertyId = user?.role === "admin" ? undefined : user?.propertyId;
     const holdData = req.body?.clear ? undefined : req.body;
-    const room = await RoomService.setMaintenanceHold(codeOrSlug, holdData);
+    const room = await RoomService.setMaintenanceHold(codeOrSlug, holdData, propertyId, ownerId);
     if (!room) {
-      return res.status(404).json({ success: false, error: "Room not found" });
+      return res.status(404).json({ success: false, error: "Room not found or unauthorized" });
     }
     res.json({ success: true, data: room });
   }
 
   static async clearMaintenanceHold(req: Request, res: Response) {
+    const user = (req as any).user;
     const codeOrSlug = (req.params.codeOrSlug || req.params.id) as string;
-    const room = await RoomService.setMaintenanceHold(codeOrSlug, undefined);
+    const ownerId = user?.role === "admin" ? undefined : user?.id;
+    const propertyId = user?.role === "admin" ? undefined : user?.propertyId;
+    const room = await RoomService.setMaintenanceHold(codeOrSlug, undefined, propertyId, ownerId);
     if (!room) {
-      return res.status(404).json({ success: false, error: "Room not found" });
+      return res.status(404).json({ success: false, error: "Room not found or unauthorized" });
     }
     res.json({ success: true, data: room, message: "Maintenance hold released" });
   }

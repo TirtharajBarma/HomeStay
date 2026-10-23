@@ -117,18 +117,19 @@ function refunds(b: BusinessDetails): LegalSection[] {
     {
       heading: 'Cab advances',
       body:
-        '• If a trip with a paid advance is cancelled before it starts (by the homestay, by StayRide, or because no driver could take it), the advance is refunded to the original payment method.\n' +
-        '• If an advance is paid after the request was released or cancelled, or paid twice, the extra payment is refunded.\n' +
-        '• Refunds are usually processed within 5–7 working days after StayRide confirms them; your bank may take longer to show them.\n' +
-        '• Once a trip has started, the advance is not refundable, except where the driver did not provide the trip.',
+        '• Once a driver quote is confirmed and driver contact details are released, the advance payment acts as a vehicle reservation lock-in fee and is non-refundable. This protects mountain drivers who reserve their vehicles and turn down other bookings.\n' +
+        '• If a trip cannot be fulfilled due to no driver accepting the broadcast, driver cancellation, vehicle breakdown, or verified road closures / landslides, the advance is refunded in full to the original payment method.\n' +
+        '• If an advance is paid after a request was cancelled or expired, or paid twice in error, the excess amount is refunded in full.\n' +
+        '• Eligible refunds are verified and processed within 5–7 working days via bank transfer or original payment method; banks or UPI apps may take additional time to show the credit.\n' +
+        '• Once a trip has started or the driver has arrived at the pickup location, the advance is strictly non-refundable.',
     },
     {
       heading: 'For drivers',
-      body: '• The advance is collected and refunded by StayRide; drivers do not refund it themselves.\n• If you cancel a confirmed trip, the guest’s advance is refunded and the trip may be offered to other drivers.\n• The cash balance is yours to collect from the guest at the trip. If a trip does not happen, no balance is due.',
+      body: '• The advance is collected and held by StayRide; drivers do not collect or refund it directly.\n• If a driver cancels a confirmed trip, the guest’s advance is refunded in full and the trip may be re-dispatched to other drivers.\n• The cash balance is collected directly by the driver from the guest upon trip drop-off. If a trip does not occur, no cash balance is payable.',
     },
-    { heading: 'Cash paid to drivers', body: 'The balance is paid in cash directly to the driver. StayRide does not collect it and cannot refund it; please raise any issue with us and we will help resolve it with the driver.' },
-    { heading: 'Room bookings', body: 'Room charges are paid to the homestay, not to StayRide. Their cancellation and refund terms are set by the homestay.' },
-    { heading: 'Questions', body: `Contact ${fill(b.email, 'support email')} with your trip or booking number. Version ${LEGAL_VERSION}.` },
+    { heading: 'Cash paid to drivers', body: 'The remaining balance is paid in cash directly to the driver at destination. StayRide does not collect this cash portion and cannot refund it directly; our support team is available to mediate any on-road disputes.' },
+    { heading: 'Room bookings', body: 'Room charges are paid to the homestay, not to StayRide. Their cancellation and refund terms are set by the individual homestay.' },
+    { heading: 'Questions & disputes', body: `For any booking dispute or refund enquiry, contact ${fill(b.email, 'support email')} with your trip reference number. Version ${LEGAL_VERSION}.` },
   ];
 }
 

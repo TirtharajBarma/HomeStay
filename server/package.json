@@ -13,7 +13,7 @@
     "start": "node dist/server.js",
     "test": "npm run test:api",
     "test:api": "tsx scripts/test-endpoints.ts",
-    "lint": "expo lint"
+    "lint": "tsc --noEmit"
   },
   "dependencies": {
     "@clerk/express": "^2.1.78",

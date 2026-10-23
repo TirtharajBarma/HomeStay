@@ -67,10 +67,22 @@ export default function AdminDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [overviewError, setOverviewError] = useState("");
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
+  const [visitedTabs, setVisitedTabs] = useState<Set<Tab>>(new Set(["dashboard"]));
   // Default is real production data; the demo dataset is opt-in.
   const [demo, setDemo] = useState(false);
   // Homestay key handed from the Homestays data viewer to the Cab requests desk.
   const [cabTenant, setCabTenant] = useState("");
+
+  const handleTabChange = (tab: Tab) => {
+    setActiveTab(tab);
+    setVisitedTabs((prev) => new Set([...prev, tab]));
+    if (tab === "cab-requests") setCabTenant("");
+  };
+
+  const handleDemoToggle = (isDemo: boolean) => {
+    setDemo(isDemo);
+    setVisitedTabs(new Set([activeTab]));
+  };
 
   // Payout settlement modal state
   const [settlingTrip, setSettlingTrip] = useState<any | null>(null);
@@ -186,6 +198,17 @@ export default function AdminDashboardPage() {
           </div>
 
           <div className="flex items-center gap-3">
+            {activeTab !== "legacy" && (
+              <label className="flex items-center gap-2 rounded-xl border border-amber-600/40 bg-amber-950/40 px-3 py-1.5 text-xs font-semibold text-amber-300 cursor-pointer hover:bg-amber-900/30 transition">
+                <input
+                  type="checkbox"
+                  className="rounded border-amber-500 accent-amber-500 cursor-pointer"
+                  checked={demo}
+                  onChange={(e) => handleDemoToggle(e.target.checked)}
+                />
+                <span>Demo dataset</span>
+              </label>
+            )}
             {activeTab === "legacy" && <button
               onClick={fetchOverview}
               className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-3.5 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-700"
@@ -216,7 +239,7 @@ export default function AdminDashboardPage() {
           {TABS.map(([key, icon, label]) => (
             <button
               key={key}
-              onClick={() => { setActiveTab(key); if (key === "cab-requests") setCabTenant(""); }}
+              onClick={() => handleTabChange(key)}
               className={`flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-bold transition whitespace-nowrap ${
                 activeTab === key
                   ? "border-blue-500 text-blue-400"
@@ -227,25 +250,59 @@ export default function AdminDashboardPage() {
               <span>{label}</span>
             </button>
           ))}
-          {activeTab !== "legacy" && (
-            <label className="ml-auto flex items-center gap-1.5 whitespace-nowrap px-3 text-xs font-semibold text-amber-300">
-              <input type="checkbox" checked={demo} onChange={(e) => setDemo(e.target.checked)} />
-              Demo dataset
-            </label>
-          )}
         </div>
 
-        {activeTab === "dashboard" && <DashboardTab demo={demo} />}
-        {activeTab === "users" && <UsersTab demo={demo} />}
-        {activeTab === "homestays" && (
-          <HomestaysTab demo={demo} onOpenCabRequests={(tenantKey) => { setCabTenant(tenantKey); setActiveTab("cab-requests"); }} />
+        {visitedTabs.has("dashboard") && (
+          <div className={activeTab === "dashboard" ? "block" : "hidden"}>
+            <DashboardTab demo={demo} />
+          </div>
         )}
-        {activeTab === "drivers" && <DriversTab demo={demo} />}
-        {activeTab === "cab-requests" && <CabRequestsTab key={cabTenant} demo={demo} initialTenantKey={cabTenant || undefined} />}
-        {activeTab === "payouts" && <PayoutsTab demo={demo} />}
-        {activeTab === "settings" && <SettingsTab demo={demo} />}
-        {activeTab === "appeals" && <AppealsTab demo={demo} />}
-        {activeTab === "audit" && <AuditTab demo={demo} />}
+        {visitedTabs.has("users") && (
+          <div className={activeTab === "users" ? "block" : "hidden"}>
+            <UsersTab demo={demo} />
+          </div>
+        )}
+        {visitedTabs.has("homestays") && (
+          <div className={activeTab === "homestays" ? "block" : "hidden"}>
+            <HomestaysTab
+              demo={demo}
+              onOpenCabRequests={(tenantKey) => {
+                setCabTenant(tenantKey);
+                handleTabChange("cab-requests");
+              }}
+            />
+          </div>
+        )}
+        {visitedTabs.has("drivers") && (
+          <div className={activeTab === "drivers" ? "block" : "hidden"}>
+            <DriversTab demo={demo} />
+          </div>
+        )}
+        {visitedTabs.has("cab-requests") && (
+          <div className={activeTab === "cab-requests" ? "block" : "hidden"}>
+            <CabRequestsTab key={cabTenant} demo={demo} initialTenantKey={cabTenant || undefined} />
+          </div>
+        )}
+        {visitedTabs.has("payouts") && (
+          <div className={activeTab === "payouts" ? "block" : "hidden"}>
+            <PayoutsTab demo={demo} />
+          </div>
+        )}
+        {visitedTabs.has("settings") && (
+          <div className={activeTab === "settings" ? "block" : "hidden"}>
+            <SettingsTab demo={demo} />
+          </div>
+        )}
+        {visitedTabs.has("appeals") && (
+          <div className={activeTab === "appeals" ? "block" : "hidden"}>
+            <AppealsTab demo={demo} />
+          </div>
+        )}
+        {visitedTabs.has("audit") && (
+          <div className={activeTab === "audit" ? "block" : "hidden"}>
+            <AuditTab demo={demo} />
+          </div>
+        )}
 
         {activeTab === "legacy" && (
           <>

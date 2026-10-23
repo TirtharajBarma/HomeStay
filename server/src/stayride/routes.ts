@@ -1101,7 +1101,7 @@ stayrideV1Router.post('/public/guest-links/:token/cab-requests', async (req: Req
     (store) => withEstimate(cfg, store.createTrip({ ...input, guestId: link.guestId ?? undefined, pickup: input.pickup || store.homestay.location || store.homestay.name }, 'GUEST_WEB_LINK')),
     'GUEST_WEB_LINK',
     clientRequestId,
-    { guestNotes: str(req.body.notes, 500) }
+    { guestNotes: str(req.body.notes, 500), guestBudget: req.body.guestBudget ? Number(req.body.guestBudget) : null }
   );
   pushOwner(isDemo, tenantKey, {
     title: 'New Guest Cab Inquiry',
@@ -1162,7 +1162,7 @@ stayrideV1Router.post('/public/properties/:slug/cab-requests', async (req: Reque
     (store) => withEstimate(cfg, store.createTrip({ ...input, pickup: input.pickup || store.homestay.location || store.homestay.name }, 'HOMESTAY_WEB_PORTAL')),
     'HOMESTAY_WEB_PORTAL',
     clientRequestId,
-    { guestNotes: str(req.body.notes, 500) }
+    { guestNotes: str(req.body.notes, 500), guestBudget: req.body.guestBudget ? Number(req.body.guestBudget) : null }
   );
 
   pushOwner(isDemo, tenantKey, {
@@ -1232,6 +1232,10 @@ stayrideV1Router.get('/public/cab-requests/:reference', async (req: Request, res
     refundStatus: doc.refundStatus,
     cancellationReason: doc.status === 'CANCELLED' ? doc.cancellationReason || '' : '',
     guestRating: doc.guestRating || null,
+    pickupOtp: doc.advancePaid ? (doc.pickupOtp || null) : null,
+    guestBudget: doc.guestBudget || null,
+    quotesCount: doc.quotes ? doc.quotes.filter((q: any) => q.status === 'PENDING').length : 0,
+    biddingClosesAt: doc.biddingClosesAt || null,
     biddingFallback: Boolean(doc.biddingFallbackAlertSentAt),
     config: publicConfig(await CommissionService.getPlatformConfig(isDemo)),
   });
@@ -1321,7 +1325,7 @@ stayrideV1Router.post('/public/driver-quote/accept-counter', async (req: Request
 stayrideV1Router.post('/public/driver-quote/start', async (req: Request, res: Response) => {
   const ctx = await quoteLinkDriver(req.body?.t, res);
   if (!ctx) return;
-  await startTrip(ctx.isDemo, { reference: ctx.reference, assignedDriverUserId: String(ctx.driver._id) }, `driver-web:${ctx.driver.name}`);
+  await startTrip(ctx.isDemo, { reference: ctx.reference, assignedDriverUserId: String(ctx.driver._id) }, `driver-web:${ctx.driver.name}`, req.body?.otp);
   return res.json(await quotePageView(ctx.isDemo, ctx.reference, ctx.driver));
 });
 
@@ -1684,7 +1688,7 @@ stayrideV1Router.post('/driver/trips/:reference/accept-counter', driverGate, asy
 
 stayrideV1Router.post('/driver/trips/:reference/start', driverGate, async (req: Request, res: Response) => {
   const isDemo = isDemoKey(authOf(req).tenantKey);
-  const updated = await startTrip(isDemo, { reference: String(req.params.reference), assignedDriverUserId: String((req as any).driver._id) }, authOf(req).email);
+  const updated = await startTrip(isDemo, { reference: String(req.params.reference), assignedDriverUserId: String((req as any).driver._id) }, authOf(req).email, req.body?.otp);
   res.json(driverTripView(updated, String((req as any).driver._id)));
 });
 
@@ -2007,6 +2011,7 @@ stayrideV1Router.post('/bookings', async (req: Request, res: Response) => {
           guestId: created.guestId ?? created.id,
           guestName: created.guestName || 'Guest',
           guestPhone: created.phone,
+          checkInDate: created.checkIn || req.body?.checkIn,
         })
       )
       .catch((err) => {
@@ -2033,6 +2038,7 @@ stayrideV1Router.post('/bookings/:id/check-in', async (req: Request, res: Respon
           guestId: b.guestId ?? b.id,
           guestName: b.guestName || 'Guest',
           guestPhone: b.phone,
+          checkInDate: b.checkIn || new Date(),
         })
       )
       .catch((err) => {

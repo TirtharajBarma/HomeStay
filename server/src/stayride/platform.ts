@@ -107,7 +107,12 @@ const last10 = (p: unknown) => String(p ?? '').replace(/\D/g, '').slice(-10);
  * Ask a guest for a cab request from the company WhatsApp number. One message per guest per cooldown
  * (admin setting): every send costs money and spam reports put the company number at risk.
  */
-export async function sendAskCab(tenantKey: string, isDemo: boolean, homestayName: string, guest: { guestId?: number | null; guestName: string; guestPhone: string }) {
+export async function sendAskCab(
+  tenantKey: string,
+  isDemo: boolean,
+  homestayName: string,
+  guest: { guestId?: number | null; guestName: string; guestPhone: string; checkInDate?: Date | string | number | null }
+) {
   const cfg = await cfgOf(isDemo);
   const Links = getGuestLinkModel(isDemo);
   if (cfg.askCabCooldownHours > 0) {
@@ -120,7 +125,23 @@ export async function sendAskCab(tenantKey: string, isDemo: boolean, homestayNam
     }
   }
   const link = await issueGuestLink(tenantKey, isDemo, guest);
-  const result = await whatsapp(isDemo, guest.guestPhone, messages.askCabMessage(guest.guestName, homestayName || 'our homestay', link.url));
+
+  // Context-aware message: future booking gets airport/railway transfer focus; walk-in / today gets sightseeing
+  let msg;
+  if (guest.checkInDate) {
+    const target = new Date(guest.checkInDate).getTime();
+    const now = Date.now();
+    if (target > now + 24 * 3600 * 1000) {
+      const dateStr = new Date(target).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' });
+      msg = messages.preArrivalTransferMessage(guest.guestName, homestayName || 'our homestay', link.url, dateStr);
+    } else {
+      msg = messages.welcomeSightseeingMessage(guest.guestName, homestayName || 'our homestay', link.url);
+    }
+  } else {
+    msg = messages.askCabMessage(guest.guestName, homestayName || 'our homestay', link.url);
+  }
+
+  const result = await whatsapp(isDemo, guest.guestPhone, msg);
   if (result === 'SENT') await Links.updateOne({ _id: link.id }, { $set: { sentAt: new Date() } });
   return { result, expiresAt: link.expiresAt, url: link.url };
 }
@@ -352,7 +373,8 @@ function snapshotFrom(split: Awaited<ReturnType<typeof CommissionService.calcula
 }
 
 async function pricedUpdate(doc: any, fare: number, isDemo: boolean) {
-  const split = await CommissionService.calculateSplit(fare, String(doc.propertyId), isDemo);
+  // Drivers quote their net in-hand cash. System calculates platform fee + homestay commission on top.
+  const split = await CommissionService.calculateGrossFromDriverCash(fare, String(doc.propertyId), isDemo);
   return {
     agreedFare: split.agreedFare,
     advanceAmount: split.advanceAmount,
@@ -662,6 +684,8 @@ export function driverTripView(d: any, driverUserId: string, driverPhone?: strin
     time: d.time,
     passengers: d.passengers,
     vehicleType: d.vehicleType,
+    guestBudget: d.guestBudget || null,
+    pickupOtpRequired: Boolean(d.pickupOtp),
     status: TRIP_STATUS[d.status] || d.status,
     driverView,
     cancellationReason: d.status === 'CANCELLED' ? d.cancellationReason || '' : null,
@@ -867,11 +891,18 @@ async function transition(isDemo: boolean, filter: Record<string, any>, set: Rec
   return updated;
 }
 
-export async function startTrip(isDemo: boolean, filter: Record<string, any>, actor: string) {
+export async function startTrip(isDemo: boolean, filter: Record<string, any>, actor: string, otp?: string) {
   // Only after the advance is paid (CONFIRMED).
+  const doc: any = await cabModel(isDemo).findOne({ ...filter, status: 'CONFIRMED', advancePaid: true, needsReassignment: { $ne: true } }).lean();
+  if (!doc) throw conflict('Trip can start only after the advance is paid and a driver is assigned.');
+
+  if (doc.pickupOtp && otp && String(otp).trim() !== String(doc.pickupOtp).trim()) {
+    throw httpError(400, 'Invalid Boarding Verification PIN. Please ask the passenger for their 4-digit PIN.');
+  }
+
   const updated = await transition(
     isDemo,
-    { ...filter, status: 'CONFIRMED', advancePaid: true, needsReassignment: { $ne: true } },
+    { _id: doc._id, status: 'CONFIRMED', advancePaid: true, needsReassignment: { $ne: true } },
     { status: 'TRIP_STARTED', startedAt: new Date() },
     'Trip can start only after the advance is paid and a driver is assigned.'
   );
@@ -1274,6 +1305,7 @@ export async function adminRecordPayment(isDemo: boolean, id: string, body: any,
 async function applyAdvancePayment(isDemo: boolean, doc: any, p: { transactionId: string; method: string; amount: number; note: string; actor: string }) {
   const Model = cabModel(isDemo);
   if (await Model.exists({ advancePaymentId: p.transactionId })) throw conflict('This transaction ID is already recorded on another request.');
+  const pickupOtp = doc.pickupOtp || String(Math.floor(1000 + Math.random() * 9000));
   let updated;
   try {
     updated = await transition(
@@ -1281,6 +1313,7 @@ async function applyAdvancePayment(isDemo: boolean, doc: any, p: { transactionId
       { _id: doc._id, status: 'AWAITING_ADVANCE_PAYMENT', advancePaid: { $ne: true }, advanceAmount: p.amount },
       {
         advancePaid: true,
+        pickupOtp,
         'financialSnapshot.advancePaid': true,
         advancePaymentId: p.transactionId,
         advancePaymentMethod: p.method,

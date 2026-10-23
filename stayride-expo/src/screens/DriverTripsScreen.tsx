@@ -92,11 +92,18 @@ export const DriverTripsScreen: React.FC = () => {
   };
 
   // Queues offline and reports honestly: server-confirmed shows success, queued shows "saved offline"
-  const handleStartRide = async (reference: string) => {
+  const [pinModalRef, setPinModalRef] = useState<string | null>(null);
+  const [pinInput, setPinInput] = useState('');
+
+  const handleStartRide = async (reference: string, otp?: string) => {
     if (submittingId) return;
     setSubmittingId(reference);
-    const outcome = await driverStartTrip(reference);
+    const outcome = await driverStartTrip(reference, otp);
     setSubmittingId(null);
+    if (outcome.ok) {
+      setPinModalRef(null);
+      setPinInput('');
+    }
     reportOutcome(outcome, 'Trip Started', 'Ride is now active! Drive safely through the mountain roads.');
   };
 
@@ -466,12 +473,43 @@ export const DriverTripsScreen: React.FC = () => {
                       <TouchableOpacity
                         style={styles.startBtn}
                         disabled={submittingId === t.reference}
-                        onPress={() => handleStartRide(t.reference)}
+                        onPress={() => {
+                          setPinModalRef(t.reference);
+                          setPinInput('');
+                        }}
                       >
                         <Text style={styles.startBtnText}>{submittingId === t.reference ? 'Starting…' : 'Start Ride'}</Text>
                       </TouchableOpacity>
                     )}
                   </View>
+
+                  {pinModalRef === t.reference && (
+                    <View style={styles.pinModalBox}>
+                      <Text style={styles.pinModalTitle}>Enter Passenger Boarding PIN</Text>
+                      <Text style={styles.pinModalSub}>Ask passenger for 4-digit PIN on their booking screen:</Text>
+                      <View style={styles.pinInputRow}>
+                        <TextInput
+                          style={styles.pinTextInput}
+                          value={pinInput}
+                          onChangeText={(text) => setPinInput(text.replace(/\D/g, '').slice(0, 4))}
+                          placeholder="PIN"
+                          placeholderTextColor="#9CA3AF"
+                          keyboardType="number-pad"
+                          maxLength={4}
+                        />
+                        <TouchableOpacity
+                          style={[styles.pinConfirmBtn, pinInput.length < 4 && { opacity: 0.5 }]}
+                          disabled={pinInput.length < 4 || submittingId === t.reference}
+                          onPress={() => handleStartRide(t.reference, pinInput)}
+                        >
+                          <Text style={styles.pinConfirmText}>{submittingId === t.reference ? 'Verifying…' : 'Start'}</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.pinCancelBtn} onPress={() => setPinModalRef(null)}>
+                          <Text style={styles.pinCancelText}>Cancel</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  )}
                 </View>
               ))
             )}
@@ -940,5 +978,63 @@ const styles = StyleSheet.create({
   breakdownSub: {
     fontSize: 10,
     color: '#64748B',
+  },
+  pinModalBox: {
+    marginTop: 10,
+    padding: 12,
+    backgroundColor: '#ECFDF5',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  pinModalTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#065F46',
+  },
+  pinModalSub: {
+    fontSize: 11,
+    color: '#047857',
+    marginTop: 2,
+    marginBottom: 8,
+  },
+  pinInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  pinTextInput: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 4,
+    color: '#111827',
+    width: 90,
+    textAlign: 'center',
+  },
+  pinConfirmBtn: {
+    backgroundColor: '#059669',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  pinConfirmText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  pinCancelBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  pinCancelText: {
+    color: '#6B7280',
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

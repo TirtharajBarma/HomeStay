@@ -25,16 +25,35 @@ export const askCabMessage = (guestName: string, homestayName: string, link: str
     `If you need an airport transfer, sightseeing, or a local hill cab during your stay at ${homestayName}, please share your itinerary and we will arrange a verified driver for you:\n${link}`,
 });
 
+export const preArrivalTransferMessage = (guestName: string, homestayName: string, link: string, checkInDateText: string): Built => ({
+  event: 'ASK_CAB',
+  params: [guestName, homestayName, link],
+  text:
+    `Namaste ${guestName}!\n` +
+    `We look forward to welcoming you to ${homestayName} on ${checkInDateText}.\n` +
+    `If you need an airport transfer from Bagdogra (IXB) or railway pickup from NJP to reach us safely, reserve a verified mountain cab here:\n${link}`,
+});
+
+export const welcomeSightseeingMessage = (guestName: string, homestayName: string, link: string): Built => ({
+  event: 'ASK_CAB',
+  params: [guestName, homestayName, link],
+  text:
+    `Namaste ${guestName}, welcome to ${homestayName}!\n` +
+    `Planning your Tiger Hill sunrise, tea garden tour, or a local hill excursion during your stay? Arrange your trusted local cab here:\n${link}`,
+});
+
 /** quoteLink: the driver's own page to quote without opening the app (WhatsApp-only drivers). */
 export const newRequestMessage = (doc: any, quoteLink: string): Built => {
+  const budgetInfo = doc.guestBudget ? `\nGuest Target Budget: ₹${Number(doc.guestBudget).toLocaleString('en-IN')}` : '';
   const params = [doc.homestayName || 'a homestay', routeText(doc), whenText(doc), quoteLink];
   return {
     event: 'NEW_REQUEST',
     params,
     text:
       `New trip request from ${params[0]}\n` +
-      `Route: ${params[1]}\nPickup: ${params[2]}\nVehicle: ${doc.vehicleType}\n\n` +
-      `Submit your fare quote here:\n${params[3]}`,
+      `Route: ${params[1]}\nPickup: ${params[2]}\nVehicle: ${doc.vehicleType}${budgetInfo}\n\n` +
+      `Submit your in-hand cash quote here:\n${params[3]}\n` +
+      `(Quote the exact cash you want to collect from passenger at drop-off)`,
   };
 };
 
@@ -81,21 +100,23 @@ export const quoteAcceptedGuestMessage = (doc: any, link: string, windowMin: num
 
 /** After the advance: the guest gets the driver's phone and the plan. */
 export const advancePaidGuestMessage = (doc: any): Built => {
+  const pinLine = doc.pickupOtp ? `\nBoarding Verification PIN: ${doc.pickupOtp}\n(Share this PIN with your driver upon boarding)\n` : '';
   const params = [doc.guestName, doc.assignedDriverName || 'Your driver', doc.assignedDriverPhone || '', vehicleText(doc), routeText(doc), whenText(doc), rupees(doc.remainingCashAmount)];
   return {
     event: 'ADVANCE_PAID_GUEST',
     params,
     text:
       `Namaste ${params[0]}, your cab booking is confirmed.\n` +
-      `Driver: ${params[1]} (${params[2]})\nVehicle: ${params[3]}\nRoute: ${params[4]}\nPickup: ${params[5]}\n\n` +
-      `Please pay the driver cash fare of ${params[6]} directly to your driver at the end of the trip.`,
+      `Driver: ${params[1]} (${params[2]})\nVehicle: ${params[3]}\nRoute: ${params[4]}\nPickup: ${params[5]}\n` +
+      pinLine +
+      `\nPlease pay the driver cash fare of ${params[6]} directly to your driver at the end of the trip.`,
   };
 };
 
 /** After the advance: the driver gets the guest's phone and the plan. */
 export const advancePaidDriverMessage = (doc: any, driverLink?: string): Built => {
   const params = [doc.assignedDriverName || 'Driver', doc.guestName, doc.guestPhone || '', routeText(doc), whenText(doc), rupees(doc.remainingCashAmount)];
-  const linkText = driverLink ? `\n\nManage trip & tap to complete:\n${driverLink}` : '';
+  const linkText = driverLink ? `\n\nManage trip & enter passenger PIN to start:\n${driverLink}` : '';
   return {
     event: 'ADVANCE_PAID_DRIVER',
     params,

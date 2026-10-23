@@ -31,19 +31,25 @@ export class PropertyController {
   }
 
   static async addLocation(req: Request, res: Response) {
-    const updated = await PropertyService.addLocation(req.body);
+    const user = (req as any).user;
+    const ownerId = user?.role === "admin" && req.query.ownerId ? String(req.query.ownerId) : user?.id;
+    const updated = await PropertyService.addLocation(req.body, ownerId);
     res.status(201).json({ success: true, data: updated });
   }
 
   static async updateLocation(req: Request, res: Response) {
+    const user = (req as any).user;
+    const ownerId = user?.role === "admin" && req.query.ownerId ? String(req.query.ownerId) : user?.id;
     const locationId = req.params.id as string;
-    const updated = await PropertyService.updateLocation(locationId, req.body);
+    const updated = await PropertyService.updateLocation(locationId, req.body, ownerId);
     res.json({ success: true, data: updated });
   }
 
   static async deleteLocation(req: Request, res: Response) {
+    const user = (req as any).user;
+    const ownerId = user?.role === "admin" && req.query.ownerId ? String(req.query.ownerId) : user?.id;
     const locationId = req.params.id as string;
-    const updated = await PropertyService.deleteLocation(locationId);
+    const updated = await PropertyService.deleteLocation(locationId, ownerId);
     res.json({ success: true, data: updated });
   }
 }

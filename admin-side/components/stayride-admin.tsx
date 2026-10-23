@@ -24,7 +24,20 @@ const OPEN_STATUSES = ["PENDING_REVIEW", "FINDING_DRIVER", "QUOTE_RECEIVED"];
 // Shared helpers
 // ---------------------------------------------------------------------------
 export const inr = (n: unknown) => (typeof n === "number" && Number.isFinite(n) ? `₹${n.toLocaleString("en-IN")}` : "—");
-const dt = (v: unknown) => (v ? new Date(String(v)).toLocaleString("en-IN") : "—");
+const parseDateObj = (v: unknown): Date | null => {
+  if (!v) return null;
+  const num = typeof v === "number" ? v : /^\d+$/.test(String(v).trim()) ? Number(v) : NaN;
+  const d = !isNaN(num) ? new Date(num) : new Date(String(v));
+  return isNaN(d.getTime()) ? null : d;
+};
+const dt = (v: unknown) => {
+  const d = parseDateObj(v);
+  return d ? d.toLocaleString("en-IN") : "—";
+};
+const formatDate = (v: unknown) => {
+  const d = parseDateObj(v);
+  return d ? d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : String(v || "—");
+};
 /** Id of a server record: new API objects use `id`, older ones `_id`. */
 const rid = (r: Any | null | undefined) => String(r?.id ?? r?._id ?? "");
 
@@ -613,19 +626,32 @@ function HomestayRow({ t, demo, onChanged, onOpen }: { t: Any; demo: boolean; on
         })}
       </div>
 
-      <div className="flex flex-wrap items-end gap-2">
-        <span className="text-[11px] font-semibold text-slate-300">
-          Commission override {o ? <Badge tone="blue">Active</Badge> : <Badge>Using global</Badge>}
-        </span>
-        <input className={`${input} w-28`} type="number" min="0" step="0.5" placeholder="Platform fee %" value={pf} onChange={(e) => setPf(e.target.value)} />
-        <input className={`${input} w-28`} type="number" min="0" step="0.5" placeholder="Homestay %" value={hc} onChange={(e) => setHc(e.target.value)} />
-        <input className={`${input} w-28`} type="number" min="0" step="0.5" placeholder="Advance %" value={adv} onChange={(e) => setAdv(e.target.value)} />
-        <button disabled={busy} className={btn.primary} onClick={saveOverride}>Save override</button>
-        {o && (
-          <button disabled={busy} className={btn.ghost} onClick={() => save({ commissionOverride: null }, `Clear commission override for ${t.homestayName}?`)}>
-            Clear override
-          </button>
-        )}
+      <div className="mt-3 pt-3 border-t border-slate-800/80">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+          <span className="text-xs font-semibold text-slate-300">
+            Commission override {o ? <Badge tone="blue">Active</Badge> : <Badge>Using global</Badge>}
+          </span>
+          {o && (
+            <button disabled={busy} className={btn.ghost} onClick={() => save({ commissionOverride: null }, `Clear commission override for ${t.homestayName}?`)}>
+              Clear override
+            </button>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] text-slate-400">Platform:</span>
+            <input className={`${input} w-24`} type="number" min="0" step="0.5" placeholder="5%" value={pf} onChange={(e) => setPf(e.target.value)} />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] text-slate-400">Homestay:</span>
+            <input className={`${input} w-24`} type="number" min="0" step="0.5" placeholder="10%" value={hc} onChange={(e) => setHc(e.target.value)} />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] text-slate-400">Advance:</span>
+            <input className={`${input} w-24`} type="number" min="0" step="0.5" placeholder="15%" value={adv} onChange={(e) => setAdv(e.target.value)} />
+          </div>
+          <button disabled={busy} className={btn.primary} onClick={saveOverride}>Save override</button>
+        </div>
       </div>
     </div>
   );
@@ -1081,7 +1107,7 @@ function CabRequestCard({ c, demo, onChanged }: { c: Any; demo: boolean; onChang
             {c.homestayName || "—"} ({c.propertyId}) • {c.requestSource || "—"} • created {dt(c.createdAt)}
           </p>
           <p className="text-slate-300">
-            {c.guestName} • {c.guestPhone} • {c.passengers ?? "—"} pax • {c.vehicleType || "—"} • {c.date || "—"} {c.time || ""}
+            {c.guestName} • {c.guestPhone} • {c.passengers ?? "—"} pax • {c.vehicleType || "—"} • {formatDate(c.date)} {c.time || ""}
           </p>
           <p className="text-slate-400">
             {c.pickupLocation?.address || "—"} ➔ {(c.destinations || []).map((d: Any) => d.address).join(" ➔ ") || "—"}
@@ -1119,9 +1145,32 @@ function CabRequestCard({ c, demo, onChanged }: { c: Any; demo: boolean; onChang
           )}
         </div>
         <div className="min-w-[250px] rounded-xl border border-slate-800 bg-slate-950 p-3 space-y-1">
-          <Money label="Agreed fare" value={inr(c.agreedFare)} />
-          <Money label="Advance" value={<>{inr(c.advanceAmount)} {c.advancePaid ? <Badge tone="green">PAID</Badge> : <Badge tone="amber">UNPAID</Badge>}</>} />
-          <Money label="Cash to driver" value={inr(c.remainingCashAmount)} />
+          <Money
+            label="Agreed fare"
+            value={
+              c.agreedFare && c.agreedFare > 0
+                ? inr(c.agreedFare)
+                : <span className="font-semibold text-amber-400">Awaiting quote</span>
+            }
+          />
+          <Money
+            label="Advance"
+            value={
+              c.advanceAmount && c.advanceAmount > 0 ? (
+                <>{inr(c.advanceAmount)} {c.advancePaid ? <Badge tone="green">PAID</Badge> : <Badge tone="amber">UNPAID</Badge>}</>
+              ) : (
+                <span className="text-slate-400">Pending quote</span>
+              )
+            }
+          />
+          <Money
+            label="Cash to driver"
+            value={
+              c.remainingCashAmount && c.remainingCashAmount > 0
+                ? inr(c.remainingCashAmount)
+                : <span className="text-slate-400">—</span>
+            }
+          />
           <SplitRows s={s} fare={s.agreedFare ?? c.agreedFare} />
           {c.advancePaymentId && <Money label="Txn" value={`${c.advancePaymentId} (${c.paymentRecordedBy || "—"})`} />}
           {c.hostPayoutId && <Money label="Host payout" value={String(c.hostPayoutId)} />}

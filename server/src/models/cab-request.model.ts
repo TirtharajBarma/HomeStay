@@ -115,6 +115,8 @@ export interface ICabRequest extends Document {
   startedAt?: Date | null;
   completedAt?: Date | null;
   cancelledBy?: string;
+  pickupOtp?: string | null; // 4-digit boarding verification PIN
+  guestBudget?: number | null; // Optional guest target budget
   remainingCashAmount: number; // Cash collected directly by driver during journey
   financialSnapshot?: IFinancialSnapshot;
   guestNotes?: string;
@@ -303,6 +305,8 @@ const CabRequestSchema = new Schema<ICabRequest>(
     driverSettledAt: { type: Date, default: null },
     startedAt: { type: Date, default: null },
     completedAt: { type: Date, default: null },
+    pickupOtp: { type: String, default: null },
+    guestBudget: { type: Number, default: null },
     biddingClosesAt: { type: Date, default: null },
     autoAccepted: { type: Boolean, default: false },
     autoCompleted: { type: Boolean, default: false },

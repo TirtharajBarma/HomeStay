@@ -31,6 +31,8 @@ type QuoteView = {
   advanceAmount?: number;
   advancePaid?: boolean;
   remainingCashAmount?: number;
+  pickupOtpRequired?: boolean;
+  guestBudget?: number | null;
   myQuote: { quotedFare: number; status: string; notes?: string; counterFare?: number | null } | null;
 };
 
@@ -43,6 +45,8 @@ function DriverQuoteContent() {
   const [loading, setLoading] = useState(true);
   const [fare, setFare] = useState("");
   const [notes, setNotes] = useState("");
+  const [showOtpModal, setShowOtpModal] = useState(false);
+  const [otp, setOtp] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -56,10 +60,7 @@ function DriverQuoteContent() {
           setView(v);
           if (v.myQuote?.notes) setNotes(v.myQuote.notes);
           if (v.myQuote?.quotedFare) {
-            // Reverse the exact calculation: totalGrossFare = cashAmount + Math.max(200, Math.round(cashAmount * 0.10))
-            const gross = v.myQuote.quotedFare;
-            const netCash = gross <= 2200 ? Math.max(0, gross - 200) : Math.round(gross / 1.10);
-            setFare(String(netCash));
+            setFare(String(v.myQuote.quotedFare));
           }
         }
       } catch (e) {
@@ -78,14 +79,11 @@ function DriverQuoteContent() {
     setMessage("");
     try {
       const cashAmount = Number(fare) || 0;
-      const bookingFee = Math.max(200, Math.round(cashAmount * 0.10));
-      const totalGrossFare = cashAmount + bookingFee;
-
       const v =
         kind === "quote"
           ? await apiFetch<QuoteView>(API_ENDPOINTS.driverQuote.quote(), {
               method: "POST",
-              body: JSON.stringify({ t: token, quotedFare: totalGrossFare, notes }),
+              body: JSON.stringify({ t: token, quotedFare: cashAmount, notes }),
             })
           : await apiFetch<QuoteView>(API_ENDPOINTS.driverQuote.acceptCounter(), {
               method: "POST",
@@ -100,16 +98,17 @@ function DriverQuoteContent() {
     }
   };
 
-  const handleTripAction = async (action: "start" | "complete") => {
+  const handleTripAction = async (action: "start" | "complete", enteredOtp?: string) => {
     setBusy(true);
     setMessage("");
     try {
       const endpoint = action === "start" ? API_ENDPOINTS.driverQuote.start() : API_ENDPOINTS.driverQuote.complete();
       const v = await apiFetch<QuoteView>(endpoint, {
         method: "POST",
-        body: JSON.stringify({ t: token }),
+        body: JSON.stringify({ t: token, otp: enteredOtp || otp }),
       });
       setView(v);
+      setShowOtpModal(false);
       setMessage(action === "start" ? "Trip started." : "Trip completed. Thank you!");
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "Action failed. Please try again.");
@@ -283,15 +282,60 @@ function DriverQuoteContent() {
             {view.status !== "COMPLETED" && (
               <div className="space-y-2 pt-1">
                 {view.status !== "TRIP_STARTED" && (
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => handleTripAction("start")}
-                    className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl border border-[#D0D7DE] bg-white py-2.5 text-xs font-bold text-[#1F2328] hover:bg-[#F6F8FA] cursor-pointer disabled:opacity-50"
-                  >
-                    <Icon name="play_arrow" className="text-sm text-emerald-700" />
-                    <span>{busy ? "Updating…" : "Start Ride"}</span>
-                  </button>
+                  <>
+                    {showOtpModal ? (
+                      <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-3.5 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-emerald-950">Enter Passenger Boarding PIN:</span>
+                          <button
+                            type="button"
+                            onClick={() => setShowOtpModal(false)}
+                            className="text-xs text-[#57606A] hover:underline"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                        <p className="text-[11px] text-[#57606A]">
+                          Ask the passenger for the 4-digit PIN displayed on their booking confirmation screen.
+                        </p>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            maxLength={4}
+                            value={otp}
+                            onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                            placeholder="4-digit PIN"
+                            className="w-full font-mono text-center text-lg font-bold tracking-widest rounded-xl border border-[#D0D7DE] bg-white px-3 py-2 text-[#1F2328] focus:border-emerald-600 focus:outline-none"
+                          />
+                          <button
+                            type="button"
+                            disabled={busy || otp.length < 4}
+                            onClick={() => handleTripAction("start", otp)}
+                            className="rounded-xl bg-emerald-600 px-4 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50 cursor-pointer"
+                          >
+                            {busy ? "Verifying…" : "Start"}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => {
+                          if (view.pickupOtpRequired) {
+                            setShowOtpModal(true);
+                          } else {
+                            handleTripAction("start");
+                          }
+                        }}
+                        className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl border border-[#D0D7DE] bg-white py-2.5 text-xs font-bold text-[#1F2328] hover:bg-[#F6F8FA] cursor-pointer disabled:opacity-50"
+                      >
+                        <Icon name="play_arrow" className="text-sm text-emerald-700" />
+                        <span>{busy ? "Updating…" : "Start Ride"}</span>
+                      </button>
+                    )}
+                  </>
                 )}
                 <button
                   type="button"
@@ -329,8 +373,15 @@ function DriverQuoteContent() {
           <div className="rounded-2xl border border-[#D0D7DE] bg-white p-5 shadow-xs space-y-4">
             <div>
               <h3 className="font-bold text-sm text-[#1F2328]">Submit Your Fare Quote</h3>
-              <p className="text-xs text-[#57606A]">Enter your all-inclusive fare for the full journey.</p>
+              <p className="text-xs text-[#57606A]">Enter your in-hand cash fare to collect from passenger at drop-off.</p>
             </div>
+
+            {view.guestBudget && (
+              <div className="rounded-xl border border-blue-200 bg-blue-50 p-2.5 text-xs text-blue-900 font-medium flex items-center justify-between">
+                <span>Passenger Target Budget:</span>
+                <strong className="font-bold text-blue-950">{inr(view.guestBudget)}</strong>
+              </div>
+            )}
 
             {/* Counter-Offer Notification */}
             {counter && (
@@ -354,11 +405,7 @@ function DriverQuoteContent() {
               <div className="rounded-xl bg-[#F6F8FA] border border-[#D0D7DE] p-3 text-xs text-[#57606A] space-y-1.5">
                 <div className="flex justify-between items-center">
                   <span className="font-medium">Your In-Hand Cash:</span>
-                  <strong className="text-emerald-700 text-sm font-extrabold">{inr(Math.round(q.quotedFare * 0.90))}</strong>
-                </div>
-                <div className="flex justify-between items-center text-[11px] text-[#57606A] border-t border-[#E1E4E8] pt-1.5">
-                  <span>Passenger Total Fare:</span>
-                  <span className="font-semibold text-[#1F2328]">{inr(q.quotedFare)}</span>
+                  <strong className="text-emerald-700 text-sm font-extrabold">{inr(q.quotedFare)}</strong>
                 </div>
                 <div className="text-[10px] text-[#57606A] flex justify-between">
                   <span>Status:</span>

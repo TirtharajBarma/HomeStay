@@ -306,12 +306,13 @@ router.patch("/stayride/drivers/:id/status", async (req, res) => {
     { returnDocument: "before" }
   ).select("name email phone accountStatus statusReason vehicle").lean();
   if (!prev) throw httpError(404, "Driver not found, or the account was deleted and cannot be re-activated.");
+  const auditReason = String(req.body.reason || "").trim() || (status === "ACTIVE" ? "Admin approved driver onboarding" : status === "BLOCKED" ? "Blocked by admin" : "Set to pending approval");
   await audit(actor(req), "driver.status", "User", String(req.params.id), {
     targetName: prev.name,
     targetEmail: prev.email,
     before: prev.accountStatus || "PENDING_APPROVAL",
     status,
-    reason: req.body.reason || "",
+    reason: auditReason,
   }, isDemo(req), { actorRole: "ADMIN", driverId: String(req.params.id) });
   // Release trips / push only on a real change, so re-saving the same status doesn't re-notify
   if (prev.accountStatus !== status) await onDriverStatusChange(isDemo(req), String(req.params.id), status, actor(req));

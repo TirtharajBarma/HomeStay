@@ -21,6 +21,13 @@ const navLinks = [
     active: false,
   },
   {
+    href: "/cab-request",
+    label: "Hill Cabs",
+    hint: "Airport, station & local tours",
+    icon: "local_taxi",
+    active: false,
+  },
+  {
     href: "/#story",
     label: "Our Story",
     hint: "Twelve years on the hillside",
@@ -70,7 +77,14 @@ export function SiteHeader() {
           ))}
         </nav>
 
-        <div className="flex shrink-0 items-center gap-1 sm:gap-3">
+        <div className="flex shrink-0 items-center gap-1 sm:gap-2.5">
+          <Link
+            href="/cab-request"
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-amber-600/30 bg-amber-50 px-3 text-label-md font-semibold text-amber-900 shadow-sm transition-all duration-200 hover:bg-amber-100 active:scale-[0.98] sm:px-3.5"
+          >
+            <Icon name="local_taxi" className="text-[18px] text-amber-700" />
+            <span>Book a Cab</span>
+          </Link>
           <Link
             href="/#search-bar"
             className="hidden min-h-11 items-center rounded-lg border border-outline-variant/60 px-4 text-label-md text-on-surface transition-all duration-200 hover:bg-surface-container-high md:inline-flex"
@@ -79,10 +93,10 @@ export function SiteHeader() {
           </Link>
           <Link
             href="/#accommodations"
-            className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-primary px-3 text-label-md text-on-primary shadow-sm transition-all duration-200 hover:bg-primary-container active:scale-[0.98] sm:gap-2 sm:px-4"
+            className="hidden min-h-11 items-center gap-1.5 rounded-lg bg-primary px-3 text-label-md text-on-primary shadow-sm transition-all duration-200 hover:bg-primary-container active:scale-[0.98] sm:inline-flex sm:gap-2 sm:px-4"
           >
-            <span>Book Your Stay</span>
-            <Icon name="north_east" className="hidden text-[16px] xs:block sm:block" />
+            <span>Book Stay</span>
+            <Icon name="north_east" className="text-[16px]" />
           </Link>
           <MobileNav links={navLinks} />
         </div>
