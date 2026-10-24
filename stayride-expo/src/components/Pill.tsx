@@ -8,12 +8,14 @@ interface PillProps {
   type?: string;
   color?: string;
   bgColor?: string;
+  borderColor?: string;
 }
 
-export const Pill: React.FC<PillProps> = ({ label, value, color, bgColor }) => {
+export const Pill: React.FC<PillProps> = ({ label, value, color, bgColor, borderColor }) => {
   const displayLabel = label || value || '';
   let textColor = Colors.textSecondary;
   let bg = Colors.statusGreyBg;
+  let border: string | undefined = undefined;
 
   const normalized = displayLabel.toUpperCase().trim();
 
@@ -24,11 +26,18 @@ export const Pill: React.FC<PillProps> = ({ label, value, color, bgColor }) => {
     case 'CONFIRMED (TRIP)':
     case 'PAID':
     case 'ACTIVE':
-      textColor = Colors.statusGreen;
-      bg = Colors.statusGreenBg;
+      textColor = normalized === 'AVAILABLE' ? '#166534' : Colors.statusGreen;
+      bg = normalized === 'AVAILABLE' ? '#DCFCE7' : Colors.statusGreenBg;
+      border = normalized === 'AVAILABLE' ? '#86EFAC' : undefined;
       break;
 
     case 'OCCUPIED':
+      // OCCUPIED (from bookings) — orange pill matching RESERVED
+      textColor = '#92400E';
+      bg = '#FEF3C7';
+      border = '#FCD34D';
+      break;
+
     case 'CONFIRMED':
     case 'DRIVER_ASSIGNED':
     case 'DRIVER ASSIGNED':
@@ -46,11 +55,17 @@ export const Pill: React.FC<PillProps> = ({ label, value, color, bgColor }) => {
     case 'SENDING':
     case 'UNPAID':
     case 'PENDING':
-      textColor = Colors.statusOrange;
-      bg = Colors.statusOrangeBg;
+      textColor = normalized === 'RESERVED' ? '#92400E' : Colors.statusOrange;
+      bg = normalized === 'RESERVED' ? '#FEF3C7' : Colors.statusOrangeBg;
+      border = normalized === 'RESERVED' ? '#FCD34D' : undefined;
       break;
 
     case 'MAINTENANCE':
+      textColor = '#991B1B';
+      bg = '#FEE2E2';
+      border = '#FCA5A5';
+      break;
+
     case 'CANCELLED':
     case 'CANCELED':
     case 'EXPIRED':
@@ -78,9 +93,10 @@ export const Pill: React.FC<PillProps> = ({ label, value, color, bgColor }) => {
 
   if (color) textColor = color;
   if (bgColor) bg = bgColor;
+  if (borderColor) border = borderColor;
 
   return (
-    <View style={[styles.container, { backgroundColor: bg }]}>
+    <View style={[styles.container, { backgroundColor: bg }, border ? { borderWidth: 1, borderColor: border } : undefined]}>
       <Text style={[styles.text, { color: textColor }]}>{displayLabel}</Text>
     </View>
   );

@@ -22,7 +22,7 @@ export function BookingCard({ stay, booking }: { stay: Stay; booking: Booking })
   const quote = quoteFor(stay.price, booking);
 
   return (
-    <aside className="order-first lg:order-last lg:col-span-4 lg:sticky lg:top-24">
+    <aside className="order-first lg:order-last lg:col-span-4 lg:sticky lg:top-24 self-start">
       <div className="rounded-2xl border border-outline-variant/50 bg-surface-container-lowest p-6 sticky-card-elevation">
         <div className="mb-5 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b border-outline-variant/30 pb-4">
           <div>

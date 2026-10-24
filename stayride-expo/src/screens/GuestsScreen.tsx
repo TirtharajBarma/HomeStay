@@ -121,8 +121,20 @@ export const GuestsScreen: React.FC = () => {
       <ScrollView contentContainerStyle={styles.listContent}>
         {linksLocked && guests.some(isCheckedIn) && <FeatureLocked feature="guestCabLinks" title="Ask-for-Cab guest links" />}
         {filteredGuests.length === 0 ? (
-          <View style={styles.emptyBox}>
-            <Text style={styles.emptyText}>No guests found matching your filter.</Text>
+          <View style={{ alignItems: 'center', paddingVertical: 48, gap: 12 }}>
+            <Text style={{ fontSize: 40 }}>👤</Text>
+            <Text style={{ fontSize: 15, fontWeight: '700', color: Colors.textPrimary }}>No guests yet</Text>
+            <Text style={{ fontSize: 13, color: Colors.textSecondary, textAlign: 'center', paddingHorizontal: 32, lineHeight: 18 }}>
+              {query ? `No guests match "${query}"` : 'Add your first guest to start tracking visits and sending cab links.'}
+            </Text>
+            {!query && (
+              <TouchableOpacity
+                style={{ marginTop: 8, backgroundColor: Colors.brandPrimary, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12 }}
+                onPress={() => navigation.navigate('NewGuest')}
+              >
+                <Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '700' }}>Add First Guest</Text>
+              </TouchableOpacity>
+            )}
           </View>
         ) : (
           filteredGuests.map((g) => (
@@ -130,7 +142,6 @@ export const GuestsScreen: React.FC = () => {
               key={g.id}
               guest={g}
               onPress={() => navigation.navigate('GuestDetail', { guestId: g.id })}
-              onLongPress={() => handleDeleteGuest(g)}
               onAskCab={isCheckedIn(g) && !linksLocked ? handleAskCab : undefined}
             />
           ))

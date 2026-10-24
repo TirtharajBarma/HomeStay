@@ -56,7 +56,10 @@ export class RoomService {
     // If query is broad (not filtered by a specific legacy property/owner), also include real rooms created by mobile app hosts
     if (!filters.propertyId && !filters.ownerId) {
       try {
-        const liveProps: any[] = await Property.find({ status: { $ne: "suspended" as any } }).lean();
+        const liveProps: any[] = await Property.find({
+          status: { $ne: "suspended" as any },
+          email: { $not: /@stayride\.test$/i },
+        }).lean();
         const TenantModel = getStayRideTenantModel(false);
         for (const lp of liveProps) {
           if (!lp.email) continue;
@@ -83,7 +86,7 @@ export class RoomService {
                 nightly: Number(tr.price) || 2000,
                 price: Number(tr.price) || 2000,
                 propertyId: (lp as any)._id,
-                image: photos[0] || "https://images.unsplash.com/photo-1544644181-1484b3fdfc62?auto=format&fit=crop&w=1200&q=80",
+                image: photos[0] || "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1200&q=80",
                 amenities: ["Mountain View", "Verified Host", "Door-to-door Cab Transfer"],
               });
             }
@@ -135,7 +138,7 @@ export class RoomService {
               nightly: Number(tr.price) || 2000,
               price: Number(tr.price) || 2000,
               propertyId: (lp as any)._id,
-              image: photos[0] || "https://images.unsplash.com/photo-1544644181-1484b3fdfc62?auto=format&fit=crop&w=1200&q=80",
+              image: photos[0] || "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1200&q=80",
               amenities: ["Mountain View", "Verified Host", "Door-to-door Cab Transfer"],
             };
           }

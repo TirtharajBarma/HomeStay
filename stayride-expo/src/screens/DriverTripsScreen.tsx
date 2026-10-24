@@ -30,6 +30,31 @@ export const DriverTripsScreen: React.FC = () => {
   // References whose quote the driver is revising (allowed while the request is still open)
   const [revising, setRevising] = useState<Record<string, boolean>>({});
 
+  // Fix 16: Search and Filter Chips
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'All' | 'Upcoming' | 'Completed' | 'Cancelled'>('All');
+
+  const matchesSearch = (t: DriverTrip) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.trim().toLowerCase();
+    return (
+      (t.guestName && t.guestName.toLowerCase().includes(q)) ||
+      (t.destination && t.destination.toLowerCase().includes(q)) ||
+      (t.pickup && t.pickup.toLowerCase().includes(q)) ||
+      (t.homestayName && t.homestayName.toLowerCase().includes(q)) ||
+      (t.reference && t.reference.toLowerCase().includes(q))
+    );
+  };
+
+  const sortUpcomingFirst = (list: DriverTrip[]) => {
+    return [...list].sort((a, b) => {
+      const aPriority = a.status === 'TRIP_STARTED' ? 3 : a.status === 'CONFIRMED' ? 2 : a.status === 'AWAITING_ADVANCE' ? 1 : 0;
+      const bPriority = b.status === 'TRIP_STARTED' ? 3 : b.status === 'CONFIRMED' ? 2 : b.status === 'AWAITING_ADVANCE' ? 1 : 0;
+      if (aPriority !== bPriority) return bPriority - aPriority;
+      return (b.date || 0) - (a.date || 0);
+    });
+  };
+
   const driverName = session?.driver?.name || '—';
 
   // The server decides what this driver sees: open requests (no guest details) and trips assigned to them
@@ -48,6 +73,18 @@ export const DriverTripsScreen: React.FC = () => {
   );
   const completedRides = driverTrips.filter((t) => !isLost(t) && t.assignedToMe && t.status === 'COMPLETED');
   const lostRides = driverTrips.filter(isLost);
+
+  // Fix 16: Filtered and Sorted lists
+  const filteredRequests = incomingRequests.filter(matchesSearch);
+  const filteredAssigned = sortUpcomingFirst(assignedRides.filter(matchesSearch));
+  const filteredCompleted = [...completedRides].sort((a, b) => (b.date || 0) - (a.date || 0)).filter(matchesSearch);
+  const filteredLost = lostRides.filter(matchesSearch);
+
+  const handleSelectFilter = (filter: 'All' | 'Upcoming' | 'Completed' | 'Cancelled') => {
+    setStatusFilter(filter);
+    if (filter === 'Upcoming') setActiveTab('assigned');
+    else if (filter === 'Completed' || filter === 'Cancelled') setActiveTab('completed');
+  };
 
   const handleQuoteChange = (reference: string, val: string) => {
     setQuoteInputs((prev) => ({ ...prev, [reference]: val }));
@@ -207,6 +244,39 @@ export const DriverTripsScreen: React.FC = () => {
         </View>
       )}
 
+      {/* Fix 16: Search bar & Filter Chips */}
+      <View style={styles.searchSection}>
+        <View style={styles.searchBar}>
+          <Ionicons name="search-outline" size={16} color="#64748B" style={{ marginRight: 6 }} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search destination, passenger, homestay…"
+            placeholderTextColor="#94A3B8"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={6}>
+              <Ionicons name="close-circle" size={16} color="#94A3B8" />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        <View style={styles.chipsRow}>
+          {(['All', 'Upcoming', 'Completed', 'Cancelled'] as const).map((chip) => (
+            <TouchableOpacity
+              key={chip}
+              style={[styles.filterChip, statusFilter === chip && styles.filterChipActive]}
+              onPress={() => handleSelectFilter(chip)}
+            >
+              <Text style={[styles.filterChipText, statusFilter === chip && styles.filterChipTextActive]}>
+                {chip}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+
       {/* Segmented Tab Row */}
       <View style={styles.tabRow}>
         <TouchableOpacity
@@ -214,7 +284,7 @@ export const DriverTripsScreen: React.FC = () => {
           onPress={() => setActiveTab('requests')}
         >
           <Text style={[styles.tabText, activeTab === 'requests' && styles.tabTextActive]}>
-            Requests ({incomingRequests.length})
+            Requests ({filteredRequests.length})
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -222,7 +292,7 @@ export const DriverTripsScreen: React.FC = () => {
           onPress={() => setActiveTab('assigned')}
         >
           <Text style={[styles.tabText, activeTab === 'assigned' && styles.tabTextActive]}>
-            My Rides ({assignedRides.length})
+            My Rides ({filteredAssigned.length})
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -230,7 +300,7 @@ export const DriverTripsScreen: React.FC = () => {
           onPress={() => setActiveTab('completed')}
         >
           <Text style={[styles.tabText, activeTab === 'completed' && styles.tabTextActive]}>
-            History ({completedRides.length + lostRides.length})
+            History ({filteredCompleted.length + filteredLost.length})
           </Text>
         </TouchableOpacity>
       </View>
@@ -242,18 +312,20 @@ export const DriverTripsScreen: React.FC = () => {
         {/* TAB 1: INCOMING REQUESTS TO QUOTE */}
         {activeTab === 'requests' && (
           <>
-            {incomingRequests.length === 0 ? (
+            {filteredRequests.length === 0 ? (
               <View style={styles.emptyCard}>
-                <Ionicons name="car-sport-outline" size={48} color={Colors.textTertiary} />
-                <Text style={styles.emptyTitle}>No pending ride requests</Text>
+                <Text style={{ fontSize: 48 }}>🚗</Text>
+                <Text style={styles.emptyTitle}>{searchQuery ? 'No matching requests' : 'No pending ride requests'}</Text>
                 <Text style={styles.emptySubtitle}>
-                  {pushEnabled
-                    ? 'You will be notified as soon as a new cab request comes in.'
-                    : 'Check back here for new cab requests. Pull down to refresh.'}
+                  {searchQuery
+                    ? `No ride requests match "${searchQuery}"`
+                    : pushEnabled
+                    ? 'You will be notified the moment a new cab request arrives from a nearby homestay. Stay online to receive dispatches.'
+                    : 'New cab requests from homestays near you will appear here. Pull down to refresh and check for updates.'}
                 </Text>
               </View>
             ) : (
-              incomingRequests.map((t) => {
+              filteredRequests.map((t) => {
                 const myQuote = t.myQuote;
                 const hasQuoted = !!myQuote;
                 const canRevise = hasQuoted && myQuote?.status !== 'REJECTED';
@@ -408,14 +480,16 @@ export const DriverTripsScreen: React.FC = () => {
         {/* TAB 2: MY ASSIGNED & CONFIRMED RIDES */}
         {activeTab === 'assigned' && (
           <>
-            {assignedRides.length === 0 ? (
+            {filteredAssigned.length === 0 ? (
               <View style={styles.emptyCard}>
                 <Ionicons name="calendar-outline" size={48} color={Colors.textTertiary} />
-                <Text style={styles.emptyTitle}>No confirmed rides assigned</Text>
-                <Text style={styles.emptySubtitle}>Submit quotes on pending requests to win bookings.</Text>
+                <Text style={styles.emptyTitle}>{searchQuery ? 'No matching assigned rides' : 'No confirmed rides assigned'}</Text>
+                <Text style={styles.emptySubtitle}>
+                  {searchQuery ? `No assigned rides match "${searchQuery}"` : 'Submit quotes on pending requests to win bookings.'}
+                </Text>
               </View>
             ) : (
-              assignedRides.map((t) => (
+              filteredAssigned.map((t) => (
                 <View key={t.reference} style={styles.card}>
                   <View style={styles.cardHeader}>
                     <View style={styles.badgeConfirmed}>
@@ -519,48 +593,54 @@ export const DriverTripsScreen: React.FC = () => {
         {/* TAB 3: COMPLETED RIDES */}
         {activeTab === 'completed' && (
           <>
-            {completedRides.length === 0 && lostRides.length === 0 ? (
+            {filteredCompleted.length === 0 && filteredLost.length === 0 ? (
               <View style={styles.emptyCard}>
                 <Ionicons name="time-outline" size={48} color={Colors.textTertiary} />
-                <Text style={styles.emptyTitle}>No completed trips yet</Text>
-                <Text style={styles.emptySubtitle}>Completed trips and payouts will be archived here.</Text>
+                <Text style={styles.emptyTitle}>{searchQuery ? 'No matching history' : 'No completed trips yet'}</Text>
+                <Text style={styles.emptySubtitle}>
+                  {searchQuery ? `No historical trips match "${searchQuery}"` : 'Completed trips and payouts will be archived here.'}
+                </Text>
               </View>
             ) : (
-              completedRides.map((t) => (
-                <View key={t.reference} style={styles.card}>
-                  <View style={styles.cardHeader}>
-                    <Text style={styles.completedTag}>COMPLETED</Text>
-                    <Text style={styles.fareEst}>{t.fare ? `₹${t.fare.toLocaleString()}` : '—'}</Text>
+              <>
+                {statusFilter !== 'Cancelled' && filteredCompleted.map((t) => (
+                  <View key={t.reference} style={styles.card}>
+                    <View style={styles.cardHeader}>
+                      <Text style={styles.completedTag}>COMPLETED</Text>
+                      <Text style={styles.fareEst}>{t.fare ? `₹${t.fare.toLocaleString()}` : '—'}</Text>
+                    </View>
+                    {!!t.guestName && <Text style={styles.passengerName}>{t.guestName}</Text>}
+                    <Text style={styles.routeSubText}>{t.pickup} ➔ {t.destination}</Text>
+                    <Text style={styles.metaText}>
+                      {new Date(t.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                      {typeof t.driverNetPayout === 'number' ? ` • Net payout ₹${t.driverNetPayout.toLocaleString()}` : ''}
+                    </Text>
                   </View>
-                  {!!t.guestName && <Text style={styles.passengerName}>{t.guestName}</Text>}
-                  <Text style={styles.routeSubText}>{t.pickup} ➔ {t.destination}</Text>
-                  <Text style={styles.metaText}>
-                    {new Date(t.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                    {typeof t.driverNetPayout === 'number' ? ` • Net payout ₹${t.driverNetPayout.toLocaleString()}` : ''}
-                  </Text>
-                </View>
-              ))
+                ))}
+                {statusFilter !== 'Completed' && filteredLost.length > 0 && (
+                  <Text style={styles.sectionLabel}>Cancelled & Expired</Text>
+                )}
+                {statusFilter !== 'Completed' && filteredLost.map((t) => (
+                  <View key={t.reference} style={styles.card}>
+                    <View style={styles.cardHeader}>
+                      <Text style={[styles.completedTag, { color: '#B91C1C' }]}>
+                        {t.driverView === 'REASSIGNED'
+                          ? 'REASSIGNED TO ANOTHER DRIVER'
+                          : t.driverView === 'EXPIRED' || t.status === 'EXPIRED'
+                          ? 'EXPIRED'
+                          : 'CANCELLED'}
+                      </Text>
+                      <Text style={styles.metaText}>{t.homestayName || ''}</Text>
+                    </View>
+                    <Text style={styles.routeSubText}>{t.pickup} ➔ {t.destination}</Text>
+                    <Text style={styles.metaText}>
+                      {new Date(t.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} at {t.time}
+                    </Text>
+                    {!!t.cancellationReason && <Text style={styles.metaText}>Reason: {t.cancellationReason}</Text>}
+                  </View>
+                ))}
+              </>
             )}
-            {lostRides.length > 0 && <Text style={styles.sectionLabel}>Cancelled</Text>}
-            {lostRides.map((t) => (
-              <View key={t.reference} style={styles.card}>
-                <View style={styles.cardHeader}>
-                  <Text style={[styles.completedTag, { color: '#B91C1C' }]}>
-                    {t.driverView === 'REASSIGNED'
-                      ? 'REASSIGNED TO ANOTHER DRIVER'
-                      : t.driverView === 'EXPIRED' || t.status === 'EXPIRED'
-                      ? 'EXPIRED'
-                      : 'CANCELLED'}
-                  </Text>
-                  <Text style={styles.metaText}>{t.homestayName || ''}</Text>
-                </View>
-                <Text style={styles.routeSubText}>{t.pickup} ➔ {t.destination}</Text>
-                <Text style={styles.metaText}>
-                  {new Date(t.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} at {t.time}
-                </Text>
-                {!!t.cancellationReason && <Text style={styles.metaText}>Reason: {t.cancellationReason}</Text>}
-              </View>
-            ))}
           </>
         )}
       </ScrollView>
@@ -581,6 +661,52 @@ const styles = StyleSheet.create({
   counterText: { flex: 1, fontSize: 14, fontWeight: '700', color: Colors.brandPrimaryDark },
   counterAccept: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, backgroundColor: Colors.brandPrimary },
   counterAcceptText: { color: '#FFFFFF', fontWeight: '700', fontSize: 13 },
+  searchSection: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F1F5F9',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 13,
+    color: '#0F172A',
+    padding: 0,
+  },
+  chipsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 8,
+  },
+  filterChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 16,
+    backgroundColor: '#F1F5F9',
+  },
+  filterChipActive: {
+    backgroundColor: '#2563EB',
+  },
+  filterChipText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  filterChipTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
   container: {
     flex: 1,
     backgroundColor: '#F8FAFC',

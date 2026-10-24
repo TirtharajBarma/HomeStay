@@ -82,6 +82,9 @@ export const CabRequestDetailScreen: React.FC = () => {
   }
 
   const status = overrideStatus || trip.status;
+  // Fix 4: Lowest quote computation for Best Match badge
+  const validQuotes = (trip.quotes || []).filter((q) => q.status !== 'REJECTED' && q.status !== 'EXPIRED');
+  const lowestFare = validQuotes.length > 0 ? Math.min(...validQuotes.map((q) => q.quotedFare)) : null;
 
   const stepOf = (s: string) => {
     switch (s) {
@@ -371,6 +374,38 @@ export const CabRequestDetailScreen: React.FC = () => {
           </View>
         </View>
 
+        {/* Fix 4: Top Rating Banner for Completed Trips */}
+        {status === 'COMPLETED' && trip.driverName && !trip.ownerDriver && (
+          <View style={styles.topRatingCard}>
+            <View style={styles.topRatingHeader}>
+              <Ionicons name="star" size={20} color="#F59E0B" />
+              <Text style={styles.topRatingTitle}>
+                {trip.driverRated ? `You rated ${trip.driverName}` : `Rate your driver, ${trip.driverName}`}
+              </Text>
+            </View>
+            {trip.driverRated ? (
+              <Text style={styles.topRatingSub}>Thank you for your rating! Ratings keep mountain rides reliable.</Text>
+            ) : (
+              <View style={styles.topRatingActionRow}>
+                <View style={{ flexDirection: 'row', gap: 6 }}>
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <TouchableOpacity key={n} onPress={() => setStars(n)} hitSlop={6}>
+                      <Ionicons name={n <= stars ? 'star' : 'star-outline'} size={28} color="#F59E0B" />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <TouchableOpacity
+                  style={[styles.topRatingSubmitBtn, (busy || stars < 1) && { opacity: 0.5 }]}
+                  disabled={busy || stars < 1}
+                  onPress={handleRate}
+                >
+                  <Text style={styles.topRatingSubmitBtnText}>{busy ? 'Saving…' : 'Submit'}</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        )}
+
         {/* Main Trip Card */}
         <View style={styles.card}>
           <View style={styles.rowBetween}>
@@ -448,40 +483,47 @@ export const CabRequestDetailScreen: React.FC = () => {
           </View>
         )}
 
-        {/* Platform trip: StayRide manages drivers and money; show server state only */}
+        {/* Fix 4: Clean Action Zone Card */}
         {trip.platform ? (
-          <View style={styles.bannerContainer}>
-            <View style={[styles.banner, { backgroundColor: Colors.statusOrangeBg }]}>
-              <Text style={[styles.bannerText, { color: Colors.statusOrange }]}>
-                {trip.refundStatus === 'PENDING'
-                  ? 'Refund pending'
-                  : trip.refundStatus === 'REFUNDED'
-                  ? 'Advance refunded'
-                  : status === 'NEW_REQUEST'
-                  ? 'New guest request. Choose how to find a driver.'
-                  : status === 'FINDING_DRIVER'
-                  ? 'Request sent to StayRide. Driver quotes will appear here.'
-                  : status === 'QUOTE_RECEIVED'
-                  ? 'Choose a driver quote below.'
-                  : status === 'AWAITING_ADVANCE'
-                  ? `${trip.ownerDriver ? `Your driver ${trip.driverName || ''} · w` : 'W'}aiting for the guest's ${formatINR(trip.advanceAmount || 0)} advance (collected by StayRide)${
-                      trip.advanceDueAt
-                        ? ` · due by ${new Date(trip.advanceDueAt).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}, otherwise the driver is released`
-                        : ''
-                    }`
-                  : status === 'CONFIRMED'
-                  ? `Advance ${trip.advancePaid ? 'paid' : 'pending'} · Cash to driver: ${formatINR(trip.remainingCashAmount || 0)}`
-                  : status === 'TRIP_STARTED'
-                  ? 'Trip in progress (managed by StayRide).'
-                  : status === 'COMPLETED'
-                  ? 'Trip completed.'
-                  : status === 'EXPIRED'
-                  ? 'No driver was confirmed before the pickup time, so this request expired.'
-                  : 'This request was cancelled.'}
-              </Text>
+          <View style={styles.actionZoneCard}>
+            <View style={styles.actionZoneHead}>
+              <View style={[styles.actionZonePill, { backgroundColor: status === 'CONFIRMED' || status === 'COMPLETED' ? '#DCFCE7' : '#FEF3C7' }]}>
+                <Text style={[styles.actionZonePillText, { color: status === 'CONFIRMED' || status === 'COMPLETED' ? '#166534' : '#92400E' }]}>
+                  {status.replace(/_/g, ' ')}
+                </Text>
+              </View>
+              <Text style={styles.actionZoneSubtitle}>StayRide Dispatch Network</Text>
             </View>
+            <Text style={styles.actionZoneBodyText}>
+              {trip.refundStatus === 'PENDING'
+                ? 'Refund pending'
+                : trip.refundStatus === 'REFUNDED'
+                ? 'Advance refunded'
+                : status === 'NEW_REQUEST'
+                ? 'New guest request. Choose how to find a driver.'
+                : status === 'FINDING_DRIVER'
+                ? 'Request sent to StayRide. Driver quotes will appear here.'
+                : status === 'QUOTE_RECEIVED'
+                ? 'Quotes received from mountain drivers. Choose a driver below.'
+                : status === 'AWAITING_ADVANCE'
+                ? `${trip.ownerDriver ? `Your driver ${trip.driverName || ''} · w` : 'W'}aiting for the guest's ${formatINR(trip.advanceAmount || 0)} advance deposit${
+                    trip.advanceDueAt
+                      ? ` · due by ${new Date(trip.advanceDueAt).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}, otherwise the driver is released`
+                      : ''
+                  }`
+                : status === 'CONFIRMED'
+                ? `Advance ${trip.advancePaid ? 'paid' : 'pending'} · Cash to driver: ${formatINR(trip.remainingCashAmount || 0)}`
+                : status === 'TRIP_STARTED'
+                ? 'Trip in progress.'
+                : status === 'COMPLETED'
+                ? 'Trip completed and settled.'
+                : status === 'EXPIRED'
+                ? 'No driver was confirmed before the pickup time, so this request expired.'
+                : 'This request was cancelled.'}
+            </Text>
+
             {status === 'NEW_REQUEST' && trip.dispatched === false && (
-              <View style={[styles.card, { marginTop: 8 }]}>
+              <View style={[styles.card, { marginTop: 12, backgroundColor: '#F8FAFC' }]}>
                 <Text style={styles.assignName}>How do you want to find a driver?</Text>
                 <Text style={[styles.assignMeta, { marginBottom: 12 }]}>
                   Nearby drivers send you quotes and you earn commission on the trip. Your own driver is assigned directly.
@@ -513,74 +555,67 @@ export const CabRequestDetailScreen: React.FC = () => {
                   ))}
               </View>
             )}
+
             {trip.needsReassignment && (
               <View style={[styles.banner, { backgroundColor: Colors.statusRedBg, marginTop: 8 }]}>
                 <Text style={[styles.bannerText, { color: Colors.statusRed }]}>
-                  Needs a new driver: your driver is no longer available. StayRide is assigning a new driver at the
-                  same agreed fare.
+                  Needs a new driver: your driver is no longer available. StayRide is assigning a new driver at the same agreed fare.
                 </Text>
               </View>
             )}
-            {status === 'COMPLETED' && trip.driverName && !trip.ownerDriver && (
-              <View style={[styles.card, { marginTop: 8 }]}>
-                {trip.driverRated ? (
-                  <Text style={styles.assignMeta}>You rated {trip.driverName}. Thank you!</Text>
-                ) : (
-                  <>
-                    <Text style={styles.assignName}>Rate {trip.driverName}</Text>
-                    <View style={{ flexDirection: 'row', marginVertical: 8 }}>
-                      {[1, 2, 3, 4, 5].map((n) => (
-                        <TouchableOpacity
-                          key={n}
-                          onPress={() => setStars(n)}
-                          accessibilityLabel={`${n} star${n > 1 ? 's' : ''}`}
-                          style={{ padding: 4 }}
-                        >
-                          <Ionicons name={n <= stars ? 'star' : 'star-outline'} size={28} color="#F59E0B" />
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                    <TouchableOpacity style={styles.assignBtn} disabled={busy || stars < 1} onPress={handleRate}>
-                      <Text style={styles.assignBtnText}>{busy ? 'Saving…' : 'Submit rating'}</Text>
-                    </TouchableOpacity>
-                  </>
-                )}
-              </View>
-            )}
+
+            {/* Fix 4: Quote Cards with Vehicle Info & Best Match Badge */}
             {(status === 'FINDING_DRIVER' || status === 'QUOTE_RECEIVED') &&
-              (trip.quotes || []).map((q) => (
-                <View key={String(q.driverId)} style={[styles.assignRow, { marginTop: 8 }]}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.assignName}>{q.driverName}</Text>
-                    <Text style={styles.assignMeta}>
-                      {formatINR(q.quotedFare)}
-                      {q.driverVehicle ? ` · ${q.driverVehicle}` : ''}
-                      {typeof q.driverRating === 'number' ? ` · ★ ${q.driverRating} (${q.driverRatingCount ?? 0})` : ''}
-                      {q.notes ? ` · ${q.notes}` : ''}
-                    </Text>
-                    {typeof q.homestayCommission === 'number' && (
-                      <Text style={styles.assignArea}>
-                        You earn {formatINR(q.homestayCommission)}
-                        {typeof q.advanceAmount === 'number' ? ` · Guest pays ${formatINR(q.advanceAmount)} advance` : ''}
-                      </Text>
+              (trip.quotes || []).map((q) => {
+                const isBestMatch = lowestFare !== null && q.quotedFare === lowestFare && validQuotes.length > 1;
+                return (
+                  <View key={String(q.driverId)} style={[styles.quoteCard, isBestMatch && styles.quoteCardBestMatch]}>
+                    {isBestMatch && (
+                      <View style={styles.bestMatchRibbon}>
+                        <Ionicons name="sparkles" size={12} color="#047857" />
+                        <Text style={styles.bestMatchRibbonText}>Best Match · Lowest Fare</Text>
+                      </View>
                     )}
-                    {q.status === 'PENDING' && typeof q.counterFare === 'number' && q.counterFare > 0 && (
-                      <Text style={[styles.assignArea, { color: Colors.brandPrimaryDark }]}>
-                        Your offer {formatINR(q.counterFare)} sent · waiting for the driver
-                      </Text>
-                    )}
-                    {q.status === 'EXPIRED' && <Text style={styles.assignArea}>Quote expired · the driver can quote again</Text>}
-                    {q.status === 'PENDING' && (
-                      <TouchableOpacity onPress={() => openCounter(q.driverId, q.driverName, q.quotedFare)} disabled={busy}>
-                        <Text style={styles.counterLink}>{q.counterFare ? 'Change your offer' : 'Counter-offer'}</Text>
+                    <View style={styles.quoteCardBody}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.assignName}>{q.driverName}</Text>
+                        <Text style={styles.quoteVehicleText}>
+                          🚗 {q.driverVehicle || 'Mountain Cab'}
+                          {typeof q.driverRating === 'number' ? ` · ★ ${q.driverRating} (${q.driverRatingCount ?? 0})` : ''}
+                        </Text>
+                        {q.notes ? <Text style={styles.quoteNotesText}>"{q.notes}"</Text> : null}
+                        <Text style={styles.quoteFareHighlight}>
+                          {formatINR(q.quotedFare)}
+                        </Text>
+                        {typeof q.homestayCommission === 'number' && (
+                          <Text style={styles.assignArea}>
+                            Your host commission: <Text style={{ fontWeight: '700', color: Colors.brandPrimaryDark }}>{formatINR(q.homestayCommission)}</Text>
+                            {typeof q.advanceAmount === 'number' ? ` · Guest pays ${formatINR(q.advanceAmount)} advance` : ''}
+                          </Text>
+                        )}
+                        {q.status === 'PENDING' && typeof q.counterFare === 'number' && q.counterFare > 0 && (
+                          <Text style={[styles.assignArea, { color: Colors.brandPrimaryDark }]}>
+                            Your counter-offer {formatINR(q.counterFare)} sent · awaiting driver reply
+                          </Text>
+                        )}
+                        {q.status === 'EXPIRED' && <Text style={styles.assignArea}>Quote expired · driver can re-quote</Text>}
+                        {q.status === 'PENDING' && (
+                          <TouchableOpacity onPress={() => openCounter(q.driverId, q.driverName, q.quotedFare)} disabled={busy} style={{ marginTop: 4 }}>
+                            <Text style={styles.counterLink}>{q.counterFare ? 'Change your offer' : 'Counter-offer'}</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                      <TouchableOpacity
+                        style={[styles.assignBtn, q.status !== 'PENDING' && { opacity: 0.4 }]}
+                        disabled={busy || q.status !== 'PENDING'}
+                        onPress={() => handleConfirmQuote(q.driverId)}
+                      >
+                        <Text style={styles.assignBtnText}>Confirm</Text>
                       </TouchableOpacity>
-                    )}
+                    </View>
                   </View>
-                  <TouchableOpacity style={[styles.assignBtn, q.status !== 'PENDING' && { opacity: 0.4 }]} disabled={busy || q.status !== 'PENDING'} onPress={() => handleConfirmQuote(q.driverId)}>
-                    <Text style={styles.assignBtnText}>Confirm</Text>
-                  </TouchableOpacity>
-                </View>
-              ))}
+                );
+              })}
           </View>
         ) : status !== 'FINDING_DRIVER' ? (
           <View style={styles.bannerContainer}>
@@ -705,11 +740,12 @@ export const CabRequestDetailScreen: React.FC = () => {
       <View style={[styles.footerActions, { paddingBottom: Math.max(insets.bottom, 16) + 8 }]}>
         {trip.platform && ['NEW_REQUEST', 'FINDING_DRIVER', 'QUOTE_RECEIVED', 'AWAITING_ADVANCE', 'CONFIRMED'].includes(status) && (
           <TouchableOpacity
-            style={[styles.outlineBtn, { borderColor: Colors.statusRed }]}
+            style={styles.destructiveCancelBtn}
             disabled={busy}
             onPress={handleConfirmCancel}
           >
-            <Text style={[styles.outlineBtnText, { color: Colors.statusRed }]}>Cancel request</Text>
+            <Ionicons name="close-circle-outline" size={16} color="#DC2626" />
+            <Text style={styles.destructiveCancelBtnText}>Cancel request</Text>
           </TouchableOpacity>
         )}
 
@@ -785,10 +821,11 @@ export const CabRequestDetailScreen: React.FC = () => {
               <Text style={styles.outlineBtnText}>Change driver</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.outlineBtn, { borderColor: Colors.statusRed }]}
+              style={styles.destructiveCancelBtn}
               onPress={handleConfirmCancel}
             >
-              <Text style={[styles.outlineBtnText, { color: Colors.statusRed }]}>
+              <Ionicons name="close-circle-outline" size={16} color="#DC2626" />
+              <Text style={styles.destructiveCancelBtnText}>
                 Cancel request
               </Text>
             </TouchableOpacity>
@@ -1128,6 +1165,155 @@ const styles = StyleSheet.create({
   outlineBtnText: {
     color: Colors.brandPrimary,
     fontWeight: '600',
+    fontSize: 14,
+  },
+  // Fix 4: Top rating banner
+  topRatingCard: {
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1.5,
+    borderColor: '#F59E0B',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 12,
+  },
+  topRatingHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  topRatingTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#92400E',
+  },
+  topRatingSub: {
+    fontSize: 12,
+    color: '#B45309',
+    marginTop: 2,
+  },
+  topRatingActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  topRatingSubmitBtn: {
+    backgroundColor: '#D97706',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  topRatingSubmitBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  // Fix 4: Clean Action Zone Card
+  actionZoneCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginTop: 12,
+    marginBottom: 12,
+  },
+  actionZoneHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  actionZonePill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+  },
+  actionZonePillText: {
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  actionZoneSubtitle: {
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  actionZoneBodyText: {
+    fontSize: 13,
+    color: '#334155',
+    lineHeight: 18,
+    marginTop: 4,
+  },
+  // Fix 4: Enhanced Quote Cards
+  quoteCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    marginTop: 10,
+    overflow: 'hidden',
+  },
+  quoteCardBestMatch: {
+    borderColor: '#10B981',
+    borderWidth: 2,
+    backgroundColor: '#F0FDF4',
+  },
+  bestMatchRibbon: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#D1FAE5',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#A7F3D0',
+  },
+  bestMatchRibbonText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#065F46',
+  },
+  quoteCardBody: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    padding: 12,
+  },
+  quoteVehicleText: {
+    fontSize: 12,
+    color: '#475569',
+    marginTop: 2,
+    fontWeight: '500',
+  },
+  quoteNotesText: {
+    fontSize: 11,
+    color: '#64748B',
+    fontStyle: 'italic',
+    marginTop: 2,
+  },
+  quoteFareHighlight: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: Colors.brandPrimaryDark,
+    marginTop: 6,
+  },
+  destructiveCancelBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 10,
+    paddingVertical: 12,
+    marginBottom: 8,
+  },
+  destructiveCancelBtnText: {
+    color: '#DC2626',
+    fontWeight: '700',
     fontSize: 14,
   },
 });

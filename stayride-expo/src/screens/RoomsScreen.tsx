@@ -279,7 +279,9 @@ export const RoomsScreen: React.FC = () => {
         ) : activeTab === 'rooms' ? (
           filteredRooms.length === 0 ? (
             <View style={styles.emptyBox}>
-              <Text style={styles.emptyText}>No rooms match this filter.</Text>
+              <Text style={{ fontSize: 40, marginBottom: 8 }}>🛏️</Text>
+              <Text style={styles.emptyTitle}>No rooms match this filter</Text>
+              <Text style={styles.emptyText}>Switch the filter chip above to see all homestay rooms.</Text>
             </View>
           ) : (
             filteredRooms.map((r) => (
@@ -288,7 +290,15 @@ export const RoomsScreen: React.FC = () => {
           )
         ) : filteredBookings.length === 0 ? (
           <View style={styles.emptyBox}>
-            <Text style={styles.emptyText}>No bookings match this filter.</Text>
+            <Text style={{ fontSize: 40, marginBottom: 8 }}>📅</Text>
+            <Text style={styles.emptyTitle}>No bookings found</Text>
+            <Text style={styles.emptyText}>Create a new room reservation for your guest.</Text>
+            <TouchableOpacity
+              style={styles.emptyActionBtn}
+              onPress={() => navigation.navigate('NewBooking')}
+            >
+              <Text style={styles.emptyActionBtnText}>+ Create Booking</Text>
+            </TouchableOpacity>
           </View>
         ) : (
           filteredBookings.map((b) => (
@@ -473,9 +483,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 40,
   },
+  emptyTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+    marginBottom: 4,
+  },
   emptyText: {
-    fontSize: 14,
+    fontSize: 13,
     color: Colors.textSecondary,
+    textAlign: 'center',
+    paddingHorizontal: 20,
+  },
+  emptyActionBtn: {
+    marginTop: 14,
+    backgroundColor: Colors.brandPrimary,
+    paddingHorizontal: 18,
+    paddingVertical: 9,
+    borderRadius: 10,
+  },
+  emptyActionBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
   },
   fab: {
     position: 'absolute',

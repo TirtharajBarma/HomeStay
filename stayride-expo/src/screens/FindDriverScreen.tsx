@@ -319,6 +319,8 @@ export const FindDriverScreen: React.FC = () => {
 
   const pickupIsCustom = Boolean(customPickup.trim());
   const usedPresets = new Set(destinations.map((d) => d.trim()));
+  const DEFAULT_POPULAR_DESTS = ['Tiger Hill', 'Bagdogra Airport', 'NJP Station', 'Mall Road'];
+  const allPresets = Array.from(new Set([...DEFAULT_POPULAR_DESTS, ...(config.sightseeingPresets || [])]));
   const nearby = bookingMode === 'NEARBY';
 
   const tab = (mode: 'NEARBY' | 'MY_DRIVERS', icon: IconName, label: string) => {
@@ -447,11 +449,11 @@ export const FindDriverScreen: React.FC = () => {
             );
           })}
 
-          {config.sightseeingPresets.length > 0 ? (
+          {allPresets.length > 0 ? (
             <>
-              <Text style={styles.presetTitle}>Popular places</Text>
+              <Text style={styles.presetTitle}>Popular destinations & day trips</Text>
               <View style={styles.presetWrap}>
-                {config.sightseeingPresets.map((dest) => {
+                {allPresets.map((dest) => {
                   const used = usedPresets.has(dest);
                   return (
                     <TouchableOpacity
@@ -480,7 +482,22 @@ export const FindDriverScreen: React.FC = () => {
             <Text style={styles.selectText}>{fmtDay(pickupDate)}</Text>
             <Ionicons name="chevron-down" size={16} color={Colors.textSecondary} />
           </TouchableOpacity>
-          <PlatformSelect label="Pickup time" value={selectedTime} options={timeOptions} onSelect={setSelectedTime} />
+
+          <Text style={[styles.fieldLabel, { marginTop: 10 }]}>Pickup time</Text>
+          <View style={styles.quickTimesRow}>
+            {['06:00 AM', '09:00 AM', '12:00 PM', '03:00 PM', '06:00 PM'].map((t) => (
+              <TouchableOpacity
+                key={t}
+                style={[styles.quickTimeChip, selectedTime === t && styles.quickTimeChipActive]}
+                onPress={() => setSelectedTime(t)}
+              >
+                <Text style={[styles.quickTimeText, selectedTime === t && styles.quickTimeTextActive]}>
+                  {t}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <PlatformSelect label="All pickup time slots" value={selectedTime} options={timeOptions} onSelect={setSelectedTime} />
         </Section>
 
         {/* Guest */}
@@ -519,12 +536,31 @@ export const FindDriverScreen: React.FC = () => {
               />
             </View>
           ) : null}
-          <PlatformSelect
-            label="Passengers"
-            value={String(Math.min(passengers, maxSeats))}
-            options={passengerOptions}
-            onSelect={(v) => setPassengers(Number(v))}
-          />
+
+          {/* Fix 5: Passenger - / + Stepper */}
+          <View style={styles.stepperContainer}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.fieldLabel}>Passengers</Text>
+              <Text style={styles.stepperSub}>Max {maxSeats} for {nearby ? vehicleType : fleetDriver ? fleetDriver.vehicle : 'selected car'}</Text>
+            </View>
+            <View style={styles.stepperRow}>
+              <TouchableOpacity
+                style={[styles.stepperBtn, passengers <= 1 && styles.stepperBtnDisabled]}
+                onPress={() => setPassengers((p) => Math.max(1, p - 1))}
+                disabled={passengers <= 1}
+              >
+                <Ionicons name="remove" size={18} color={passengers <= 1 ? '#94A3B8' : Colors.brandPrimaryDark} />
+              </TouchableOpacity>
+              <Text style={styles.stepperValue}>{passengers}</Text>
+              <TouchableOpacity
+                style={[styles.stepperBtn, passengers >= maxSeats && styles.stepperBtnDisabled]}
+                onPress={() => setPassengers((p) => Math.min(maxSeats, p + 1))}
+                disabled={passengers >= maxSeats}
+              >
+                <Ionicons name="add" size={18} color={passengers >= maxSeats ? '#94A3B8' : Colors.brandPrimaryDark} />
+              </TouchableOpacity>
+            </View>
+          </View>
         </Section>
 
         {nearby ? (
@@ -699,11 +735,15 @@ export const FindDriverScreen: React.FC = () => {
               style={[styles.cta, { alignSelf: 'stretch' }]}
               onPress={() => {
                 setBroadcastSuccessModalVisible(false);
-                navigation.navigate('Cabs');
+                if (lastCreatedTrip?.id) {
+                  navigation.navigate('CabRequestDetail', { tripId: lastCreatedTrip.id });
+                } else {
+                  navigation.navigate('Cabs');
+                }
               }}
               accessibilityRole="button"
             >
-              <Text style={styles.ctaText}>View in Cabs</Text>
+              <Text style={styles.ctaText}>View Trip Details</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -731,11 +771,15 @@ export const FindDriverScreen: React.FC = () => {
               style={[styles.cta, { alignSelf: 'stretch' }]}
               onPress={() => {
                 setBookedSuccessModalVisible(false);
-                navigation.navigate('Cabs');
+                if (lastCreatedTrip?.id) {
+                  navigation.navigate('CabRequestDetail', { tripId: lastCreatedTrip.id });
+                } else {
+                  navigation.navigate('Cabs');
+                }
               }}
               accessibilityRole="button"
             >
-              <Text style={styles.ctaText}>Done</Text>
+              <Text style={styles.ctaText}>View Trip</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -780,6 +824,75 @@ const styles = StyleSheet.create({
   fieldLabel: { fontSize: 13, fontWeight: '700', color: Colors.textSecondary, marginBottom: 6 },
   selectBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.divider, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 13, marginBottom: 12 },
   selectText: { flex: 1, fontSize: 15, fontWeight: '600', color: Colors.textPrimary },
+  quickTimesRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 10,
+  },
+  quickTimeChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: Radii.pill,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  quickTimeChipActive: {
+    backgroundColor: Colors.brandPrimary,
+    borderColor: Colors.brandPrimary,
+  },
+  quickTimeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#334155',
+  },
+  quickTimeTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  stepperContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: Colors.divider,
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 10,
+  },
+  stepperSub: {
+    fontSize: 11,
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
+  stepperRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  stepperBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: Colors.divider,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepperBtnDisabled: {
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F1F5F9',
+  },
+  stepperValue: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: Colors.textPrimary,
+    minWidth: 20,
+    textAlign: 'center',
+  },
   inlineFields: { flexDirection: 'row', gap: 8, marginTop: 4 },
   hint: { fontSize: 12, color: Colors.textSecondary, marginTop: 8, lineHeight: 17 },
   empty: { alignItems: 'center', paddingVertical: 12 },

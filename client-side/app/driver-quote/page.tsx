@@ -13,7 +13,11 @@ type QuoteView = {
   homestayName?: string;
   driverName?: string;
   pickup: string;
+  pickupLat?: number;
+  pickupLng?: number;
   destination: string;
+  destinationLat?: number;
+  destinationLng?: number;
   date: number;
   time: string;
   passengers: number;
@@ -46,9 +50,34 @@ function DriverQuoteContent() {
   const [fare, setFare] = useState("");
   const [notes, setNotes] = useState("");
   const [showOtpModal, setShowOtpModal] = useState(false);
-  const [otp, setOtp] = useState("");
+  // Fix 11: 4 individual digit boxes
+  const [otpDigits, setOtpDigits] = useState(["", "", "", ""]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  // Fix 11: inline confirmation card instead of window.confirm()
+  const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
+
+  // Computed OTP from digit boxes
+  const otp = otpDigits.join("");
+
+  const handleOtpDigitChange = (index: number, val: string) => {
+    const digit = val.replace(/\D/g, "").slice(-1);
+    const next = [...otpDigits];
+    next[index] = digit;
+    setOtpDigits(next);
+    // Auto-advance to next input
+    if (digit && index < 3) {
+      const nextInput = document.getElementById(`otp-d-${index + 1}`);
+      if (nextInput) (nextInput as HTMLInputElement).focus();
+    }
+    // Auto-submit on 4th digit
+    if (digit && index === 3) {
+      const fullOtp = next.join("");
+      if (fullOtp.length === 4) {
+        handleTripAction("start", fullOtp);
+      }
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -265,6 +294,19 @@ function DriverQuoteContent() {
               </div>
             )}
 
+            {/* Fix 20: Google Maps Navigation Deeplink */}
+            <a
+              href={(view.pickupLat && view.pickupLng)
+                ? `https://www.google.com/maps/dir/?api=1&destination=${view.pickupLat},${view.pickupLng}`
+                : `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(view.pickup)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-blue-700"
+            >
+              <Icon name="navigation" className="text-sm" />
+              <span>🗺️  Navigate to Pickup</span>
+            </a>
+
             {/* Cash Collection Banner */}
             {typeof view.remainingCashAmount === "number" && view.remainingCashAmount > 0 && (
               <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 space-y-1">
@@ -289,7 +331,7 @@ function DriverQuoteContent() {
                           <span className="text-xs font-bold text-emerald-950">Enter Passenger Boarding PIN:</span>
                           <button
                             type="button"
-                            onClick={() => setShowOtpModal(false)}
+                            onClick={() => { setShowOtpModal(false); setOtpDigits(["","","",""]); }}
                             className="text-xs text-[#57606A] hover:underline"
                           >
                             Cancel
@@ -298,25 +340,35 @@ function DriverQuoteContent() {
                         <p className="text-[11px] text-[#57606A]">
                           Ask the passenger for the 4-digit PIN displayed on their booking confirmation screen.
                         </p>
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            maxLength={4}
-                            value={otp}
-                            onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                            placeholder="4-digit PIN"
-                            className="w-full font-mono text-center text-lg font-bold tracking-widest rounded-xl border border-[#D0D7DE] bg-white px-3 py-2 text-[#1F2328] focus:border-emerald-600 focus:outline-none"
-                          />
-                          <button
-                            type="button"
-                            disabled={busy || otp.length < 4}
-                            onClick={() => handleTripAction("start", otp)}
-                            className="rounded-xl bg-emerald-600 px-4 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50 cursor-pointer"
-                          >
-                            {busy ? "Verifying…" : "Start"}
-                          </button>
+                        {/* Fix 11: 4 individual digit boxes */}
+                        <div className="flex gap-2 justify-center">
+                          {[0, 1, 2, 3].map((i) => (
+                            <input
+                              key={i}
+                              id={`otp-d-${i}`}
+                              type="text"
+                              inputMode="numeric"
+                              maxLength={1}
+                              value={otpDigits[i]}
+                              onChange={(e) => handleOtpDigitChange(i, e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Backspace" && !otpDigits[i] && i > 0) {
+                                  const prev = document.getElementById(`otp-d-${i - 1}`);
+                                  if (prev) (prev as HTMLInputElement).focus();
+                                }
+                              }}
+                              className="w-12 h-12 font-mono text-center text-xl font-bold rounded-xl border-2 border-[#D0D7DE] bg-white text-[#1F2328] focus:border-emerald-600 focus:outline-none"
+                            />
+                          ))}
                         </div>
+                        <button
+                          type="button"
+                          disabled={busy || otp.length < 4}
+                          onClick={() => handleTripAction("start", otp)}
+                          className="w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50 cursor-pointer"
+                        >
+                          {busy ? "Verifying…" : "Verify & Start Ride"}
+                        </button>
                       </div>
                     ) : (
                       <button
@@ -337,19 +389,52 @@ function DriverQuoteContent() {
                     )}
                   </>
                 )}
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => {
-                    if (confirm(`Did you complete this ride and collect ${view.remainingCashAmount ? inr(view.remainingCashAmount) : "cash balance"}?`)) {
-                      handleTripAction("complete");
-                    }
-                  }}
-                  className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 py-3 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 cursor-pointer disabled:opacity-50"
-                >
-                  <Icon name="done_all" className="text-sm" />
-                  <span>{busy ? "Completing…" : "Complete Ride & Confirm Cash"}</span>
-                </button>
+                {/* Fix 11: Inline completion confirmation card */}
+                {showCompleteConfirm ? (
+                  <div className="rounded-xl border-2 border-emerald-500 bg-emerald-50 p-4 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Icon name="check_circle" className="text-emerald-700 text-lg" />
+                      <span className="text-xs font-bold text-emerald-950">Confirm Ride Completion & Cash Collection</span>
+                    </div>
+                    <p className="text-xs text-emerald-900 leading-relaxed">
+                      Did you drop off the passenger and collect{" "}
+                      <strong className="font-extrabold text-emerald-950">
+                        {view.remainingCashAmount ? inr(view.remainingCashAmount) : "cash balance"}
+                      </strong>
+                      ?
+                    </p>
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => {
+                          setShowCompleteConfirm(false);
+                          handleTripAction("complete");
+                        }}
+                        className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50 cursor-pointer"
+                      >
+                        {busy ? "Completing…" : "Yes, Completed & Collected"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowCompleteConfirm(false)}
+                        className="rounded-xl border border-[#D0D7DE] bg-white px-3 py-2.5 text-xs font-semibold text-[#57606A] hover:bg-[#F6F8FA] cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => setShowCompleteConfirm(true)}
+                    className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 py-3 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 cursor-pointer disabled:opacity-50"
+                  >
+                    <Icon name="done_all" className="text-sm" />
+                    <span>{busy ? "Completing…" : "Complete Ride & Confirm Cash"}</span>
+                  </button>
+                )}
               </div>
             )}
 
@@ -385,8 +470,21 @@ function DriverQuoteContent() {
 
             {/* Counter-Offer Notification */}
             {counter && (
-              <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-3.5 space-y-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">Homestay Counter-Offer</span>
+              <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">Homestay Counter-Offer</span>
+                  <span className="text-[10px] bg-emerald-200 text-emerald-900 font-bold px-2 py-0.5 rounded-full">New Rate</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 bg-white rounded-lg p-2.5 border border-emerald-200 text-center">
+                  <div>
+                    <span className="text-[10px] text-[#57606A] block">Your Quote</span>
+                    <span className="text-xs font-bold line-through text-[#57606A]">{q ? inr(q.quotedFare) : "—"}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-emerald-700 font-semibold block">Counter-Offer</span>
+                    <span className="text-sm font-extrabold text-emerald-700">{inr(counter)}</span>
+                  </div>
+                </div>
                 <p className="text-xs text-[#1F2328]">
                   The homestay offers <strong className="text-emerald-900 font-extrabold">{inr(counter)}</strong>. Accepting confirms this trip immediately.
                 </p>

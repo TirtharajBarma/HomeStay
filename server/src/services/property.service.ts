@@ -49,7 +49,10 @@ export class PropertyService {
   }
 
   static async getAllProperties(): Promise<any[]> {
-    const properties: any[] = await Property.find({ status: { $ne: "suspended" as any } }).sort({ createdAt: -1 }).lean();
+    const properties: any[] = await Property.find({
+      status: { $ne: "suspended" as any },
+      email: { $not: /@stayride\.test$/i },
+    }).sort({ createdAt: -1 }).lean();
     return await Promise.all(
       properties.map(async (prop: any) => {
         let rooms = await Room.find({ propertyId: (prop as any)._id }).lean();

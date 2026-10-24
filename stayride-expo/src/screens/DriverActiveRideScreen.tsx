@@ -98,6 +98,24 @@ export const DriverActiveRideScreen: React.FC = () => {
     );
   };
 
+  const handleGuestAbsent = () => {
+    Alert.alert(
+      'Guest Not at Pickup?',
+      'Please call the passenger directly or contact the host. Standard mountain waiting time is 15 minutes before reporting a no-show.',
+      [
+        activeRide?.phone
+          ? {
+              text: '📞 Call Passenger',
+              onPress: () => {
+                Linking.openURL(`tel:${activeRide.phone}`);
+              },
+            }
+          : { text: 'OK' },
+        { text: 'Dismiss', style: 'cancel' },
+      ]
+    );
+  };
+
   return (
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) }]}>
@@ -113,11 +131,20 @@ export const DriverActiveRideScreen: React.FC = () => {
             </View>
             <Text style={styles.emptyTitle}>No Active Ride in Progress</Text>
             <Text style={styles.emptySubtitle}>
-              Go to &quot;My Rides&quot; and tap &quot;Start Ride&quot; on any of your confirmed bookings to begin navigation.
+              Go to "My Rides" and tap "Start Ride" on any of your confirmed bookings to begin navigation.
             </Text>
           </View>
         ) : (
           <View style={styles.activeCard}>
+            {/* Fix 8: Cash Hero Card — prominent at very top */}
+            {typeof activeRide.remainingCashAmount === 'number' && activeRide.remainingCashAmount > 0 && (
+              <View style={styles.cashHeroCard}>
+                <Text style={styles.cashHeroLabel}>💵  COLLECT FROM PASSENGER</Text>
+                <Text style={styles.cashHeroAmount}>{cashDue}</Text>
+                <Text style={styles.cashHeroSub}>Pay at drop-off in cash or personal UPI</Text>
+              </View>
+            )}
+
             {/* Status Pill */}
             <View style={styles.statusRow}>
               <View style={styles.livePill}>
@@ -178,8 +205,17 @@ export const DriverActiveRideScreen: React.FC = () => {
             {/* Google Maps Button */}
             <TouchableOpacity style={styles.mapBtn} onPress={handleOpenGoogleMaps}>
               <Ionicons name="navigate" size={18} color="#FFFFFF" />
-              <Text style={styles.mapBtnText}>Open Google Maps Navigation ↗</Text>
+              <Text style={styles.mapBtnText}>🗺️  Navigate to Pickup</Text>
             </TouchableOpacity>
+            {/* Fix 8: GPS warning if no pin set */}
+            {!(typeof activeRide.pickupLat === 'number') && (
+              <View style={styles.gpsWarning}>
+                <Ionicons name="warning-outline" size={14} color="#92400E" />
+                <Text style={styles.gpsWarningText}>
+                  No GPS pin — navigation uses address text only. Ask the owner to pin their exact location in Settings.
+                </Text>
+              </View>
+            )}
 
             {/* Passenger Contact Action Buttons: guest contact arrives only after the advance is paid */}
             {!activeRide.phone ? (
@@ -224,21 +260,32 @@ export const DriverActiveRideScreen: React.FC = () => {
 
             {/* Start Ride Button: when trip is CONFIRMED and waiting to start */}
             {activeRide.status === 'CONFIRMED' && (
-              <TouchableOpacity
-                style={[styles.completeBtn, { backgroundColor: '#0284C7' }]}
-                onPress={handleStartTrip}
-                disabled={starting}
-              >
-                <Ionicons name="play-circle" size={22} color="#FFFFFF" />
-                <Text style={styles.completeBtnText}>{starting ? 'Starting…' : 'Start Ride'}</Text>
-              </TouchableOpacity>
+              <>
+                <TouchableOpacity
+                  style={[styles.startBtn]}
+                  onPress={handleStartTrip}
+                  disabled={starting}
+                >
+                  <Ionicons name="play-circle" size={22} color="#16A34A" />
+                  <Text style={styles.startBtnText}>{starting ? 'Starting…' : '▶  Start Ride'}</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.waitingBtn}
+                  onPress={handleGuestAbsent}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="time-outline" size={16} color="#64748B" />
+                  <Text style={styles.waitingBtnText}>Guest Absent / Still Waiting?</Text>
+                </TouchableOpacity>
+              </>
             )}
 
             {/* Complete Ride Button: only after the server recorded the start */}
             {activeRide.status === 'TRIP_STARTED' && (
               <TouchableOpacity style={styles.completeBtn} onPress={handleFinishTrip} disabled={completing}>
                 <Ionicons name="checkmark-done-circle" size={22} color="#FFFFFF" />
-                <Text style={styles.completeBtnText}>{completing ? 'Completing…' : 'Complete Ride & Collect Cash'}</Text>
+                <Text style={styles.completeBtnText}>{completing ? 'Completing…' : '✓  Complete Ride & Collect Cash'}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -507,5 +554,84 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '800',
     fontSize: 15,
+  },
+  // Fix 8: Cash hero at top
+  cashHeroCard: {
+    backgroundColor: '#FEF3C7',
+    borderWidth: 2,
+    borderColor: '#F59E0B',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 16,
+    alignItems: 'center',
+  },
+  cashHeroLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#92400E',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 6,
+  },
+  cashHeroAmount: {
+    fontSize: 36,
+    fontWeight: '900',
+    color: '#78350F',
+    marginBottom: 4,
+  },
+  cashHeroSub: {
+    fontSize: 11,
+    color: '#92400E',
+  },
+  // Fix 8: GPS warning
+  gpsWarning: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 10,
+  },
+  gpsWarningText: {
+    flex: 1,
+    fontSize: 11,
+    color: '#92400E',
+    lineHeight: 16,
+  },
+  // Fix 8: Start ride — outline green
+  startBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: '#16A34A',
+    paddingVertical: 16,
+    borderRadius: 14,
+    marginBottom: 10,
+  },
+  startBtnText: {
+    color: '#16A34A',
+    fontWeight: '800',
+    fontSize: 15,
+  },
+  waitingBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    marginTop: 2,
+    marginBottom: 6,
+  },
+  waitingBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#64748B',
+    textDecorationLine: 'underline',
   },
 });

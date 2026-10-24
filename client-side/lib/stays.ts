@@ -1,3 +1,4 @@
+import { cache } from "react";
 import type { StayKind } from "./booking";
 import { API_ENDPOINTS } from "./api-config";
 import { estate } from "./stay-images";
@@ -117,7 +118,7 @@ function propertyToStay(p: Raw): Stay {
   const slug = str(p.slug) || "homestay";
   const rawRooms = Array.isArray(p.rooms) ? p.rooms : [];
   const photos = Array.isArray(p.photos) && p.photos.length ? p.photos : [];
-  const defaultImage = photos[0] || rawRooms[0]?.image || "https://images.unsplash.com/photo-1544644181-1484b3fdfc62?auto=format&fit=crop&w=1200&q=80";
+  const defaultImage = photos[0] || rawRooms[0]?.image || "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1200&q=80";
 
   const roomPrices = rawRooms.map((r: any) => num(r.price) || num(r.nightly)).filter((pr: number) => pr > 0);
   const minPrice = roomPrices.length ? Math.min(...roomPrices) : 2400;
@@ -176,14 +177,28 @@ function propertyToStay(p: Raw): Stay {
   };
 }
 
+/** Filter out test/audit properties generated during test runs */
+function isTestEntity(e: Raw): boolean {
+  const em = str(e.email).toLowerCase();
+  const slug = str(e.slug).toLowerCase();
+  return (
+    em.includes("@stayride.test") ||
+    em.includes("host.audit") ||
+    em.includes("audit.host") ||
+    slug.startsWith("test-")
+  );
+}
+
 /** Live stays from the API. Prioritizes real registered properties, with fallback to rooms. */
-export async function getLiveStays(): Promise<{ stays: Stay[]; error: string | null }> {
+export const getLiveStays = cache(async (): Promise<{ stays: Stay[]; error: string | null }> => {
   try {
-    const propPromise = fetch(API_ENDPOINTS.properties.list(), { cache: "no-store" })
+    const fetchOpts: RequestInit = { next: { revalidate: 30 } };
+
+    const propPromise = fetch(API_ENDPOINTS.properties.list(), fetchOpts)
       .then((r) => (r.ok ? r.json() : null))
       .catch(() => null);
 
-    const roomPromise = fetch(API_ENDPOINTS.stays.list(), { cache: "no-store" })
+    const roomPromise = fetch(API_ENDPOINTS.stays.list(), fetchOpts)
       .then((r) => (r.ok ? r.json() : null))
       .catch(() => null);
 
@@ -192,6 +207,7 @@ export async function getLiveStays(): Promise<{ stays: Stay[]; error: string | n
     const propertyStays: Stay[] = [];
     if (propJson?.success && Array.isArray(propJson.data)) {
       for (const p of propJson.data) {
+        if (isTestEntity(p)) continue;
         const stay = propertyToStay(p);
         if (stay) propertyStays.push(stay);
       }
@@ -200,6 +216,7 @@ export async function getLiveStays(): Promise<{ stays: Stay[]; error: string | n
     const roomStays: Stay[] = [];
     if (roomJson?.success && Array.isArray(roomJson.data)) {
       for (const r of roomJson.data) {
+        if (isTestEntity(r)) continue;
         const stay = toStay(r);
         if (stay) roomStays.push(stay);
       }
@@ -208,7 +225,13 @@ export async function getLiveStays(): Promise<{ stays: Stay[]; error: string | n
     // Real properties take priority; then include standalone rooms if their property isn't already listed
     const combined: Stay[] = [...propertyStays];
     for (const r of roomStays) {
-      if (!combined.some((s) => s.slug === r.slug)) {
+      const isAlreadyCovered = combined.some(
+        (s) =>
+          s.slug === r.slug ||
+          r.slug.startsWith(`${s.slug}-`) ||
+          (r.code && r.code.startsWith(`${s.slug}-`))
+      );
+      if (!isAlreadyCovered) {
         combined.push(r);
       }
     }
@@ -222,10 +245,10 @@ export async function getLiveStays(): Promise<{ stays: Stay[]; error: string | n
   } catch {
     return { stays: [], error: "Stays could not be loaded right now. Please check your connection and try again." };
   }
-}
+});
 
 /** A live stay by slug or code; checks rooms first, then resolves homestay property directly. */
-export async function getLiveStay(slug: string): Promise<Stay | undefined> {
+export const getLiveStay = cache(async (slug: string): Promise<Stay | undefined> => {
   if (!slug) return undefined;
   const clean = slug.toLowerCase().trim();
   const { stays } = await getLiveStays();
@@ -236,7 +259,7 @@ export async function getLiveStay(slug: string): Promise<Stay | undefined> {
 
   // Fallback: Resolve homestay property by slug
   try {
-    const res = await fetch(API_ENDPOINTS.properties.bySlug(clean), { cache: "no-store" });
+    const res = await fetch(API_ENDPOINTS.properties.bySlug(clean), { next: { revalidate: 30 } });
     const json = await res.json().catch(() => null);
     if (res.ok && json?.success && json.data) {
       return propertyToStay(json.data);
@@ -246,4 +269,4 @@ export async function getLiveStay(slug: string): Promise<Stay | undefined> {
   }
 
   return undefined;
-}
+});

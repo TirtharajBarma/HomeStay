@@ -87,10 +87,10 @@ export default async function StayPage({ params, searchParams }: PageProps<"/sta
         </div>
       </div>
 
-      <StayGallery stay={stay} />
-
       <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-12">
-        <div className="space-y-10 lg:col-span-8">
+        <div className="space-y-8 lg:col-span-8">
+          <StayGallery stay={stay} />
+
           {/* Quick facts */}
           <div className="sunlit-card-shadow rounded-xl border border-outline-variant/40 bg-surface-container-lowest p-5">
             <div className="grid grid-cols-2 gap-4 divide-y divide-outline-variant/30 sm:grid-cols-4 sm:divide-y-0 sm:divide-x">

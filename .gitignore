@@ -78,5 +78,9 @@ Thumbs.db
 *.swp
 *.swo
 
+# Backups
+backups/
+*/backups/
+
 # Miscellaneous
 image

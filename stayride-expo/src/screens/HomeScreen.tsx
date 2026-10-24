@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -52,6 +52,32 @@ export const HomeScreen: React.FC = () => {
 
   const [period, setPeriod] = useState<'7d' | '30d' | '6m' | '1y'>('30d');
   const [metric, setMetric] = useState<'revenue' | 'bookings' | 'cabs' | 'commission'>('revenue');
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date>(new Date());
+
+  const formatSyncAge = (date: Date): string => {
+    const diffMs = Date.now() - date.getTime();
+    const diffSec = Math.floor(diffMs / 1000);
+    if (diffSec < 60) return 'just now';
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHr = Math.floor(diffMin / 60);
+    return `${diffHr}h ago`;
+  };
+
+  const isRecentSync = Date.now() - lastSyncedAt.getTime() < 2 * 60 * 1000;
+
+  const handleSync = async () => {
+    await sync();
+    setLastSyncedAt(new Date());
+  };
+
+  // Auto-refresh every 5 minutes
+  useEffect(() => {
+    const interval = setInterval(() => {
+      handleSync();
+    }, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   const greeting = () => {
     const h = new Date().getHours();
@@ -66,9 +92,13 @@ export const HomeScreen: React.FC = () => {
     <View style={styles.container}>
       <Header title={homestay.name || 'My Homestay'} />
       <SyncBanner />
+      <View style={styles.syncRow}>
+        <View style={[styles.syncDot, { backgroundColor: isRecentSync ? '#16A34A' : '#94A3B8' }]} />
+        <Text style={styles.syncText}>Last synced: {formatSyncAge(lastSyncedAt)}</Text>
+      </View>
       <ScrollView
         contentContainerStyle={[styles.scrollContent, { paddingTop: 12 }]}
-        refreshControl={<RefreshControl refreshing={syncing} onRefresh={sync} colors={[Colors.brandPrimary]} />}
+        refreshControl={<RefreshControl refreshing={syncing} onRefresh={handleSync} colors={[Colors.brandPrimary]} />}
         showsVerticalScrollIndicator={false}
       >
         <GradientHeader
@@ -179,19 +209,23 @@ export const HomeScreen: React.FC = () => {
               label="Cab Requests"
               onPress={() => navigation.navigate('Cabs' as any)}
             />
-            {/* Adding a booking already adds the guest; asking checked-in guests for a cab earns commission */}
+            {/* Navigates directly to FindDriver flow */}
             <QuickActionCard
               icon="car"
               label="Ask for Cab"
-              onPress={() => navigation.navigate('Guests' as any)}
-            />
-            <QuickActionCard
-              icon="send"
-              label="Campaign"
-              onPress={() => navigation.navigate('Campaign')}
+              onPress={() => navigation.navigate('FindDriver')}
             />
           </View>
         </View>
+
+        {/* More actions — less prominent */}
+        <TouchableOpacity
+          style={styles.moreActionsRow}
+          onPress={() => navigation.navigate('Campaign')}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.moreActionsText}>📣  Campaign</Text>
+        </TouchableOpacity>
 
         {/* Performance Chart Card */}
         <View style={styles.chartCard}>
@@ -355,6 +389,41 @@ const styles = StyleSheet.create({
   },
   quickRow: {
     flexDirection: 'row',
+  },
+  moreActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    marginTop: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.divider,
+    backgroundColor: Colors.bgCard,
+  },
+  moreActionsText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+  },
+  syncRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 2,
+  },
+  syncDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+  },
+  syncText: {
+    fontSize: 11,
+    color: Colors.textSecondary,
+    fontWeight: '500',
   },
   chartCard: {
     backgroundColor: Colors.bgCard,

@@ -697,12 +697,12 @@ function CabRequestFormContent() {
                 </div>
               </div>
 
-              {/* Status Stepper Progression */}
-              <div className="py-2">
-                <div className="grid grid-cols-4 gap-2 text-center text-xs">
+              {/* Fix 12: 5-Step Visual Timeline */}
+              <div className="py-3">
+                <div className="grid grid-cols-5 gap-1.5 text-center text-[11px]">
                   <div className="space-y-1">
                     <div className="h-1.5 w-full rounded-full bg-emerald-600" />
-                    <span className="font-semibold text-emerald-900">Requested</span>
+                    <span className="font-bold text-emerald-900 block truncate">Received</span>
                   </div>
                   <div className="space-y-1">
                     <div
@@ -711,10 +711,12 @@ function CabRequestFormContent() {
                           tripStatus?.status || ""
                         )
                           ? "bg-emerald-600"
+                          : (tripStatus?.status || confirmedTrip.status) === "FINDING_DRIVER"
+                          ? "bg-blue-500 animate-pulse"
                           : "bg-[#E1E4E8]"
                       }`}
                     />
-                    <span className="font-medium text-[#57606A]">Quotes</span>
+                    <span className="font-medium text-[#57606A] block truncate">Assigned</span>
                   </div>
                   <div className="space-y-1">
                     <div
@@ -726,7 +728,19 @@ function CabRequestFormContent() {
                           : "bg-[#E1E4E8]"
                       }`}
                     />
-                    <span className="font-medium text-[#57606A]">Advance</span>
+                    <span className="font-medium text-[#57606A] block truncate">Confirmed</span>
+                  </div>
+                  <div className="space-y-1">
+                    <div
+                      className={`h-1.5 w-full rounded-full ${
+                        ["TRIP_STARTED", "COMPLETED"].includes(tripStatus?.status || "")
+                          ? "bg-emerald-600"
+                          : tripStatus?.status === "CONFIRMED"
+                          ? "bg-blue-400"
+                          : "bg-[#E1E4E8]"
+                      }`}
+                    />
+                    <span className="font-medium text-[#57606A] block truncate">In Progress</span>
                   </div>
                   <div className="space-y-1">
                     <div
@@ -734,7 +748,7 @@ function CabRequestFormContent() {
                         tripStatus?.status === "COMPLETED" ? "bg-emerald-600" : "bg-[#E1E4E8]"
                       }`}
                     />
-                    <span className="font-medium text-[#57606A]">Complete</span>
+                    <span className="font-medium text-[#57606A] block truncate">Completed</span>
                   </div>
                 </div>
               </div>
@@ -742,21 +756,24 @@ function CabRequestFormContent() {
               {/* Bidding Radar / Active Searching Banner */}
               {(tripStatus?.status || confirmedTrip.status) === "FINDING_DRIVER" && (
                 <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-4 space-y-2">
-                  <div className="flex items-center gap-3">
-                    <div className="relative flex h-3 w-3">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
-                      <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-600" />
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="relative flex h-3.5 w-3.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-blue-600" />
+                      </div>
+                      <span className="text-xs font-bold text-blue-900 uppercase tracking-wide">
+                        Finding your driver in this valley…
+                      </span>
                     </div>
-                    <span className="text-xs font-bold text-blue-900 uppercase tracking-wide">
-                      {tripStatus?.quotesCount && tripStatus.quotesCount > 0
-                        ? `${tripStatus.quotesCount} Mountain Driver Quote(s) Received`
-                        : "Broadcasting to Nearby Mountain Drivers"}
+                    <span className="text-[10px] text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full font-semibold">
+                      Auto-syncing
                     </span>
                   </div>
                   <p className="text-xs text-blue-800 leading-relaxed">
                     {tripStatus?.quotesCount && tripStatus.quotesCount > 0
-                      ? "Mountain drivers in this valley have submitted competitive quotes. Lowest market bid will be automatically locked."
-                      : "Your trip has been dispatched to verified hill drivers in this valley. Lowest market bid will be automatically confirmed in 5 minutes."}
+                      ? `${tripStatus.quotesCount} local driver quote(s) received. Best rate is being matched.`
+                      : "Dispatched to verified local hill drivers. Connecting with available cabs near your homestay."}
                   </p>
                   {tripStatus?.biddingFallback && (
                     <div className="rounded-lg bg-amber-50 border border-amber-300 p-2.5 text-xs text-amber-900 font-medium">

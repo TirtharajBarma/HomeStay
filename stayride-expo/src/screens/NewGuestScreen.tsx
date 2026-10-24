@@ -15,7 +15,6 @@ import { api } from '../data/api';
 import { Header } from '../components/Header';
 import { Colors } from '../theme/colors';
 import { FormScroll } from '../components/FormScroll';
-
 export const NewGuestScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
   const route = useRoute<RouteProp<{ params: { guestId?: number } }, 'params'>>();
@@ -33,6 +32,8 @@ export const NewGuestScreen: React.FC = () => {
   const [notes, setNotes] = useState(() => editingGuest?.notes || '');
   // Marketing is opt-in: the owner switches it on only when the guest agrees
   const [consent, setConsent] = useState(() => editingGuest?.marketingConsent ?? false);
+  // Fix 6: phone validation error
+  const [phoneError, setPhoneError] = useState('');
 
   const [syncedGuestId, setSyncedGuestId] = useState<number | undefined>(editingGuest?.id);
   if (editingGuest && editingGuest.id !== syncedGuestId) {
@@ -44,6 +45,17 @@ export const NewGuestScreen: React.FC = () => {
     setConsent(editingGuest.marketingConsent);
   }
 
+  // Fix 6: real-time phone validation
+  const handlePhoneChange = (text: string) => {
+    setPhone(text);
+    const digits = text.replace(/\D/g, '');
+    if (digits.length > 0 && digits.length < 10) {
+      setPhoneError('Enter a valid 10-digit WhatsApp number');
+    } else {
+      setPhoneError('');
+    }
+  };
+
   const handleSave = async () => {
     const trimmedName = name.trim();
     const trimmedPhone = phone.trim();
@@ -54,6 +66,12 @@ export const NewGuestScreen: React.FC = () => {
     }
     if (!trimmedPhone) {
       Alert.alert('Required', 'Phone number is required');
+      return;
+    }
+    const digits = trimmedPhone.replace(/\D/g, '');
+    if (digits.length < 10) {
+      setPhoneError('Enter a valid 10-digit WhatsApp number');
+      Alert.alert('Invalid Phone', 'Please enter a 10-digit WhatsApp number.');
       return;
     }
 
@@ -73,8 +91,9 @@ export const NewGuestScreen: React.FC = () => {
         { text: 'OK', onPress: () => navigation.goBack() },
       ]);
     } else {
+      let createdGuest: any = null;
       try {
-        await createGuest({
+        createdGuest = await createGuest({
           name: trimmedName,
           phone: trimmedPhone,
           email: email.trim(),
@@ -85,9 +104,28 @@ export const NewGuestScreen: React.FC = () => {
         Alert.alert('Not saved', e?.message || 'Please try again.');
         return;
       }
-      Alert.alert('Success', `${trimmedName} added to guest database`, [
-        { text: 'OK', onPress: () => navigation.goBack() },
-      ]);
+      // Fix 6: Post-save options
+      Alert.alert(
+        `✅ ${trimmedName} added!`,
+        'What would you like to do next?',
+        [
+          {
+            text: '🛏  Book a Room',
+            onPress: () => {
+              navigation.goBack();
+              navigation.navigate('NewBooking', { guestId: createdGuest?.id });
+            },
+          },
+          {
+            text: '🚗  Request a Cab',
+            onPress: () => {
+              navigation.goBack();
+              navigation.navigate('FindDriver');
+            },
+          },
+          { text: 'Done', style: 'cancel', onPress: () => navigation.goBack() },
+        ]
+      );
     }
   };
 
@@ -110,13 +148,14 @@ export const NewGuestScreen: React.FC = () => {
 
         <Text style={styles.label}>Phone Number *</Text>
         <TextInput
-          style={styles.input}
+          style={[styles.input, phoneError ? styles.inputError : undefined]}
           placeholder="+91 98000 00000"
           placeholderTextColor={Colors.textSecondary}
           keyboardType="phone-pad"
           value={phone}
-          onChangeText={setPhone}
+          onChangeText={handlePhoneChange}
         />
+        {phoneError ? <Text style={styles.errorText}>{phoneError}</Text> : null}
 
         <Text style={styles.label}>Email Address</Text>
         <TextInput
@@ -144,7 +183,7 @@ export const NewGuestScreen: React.FC = () => {
           <View style={{ flex: 1, paddingRight: 10 }}>
             <Text style={styles.switchTitle}>Allow WhatsApp & marketing offers</Text>
             <Text style={styles.switchSub}>
-              Guest will be included in targeted WhatsApp broadcast campaigns.
+              Guest verbally agreed to receive cab offers &amp; promotions via WhatsApp. Enable only with their permission.
             </Text>
           </View>
           <Switch
@@ -227,5 +266,16 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: 'bold',
     fontSize: 16,
+  },
+  // Fix 6: phone validation styles
+  inputError: {
+    borderColor: '#DC2626',
+    borderWidth: 1.5,
+  },
+  errorText: {
+    fontSize: 12,
+    color: '#DC2626',
+    marginTop: 4,
+    marginLeft: 2,
   },
 });

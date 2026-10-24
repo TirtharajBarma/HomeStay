@@ -25,7 +25,7 @@ export const GuestDetailScreen: React.FC = () => {
   const route = useRoute<RouteProp<{ params: { guestId: number } }, 'params'>>();
   const { guestId } = route.params || {};
 
-  const { guests, bookings, updateGuest } = useStayRide();
+  const { guests, bookings, trips, updateGuest, deleteGuest } = useStayRide();
   const guest = guests.find((g) => g.id === guestId);
 
   const [notesModalVisible, setNotesModalVisible] = useState(false);
@@ -43,7 +43,52 @@ export const GuestDetailScreen: React.FC = () => {
   }
 
   const guestBookings = bookings.filter((b) => b.guestId === guest.id);
+  // Fix 17: Cab history for this guest
+  const guestTrips = trips.filter(
+    (t) => (t.guestName && t.guestName.toLowerCase() === guest.name.toLowerCase()) ||
+           (t.phone && guest.phone && t.phone.replace(/\D/g, '') === guest.phone.replace(/\D/g, ''))
+  );
   const isRepeat = guest.visits > 1;
+
+  const handleRequestCab = () => {
+    const todayStr = new Date().toDateString();
+    const hasOpenTripToday = guestTrips.some(
+      (t) => t.status !== 'COMPLETED' && t.status !== 'CANCELLED' && t.status !== 'EXPIRED' && new Date(t.date).toDateString() === todayStr
+    );
+    if (hasOpenTripToday) {
+      Alert.alert(
+        'Active Cab Request Exists',
+        `${guest.name} already has a pending or active cab request today. Do you want to create another one?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Continue', onPress: () => navigation.navigate('FindDriver') },
+        ]
+      );
+    } else {
+      navigation.navigate('FindDriver');
+    }
+  };
+
+  const handleDeleteGuest = () => {
+    Alert.alert(
+      'Delete Guest Record',
+      `Are you sure you want to delete ${guest.name}? This will remove them from your guest database.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            const outcome = await deleteGuest(guest.id);
+            reportOutcome(outcome, 'Guest Deleted', `${guest.name} was removed from the database.`);
+            if (outcome.ok) {
+              navigation.goBack();
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const fmtDate = (ms: number) =>
     new Date(ms).toLocaleDateString('en-IN', {
@@ -118,13 +163,19 @@ export const GuestDetailScreen: React.FC = () => {
             style={styles.actionBtn}
             onPress={() => navigation.navigate('NewBooking', { guestId: guest.id })}
           >
-            <Text style={styles.actionBtnText}>+ Create booking</Text>
+            <Text style={styles.actionBtnText}>+ Booking</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.actionBtn, styles.actionBtnCab]}
+            onPress={handleRequestCab}
+          >
+            <Text style={styles.actionBtnCabText}>🚗 Ask Cab</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.actionBtn, styles.actionBtnOutline]}
             onPress={() => navigation.navigate('NewGuest', { guestId: guest.id })}
           >
-            <Text style={styles.actionBtnOutlineText}>Edit profile</Text>
+            <Text style={styles.actionBtnOutlineText}>Edit</Text>
           </TouchableOpacity>
         </View>
 
@@ -181,6 +232,54 @@ export const GuestDetailScreen: React.FC = () => {
             ))
           )}
         </View>
+
+        {/* Fix 17: Cab History Section */}
+        <View style={styles.historySection}>
+          <Text style={styles.historyTitle}>
+            Cab rides & requests ({guestTrips.length}{' '}
+            {guestTrips.length === 1 ? 'trip' : 'trips'})
+          </Text>
+          {guestTrips.length === 0 ? (
+            <View style={styles.emptyHistoryCard}>
+              <Text style={styles.emptyHistoryText}>No cab rides requested yet</Text>
+            </View>
+          ) : (
+            guestTrips.map((t) => (
+              <TouchableOpacity
+                key={t.id}
+                style={styles.cabHistoryCard}
+                onPress={() => navigation.navigate('CabRequestDetail', { tripId: t.id })}
+                activeOpacity={0.7}
+              >
+                <View style={styles.rowBetween}>
+                  <Text style={styles.cabRouteText} numberOfLines={1}>
+                    {t.pickup} → {t.destination}
+                  </Text>
+                  <Pill label={t.status} />
+                </View>
+                <View style={[styles.rowBetween, { marginTop: 6 }]}>
+                  <Text style={styles.cabDateText}>
+                    {new Date(t.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} {t.time}
+                  </Text>
+                  {t.fare ? (
+                    <Text style={styles.cabFareText}>₹{t.fare.toLocaleString('en-IN')}</Text>
+                  ) : t.estFare ? (
+                    <Text style={styles.cabEstFareText}>Est. ₹{t.estFare.toLocaleString('en-IN')}</Text>
+                  ) : null}
+                </View>
+              </TouchableOpacity>
+            ))
+          )}
+        </View>
+
+        {/* Fix 10: Explicit Delete Guest Button */}
+        <TouchableOpacity
+          style={styles.deleteBtn}
+          onPress={handleDeleteGuest}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.deleteBtnText}>Delete Guest Record</Text>
+        </TouchableOpacity>
       </ScrollView>
 
       {/* Edit Notes Modal */}
@@ -326,6 +425,60 @@ const styles = StyleSheet.create({
     color: Colors.brandPrimary,
     fontWeight: 'bold',
     fontSize: 14,
+  },
+  actionBtnCab: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#3B82F6',
+  },
+  actionBtnCabText: {
+    color: '#1D4ED8',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  cabHistoryCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: Colors.divider,
+  },
+  cabRouteText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+    flex: 1,
+    marginRight: 8,
+  },
+  cabDateText: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+  },
+  cabFareText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.brandPrimaryDark,
+  },
+  cabEstFareText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+  },
+  deleteBtn: {
+    marginTop: 24,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    backgroundColor: '#FEF2F2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#DC2626',
   },
   sectionCard: {
     backgroundColor: '#FFFFFF',

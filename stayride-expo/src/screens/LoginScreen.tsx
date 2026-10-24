@@ -114,6 +114,30 @@ export const LoginScreen: React.FC = () => {
   const [resetStage, setResetStage] = useState<'request' | 'confirm'>('request');
   const [newPassword, setNewPassword] = useState('');
 
+  // Fix 1: 6 digit boxes + timer + cooldown
+  const [otpDigits, setOtpDigits] = useState(['', '', '', '', '', '']);
+  const [expirySec, setExpirySec] = useState(600);
+  const [resendCooldown, setResendCooldown] = useState(30);
+  const otpInputRefs = useRef<Array<any>>([]);
+
+  // Fix 19: Inline password error
+  const [passwordError, setPasswordError] = useState('');
+
+  useEffect(() => {
+    if (mode !== 'verify') return;
+    const timer = setInterval(() => {
+      setExpirySec((prev) => (prev > 0 ? prev - 1 : 0));
+      setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [mode]);
+
+  const formatTimer = (sec: number) => {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+  };
+
   // Registration details (shared by "Create account" and the Google finish-setup sheet)
   const [role, setRole] = useState<Role | null>(null);
   const [name, setName] = useState('');
@@ -311,8 +335,12 @@ export const LoginScreen: React.FC = () => {
   };
 
   const emailSignIn = async () => {
+    setPasswordError('');
     const cleanEmail = email.trim();
-    if (!cleanEmail || !password) return Alert.alert('Sign in', 'Enter your email and password.');
+    if (!cleanEmail || !password) {
+      if (!password) setPasswordError('Please enter your password.');
+      return Alert.alert('Sign in', 'Enter your email and password.');
+    }
     if (DEMO_ENABLED && ['demo@stayride.in', 'driver@stayride.in', 'demo-driver@stayride.in'].includes(cleanEmail.toLowerCase())) {
       return demoLogin(cleanEmail);
     }
@@ -329,11 +357,12 @@ export const LoginScreen: React.FC = () => {
           await login(cleanEmail, password);
           navigation.replace('Main');
         } catch (legacyErr: any) {
-          Alert.alert('Sign in failed', legacyErr?.message || 'Invalid email or password.');
+          setPasswordError(legacyErr?.message || 'Invalid email or password.');
         }
         return;
       }
-      Alert.alert('Sign in failed', clerkMessage(err, 'Invalid email or password.'));
+      const msg = clerkMessage(err, 'Invalid email or password.');
+      setPasswordError(msg);
     } finally {
       setLoading(false);
     }
@@ -365,12 +394,13 @@ export const LoginScreen: React.FC = () => {
     }
   };
 
-  const verifyEmail = async () => {
-    if (!code.trim()) return Alert.alert('Verify email', 'Enter the 6-digit code.');
+  const verifyEmailWithCode = async (overrideCode?: string) => {
+    const codeToVerify = (overrideCode || code).trim();
+    if (!codeToVerify) return Alert.alert('Verify email', 'Enter the 6-digit code.');
     if (!signUp) return;
     setLoading(true);
     try {
-      const done = await signUp.attemptEmailAddressVerification({ code: code.trim() });
+      const done = await signUp.attemptEmailAddressVerification({ code: codeToVerify });
       if (done.status === 'complete' && setActive) await setActive({ session: done.createdSessionId });
       else Alert.alert('Not verified', 'The code could not be verified. Please check it and try again.');
     } catch (err: any) {
@@ -378,6 +408,36 @@ export const LoginScreen: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const verifyEmail = () => verifyEmailWithCode();
+
+  const handleOtpDigitChange = (index: number, val: string) => {
+    const digit = val.replace(/\D/g, '').slice(-1);
+    const next = [...otpDigits];
+    next[index] = digit;
+    setOtpDigits(next);
+    const fullCode = next.join('');
+    setCode(fullCode);
+    if (digit && index < 5) {
+      otpInputRefs.current[index + 1]?.focus();
+    }
+    if (digit && index === 5 && fullCode.length === 6) {
+      verifyEmailWithCode(fullCode);
+    }
+  };
+
+  const handleOtpKeyPress = (index: number, key: string) => {
+    if (key === 'Backspace' && !otpDigits[index] && index > 0) {
+      otpInputRefs.current[index - 1]?.focus();
+    }
+  };
+
+  const handleResendWithCooldown = async () => {
+    if (resendCooldown > 0) return;
+    setResendCooldown(30);
+    setExpirySec(600);
+    await resendCode();
   };
 
   const resendCode = async () => {
@@ -610,15 +670,52 @@ export const LoginScreen: React.FC = () => {
 
         <View style={styles.card}>
           {mode === 'verify' ? (
-            <View style={{ gap: 12 }}>
+            <View style={{ gap: 14 }}>
               <Text style={styles.title}>Check your email</Text>
-              <Text style={styles.subtitle}>We sent a 6-digit code to {email.trim()}.</Text>
-              {field('keypad-outline', { placeholder: '123456', value: code, onChangeText: setCode, keyboardType: 'number-pad', maxLength: 6 })}
-              <PrimaryButton label="Verify and continue" onPress={verifyEmail} busy={busy} loading={loading} />
+              <Text style={styles.subtitle}>We sent a 6-digit verification code to {email.trim()}.</Text>
+
+              {/* Fix 1: 6 separate digit boxes */}
+              <View style={styles.otpBoxesRow}>
+                {[0, 1, 2, 3, 4, 5].map((i) => (
+                  <TextInput
+                    key={i}
+                    ref={(el) => {
+                      otpInputRefs.current[i] = el;
+                    }}
+                    style={[
+                      styles.otpDigitBox,
+                      otpDigits[i] ? styles.otpDigitBoxFilled : undefined,
+                    ]}
+                    keyboardType="number-pad"
+                    maxLength={1}
+                    value={otpDigits[i]}
+                    onChangeText={(val) => handleOtpDigitChange(i, val)}
+                    onKeyPress={({ nativeEvent }) => handleOtpKeyPress(i, nativeEvent.key)}
+                  />
+                ))}
+              </View>
+
+              {/* Expiry Timer */}
+              <Text style={styles.timerText}>
+                {expirySec > 0 ? `Code expires in ${formatTimer(expirySec)}` : 'Code expired. Please request a new code.'}
+              </Text>
+
+              <PrimaryButton
+                label="Verify and continue"
+                onPress={() => verifyEmailWithCode(otpDigits.join(''))}
+                busy={busy}
+                loading={loading}
+              />
+
               <View style={styles.linkRow}>
-                <Text style={styles.linkText} onPress={resendCode}>
-                  Resend code
-                </Text>
+                <TouchableOpacity
+                  disabled={resendCooldown > 0}
+                  onPress={handleResendWithCooldown}
+                >
+                  <Text style={[styles.linkText, resendCooldown > 0 && { color: Colors.textSecondary }]}>
+                    {resendCooldown > 0 ? `Resend code (${resendCooldown}s)` : 'Resend code'}
+                  </Text>
+                </TouchableOpacity>
                 <Text style={styles.linkText} onPress={() => setMode('signup')}>
                   Change email
                 </Text>
@@ -659,8 +756,9 @@ export const LoginScreen: React.FC = () => {
                 <View style={{ gap: 12 }}>
                   <GoogleButton label="Continue with Google" onPress={() => startGoogle(null)} busy={busy} loading={googleLoading} />
                   {divider('or sign in with email')}
-                  {field('mail-outline', { placeholder: 'Email', value: email, onChangeText: setEmail, keyboardType: 'email-address', autoCapitalize: 'none', autoComplete: 'email' })}
-                  {field('lock-closed-outline', { placeholder: 'Password', value: password, onChangeText: setPassword, secureTextEntry: !showPassword, autoComplete: 'password' }, passwordEye)}
+                  {field('mail-outline', { placeholder: 'Email', value: email, onChangeText: (v) => { setEmail(v); setPasswordError(''); }, keyboardType: 'email-address', autoCapitalize: 'none', autoComplete: 'email' })}
+                  {field('lock-closed-outline', { placeholder: 'Password', value: password, onChangeText: (v) => { setPassword(v); setPasswordError(''); }, secureTextEntry: !showPassword, autoComplete: 'password' }, passwordEye)}
+                  {passwordError ? <Text style={styles.inlinePasswordError}>{passwordError}</Text> : null}
                   <Text style={[styles.linkText, { alignSelf: 'flex-end' }]} onPress={() => { setResetStage('request'); setMode('reset'); }}>
                     Forgot password?
                   </Text>
@@ -818,4 +916,40 @@ const styles = StyleSheet.create({
   legalFoot: { textAlign: 'center', fontSize: 12, marginTop: 18, color: Colors.textSecondary },
   sheet: { flex: 1, backgroundColor: Colors.bgCard, paddingHorizontal: 18 },
   sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12 },
+  otpBoxesRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginVertical: 8,
+  },
+  otpDigitBox: {
+    flex: 1,
+    height: 52,
+    borderWidth: 1.5,
+    borderColor: Colors.divider,
+    borderRadius: 12,
+    backgroundColor: Colors.white,
+    textAlign: 'center',
+    fontSize: 22,
+    fontWeight: '800',
+    color: Colors.textPrimary,
+  },
+  otpDigitBoxFilled: {
+    borderColor: Colors.brandPrimary,
+    backgroundColor: '#F5F3FF',
+  },
+  timerText: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  inlinePasswordError: {
+    fontSize: 12,
+    color: '#DC2626',
+    fontWeight: '600',
+    marginTop: -4,
+    marginBottom: 4,
+    marginLeft: 4,
+  },
 });

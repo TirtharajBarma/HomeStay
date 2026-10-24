@@ -168,6 +168,29 @@ export const CabsScreen: React.FC = () => {
 
   // StayRide's server sends the link from the company WhatsApp number
   const handleSendAskCabLink = async (guest: Guest) => {
+    // Fix 14: check if guest already has an active trip today before sending another link
+    const today = new Date();
+    const todayStr = today.toDateString();
+    const hasOpenTripToday = trips.some(
+      t => t.guestName === guest.name &&
+           t.status !== 'COMPLETED' &&
+           t.status !== 'CANCELLED' &&
+           t.status !== 'EXPIRED' &&
+           new Date(t.date).toDateString() === todayStr
+    );
+
+    if (hasOpenTripToday) {
+      Alert.alert(
+        'Cab Already Requested',
+        `${guest.name} already has an active cab request today. Send another link anyway?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Send Anyway', onPress: () => handleSendAskCabLink(guest) },
+        ]
+      );
+      return;
+    }
+
     setAskCabModalVisible(false);
     await askForCab(askGuestForCab, guest);
   };
@@ -233,7 +256,7 @@ export const CabsScreen: React.FC = () => {
           activeOpacity={0.8}
         >
           <Text style={[styles.toggleBtnText, activeTab === 'trips' && styles.toggleBtnTextActive]}>
-            Trips ({confirmedTrips.length})
+            History ({confirmedTrips.length})
           </Text>
         </TouchableOpacity>
 
@@ -242,13 +265,20 @@ export const CabsScreen: React.FC = () => {
           onPress={() => setActiveTab('guest_requests')}
           activeOpacity={0.8}
         >
-          <Text style={[styles.toggleBtnText, activeTab === 'guest_requests' && styles.toggleBtnTextActive]}>
-            Guest Inquiries ({guestWebTrips.length})
-          </Text>
+          <View style={styles.tabWithBadge}>
+            <Text style={[styles.toggleBtnText, activeTab === 'guest_requests' && styles.toggleBtnTextActive]}>
+              Guest Requests ({guestWebTrips.length})
+            </Text>
+            {guestWebTrips.length > 0 && (
+              <View style={styles.tabBadge}>
+                <Text style={styles.tabBadgeText}>{guestWebTrips.length}</Text>
+              </View>
+            )}
+          </View>
         </TouchableOpacity>
       </View>
 
-      {/* Subheader: Count + Simulate Request */}
+      {/* Subheader: Count */}
       <View style={styles.subHeaderRow}>
         <Text style={styles.countText}>
           {currentList.length}{' '}
@@ -258,32 +288,45 @@ export const CabsScreen: React.FC = () => {
             ? 'confirmed & active trips'
             : 'inquiries submitted by guests'}
         </Text>
-        {isDemoMode && (
-          <TouchableOpacity onPress={handleSimulateRequest} activeOpacity={0.7}>
-            <Text style={styles.simulateText}>+ Simulate request</Text>
-          </TouchableOpacity>
-        )}
       </View>
 
       {/* Trip Cards List */}
       <ScrollView contentContainerStyle={styles.listContent}>
         {currentList.length === 0 ? (
           <View style={styles.emptyBox}>
-            <Ionicons name="car-outline" size={48} color={Colors.textTertiary} />
+            <Text style={{ fontSize: 44, marginBottom: 8 }}>
+              {activeTab === 'guest_requests' ? '📲' : '🚗'}
+            </Text>
             <Text style={styles.emptyTitle}>
               {activeTab === 'requested'
                 ? 'No pending cab requests'
                 : activeTab === 'trips'
                 ? 'No active or confirmed trips'
-                : 'No incoming guest inquiries'}
+                : 'No guest cab inquiries yet'}
             </Text>
             <Text style={styles.emptySubtitle}>
               {activeTab === 'requested'
-                ? 'Tap "+ Book Cab" above to request a mountain ride.'
+                ? 'Tap below to book a cab or dispatch a request to nearby valley drivers.'
                 : activeTab === 'trips'
                 ? 'Accepted quotes and booked rides appear here.'
-                : 'Share your cab booking link with guests via WhatsApp.'}
+                : 'Share your WhatsApp cab request link with checked-in guests to receive bookings here.'}
             </Text>
+            {activeTab === 'requested' && (
+              <TouchableOpacity
+                style={styles.emptyActionBtn}
+                onPress={() => navigation.navigate('FindDriver')}
+              >
+                <Text style={styles.emptyActionBtnText}>+ Book First Cab</Text>
+              </TouchableOpacity>
+            )}
+            {activeTab === 'guest_requests' && (
+              <TouchableOpacity
+                style={styles.emptyActionBtn}
+                onPress={() => setAskCabModalVisible(true)}
+              >
+                <Text style={styles.emptyActionBtnText}>📲 Send Guest Cab Link</Text>
+              </TouchableOpacity>
+            )}
           </View>
         ) : (
           currentList.map((t) => {
@@ -502,6 +545,25 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#2563EB',
   },
+  tabWithBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  tabBadge: {
+    backgroundColor: '#EF4444',
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  tabBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
+  },
   listContent: {
     paddingHorizontal: 12,
     paddingBottom: 40,
@@ -613,6 +675,18 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 4,
     lineHeight: 18,
+  },
+  emptyActionBtn: {
+    marginTop: 16,
+    backgroundColor: Colors.brandPrimary,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  emptyActionBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
   },
   modalOverlay: {
     flex: 1,

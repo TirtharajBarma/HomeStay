@@ -8,10 +8,12 @@ import {
   TouchableOpacity,
   Alert,
   Platform,
+  TextInput,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import Constants from 'expo-constants';
 import { Colors, Shadows } from '../theme/colors';
 import { useStayRide } from '../data/store';
 import { reportOutcome } from '../utils/report';
@@ -24,6 +26,13 @@ export const DriverProfileScreen: React.FC = () => {
 
   const isOnline = session?.driver?.available !== false;
   const [whatsappAlerts, setWhatsappAlerts] = useState(session?.driver?.whatsappAlerts !== false);
+
+  // Fix 9: Editable vehicle fields
+  const [isEditingVehicle, setIsEditingVehicle] = useState(false);
+  const [vehicleModel, setVehicleModel] = useState(session?.driver?.vehicle || '');
+  const [vehiclePlate, setVehiclePlate] = useState(session?.driver?.plate || '');
+  const [vehicleArea, setVehicleArea] = useState(session?.driver?.area || '');
+  const [savingVehicle, setSavingVehicle] = useState(false);
 
   // Only what the server returned for this driver; '—' when a field is missing
   const driver = session?.driver;
@@ -56,6 +65,24 @@ export const DriverProfileScreen: React.FC = () => {
     } catch (err: any) {
       setWhatsappAlerts(!val);
       Alert.alert('Error', err?.message || 'Could not update notification preferences.');
+    }
+  };
+
+  const handleSaveVehicle = async () => {
+    setSavingVehicle(true);
+    try {
+      if (session?.driver) {
+        session.driver.vehicle = vehicleModel.trim() || session.driver.vehicle;
+        session.driver.plate = vehiclePlate.trim().toUpperCase() || session.driver.plate;
+        session.driver.area = vehicleArea.trim() || session.driver.area;
+        await api.saveSession(session);
+      }
+      setIsEditingVehicle(false);
+      Alert.alert('Vehicle Updated', 'Your vehicle and operating details have been updated.');
+    } catch {
+      setIsEditingVehicle(false);
+    } finally {
+      setSavingVehicle(false);
     }
   };
 
@@ -138,23 +165,81 @@ export const DriverProfileScreen: React.FC = () => {
 
         {/* Vehicle Information */}
         <View style={styles.card}>
-          <Text style={styles.cardSectionTitle}>Vehicle Details</Text>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Vehicle Model:</Text>
-            <Text style={styles.infoVal}>{show(driver?.vehicle)}</Text>
+          <View style={styles.cardHeaderRow}>
+            <Text style={styles.cardSectionTitle}>Vehicle Details</Text>
+            <TouchableOpacity
+              onPress={() => {
+                if (isEditingVehicle) {
+                  setVehicleModel(driver?.vehicle || '');
+                  setVehiclePlate(driver?.plate || '');
+                  setVehicleArea(driver?.area || '');
+                }
+                setIsEditingVehicle(!isEditingVehicle);
+              }}
+              hitSlop={8}
+            >
+              <Text style={styles.editToggleText}>{isEditingVehicle ? 'Cancel' : 'Edit'}</Text>
+            </TouchableOpacity>
           </View>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Registration / Plate:</Text>
-            <Text style={[styles.infoVal, styles.plateText]}>{show(driver?.plate)}</Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Operating Base:</Text>
-            <Text style={styles.infoVal}>{show(driver?.area)}</Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Vehicle Type:</Text>
-            <Text style={styles.infoVal}>{show(driver?.vehicleType)}</Text>
-          </View>
+
+          {isEditingVehicle ? (
+            <View style={styles.editForm}>
+              <Text style={styles.inputLabel}>Vehicle Model</Text>
+              <TextInput
+                style={styles.fieldInput}
+                placeholder="e.g. Innova Crysta, Bolero"
+                placeholderTextColor="#94A3B8"
+                value={vehicleModel}
+                onChangeText={setVehicleModel}
+              />
+
+              <Text style={styles.inputLabel}>Registration / Number Plate</Text>
+              <TextInput
+                style={[styles.fieldInput, styles.plateInput]}
+                placeholder="WB 74 XX 0000"
+                placeholderTextColor="#94A3B8"
+                autoCapitalize="characters"
+                value={vehiclePlate}
+                onChangeText={setVehiclePlate}
+              />
+
+              <Text style={styles.inputLabel}>Operating Base / Valley Area</Text>
+              <TextInput
+                style={styles.fieldInput}
+                placeholder="e.g. Darjeeling & Kurseong"
+                placeholderTextColor="#94A3B8"
+                value={vehicleArea}
+                onChangeText={setVehicleArea}
+              />
+
+              <TouchableOpacity
+                style={[styles.saveBtn, savingVehicle && { opacity: 0.7 }]}
+                onPress={handleSaveVehicle}
+                disabled={savingVehicle}
+              >
+                <Text style={styles.saveBtnText}>{savingVehicle ? 'Saving…' : 'Save Details'}</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Vehicle Model:</Text>
+                <Text style={styles.infoVal}>{show(vehicleModel || driver?.vehicle)}</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Registration / Plate:</Text>
+                <Text style={[styles.infoVal, styles.plateText]}>{show(vehiclePlate || driver?.plate)}</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Operating Base:</Text>
+                <Text style={styles.infoVal}>{show(vehicleArea || driver?.area)}</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Vehicle Type:</Text>
+                <Text style={styles.infoVal}>{show(driver?.vehicleType)}</Text>
+              </View>
+            </>
+          )}
         </View>
 
         {/* App Info & Safety */}
@@ -162,7 +247,7 @@ export const DriverProfileScreen: React.FC = () => {
           <Text style={styles.cardSectionTitle}>App &amp; Support</Text>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Network Version:</Text>
-            <Text style={styles.infoVal}>StayRide Driver v2.0</Text>
+            <Text style={styles.infoVal}>StayRide Driver v{Constants.expoConfig?.version ?? '2.0'}</Text>
           </View>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Seats:</Text>
@@ -314,6 +399,56 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#0F172A',
     marginBottom: 12,
+  },
+  cardHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  editToggleText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.brandPrimaryDark,
+  },
+  editForm: {
+    gap: 8,
+    marginTop: 4,
+  },
+  inputLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748B',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  fieldInput: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    fontSize: 13,
+    color: '#0F172A',
+    fontWeight: '600',
+  },
+  plateInput: {
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    color: '#2563EB',
+    fontWeight: '700',
+  },
+  saveBtn: {
+    backgroundColor: Colors.brandPrimary,
+    borderRadius: 10,
+    paddingVertical: 11,
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  saveBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
   },
   infoRow: {
     flexDirection: 'row',

@@ -44,19 +44,19 @@ export function StayGallery({ stay }: { stay: Stay }) {
   const index = active ?? 0;
 
   return (
-    <section aria-label={`${stay.name} photo gallery`} className="mb-12">
-      <div className="grid grid-cols-1 gap-3.5 md:h-[500px] md:grid-cols-4 lg:grid-cols-12">
+    <section aria-label={`${stay.name} photo gallery`} className="mb-8">
+      {tiles.length === 0 ? (
         <button
           type="button"
           onClick={() => setActive(0)}
-          className="group relative col-span-1 h-64 overflow-hidden rounded-xl text-left sunlit-card-shadow sm:h-80 md:col-span-2 md:h-full lg:col-span-7"
+          className="group relative h-72 sm:h-80 md:h-[400px] w-full overflow-hidden rounded-2xl text-left sunlit-card-shadow"
         >
           <Image
             src={hero.src}
             alt={hero.alt}
             fill
             priority
-            sizes="(min-width: 1024px) 58vw, 100vw"
+            sizes="(min-width: 1024px) 66vw, 100vw"
             className="object-cover transition-transform duration-700 ease-out group-hover:scale-[1.02]"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-60" />
@@ -72,33 +72,62 @@ export function StayGallery({ stay }: { stay: Stay }) {
             </span>
           </span>
         </button>
+      ) : (
+        <div className="grid grid-cols-1 gap-3.5 md:h-[420px] md:grid-cols-4 lg:grid-cols-12">
+          <button
+            type="button"
+            onClick={() => setActive(0)}
+            className="group relative col-span-1 h-64 overflow-hidden rounded-2xl text-left sunlit-card-shadow sm:h-80 md:col-span-2 md:h-full lg:col-span-7"
+          >
+            <Image
+              src={hero.src}
+              alt={hero.alt}
+              fill
+              priority
+              sizes="(min-width: 1024px) 45vw, 100vw"
+              className="object-cover transition-transform duration-700 ease-out group-hover:scale-[1.02]"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-60" />
+            <span className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full bg-surface/85 text-primary opacity-0 backdrop-blur-md transition-opacity group-hover:opacity-100">
+              <Icon name="zoom_out_map" className="text-xl" />
+            </span>
+            <span className="absolute bottom-4 left-4 block text-white">
+              <span className="mb-1 inline-block rounded-full bg-primary-container/80 px-2.5 py-1 text-label-sm text-on-primary backdrop-blur-md">
+                {stay.eyebrow}
+              </span>
+              <span className="block font-display text-headline-sm drop-shadow-sm">
+                {hero.caption}
+              </span>
+            </span>
+          </button>
 
-        <div className="grid h-72 grid-cols-2 gap-3.5 md:col-span-2 md:h-full lg:col-span-5">
-          {tiles.map((tile, index) => (
-            <button
-              key={tile.src}
-              type="button"
-              onClick={() => setActive(index + 1)}
-              className="group relative overflow-hidden rounded-xl text-left sunlit-card-shadow"
-            >
-              <Image
-                src={tile.src}
-                alt={tile.alt}
-                fill
-                sizes="(min-width: 1024px) 20vw, (min-width: 768px) 25vw, 50vw"
-                className="object-cover transition-transform duration-700 ease-out group-hover:scale-[1.03]"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/45 to-transparent" />
-              <span className="absolute right-2 top-2 flex h-9 w-9 items-center justify-center rounded-full bg-surface/85 text-primary opacity-0 backdrop-blur-md transition-opacity group-hover:opacity-100">
-                <Icon name="zoom_out_map" className="text-lg" />
-              </span>
-              <span className="absolute bottom-2.5 left-2.5 right-2.5 rounded bg-surface-container-lowest/90 px-2 py-1 text-left text-label-sm font-medium text-primary backdrop-blur-sm">
-                {tile.caption}
-              </span>
-            </button>
-          ))}
+          <div className="grid h-72 grid-cols-2 gap-3.5 md:col-span-2 md:h-full lg:col-span-5">
+            {tiles.map((tile, index) => (
+              <button
+                key={tile.src}
+                type="button"
+                onClick={() => setActive(index + 1)}
+                className="group relative overflow-hidden rounded-xl text-left sunlit-card-shadow"
+              >
+                <Image
+                  src={tile.src}
+                  alt={tile.alt}
+                  fill
+                  sizes="(min-width: 1024px) 15vw, (min-width: 768px) 25vw, 50vw"
+                  className="object-cover transition-transform duration-700 ease-out group-hover:scale-[1.03]"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/45 to-transparent" />
+                <span className="absolute right-2 top-2 flex h-9 w-9 items-center justify-center rounded-full bg-surface/85 text-primary opacity-0 backdrop-blur-md transition-opacity group-hover:opacity-100">
+                  <Icon name="zoom_out_map" className="text-lg" />
+                </span>
+                <span className="absolute bottom-2.5 left-2.5 right-2.5 rounded bg-surface-container-lowest/90 px-2 py-1 text-left text-label-sm font-medium text-primary backdrop-blur-sm">
+                  {tile.caption}
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {current && (
         <div
