@@ -15,8 +15,6 @@ export default async function handler(req: Request, res: Response) {
     return res.status(500).json({
       success: false,
       error: "Internal Server Error in Serverless Handler",
-      message: error?.message || "Unknown serverless error",
-      tip: "Please verify that MONGODB_URI and JWT_SECRET are configured in your Vercel Project Settings -> Environment Variables.",
     });
   }
 }

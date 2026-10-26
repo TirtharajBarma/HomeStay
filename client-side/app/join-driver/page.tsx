@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { API_ENDPOINTS, apiFetch } from "@/lib/api-config";
 import { Icon } from "@/components/icon";
+import { getRecaptchaToken } from "@/lib/recaptcha";
 
 const BASE_TOWNS = [
   "Darjeeling",
@@ -15,6 +16,17 @@ const BASE_TOWNS = [
   "Pelling",
   "Ravangla",
   "Other Sikkim / North Bengal",
+];
+
+const MOUNTAIN_UNIONS = [
+  "Darjeeling Motor Syndicate",
+  "Clubside Taxi Stand",
+  "Ghum Taxi Stand",
+  "Siliguri Junction Taxi Union",
+  "Kalimpong Drivers Association",
+  "Kurseong Motor Union",
+  "Gangtok Main Stand (SNT)",
+  "Other Local Syndicate / Stand",
 ];
 
 const VEHICLE_TIERS = [
@@ -32,13 +44,16 @@ export default function JoinDriverPage() {
   const [vehicleNumber, setVehicleNumber] = useState("");
   const [vehicleModel, setVehicleModel] = useState("");
   const [drivingLicense, setDrivingLicense] = useState("");
+  const [driverCategory, setDriverCategory] = useState<"INDIVIDUAL" | "UNION">("INDIVIDUAL");
+  const [unionName, setUnionName] = useState(MOUNTAIN_UNIONS[0]);
+  const [customUnion, setCustomUnion] = useState("");
   const [acceptedTerms, setAcceptedTerms] = useState(true);
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState<{
     message: string;
-    driver: { name: string; phone: string; vehicleType: string; plate: string; area: string };
+    driver: { name: string; phone: string; vehicleType: string; plate: string; area: string; driverCategory?: string; unionName?: string };
   } | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -47,6 +62,7 @@ export default function JoinDriverPage() {
 
     const cleanPhone = phone.replace(/\D/g, "").slice(-10);
     const cleanPlate = vehicleNumber.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const effectiveUnion = driverCategory === "UNION" ? (unionName === "Other Local Syndicate / Stand" ? customUnion.trim() : unionName) : "";
 
     if (name.trim().length < 2) {
       setError("Please enter your full name as shown on your Driving License.");
@@ -73,6 +89,7 @@ export default function JoinDriverPage() {
         driver?: { name: string; phone: string; vehicleType: string; plate: string; area: string };
         error?: { message: string };
       }
+      const recaptchaToken = await getRecaptchaToken("driver_signup");
       const res = await apiFetch<SignupResponse>(API_ENDPOINTS.driverSignup(), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -84,6 +101,9 @@ export default function JoinDriverPage() {
           vehicleNumber: cleanPlate,
           vehicleModel: vehicleModel.trim(),
           drivingLicense: drivingLicense.trim(),
+          driverCategory,
+          unionName: effectiveUnion,
+          recaptchaToken,
         }),
       });
 
@@ -96,6 +116,8 @@ export default function JoinDriverPage() {
             vehicleType,
             plate: cleanPlate,
             area,
+            driverCategory,
+            unionName: effectiveUnion,
           },
         });
       } else {
@@ -197,6 +219,12 @@ export default function JoinDriverPage() {
                 <span className="text-[#57606A]">Vehicle Class:</span>
                 <strong className="font-semibold">{success.driver.vehicleType}</strong>
               </div>
+              <div className="flex justify-between border-b border-[#E1E4E8] pb-1.5">
+                <span className="text-[#57606A]">Affiliation:</span>
+                <strong className="font-semibold">
+                  {success.driver.driverCategory === "UNION" ? `Taxi Union (${success.driver.unionName})` : "Independent Driver"}
+                </strong>
+              </div>
               <div className="flex justify-between">
                 <span className="text-[#57606A]">Operating Base:</span>
                 <strong className="font-semibold">{success.driver.area}</strong>
@@ -290,6 +318,71 @@ export default function JoinDriverPage() {
                   </option>
                 ))}
               </select>
+            </div>
+
+            {/* Driver Category: Individual vs Taxi Union */}
+            <div>
+              <label className="text-xs font-semibold text-[#57606A] block mb-1.5">
+                Driver Affiliation *
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDriverCategory("INDIVIDUAL")}
+                  className={`rounded-xl border p-3 text-left transition cursor-pointer ${
+                    driverCategory === "INDIVIDUAL"
+                      ? "border-emerald-600 bg-emerald-50/70 ring-1 ring-emerald-600"
+                      : "border-[#D0D7DE] bg-white hover:bg-[#F6F8FA]"
+                  }`}
+                >
+                  <span className="block text-xs font-bold text-[#1F2328]">Independent</span>
+                  <span className="text-[10px] text-[#57606A]">Own taxi / individual</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDriverCategory("UNION")}
+                  className={`rounded-xl border p-3 text-left transition cursor-pointer ${
+                    driverCategory === "UNION"
+                      ? "border-emerald-600 bg-emerald-50/70 ring-1 ring-emerald-600"
+                      : "border-[#D0D7DE] bg-white hover:bg-[#F6F8FA]"
+                  }`}
+                >
+                  <span className="block text-xs font-bold text-[#1F2328]">Taxi Union</span>
+                  <span className="text-[10px] text-[#57606A]">Syndicate / Stand</span>
+                </button>
+              </div>
+
+              {driverCategory === "UNION" && (
+                <div className="mt-3 space-y-2 rounded-xl bg-[#F6F8FA] border border-[#D0D7DE] p-3">
+                  <label className="text-[11px] font-semibold text-[#1F2328] block">
+                    Select Your Taxi Union or Stand *
+                  </label>
+                  <select
+                    value={unionName}
+                    onChange={(e) => setUnionName(e.target.value)}
+                    className="w-full rounded-xl border border-[#D0D7DE] px-3 py-2 text-xs font-medium text-[#1F2328] bg-white focus:border-emerald-600 focus:outline-none"
+                  >
+                    {MOUNTAIN_UNIONS.map((u) => (
+                      <option key={u} value={u}>
+                        {u}
+                      </option>
+                    ))}
+                  </select>
+                  {unionName === "Other Local Syndicate / Stand" && (
+                    <input
+                      type="text"
+                      required
+                      value={customUnion}
+                      onChange={(e) => setCustomUnion(e.target.value)}
+                      placeholder="Enter Union / Stand Name"
+                      className="w-full rounded-xl border border-[#D0D7DE] px-3 py-2 text-xs font-medium text-[#1F2328] bg-white focus:border-emerald-600 focus:outline-none"
+                    />
+                  )}
+                  <p className="text-[10px] text-[#57606A]">
+                    Guests will see your syndicate badge for added confidence when assigned.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Vehicle Tier Selection */}

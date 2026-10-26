@@ -88,7 +88,7 @@ await assert.rejects(dispatchRequest('owner@x.in', false, cancelled.reference), 
 // --- notes + vehicle matching ---
 await assert.rejects(driverSubmitQuote(false, held.reference, driver('d3'), 2500, 'call 9832012345'), /phone numbers/);
 await driverSubmitQuote(false, held.reference, driver('d3'), 2500, 'AC car, 2 bags ok');
-const sedanOnly: any = await Cab.create(base({ vehicleType: 'Sedan' }));
+const sedanOnly: any = await Cab.create(base({ vehicleType: 'Sedan', dispatched: true }));
 const suvDriver = await listDriverTrips(false, driver('d4', 'SUV'), true);
 assert.ok(!suvDriver.some((t: any) => t.reference === sedanOnly.reference), 'SUV driver must not see Sedan requests');
 const sedanDriver = await listDriverTrips(false, driver('d5', 'Sedan'), true);
@@ -217,8 +217,8 @@ assert.equal(P.readDriverQuoteToken(tok.slice(0, -2) + (tok.endsWith('A') ? 'BB'
 assert.equal(P.readDriverQuoteToken('garbage'), null);
 
 // quote → expires after the validity → re-quote works
-await CommissionService.updateSettings({ globalPlatformFeePercent: 5, globalHomestayCommissionPercent: 10, platform: { quoteValidityHours: 1 }, updatedBy: 'test', isDemo: false });
-const negReq: any = await Cab.create(base());
+await CommissionService.updateSettings({ globalPlatformFeePercent: 5, globalHomestayCommissionPercent: 10, platform: { quoteValidityHours: 1, quoteBiddingWindowMin: 30 }, updatedBy: 'test', isDemo: false });
+const negReq: any = await Cab.create(base({ dispatched: true }));
 await P.driverSubmitQuote(false, negReq.reference, negDriver, 3000, 'AC');
 await Cab.updateOne({ _id: negReq._id }, { $set: { 'quotes.0.createdAt': new Date(Date.now() - 2 * 3600000) } });
 await P.expireStaleRequests(false, { reference: negReq.reference });
@@ -242,7 +242,7 @@ assert.equal(acc.agreedFare, 2500);
 assert.equal(acc.quotes[0].status, 'ACCEPTED');
 await assert.rejects(P.driverAcceptCounter(false, negReq.reference, negDriver), /no longer open/);
 // a new fare from the driver clears an open counter
-const neg2: any = await Cab.create(base());
+const neg2: any = await Cab.create(base({ dispatched: true }));
 await P.driverSubmitQuote(false, neg2.reference, negDriver, 3100, '');
 await P.ownerCounterOffer('owner@x.in', false, neg2.reference, String(drvId), 2800, 'o');
 await P.driverSubmitQuote(false, neg2.reference, negDriver, 3000, '');

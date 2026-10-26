@@ -68,10 +68,17 @@ export class CommissionService {
   }
 
   static async updateSettings(params: {
+    totalCommissionPercent?: unknown;
+    adminSharePercentOfCommission?: unknown;
+    homestaySharePercentOfCommission?: unknown;
     globalPlatformFeePercent?: unknown;
     globalHomestayCommissionPercent?: unknown;
     defaultAdvancePercent?: unknown;
     minAdvanceAmount?: unknown;
+    quoteWindowHours?: unknown;
+    minDriverPayoutThreshold?: unknown;
+    ownFleetCommissionPercent?: unknown;
+    ownFleetMinFee?: unknown;
     features?: Record<string, { enabled?: unknown; defaultOn?: unknown }>;
     platform?: Record<string, any>;
     updatedBy: string;
@@ -80,6 +87,43 @@ export class CommissionService {
   }): Promise<{ before: any; after: ICommissionSettings }> {
     const settings = await this.getSettings(Boolean(params.isDemo));
     const before = settings.toObject();
+
+    if (params.totalCommissionPercent !== undefined) {
+      const tcp = pct(params.totalCommissionPercent);
+      if (!Number.isFinite(tcp) || tcp < 0 || tcp > 100) throw new Error("Total commission percent must be between 0 and 100.");
+      settings.totalCommissionPercent = tcp;
+    }
+    if (params.adminSharePercentOfCommission !== undefined) {
+      const asp = pct(params.adminSharePercentOfCommission);
+      if (!Number.isFinite(asp) || asp < 0 || asp > 100) throw new Error("Admin share percent must be between 0 and 100.");
+      settings.adminSharePercentOfCommission = asp;
+    }
+    if (params.homestaySharePercentOfCommission !== undefined) {
+      const hsp = pct(params.homestaySharePercentOfCommission);
+      if (!Number.isFinite(hsp) || hsp < 0 || hsp > 100) throw new Error("Homestay share percent must be between 0 and 100.");
+      settings.homestaySharePercentOfCommission = hsp;
+    }
+    if (params.quoteWindowHours !== undefined) {
+      const qwh = pct(params.quoteWindowHours);
+      if (!Number.isFinite(qwh) || qwh < 0.1 || qwh > 72) throw new Error("Quote window hours must be between 0.1 and 72.");
+      settings.quoteWindowHours = qwh;
+    }
+    if (params.minDriverPayoutThreshold !== undefined) {
+      const mdpt = pct(params.minDriverPayoutThreshold);
+      if (!Number.isFinite(mdpt) || mdpt < 0) throw new Error("Minimum driver payout threshold must be 0 or more.");
+      settings.minDriverPayoutThreshold = mdpt;
+    }
+    if (params.ownFleetCommissionPercent !== undefined) {
+      const ofcp = pct(params.ownFleetCommissionPercent);
+      if (!Number.isFinite(ofcp) || ofcp < 0 || ofcp > 100) throw new Error("Own fleet commission percent must be between 0 and 100.");
+      (settings as any).ownFleetCommissionPercent = ofcp;
+    }
+    if (params.ownFleetMinFee !== undefined) {
+      const minFee = pct(params.ownFleetMinFee);
+      if (!Number.isFinite(minFee) || minFee < 0 || minFee > 5000) throw new Error("Own fleet minimum fee must be between 0 and 5000.");
+      settings.ownFleetMinFee = minFee;
+    }
+
     // Omitted values keep what is saved, so saving one settings form never reverts another's changes
     const pf = params.globalPlatformFeePercent === undefined ? settings.globalPlatformFeePercent : pct(params.globalPlatformFeePercent);
     const hc = params.globalHomestayCommissionPercent === undefined ? settings.globalHomestayCommissionPercent : pct(params.globalHomestayCommissionPercent);
@@ -126,7 +170,19 @@ export class CommissionService {
 
   /** The admin's operational settings, complete and valid (defaults fill anything unsaved). */
   static platformConfig(settings: ICommissionSettings): PlatformConfig {
-    return resolvePlatformConfig((settings as any).platform);
+    const s: any = settings;
+    const overrides: Record<string, unknown> = {};
+    if (s.quoteWindowHours !== undefined) {
+      overrides.quoteWindowHours = s.quoteWindowHours;
+      overrides.quoteBiddingWindowMin = Math.round(Number(s.quoteWindowHours) * 60);
+    }
+    if (s.minDriverPayoutThreshold !== undefined) overrides.minDriverPayoutThreshold = s.minDriverPayoutThreshold;
+    if (s.ownFleetCommissionPercent !== undefined) overrides.ownFleetFeePercent = s.ownFleetCommissionPercent;
+    if (s.ownFleetMinFee !== undefined) overrides.ownFleetMinFee = s.ownFleetMinFee;
+    return resolvePlatformConfig({
+      ...s.platform,
+      ...overrides,
+    });
   }
 
   // Read on hot paths (every list, every message), so cached briefly; a save clears it at once on this
@@ -172,26 +228,46 @@ export class CommissionService {
     const settings = await this.getSettings(isDemo);
     const control = tenantKey ? await this.getControl(tenantKey, isDemo) : null;
     const o = control?.commissionOverride;
+
+    const totalCommission = settings.totalCommissionPercent ?? (settings.globalPlatformFeePercent + settings.globalHomestayCommissionPercent);
+    const adminShare = settings.adminSharePercentOfCommission ?? 50;
+    const defaultPf = Number(((totalCommission * adminShare) / 100).toFixed(2));
+    const defaultHc = Number((totalCommission - defaultPf).toFixed(2));
+
     return {
-      pfPercent: o?.pfPercent ?? settings.globalPlatformFeePercent,
-      hcPercent: o?.hcPercent ?? settings.globalHomestayCommissionPercent,
+      totalCommissionPercent: totalCommission,
+      pfPercent: o?.pfPercent ?? settings.globalPlatformFeePercent ?? defaultPf,
+      hcPercent: o?.hcPercent ?? settings.globalHomestayCommissionPercent ?? defaultHc,
       advancePercent: o?.advancePercent ?? settings.defaultAdvancePercent ?? 15,
-      minAdvanceAmount: settings.minAdvanceAmount ?? 300,
+      minAdvanceAmount: settings.minAdvanceAmount ?? 500,
+      quoteWindowHours: (settings as any).quoteWindowHours ?? 4,
+      minDriverPayoutThreshold: (settings as any).minDriverPayoutThreshold ?? 100,
       isOverride: Boolean(o),
     };
   }
 
   /** Exact split for an agreed fare. Integer rupees; PF + HC + driver always equals the fare. */
-  static async calculateSplit(fare: number, tenantKey?: string, isDemo = false): Promise<CommissionCalculationResult> {
-    const { pfPercent, hcPercent, advancePercent, minAdvanceAmount } = await this.getEffectiveRates(tenantKey, isDemo);
-    const split = this.split(fare, pfPercent, hcPercent, advancePercent, minAdvanceAmount);
+  static async calculateSplit(fare: number, tenantKey?: string, isDemo = false, isOwnDriver = false): Promise<CommissionCalculationResult> {
+    const settings = await this.getSettings(isDemo);
+    let { pfPercent, hcPercent, advancePercent, minAdvanceAmount } = await this.getEffectiveRates(tenantKey, isDemo);
+    let minFee = 0;
+
+    if (isOwnDriver) {
+      const cfg = this.platformConfig(settings);
+      pfPercent = cfg.ownFleetFeePercent;
+      minFee = cfg.ownFleetMinFee;
+      hcPercent = 0.0; // Homestay owns vehicle/driver; 100% of driver take-home belongs to homestay
+    }
+
+    const split = this.split(fare, pfPercent, hcPercent, advancePercent, minAdvanceAmount, minFee);
     logger.info(
-      `[CALCULATION] Fare split for ₹${split.agreedFare}: Platform fee ₹${split.platformFeeAmount} (${split.platformFeePercent}%), Homestay comm ₹${split.homestayCommissionAmount} (${split.homestayCommissionPercent}%), Driver payout ₹${split.driverPayoutAmount}, Advance ₹${split.advanceAmount}, Cash to driver ₹${split.remainingCashToDriver}`,
+      `[CALCULATION] Fare split for ₹${split.agreedFare} (isOwnDriver=${isOwnDriver}): Platform fee ₹${split.platformFeeAmount} (${split.platformFeePercent}%), Homestay comm ₹${split.homestayCommissionAmount} (${split.homestayCommissionPercent}%), Driver payout ₹${split.driverPayoutAmount}, Advance ₹${split.advanceAmount}, Cash to driver ₹${split.remainingCashToDriver}`,
       {
         action: "calculate_split",
         tenantId: tenantKey,
         metadata: {
           isDemo,
+          isOwnDriver,
           agreedFare: split.agreedFare,
           platformFeeAmount: split.platformFeeAmount,
           platformFeePercent: split.platformFeePercent,
@@ -207,11 +283,11 @@ export class CommissionService {
     return split;
   }
 
-  static split(fare: number, pfPercent: number, hcPercent: number, advancePercent: number, minAdvanceAmount: number): CommissionCalculationResult {
+  static split(fare: number, pfPercent: number, hcPercent: number, advancePercent: number, minAdvanceAmount: number, minFee = 0): CommissionCalculationResult {
     if (!Number.isFinite(fare) || fare <= 0) throw new Error("Fare must be a positive number.");
     const agreedFare = Math.round(fare);
-    const platformFeeAmount = Math.round((agreedFare * pfPercent) / 100);
-    const homestayCommissionAmount = Math.round((agreedFare * hcPercent) / 100);
+    const platformFeeAmount = Math.min(agreedFare, Math.max(minFee, Math.round((agreedFare * pfPercent) / 100)));
+    const homestayCommissionAmount = Math.min(agreedFare - platformFeeAmount, Math.round((agreedFare * hcPercent) / 100));
     const totalCommission = platformFeeAmount + homestayCommissionAmount;
 
     // Advance collected online from guest is strictly for StayRide platform fee + homestay commission.

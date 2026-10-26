@@ -44,7 +44,7 @@ async function sendPage(req: Request, res: Response, Model: mongoose.Model<any>,
 }
 
 const ratingOf = (u: any) => (u.ratingCount ? Math.round((u.ratingSum / u.ratingCount) * 10) / 10 : null);
-const USER_FIELDS = "name email phone role accountStatus statusReason vehicle createdAt deletedAt ratingSum ratingCount";
+const USER_FIELDS = "name email phone role accountStatus statusReason vehicle driverCategory unionName createdAt deletedAt ratingSum ratingCount";
 const userItem = (demo: boolean) => (u: any) => ({
   id: String(u._id),
   name: u.name,
@@ -57,7 +57,15 @@ const userItem = (demo: boolean) => (u: any) => ({
   isDemo: demo,
   createdAt: u.createdAt,
   deletedAt: u.deletedAt ?? null,
-  ...(u.role === "driver" ? { rating: ratingOf(u), ratingCount: u.ratingCount || 0, vehicle: u.vehicle || null } : {}),
+  ...(u.role === "driver"
+    ? {
+        rating: ratingOf(u),
+        ratingCount: u.ratingCount || 0,
+        vehicle: u.vehicle || null,
+        driverCategory: u.driverCategory || "INDIVIDUAL",
+        unionName: u.unionName || "",
+      }
+    : {}),
 });
 
 
@@ -407,20 +415,27 @@ const cabAction = (fn: (demo: boolean, id: string, req: Request) => Promise<any>
 router.post("/cab-requests/:id/assign-driver", cabAction((d, id, req) => adminAssignDriver(d, id, req.body, actor(req)), "Driver assigned and fare locked."));
 router.post("/cab-requests/:id/record-payment", cabAction((d, id, req) => adminRecordPayment(d, id, req.body, actor(req)), "Advance payment recorded."));
 router.post("/cab-requests/:id/void-payment", cabAction((d, id, req) => adminVoidPayment(d, id, req.body.reason, actor(req)), "Payment voided."));
-router.post("/cab-requests/:id/cancel", cabAction((d, id, req) => cancelRequest({ _id: id }, d, actor(req), String(req.body.reason || "Cancelled by StayRide admin")), "Request cancelled."));
+router.post("/cab-requests/:id/cancel", cabAction((d, id, req) => cancelRequest({ _id: id }, d, actor(req), String(req.body.reason || "Cancelled by StayRide admin"), true), "Request cancelled."));
 router.post("/cab-requests/:id/refund", cabAction((d, id, req) => adminMarkRefunded(d, id, req.body.reference, actor(req)), "Refund recorded."));
-router.post("/cab-requests/:id/start", cabAction((d, id, req) => startTrip(d, { _id: id }, actor(req)), "Trip started."));
+router.post("/cab-requests/:id/start", cabAction((d, id, req) => startTrip(d, { _id: id }, actor(req), undefined, false), "Trip started."));
 router.post("/cab-requests/:id/complete", cabAction((d, id, req) => completeTrip(d, { _id: id }, actor(req)), "Trip completed."));
 router.post("/cab-requests/:id/unmatched-refunded", cabAction((d, id, req) => adminRefundUnmatched(d, id, req.body.paymentId, req.body.reference, actor(req)), "Unmatched payment marked refunded."));
 router.post("/cab-requests/:id/driver-settled", cabAction((d, id, req) => adminSettleDriver(d, id, req.body.reference, actor(req)), "Driver settlement recorded."));
 
 // ---------------------------------------------------------------------------
-// Homestay commission payouts
+// Homestay & Driver payouts
 // ---------------------------------------------------------------------------
 router.get("/host-payouts", async (req, res) => {
-  const filter: any = {};
+  const filter: any = { recipientType: { $ne: "DRIVER" } };
   if (["PENDING", "SETTLED", "REJECTED"].includes(String(req.query.status))) filter.status = req.query.status;
   if (req.query.tenantKey) filter.tenantId = String(req.query.tenantKey);
+  await sendPage(req, res, payoutModel(isDemo(req)), filter, { requestedAt: -1 });
+});
+
+router.get("/driver-payouts", async (req, res) => {
+  const filter: any = { recipientType: "DRIVER" };
+  if (["PENDING", "SETTLED", "REJECTED"].includes(String(req.query.status))) filter.status = req.query.status;
+  if (req.query.driverId) filter.driverId = String(req.query.driverId);
   await sendPage(req, res, payoutModel(isDemo(req)), filter, { requestedAt: -1 });
 });
 
@@ -430,10 +445,22 @@ router.post("/host-payouts/:id/settle", async (req, res) => {
   res.json({ success: true, message: `Payout of ₹${payout.amount} settled with UTR ${payout.utrNumber}.`, payout });
 });
 
+router.post("/driver-payouts/:id/settle", async (req, res) => {
+  if (!mongoose.Types.ObjectId.isValid(String(req.params.id))) throw httpError(404, "Payout not found.");
+  const payout: any = await settlePayout(isDemo(req), String(req.params.id), req.body.utrNumber, req.body.notes, actor(req));
+  res.json({ success: true, message: `Driver payout of ₹${payout.amount} settled with UTR ${payout.utrNumber}.`, payout });
+});
+
 router.post("/host-payouts/:id/reject", async (req, res) => {
   if (!mongoose.Types.ObjectId.isValid(String(req.params.id))) throw httpError(404, "Payout not found.");
   const payout = await rejectPayout(isDemo(req), String(req.params.id), req.body.reason, actor(req));
   res.json({ success: true, message: "Payout rejected; its trips can be requested again.", payout });
+});
+
+router.post("/driver-payouts/:id/reject", async (req, res) => {
+  if (!mongoose.Types.ObjectId.isValid(String(req.params.id))) throw httpError(404, "Payout not found.");
+  const payout = await rejectPayout(isDemo(req), String(req.params.id), req.body.reason, actor(req));
+  res.json({ success: true, message: "Driver payout rejected; wallet balance restored.", payout });
 });
 
 // ---------------------------------------------------------------------------

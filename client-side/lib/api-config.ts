@@ -64,6 +64,10 @@ export const API_ENDPOINTS = {
     acceptCounter: () => `${API_BASE_URL}/stayride/public/driver-quote/accept-counter`,
     start: () => `${API_BASE_URL}/stayride/public/driver-quote/start`,
     complete: () => `${API_BASE_URL}/stayride/public/driver-quote/complete`,
+    location: () => `${API_BASE_URL}/stayride/public/driver-quote/location`,
+    updateVehicle: () => `${API_BASE_URL}/stayride/public/driver-quote/update-vehicle`,
+    wallet: (token: string) => `${API_BASE_URL}/stayride/public/driver-quote/wallet?t=${encodeURIComponent(token)}`,
+    requestPayout: () => `${API_BASE_URL}/stayride/public/driver-quote/payouts/request`,
   },
   legal: (doc: string) => `${API_BASE_URL}/stayride/public/legal/${encodeURIComponent(doc)}`,
   newsletter: {

@@ -24,7 +24,7 @@ export class AuthService {
     };
 
     const isAdmin = user.role === "admin";
-    const expiresIn = isAdmin ? "30d" : (config.jwtExpiresIn || "30d");
+    const expiresIn = isAdmin ? "24h" : (config.jwtExpiresIn || "30d");
     const expiresInSeconds = 30 * 24 * 60 * 60; // 30 days
     const token = jwt.sign(payload, config.jwtSecret, { expiresIn: expiresIn as any });
     return { token, expiresIn, expiresInSeconds };

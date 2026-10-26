@@ -75,11 +75,23 @@ const strictLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   store: new MongoRateLimitStore("s:"),
-  passOnStoreError: true,
+  passOnStoreError: false,
   message: { error: { message: "Too many attempts, please try again after 15 minutes", code: "RATE_LIMITED" } },
 });
 app.use(
-  ["/v1/auth/login", "/v1/auth/signup", "/api/v1/stayride/auth/login", "/api/v1/stayride/auth/signup", "/api/v1/auth/login"],
+  [
+    "/v1/auth/login",
+    "/v1/auth/signup",
+    "/v1/auth/otp/send",
+    "/v1/auth/otp/verify",
+    "/api/v1/stayride/auth/login",
+    "/api/v1/stayride/auth/signup",
+    "/api/v1/stayride/auth/otp/send",
+    "/api/v1/stayride/auth/otp/verify",
+    "/api/v1/auth/login",
+    "/api/v1/auth/otp/send",
+    "/api/v1/auth/otp/verify",
+  ],
   strictLimiter
 );
 app.post(["/v1/public/*path", "/api/v1/stayride/public/*path"], strictLimiter);

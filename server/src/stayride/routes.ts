@@ -4,14 +4,16 @@ import crypto from 'node:crypto';
 import { tenantManager, StayRideMemoryStore, isDemoKey, pick, WRITABLE, clean } from './store.js';
 import { beginIdempotent } from './idempotency.js';
 import {
-  OPEN_STATUSES, cabModel, payoutModel, userModel, parseFare, overlayTrips, ownerConfirmQuote, cancelRequest,
+  OPEN_STATUSES, cabModel, payoutModel, userModel, parseFare, overlayTrips, ownerConfirmQuote, cancelRequest, expireStaleRequests,
   driverTripView, listDriverTrips, driverSubmitQuote, startTrip, completeTrip, payoutSummary, requestPayout,
-  istDateTime, notifyNewRequest, rateDriver, rateDriverByGuest, ownerPayoutView, parseTime12, hashToken, readDriverQuoteToken, ownerCounterOffer, driverAcceptCounter, ownerCompleteTrip, onDriverStatusChange, issueGuestLink, sendAskCab, dispatchRequest, assignOwnFleet, recordGatewayPayment, pushOwner,
+  driverPayoutSummary, requestDriverPayout,
+  istDateTime, notifyNewRequest, rateDriver, rateDriverByGuest, ownerPayoutView, parseTime12, hashToken, readDriverQuoteToken, ownerCounterOffer, driverAcceptCounter, ownerCompleteTrip, onDriverStatusChange, issueGuestLink, sendAskCab, dispatchRequest, assignOwnFleet, recordGatewayPayment, pushOwner, whatsapp, scope,
 } from './platform.js';
 import { CommissionService } from '../services/commission.service.js';
 import { sendWhatsApp, getWhatsAppNativeLink } from '../services/whatsapp.service.js';
 import { PropertyService } from '../services/property.service.js';
-import { driverWelcomeMessage } from './messages.js';
+import * as messages from './messages.js';
+const { driverWelcomeMessage } = messages;
 import { publicConfig, PlatformConfig } from '../services/platform-config.js';
 import { verifyWebhookSignature } from '../services/payment-gateway.service.js';
 import { buildIcs, feedFor, setImports, syncRoom, syncAll, storeForExportToken } from './ical.js';
@@ -24,6 +26,7 @@ import { Property } from '../models/property.model.js';
 import { Driver } from '../models/driver.model.js';
 import { Booking } from '../models/booking.model.js';
 import { tenantDbModel } from '../utils/tenant-model.js';
+import { requireRecaptcha } from '../middlewares/recaptcha.js';
 
 export function getUserModel(isDemo: boolean = false): mongoose.Model<any> {
   return tenantDbModel(isDemo, 'User', User.schema);
@@ -972,6 +975,15 @@ async function createPlatformTrip(
       status: 'FINDING_DRIVER',
       // A guest's inquiry waits for the owner (nearby drivers or own fleet); the owner's own bookings go straight out.
       dispatched: source !== 'GUEST_WEB_LINK',
+      biddingClosesAt:
+        source !== 'GUEST_WEB_LINK'
+          ? (() => {
+              const tripPickupAt = istDateTime(trip.date, trip.time) ?? Number(trip.date);
+              const leadTimeMin = Math.max(0, Math.floor((tripPickupAt - Date.now()) / 60000));
+              const windowMin = leadTimeMin > 0 && leadTimeMin < 270 ? Math.max(10, leadTimeMin - 30) : 240;
+              return new Date(Date.now() + windowMin * 60000);
+            })()
+          : null,
       ...extra,
     };
     const upsert = () => Cab.findOneAndUpdate({ propertyId: tenantKey, clientRequestId: crid }, { $setOnInsert: fields }, { upsert: true, returnDocument: 'after', runValidators: true }).lean();
@@ -1071,7 +1083,7 @@ stayrideV1Router.get('/public/guest-links/:token', async (req: Request, res: Res
   });
 });
 
-stayrideV1Router.post('/public/guest-links/:token/cab-requests', async (req: Request, res: Response) => {
+stayrideV1Router.post('/public/guest-links/:token/cab-requests', requireRecaptcha('guest_cab_request'), async (req: Request, res: Response) => {
   const link = await activeGuestLink(req.params.token);
   if (!link) return invalidLink(res);
 
@@ -1119,7 +1131,7 @@ stayrideV1Router.post('/public/guest-links/:token/cab-requests', async (req: Req
   return res.status(201).json({ reference: doc.reference, status: doc.status });
 });
 
-stayrideV1Router.post('/public/properties/:slug/cab-requests', async (req: Request, res: Response) => {
+stayrideV1Router.post('/public/properties/:slug/cab-requests', requireRecaptcha('guest_cab_request'), async (req: Request, res: Response) => {
   const slug = String(req.params.slug || '').trim().toLowerCase();
   let tenantKey = '';
   let isDemo = false;
@@ -1232,7 +1244,7 @@ stayrideV1Router.get('/public/cab-requests/:reference', async (req: Request, res
     refundStatus: doc.refundStatus,
     cancellationReason: doc.status === 'CANCELLED' ? doc.cancellationReason || '' : '',
     guestRating: doc.guestRating || null,
-    pickupOtp: doc.advancePaid ? (doc.pickupOtp || null) : null,
+    pickupOtp: (isVerifiedGuest && doc.advancePaid) ? (doc.pickupOtp || null) : null,
     guestBudget: doc.guestBudget || null,
     quotesCount: doc.quotes ? doc.quotes.filter((q: any) => q.status === 'PENDING').length : 0,
     biddingClosesAt: doc.biddingClosesAt || null,
@@ -1276,11 +1288,84 @@ async function quoteLinkDriver(token: unknown, res: Response) {
     return null;
   }
   let driver: any = null;
-  if (link.isDemo && String(link.driverId) === 'demo-driver-1') {
+  const driverIdStr = String(link.driverId);
+
+  if (link.isDemo && driverIdStr === 'demo-driver-1') {
     driver = { _id: 'demo-driver-1', name: 'Demo Driver', phone: '+919876543210', accountStatus: 'ACTIVE', role: 'driver' };
-  } else if (mongoose.Types.ObjectId.isValid(link.driverId)) {
-    driver = await getUserModel(link.isDemo).findOne({ _id: link.driverId, role: 'driver' }).lean();
+  } else if (driverIdStr.startsWith('own-')) {
+    const ownId = driverIdStr.replace(/^own-/, '');
+    // 1. Try resolving from homestay tenant memory store
+    try {
+      const doc: any = await cabModel(link.isDemo).findOne({ reference: link.reference }).select('propertyId').lean();
+      if (doc?.propertyId) {
+        const store = await tenantManager.load(String(doc.propertyId));
+        const d: any = (store.drivers || []).find((x: any) => String(x.id) === ownId);
+        if (d) {
+          driver = {
+            _id: driverIdStr,
+            name: d.name,
+            phone: d.phone,
+            accountStatus: d.active ? 'ACTIVE' : 'INACTIVE',
+            role: 'driver',
+            isOwnDriver: true,
+            vehicle: { model: d.vehicle, plate: d.plate || d.vehicle || '', type: d.vehicleType || '' },
+          };
+        }
+      }
+    } catch {}
+    // 2. If not found in tenant store, check Driver collection
+    if (!driver) {
+      try {
+        const d = await getDriverModel(link.isDemo).findOne({
+          $or: [{ id: ownId }, ...(mongoose.Types.ObjectId.isValid(ownId) ? [{ _id: ownId }] : [])],
+        }).lean();
+        if (d) {
+          driver = {
+            _id: driverIdStr,
+            name: d.name,
+            phone: d.phone,
+            accountStatus: (d.status === 'Active' || d.status === 'On a trip') ? 'ACTIVE' : 'INACTIVE',
+            role: 'driver',
+            isOwnDriver: true,
+            vehicle: { model: d.vehicle, plate: d.plate, type: '' },
+          };
+        }
+      } catch {}
+    }
+  } else if (mongoose.Types.ObjectId.isValid(driverIdStr)) {
+    driver = await getUserModel(link.isDemo).findOne({ _id: driverIdStr, role: 'driver' }).lean();
+    if (!driver) {
+      const d = await getDriverModel(link.isDemo).findById(driverIdStr).lean();
+      if (d) {
+        driver = {
+          _id: String(d._id),
+          name: d.name,
+          phone: d.phone,
+          accountStatus: (d.status === 'Active' || d.status === 'On a trip') ? 'ACTIVE' : 'INACTIVE',
+          role: 'driver',
+          isOwnDriver: true,
+          vehicle: { model: d.vehicle, plate: d.plate, type: '' },
+        };
+      }
+    }
+  } else {
+    // String id like "DRV-101"
+    try {
+      const d = await getDriverModel(link.isDemo).findOne({ id: driverIdStr }).lean();
+      if (d) {
+        driver = {
+          _id: driverIdStr,
+          name: d.name,
+          phone: d.phone,
+          accountStatus: (d.status === 'Active' || d.status === 'On a trip') ? 'ACTIVE' : 'INACTIVE',
+          role: 'driver',
+          isOwnDriver: true,
+          vehicle: { model: d.vehicle, plate: d.plate, type: '' },
+        };
+      }
+    } catch {}
   }
+
   if (!driver || driver.accountStatus !== 'ACTIVE') {
     res.status(403).json({ error: { message: 'Your driver account is not active. Contact StayRide support.', code: 'DRIVER_NOT_ACTIVE' } });
     return null;
@@ -1294,7 +1379,18 @@ const quotePageView = async (isDemo: boolean, reference: string, driver: any) =>
   const doc: any = await cabModel(isDemo).findOne({ reference }).lean();
   if (!doc) return null;
   const view = driverTripView(doc, String(driver._id));
-  return { ...view, driverName: driver.name, canQuote: quotesOn && view.driverView !== 'ASSIGNED' && OPEN_STATUSES.includes(doc.status) && doc.dispatched !== false };
+  const rates = await CommissionService.getEffectiveRates(doc.propertyId ? String(doc.propertyId) : undefined, isDemo);
+  return {
+    ...view,
+    driverName: driver.name,
+    canQuote: quotesOn && view.driverView !== 'ASSIGNED' && OPEN_STATUSES.includes(doc.status) && doc.dispatched !== false,
+    commissionConfig: {
+      totalCommissionPercent: rates.totalCommissionPercent,
+      defaultAdvancePercent: rates.advancePercent,
+      minAdvanceAmount: rates.minAdvanceAmount,
+      minDriverPayoutThreshold: rates.minDriverPayoutThreshold,
+    },
+  };
 };
 
 stayrideV1Router.get('/public/driver-quote', async (req: Request, res: Response) => {
@@ -1311,7 +1407,11 @@ stayrideV1Router.post('/public/driver-quote/quote', async (req: Request, res: Re
   if (!CommissionService.globalFeatures(settings).driverQuotes.enabled) {
     return res.status(403).json({ error: { message: 'Driver quotes are currently disabled by StayRide.', code: 'FEATURE_DISABLED' } });
   }
-  await driverSubmitQuote(ctx.isDemo, ctx.reference, ctx.driver, req.body?.quotedFare, req.body?.notes);
+  await driverSubmitQuote(ctx.isDemo, ctx.reference, ctx.driver, req.body?.quotedFare, req.body?.notes, {
+    plate: req.body?.vehiclePlate,
+    model: req.body?.vehicleModel,
+    driverName: req.body?.driverName,
+  });
   return res.json(await quotePageView(ctx.isDemo, ctx.reference, ctx.driver));
 });
 
@@ -1336,16 +1436,90 @@ stayrideV1Router.post('/public/driver-quote/complete', async (req: Request, res:
   return res.json(await quotePageView(ctx.isDemo, ctx.reference, ctx.driver));
 });
 
+// WhatsApp-less / Web Driver Wallet & Payouts
+stayrideV1Router.get('/public/driver-quote/wallet', async (req: Request, res: Response) => {
+  const ctx = await quoteLinkDriver(req.query.t, res);
+  if (!ctx) return;
+  const summary = await driverPayoutSummary(String(ctx.driver._id), ctx.isDemo);
+  return res.json(summary);
+});
+
+stayrideV1Router.post('/public/driver-quote/payouts/request', async (req: Request, res: Response) => {
+  const ctx = await quoteLinkDriver(req.body?.t, res);
+  if (!ctx) return;
+  const payout = await requestDriverPayout(
+    String(ctx.driver._id),
+    { name: ctx.driver.name, phone: ctx.driver.phone },
+    ctx.isDemo,
+    req.body,
+    `driver-web:${ctx.driver.name}`
+  );
+  return res.status(201).json({ success: true, message: `Payout request of ₹${(payout as any).amount.toLocaleString('en-IN')} submitted.`, payout });
+});
+
+// Update Driver Live Geo-Location (Web Link & Mobile Background Ping)
+stayrideV1Router.post('/public/driver-quote/location', async (req: Request, res: Response) => {
+  const ctx = await quoteLinkDriver(req.body?.t, res);
+  if (!ctx) return;
+  const lat = Number(req.body?.lat);
+  const lng = Number(req.body?.lng);
+  if (Number.isFinite(lat) && Number.isFinite(lng)) {
+    const driverIdStr = String(ctx.driver._id);
+    if (mongoose.Types.ObjectId.isValid(driverIdStr)) {
+      await getUserModel(ctx.isDemo).updateOne(
+        { _id: driverIdStr },
+        { $set: { location: { lat, lng }, locationUpdatedAt: new Date() } }
+      );
+    }
+  }
+  return res.json({ success: true, message: 'Driver location updated' });
+});
+
+// Standby Vehicle Swap / Last-Minute Plate Override (Post-Confirmation)
+stayrideV1Router.post('/public/driver-quote/update-vehicle', async (req: Request, res: Response) => {
+  const ctx = await quoteLinkDriver(req.body?.t, res);
+  if (!ctx) return;
+  const cleanPlate = str(req.body?.vehiclePlate, 30).toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (!cleanPlate || cleanPlate.length < 5) {
+    return res.status(400).json({ error: { message: 'Valid vehicle registration number plate is required.' } });
+  }
+  const cleanModel = str(req.body?.vehicleModel, 50);
+  const Cab = cabModel(ctx.isDemo);
+  const trip: any = await Cab.findOne({ reference: ctx.reference, assignedDriverUserId: String(ctx.driver._id) });
+  if (!trip) return res.status(404).json({ error: { message: 'Trip not found or not assigned to you.' } });
+  if (['COMPLETED', 'CANCELLED', 'EXPIRED'].includes(trip.status)) {
+    return res.status(400).json({ error: { message: 'Cannot update vehicle for a completed or cancelled trip.' } });
+  }
+
+  trip.vehicleDetails = {
+    ...trip.vehicleDetails,
+    plate: cleanPlate,
+    ...(cleanModel ? { model: cleanModel } : {}),
+  };
+  await trip.save();
+
+  // Alert guest on WhatsApp immediately with updated standby plate!
+  if (trip.guestPhone) {
+    whatsapp(ctx.isDemo, trip.guestPhone, messages.vehicleUpdatedGuestMessage(trip.guestName, trip.reference, cleanPlate, trip.assignedDriverName, trip.pickupOtp)).catch(() => {});
+  }
+
+  await audit(`driver-web:${ctx.driver.name}`, 'cab.vehicle_updated', 'CabRequest', String(trip._id), { plate: cleanPlate, model: cleanModel }, ctx.isDemo, scope(trip));
+
+  return res.json({ success: true, message: `Vehicle plate updated to ${cleanPlate}. Guest has been notified via WhatsApp.`, trip });
+});
+
 // ==========================================
 // Public Driver Web Signup (App-less Onboarding)
 // ==========================================
-stayrideV1Router.post('/public/driver-signup', async (req: Request, res: Response) => {
-  const { name, phone, vehicleType, vehicleNumber, vehicleModel, area } = req.body || {};
+stayrideV1Router.post('/public/driver-signup', requireRecaptcha('driver_signup'), async (req: Request, res: Response) => {
+  const { name, phone, vehicleType, vehicleNumber, vehicleModel, area, driverCategory, unionName } = req.body || {};
   const cleanName = str(name, 100);
   const cleanPhone = String(phone || '').replace(/\D/g, '').slice(-10);
   const cleanPlate = str(vehicleNumber, 30).toUpperCase().replace(/[^A-Z0-9]/g, '');
   const cleanArea = str(area, 100);
   const cleanModel = str(vehicleModel, 50);
+  const cleanCategory = driverCategory === 'UNION' ? 'UNION' : 'INDIVIDUAL';
+  const cleanUnion = cleanCategory === 'UNION' ? str(unionName, 100) : '';
   const vt = VEHICLE_TYPES.includes(vehicleType) ? vehicleType : 'SUV';
 
   if (!cleanName || cleanName.length < 2) {
@@ -1394,6 +1568,8 @@ stayrideV1Router.post('/public/driver-signup', async (req: Request, res: Respons
       password: crypto.randomBytes(32).toString('hex'),
       phone: cleanPhone,
       role: 'driver',
+      driverCategory: cleanCategory,
+      unionName: cleanUnion,
       accountStatus: 'PENDING_APPROVAL',
       isAvailable: true,
       whatsappAlerts: true,
@@ -1464,6 +1640,16 @@ stayrideV1Router.get('/cron/ical-sync', async (req: Request, res: Response) => {
     }
     throw syncErr;
   }
+});
+
+stayrideV1Router.get('/cron/cab-cycle', async (req: Request, res: Response) => {
+  const secret = process.env.CRON_SECRET || '';
+  const given = String(req.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+  if (!secret || given.length !== secret.length || !crypto.timingSafeEqual(Buffer.from(given), Buffer.from(secret))) {
+    return res.status(401).json({ error: { message: 'Unauthorized' } });
+  }
+  const [productionExpired, demoExpired] = await Promise.all([expireStaleRequests(false), expireStaleRequests(true)]);
+  return res.json({ ok: true, productionExpired, demoExpired });
 });
 
 // Razorpay payment-link webhook (raw body; signature checked before anything is read).
@@ -1670,7 +1856,15 @@ stayrideV1Router.patch('/driver/location', driverGate, async (req: Request, res:
     return res.status(400).json({ error: { message: 'A valid location is required.', code: 'VALIDATION' } });
   }
   if (!isDemoKey(authOf(req).tenantKey)) {
-    await getUserModel(false).updateOne({ _id: (req as any).driver._id }, { $set: { location: { lat, lng, updatedAt: new Date() } } });
+    await getUserModel(false).updateOne(
+      { _id: (req as any).driver._id },
+      {
+        $set: {
+          location: { lat, lng, updatedAt: new Date() },
+          locationPoint: { type: 'Point', coordinates: [lng, lat] },
+        },
+      }
+    );
   }
   res.json({ ok: true });
 });
@@ -1685,7 +1879,18 @@ stayrideV1Router.post('/driver/trips/:reference/quote', driverGate, async (req: 
   if (!CommissionService.globalFeatures(settings).driverQuotes.enabled) {
     return res.status(403).json({ error: { message: 'Driver quotes are currently disabled by StayRide.', code: 'FEATURE_DISABLED' } });
   }
-  const updated = await driverSubmitQuote(isDemo, String(req.params.reference), (req as any).driver, req.body?.quotedFare, req.body?.notes);
+  const updated = await driverSubmitQuote(
+    isDemo,
+    String(req.params.reference),
+    (req as any).driver,
+    req.body?.quotedFare,
+    req.body?.notes,
+    {
+      plate: req.body?.vehiclePlate,
+      model: req.body?.vehicleModel,
+      driverName: req.body?.driverName,
+    }
+  );
   res.json(driverTripView(updated, String((req as any).driver._id)));
 });
 
@@ -1705,6 +1910,34 @@ stayrideV1Router.post('/driver/trips/:reference/complete', driverGate, async (re
   const isDemo = isDemoKey(authOf(req).tenantKey);
   const updated = await completeTrip(isDemo, { reference: String(req.params.reference), assignedDriverUserId: String((req as any).driver._id) }, authOf(req).email);
   res.json(driverTripView(updated, String((req as any).driver._id)));
+});
+
+// App Driver Wallet & Payouts
+stayrideV1Router.get('/driver/wallet', driverGate, async (req: Request, res: Response) => {
+  const isDemo = isDemoKey(authOf(req).tenantKey);
+  const driverId = String((req as any).driver._id);
+  res.json(await driverPayoutSummary(driverId, isDemo));
+});
+
+stayrideV1Router.post('/driver/payouts/request', driverGate, async (req: Request, res: Response) => {
+  const isDemo = isDemoKey(authOf(req).tenantKey);
+  const driver = (req as any).driver;
+  const driverId = String(driver._id);
+  const payout = await requestDriverPayout(
+    driverId,
+    { name: driver.name, phone: driver.phone },
+    isDemo,
+    req.body,
+    `driver-app:${driver.name || driverId}`
+  );
+  res.status(201).json({ success: true, message: `Payout request of ₹${(payout as any).amount.toLocaleString('en-IN')} submitted.`, payout });
+});
+
+stayrideV1Router.get('/driver/payouts/history', driverGate, async (req: Request, res: Response) => {
+  const isDemo = isDemoKey(authOf(req).tenantKey);
+  const driverId = String((req as any).driver._id);
+  const history = await payoutModel(isDemo).find({ driverId, recipientType: 'DRIVER' }).sort({ requestedAt: -1 }).limit(50).lean();
+  res.json(history);
 });
 
 // ==========================================
@@ -2162,7 +2395,7 @@ const ownFleetOrOwnTrip = (kind: 'start' | 'complete', fn: (s: StayRideMemorySto
   if (!trip) return notFound(res, 'Trip');
   if (await ownFleetDoc(tenantKey, isDemo, trip)) {
     const filter = { reference: trip.reference, propertyId: tenantKey, ownFleet: true };
-    if (kind === 'start') await startTrip(isDemo, filter, actor);
+    if (kind === 'start') await startTrip(isDemo, filter, actor, undefined, false);
     else await completeTrip(isDemo, filter, actor);
     return res.json(await overlayOne(req, trip));
   }

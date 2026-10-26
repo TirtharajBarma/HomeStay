@@ -120,7 +120,7 @@ function propertyToStay(p: Raw): Stay {
   const photos = Array.isArray(p.photos) && p.photos.length ? p.photos : [];
   const defaultImage = photos[0] || rawRooms[0]?.image || "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1200&q=80";
 
-  const roomPrices = rawRooms.map((r: any) => num(r.price) || num(r.nightly)).filter((pr: number) => pr > 0);
+  const roomPrices = rawRooms.map((r: Raw) => num(r.price) || num(r.nightly)).filter((pr: number) => pr > 0);
   const minPrice = roomPrices.length ? Math.min(...roomPrices) : 2400;
 
   const galleryShots: GalleryShot[] = photos.length
@@ -129,7 +129,7 @@ function propertyToStay(p: Raw): Stay {
       ? rawRooms[0].gallery
       : [{ src: defaultImage, alt: name, caption: name }];
 
-  const mappedRooms: StayRoom[] = rawRooms.map((r: any) => ({
+  const mappedRooms: StayRoom[] = rawRooms.map((r: Raw) => ({
     id: r.id || r._id,
     number: str(r.number) || "101",
     type: str(r.type) || "Standard Room",

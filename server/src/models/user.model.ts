@@ -16,7 +16,10 @@ export interface IUser extends Document {
   isAvailable?: boolean;
   // Driver's last known position (sent by the driver app); used to find drivers near a homestay
   location?: { lat: number; lng: number; updatedAt: Date } | null;
+  locationPoint?: { type: "Point"; coordinates: [number, number] };
   vehicle?: { type?: string; model?: string; plate?: string; seats?: number; area?: string };
+  driverCategory?: "INDIVIDUAL" | "UNION";
+  unionName?: string;
   pushTokens?: Array<{ token: string; platform: string; updatedAt: Date }>; // Expo tokens, newest last, max 10
   whatsappAlerts?: boolean; // Driver preference: receive trip requests via WhatsApp in addition to push
   ratingSum?: number; // drivers: sum of owner star ratings
@@ -49,6 +52,10 @@ const UserSchema = new Schema<IUser>(
     isAvailable: { type: Boolean, default: true },
     whatsappAlerts: { type: Boolean, default: true },
     location: { type: { lat: Number, lng: Number, updatedAt: Date, _id: false }, default: null },
+    locationPoint: {
+      type: { type: String, enum: ["Point"], default: "Point" },
+      coordinates: { type: [Number], default: undefined },
+    },
     vehicle: {
       type: { type: String, default: "" },
       model: { type: String, default: "" },
@@ -56,6 +63,8 @@ const UserSchema = new Schema<IUser>(
       seats: { type: Number, default: 0 },
       area: { type: String, default: "" },
     },
+    driverCategory: { type: String, enum: ["INDIVIDUAL", "UNION"], default: "INDIVIDUAL" },
+    unionName: { type: String, default: "" },
     pushTokens: {
       type: [new Schema({ token: String, platform: String, updatedAt: Date }, { _id: false })],
       default: [],
@@ -73,11 +82,19 @@ const UserSchema = new Schema<IUser>(
   { timestamps: true }
 );
 
+UserSchema.index({ locationPoint: "2dsphere" });
+
 // Hash password before saving & update IST timestamp
 UserSchema.pre("save", async function () {
   this.updatedAtIST = getISTTimestamp();
   if (!this.createdAtIST) {
     this.createdAtIST = getISTTimestamp();
+  }
+  if (this.location && typeof this.location.lat === "number" && typeof this.location.lng === "number") {
+    (this as any).locationPoint = {
+      type: "Point",
+      coordinates: [this.location.lng, this.location.lat],
+    };
   }
   if (!this.isModified("password")) return;
   const salt = await bcrypt.genSalt(10);

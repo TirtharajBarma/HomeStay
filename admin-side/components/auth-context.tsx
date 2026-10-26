@@ -78,7 +78,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
         };
         window.localStorage.setItem(USER_KEY, JSON.stringify(user));
         const secureFlag = typeof window !== "undefined" && window.location.protocol === "https:" ? "; Secure" : "";
-        document.cookie = `${TOKEN_KEY}=${storedToken}; path=/; SameSite=Lax; max-age=2592000${secureFlag}`;
+        document.cookie = `${TOKEN_KEY}=${storedToken}; path=/; SameSite=Strict; max-age=86400${secureFlag}`;
         if (cancelled) return;
         setToken(storedToken);
         setAdmin(user);
@@ -125,7 +125,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
               setAdmin(refreshedUser);
             }
             const secureFlag = window.location.protocol === "https:" ? "; Secure" : "";
-            document.cookie = `${TOKEN_KEY}=${refreshedToken}; path=/; SameSite=Lax; max-age=2592000${secureFlag}`;
+            document.cookie = `${TOKEN_KEY}=${refreshedToken}; path=/; SameSite=Strict; max-age=86400${secureFlag}`;
             setToken(refreshedToken);
           }
         }
@@ -144,7 +144,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
       window.localStorage.setItem(TOKEN_KEY, newToken);
       window.localStorage.setItem(USER_KEY, JSON.stringify(newAdmin));
       const secureFlag = typeof window !== "undefined" && window.location.protocol === "https:" ? "; Secure" : "";
-      document.cookie = `${TOKEN_KEY}=${newToken}; path=/; SameSite=Lax; max-age=2592000${secureFlag}`;
+      document.cookie = `${TOKEN_KEY}=${newToken}; path=/; SameSite=Strict; max-age=86400${secureFlag}`;
       router.push("/");
     },
     [router]

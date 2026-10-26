@@ -177,13 +177,15 @@ export class DriverService {
       status: { $in: ["Active", "On a trip"] },
     });
 
-    // Commission comes from the single source of truth (admin-configured platform settings),
-    // never from a hard-coded rate. PF + HC is the estate's cut; the remainder is the payout.
+    // Commission and mountain terrain configuration come from the single source of truth (admin settings)
     const { pfPercent, hcPercent, advancePercent, minAdvanceAmount } = await CommissionService.getEffectiveRates();
+    const cfg = await CommissionService.getPlatformConfig();
+    const hillDistance = cfg.hillSurchargeDistanceKm || 40;
+    const hillMult = cfg.hillSurchargeMultiplier || 1.15;
 
     const quotes = drivers.map((driver) => {
-      // Long distance hill surcharge (>40 km, e.g. down to Siliguri/Bagdogra)
-      const surgeMultiplier = distanceKm > 40 ? 1.15 : 1.0;
+      // Dynamic mountain terrain surcharge (>hillDistance km, e.g. down to Siliguri/Bagdogra or steep climbs)
+      const surgeMultiplier = distanceKm > hillDistance ? hillMult : 1.0;
       const rawFare = distanceKm * driver.perKm * surgeMultiplier;
       const fare = Math.round(Math.max(driver.minimum, rawFare) / 10) * 10;
       const split = CommissionService.split(fare, pfPercent, hcPercent, advancePercent, minAdvanceAmount);

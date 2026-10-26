@@ -94,22 +94,18 @@ export const DriverTripsScreen: React.FC = () => {
     const raw = (quoteInputs[trip.reference] || '').replace(/[₹,\s]/g, '');
     const amount = /^\d+$/.test(raw) ? parseInt(raw, 10) : 0;
     if (!amount || amount <= 0) {
-      Alert.alert('Invalid Fare', 'Please enter the in-hand cash fare you want to collect.');
+      Alert.alert('Invalid Fare', 'Please enter your total trip fare quote.');
       return;
     }
 
-    const cash = amount;
-    const fee = Math.max(200, Math.round(cash * 0.10));
-    const total = cash + fee;
-
     setSubmittingId(trip.reference);
-    const outcome = await driverQuote(trip.reference, total);
+    const outcome = await driverQuote(trip.reference, amount);
     setSubmittingId(null);
     if (outcome.ok) setRevising((prev) => ({ ...prev, [trip.reference]: false }));
     reportOutcome(
       outcome,
       'Quote Submitted',
-      `Your quote of ₹${cash.toLocaleString()} in-hand cash was sent (Passenger total bill: ₹${total.toLocaleString()}).`
+      `Your total fare quote of ₹${amount.toLocaleString('en-IN')} was submitted. StayRide will calculate the advance, commission, and wallet share from the current settings.`
     );
   };
 
@@ -438,7 +434,7 @@ export const DriverTripsScreen: React.FC = () => {
                               keyboardType="numeric"
                               value={inputValue}
                               onChangeText={(val) => handleQuoteChange(t.reference, val)}
-                              placeholder="In-hand cash"
+                              placeholder="Total fare"
                             />
                           </View>
                           <TouchableOpacity
@@ -456,18 +452,6 @@ export const DriverTripsScreen: React.FC = () => {
                             </TouchableOpacity>
                           )}
                         </View>
-                        {Number(inputValue) > 0 && (
-                          <View style={styles.quoteLiveBreakdown}>
-                            <View style={styles.breakdownRow}>
-                              <Text style={styles.breakdownLabel}>Cash you collect at drop-off:</Text>
-                              <Text style={styles.breakdownCash}>₹{Number(inputValue).toLocaleString('en-IN')}</Text>
-                            </View>
-                            <View style={styles.breakdownRow}>
-                              <Text style={styles.breakdownSub}>Online Booking Fee (guest pays StayRide):</Text>
-                              <Text style={styles.breakdownSub}>+₹{Math.max(200, Math.round(Number(inputValue) * 0.10)).toLocaleString('en-IN')}</Text>
-                            </View>
-                          </View>
-                        )}
                       </View>
                     )}
                   </View>
@@ -1076,34 +1060,6 @@ const styles = StyleSheet.create({
   },
   chipTextActive: {
     color: '#047857',
-  },
-  quoteLiveBreakdown: {
-    marginTop: 8,
-    padding: 10,
-    backgroundColor: '#F0FDF4',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#BBF7D0',
-    gap: 4,
-  },
-  breakdownRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  breakdownLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#064E3B',
-  },
-  breakdownCash: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#047857',
-  },
-  breakdownSub: {
-    fontSize: 10,
-    color: '#64748B',
   },
   pinModalBox: {
     marginTop: 10,

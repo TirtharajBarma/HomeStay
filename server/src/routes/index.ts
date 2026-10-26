@@ -13,6 +13,7 @@ import { IcalController } from "../controllers/ical.controller.js";
 import { verifyToken, requireRole } from "../middlewares/auth.js";
 import { Newsletter } from "../models/newsletter.model.js";
 import { config } from "../config/env.js";
+import { requireRecaptcha } from "../middlewares/recaptcha.js";
 
 const apiRouter = Router();
 
@@ -48,7 +49,7 @@ if (config.legacyApiEnabled) {
   apiRouter.post("/ical/sync/:codeOrSlug", verifyToken, requireRole("owner", "admin"), IcalController.syncInboundIcal);
 
   // Newsletter subscription endpoint
-  apiRouter.post("/newsletter/subscribe", async (req, res) => {
+  apiRouter.post("/newsletter/subscribe", requireRecaptcha("newsletter_subscribe"), async (req, res) => {
     const { email } = req.body;
     if (!email || typeof email !== "string" || !email.includes("@")) {
       return res.status(400).json({ success: false, error: "Valid email required" });

@@ -21,9 +21,9 @@ const navLinks = [
     active: false,
   },
   {
-    href: "/cab-request",
-    label: "Hill Cabs",
-    hint: "Bagdogra, NJP & local transfers",
+    href: "/join-driver",
+    label: "Cab Join",
+    hint: "Drive with StayRide Network",
     icon: "local_taxi",
     active: false,
   },
@@ -79,11 +79,11 @@ export function SiteHeader() {
 
         <div className="flex shrink-0 items-center gap-1 sm:gap-2.5">
           <Link
-            href="/cab-request"
+            href="/join-driver"
             className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-amber-600/30 bg-amber-50 px-3 text-label-md font-semibold text-amber-900 shadow-sm transition-all duration-200 hover:bg-amber-100 active:scale-[0.98] sm:px-3.5"
           >
             <Icon name="local_taxi" className="text-[18px] text-amber-700" />
-            <span>Book a Cab</span>
+            <span>Cab Join</span>
           </Link>
           <Link
             href="/#search-bar"

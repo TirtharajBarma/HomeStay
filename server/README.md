@@ -1157,4 +1157,32 @@ NODE_ENV=development
 MONGODB_URI=mongodb+srv://...mongodb.net/homestay
 JWT_SECRET=super-secret-jwt-key-for-hill-network
 CORS_ORIGIN=http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003
+LEGACY_API_ENABLED=false
+PAYMENT_GATEWAY_MODE=disabled
+RECAPTCHA_SECRET_KEY=your-google-recaptcha-secret
+RECAPTCHA_ALLOWED_HOSTNAMES=localhost,127.0.0.1
+RECAPTCHA_MIN_SCORE=0.5
 ```
+
+For production, create a Google reCAPTCHA v3 key pair and configure `RECAPTCHA_SECRET_KEY`,
+`RECAPTCHA_ALLOWED_HOSTNAMES` (exact hostnames, comma-separated), and `RECAPTCHA_MIN_SCORE` in the
+server deployment. Configure the matching site key as `NEXT_PUBLIC_RECAPTCHA_SITE_KEY` in the
+client-side deployment. Anonymous cab requests, driver applications, and newsletter subscriptions
+are rejected if verification is missing, has the wrong action/hostname, or falls below the score.
+
+To activate Razorpay after account approval, set `PAYMENT_GATEWAY_MODE=razorpay`,
+`RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, and `RAZORPAY_WEBHOOK_SECRET`. Register the webhook at
+`https://<api-host>/v1/webhooks/razorpay` (or `/api/v1/stayride/webhooks/razorpay`) for
+`payment_link.paid`, using the same webhook secret configured on the server. The gateway stays off
+unless all four values are real and present. If link creation fails after activation, the app does
+not send a misleading manual payment link.
+
+To activate Meta WhatsApp Cloud API, set `WHATSAPP_DISPATCH_MODE=cloud_api`, the approved
+`WHATSAPP_PHONE_NUMBER_ID`, long-lived `WHATSAPP_ACCESS_TOKEN`, and `WHATSAPP_API_VERSION` (currently
+`v26.0`). Set `WHATSAPP_TPL_<EVENT>` for each event to the corresponding approved template name in
+Meta. Template body variables must match the event's `params` order. Production sends are skipped
+when an event has no template, since business-initiated messages need an approved template. The native
+`wa.me` fallback remains available where the UI offers it.
+
+Keep each integration disabled until its real credentials, hostnames, webhook, and approved templates
+are configured. Placeholder values in the example files are deliberately treated as missing.

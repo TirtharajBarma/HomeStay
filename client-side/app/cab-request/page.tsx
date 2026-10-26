@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Icon } from "@/components/icon";
 import { API_ENDPOINTS, apiFetch } from "@/lib/api-config";
+import { getRecaptchaToken } from "@/lib/recaptcha";
 
 export interface RoutePreset {
   id: string;
@@ -176,7 +177,7 @@ const toTime12 = (t24: string) => {
   if (!t24) return "09:00 AM";
   const parts = t24.split(":");
   if (parts.length < 2) return "09:00 AM";
-  let h = parseInt(parts[0], 10);
+  const h = parseInt(parts[0], 10);
   const m = parts[1];
   const ampm = h >= 12 ? "PM" : "AM";
   const h12 = h % 12 === 0 ? 12 : h % 12;
@@ -493,6 +494,7 @@ function CabRequestFormContent() {
 
     setSubmitting(true);
     try {
+      const recaptchaToken = await getRecaptchaToken("guest_cab_request");
       const selectedDateObj = new Date(`${date}T12:00:00Z`);
       const payload = {
         pickup: pickup.trim(),
@@ -506,6 +508,7 @@ function CabRequestFormContent() {
         notes: notes.trim(),
         guestBudget: guestBudget ? Number(guestBudget) : undefined,
         clientRequestId,
+        recaptchaToken,
       };
 
       const submitEndpoint = token

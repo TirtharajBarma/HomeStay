@@ -131,7 +131,7 @@ export const DriverActiveRideScreen: React.FC = () => {
             </View>
             <Text style={styles.emptyTitle}>No Active Ride in Progress</Text>
             <Text style={styles.emptySubtitle}>
-              Go to "My Rides" and tap "Start Ride" on any of your confirmed bookings to begin navigation.
+              Go to &ldquo;My Rides&rdquo; and tap &ldquo;Start Ride&rdquo; on any of your confirmed bookings to begin navigation.
             </Text>
           </View>
         ) : (

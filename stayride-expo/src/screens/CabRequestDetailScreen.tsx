@@ -565,17 +565,30 @@ export const CabRequestDetailScreen: React.FC = () => {
             )}
 
             {/* Fix 4: Quote Cards with Vehicle Info & Best Match Badge */}
+            {(status === 'FINDING_DRIVER' || status === 'QUOTE_RECEIVED') && (
+              <View style={[styles.banner, { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0', borderWidth: 1, marginTop: 8, marginBottom: 8 }]}>
+                <Ionicons name="time-outline" size={16} color="#166534" />
+                <Text style={[styles.bannerText, { color: '#166534', marginLeft: 6 }]}>
+                  4-Hour Quote Window: Quotes from your registered homestay drivers receive top priority over the mountain pool.
+                </Text>
+              </View>
+            )}
             {(status === 'FINDING_DRIVER' || status === 'QUOTE_RECEIVED') &&
-              (trip.quotes || []).map((q) => {
+              (trip.quotes || []).map((q: any) => {
                 const isBestMatch = lowestFare !== null && q.quotedFare === lowestFare && validQuotes.length > 1;
                 return (
-                  <View key={String(q.driverId)} style={[styles.quoteCard, isBestMatch && styles.quoteCardBestMatch]}>
-                    {isBestMatch && (
+                  <View key={String(q.driverId)} style={[styles.quoteCard, (isBestMatch || q.isOwnDriver) && styles.quoteCardBestMatch]}>
+                    {q.isOwnDriver ? (
+                      <View style={[styles.bestMatchRibbon, { backgroundColor: '#DCFCE7' }]}>
+                        <Ionicons name="shield-checkmark" size={12} color="#15803D" />
+                        <Text style={[styles.bestMatchRibbonText, { color: '#15803D' }]}>Priority · Your Own Homestay Driver</Text>
+                      </View>
+                    ) : isBestMatch ? (
                       <View style={styles.bestMatchRibbon}>
                         <Ionicons name="sparkles" size={12} color="#047857" />
                         <Text style={styles.bestMatchRibbonText}>Best Match · Lowest Fare</Text>
                       </View>
-                    )}
+                    ) : null}
                     <View style={styles.quoteCardBody}>
                       <View style={{ flex: 1 }}>
                         <Text style={styles.assignName}>{q.driverName}</Text>
@@ -583,7 +596,7 @@ export const CabRequestDetailScreen: React.FC = () => {
                           🚗 {q.driverVehicle || 'Mountain Cab'}
                           {typeof q.driverRating === 'number' ? ` · ★ ${q.driverRating} (${q.driverRatingCount ?? 0})` : ''}
                         </Text>
-                        {q.notes ? <Text style={styles.quoteNotesText}>"{q.notes}"</Text> : null}
+                        {q.notes ? <Text style={styles.quoteNotesText}>&ldquo;{q.notes}&rdquo;</Text> : null}
                         <Text style={styles.quoteFareHighlight}>
                           {formatINR(q.quotedFare)}
                         </Text>

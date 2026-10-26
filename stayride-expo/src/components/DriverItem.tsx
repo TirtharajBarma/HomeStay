@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Switch } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Switch, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Driver } from '../types';
 import { Colors, Radii, Shadows } from '../theme/colors';
@@ -24,6 +24,14 @@ export const DriverItem: React.FC<DriverItemProps> = ({
   onToggleActive,
   onToggleAvailable,
 }) => {
+  const handleCallDriver = (e: any) => {
+    e.stopPropagation();
+    if (driver.phone) {
+      const clean = driver.phone.replace(/[^0-9+]/g, '');
+      Linking.openURL(`tel:${clean}`);
+    }
+  };
+
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.75}>
       <View style={styles.topRow}>
@@ -57,7 +65,15 @@ export const DriverItem: React.FC<DriverItemProps> = ({
       </View>
 
       <View style={styles.footerRow}>
-        <Text style={styles.phone}>{driver.phone}</Text>
+        <TouchableOpacity
+          style={styles.phoneBtn}
+          onPress={handleCallDriver}
+          accessibilityRole="button"
+          accessibilityLabel={`Call ${driver.name} at ${driver.phone}`}
+        >
+          <Ionicons name="call" size={14} color={Colors.brandPrimary} />
+          <Text style={styles.phone}>{driver.phone}</Text>
+        </TouchableOpacity>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
           {showActiveToggle && onToggleActive && (
             <View style={styles.switchRow}>
@@ -187,10 +203,19 @@ const styles = StyleSheet.create({
     marginTop: 10,
     paddingTop: 8,
   },
+  phoneBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    backgroundColor: Colors.brandPrimaryLight,
+    borderRadius: 8,
+  },
   phone: {
     fontSize: 13,
     color: Colors.brandPrimaryDark,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   switchRow: {
     flexDirection: 'row',

@@ -29,6 +29,7 @@ export interface PlatformConfig {
   /** StayRide fee on trips done by the owner's own drivers: percent of the fare, never below the minimum */
   ownFleetFeePercent: number;
   ownFleetMinFee: number;
+  minDriverPayoutThreshold: number;
   /** Max drivers messaged on WhatsApp per request (push goes to every matching driver) */
   driverBroadcastMax: number;
   /** Only drivers within this distance of the homestay hear about a request; 0 = no distance filter */
@@ -48,11 +49,17 @@ export interface PlatformConfig {
   guestLinkDays: number;
   maxOpenRequestsPerPhone: number;
   maxFare: number;
+  /** Surcharge multiplier for steep mountain corridors / long hill climbs (e.g. 1.15 = 15%) */
+  hillSurchargeMultiplier: number;
+  /** Distance in km beyond which the mountain hill surcharge kicks in (e.g. 40 km) */
+  hillSurchargeDistanceKm: number;
   /** Calendar (iCal) links are only fetched from these sites (and their subdomains) */
   icalAllowedHosts: string[];
   /** A driver's quote stops counting after this many hours (he can quote again); 0 = never */
   quoteValidityHours: number;
-  /** Minutes to wait for driver bids before auto-accepting lowest price quote; 0 = instant on first quote */
+  /** Hours to wait for driver bids before auto-accepting winning quote (default 4 hours) */
+  quoteWindowHours: number;
+  /** Minutes to wait for driver bids before auto-accepting winning quote */
   quoteBiddingWindowMin: number;
   /** Meta-approved WhatsApp template name per message event (empty = plain text, test number only) */
   whatsappTemplates: Record<string, string>;
@@ -146,6 +153,7 @@ export const DEFAULT_PLATFORM_CONFIG: PlatformConfig = {
   advanceWindowMin: 0,
   ownFleetFeePercent: 5,
   ownFleetMinFee: 100,
+  minDriverPayoutThreshold: 100,
   driverBroadcastMax: 25,
   nearbyRadiusKm: 40,
   whatsappLanguage: 'en',
@@ -178,8 +186,11 @@ export const DEFAULT_PLATFORM_CONFIG: PlatformConfig = {
   guestLinkDays: 7,
   maxOpenRequestsPerPhone: 5,
   maxFare: 200000,
+  hillSurchargeMultiplier: 1.15,
+  hillSurchargeDistanceKm: 40,
   quoteValidityHours: 24,
-  quoteBiddingWindowMin: 5,
+  quoteWindowHours: 4,
+  quoteBiddingWindowMin: 240,
   whatsappTemplates: {},
   // Fill these in Operations settings before publishing the app: they appear in the legal pages
   business: { name: 'StayRide', legalName: '', address: '', email: '', phone: '', upiId: '', grievanceOfficer: '', grievanceEmail: '', website: '' },
@@ -233,6 +244,7 @@ export function resolvePlatformConfig(saved: any): PlatformConfig {
     advanceWindowMin: num(s.advanceWindowMin, d.advanceWindowMin, 0, 24 * 60),
     ownFleetFeePercent: num(s.ownFleetFeePercent, d.ownFleetFeePercent, 0, 50),
     ownFleetMinFee: num(s.ownFleetMinFee, d.ownFleetMinFee, 0, 5000),
+    minDriverPayoutThreshold: num(s.minDriverPayoutThreshold, d.minDriverPayoutThreshold, 0, 1000000),
     driverBroadcastMax: num(s.driverBroadcastMax, d.driverBroadcastMax, 0, 200),
     nearbyRadiusKm: num(s.nearbyRadiusKm, d.nearbyRadiusKm, 0, 500),
     whatsappLanguage: lang,
@@ -248,8 +260,11 @@ export function resolvePlatformConfig(saved: any): PlatformConfig {
     guestLinkDays: num(s.guestLinkDays, d.guestLinkDays, 1, 60),
     maxOpenRequestsPerPhone: num(s.maxOpenRequestsPerPhone, d.maxOpenRequestsPerPhone, 1, 50),
     maxFare: num(s.maxFare, d.maxFare, 1000, 1000000),
+    hillSurchargeMultiplier: num(s.hillSurchargeMultiplier, d.hillSurchargeMultiplier ?? 1.15, 1.0, 3.0),
+    hillSurchargeDistanceKm: num(s.hillSurchargeDistanceKm, d.hillSurchargeDistanceKm ?? 40, 5, 200),
     quoteValidityHours: num(s.quoteValidityHours, d.quoteValidityHours, 0, 24 * 14),
-    quoteBiddingWindowMin: num(s.quoteBiddingWindowMin, d.quoteBiddingWindowMin, 0, 120),
+    quoteWindowHours: num(s.quoteWindowHours, s.quoteBiddingWindowMin ? Number((s.quoteBiddingWindowMin / 60).toFixed(2)) : d.quoteWindowHours, 0.1, 72),
+    quoteBiddingWindowMin: num(s.quoteBiddingWindowMin, s.quoteWindowHours ? Math.round(Number(s.quoteWindowHours) * 60) : d.quoteBiddingWindowMin, 0, 4320),
     business: Object.fromEntries(BUSINESS_KEYS.map((k) => [k, text(s.business?.[k], d.business[k] || '', 300)])) as unknown as BusinessDetails,
     whatsappTemplates: Object.fromEntries(
       WHATSAPP_EVENTS.map((e) => [e, typeof s.whatsappTemplates?.[e] === 'string' ? s.whatsappTemplates[e].trim() : ''])

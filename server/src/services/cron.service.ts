@@ -1,9 +1,11 @@
 import { Property } from "../models/property.model.js";
 import { Room } from "../models/room.model.js";
 import { IcalService } from "./ical.service.js";
+import { expireStaleRequests } from "../stayride/platform.js";
 
 export class CronService {
   private static timer: NodeJS.Timeout | null = null;
+  private static cabTimer: NodeJS.Timeout | null = null;
 
   static startIcalWorker(intervalMinutes = 15) {
     // Serverless platforms (Vercel) freeze the process between requests, so a long-lived
@@ -64,10 +66,34 @@ export class CronService {
     this.timer = setInterval(runSync, intervalMinutes * 60 * 1000);
   }
 
+  static startCabWorker(intervalSeconds = 60) {
+    if (process.env.VERCEL) return;
+
+    console.log(
+      `🚕 [CAB WORKER] Initialized automatic bidding auction & auto-completion worker (every ${intervalSeconds}s)`
+    );
+
+    const runCabCycles = async () => {
+      try {
+        await expireStaleRequests(false);
+        await expireStaleRequests(true);
+      } catch (err: any) {
+        console.warn("🚕 [CAB WORKER] Notice during periodic cab cycle:", err?.message);
+      }
+    };
+
+    setTimeout(runCabCycles, 5_000);
+    this.cabTimer = setInterval(runCabCycles, intervalSeconds * 1000);
+  }
+
   static stopWorker() {
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = null;
+    }
+    if (this.cabTimer) {
+      clearInterval(this.cabTimer);
+      this.cabTimer = null;
     }
   }
 }

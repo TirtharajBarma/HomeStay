@@ -2,11 +2,15 @@ import mongoose, { Schema, Document } from 'mongoose';
 import { tenantDbModel } from '../utils/tenant-model.js';
 
 export interface IPayoutRequest extends Document {
-  tenantId: string; // Homestay owner email
+  recipientType: 'HOMESTAY' | 'DRIVER';
+  tenantId?: string; // Homestay owner email (for HOMESTAY payouts)
+  driverId?: string; // Driver user ID or phone (for DRIVER payouts)
+  driverName?: string;
+  driverPhone?: string;
   homestayName: string;
   ownerName: string;
   ownerPhone: string;
-  amount: number; // Commission amount in INR
+  amount: number; // Commission or excess advance share amount in INR
   method: 'UPI' | 'BANK_TRANSFER';
   upiId?: string;
   bank?: {
@@ -17,7 +21,7 @@ export interface IPayoutRequest extends Document {
   };
   status: 'PENDING' | 'SETTLED' | 'REJECTED';
   tripIds: number[];
-  cabRequestIds: string[]; // CabRequest _ids whose homestay commission this payout covers
+  cabRequestIds: string[]; // CabRequest _ids covered by this payout
   rejectedReason?: string;
   decidedBy?: string;
   utrNumber?: string;
@@ -29,12 +33,15 @@ export interface IPayoutRequest extends Document {
 
 const PayoutRequestSchema: Schema = new Schema(
   {
-    tenantId: { type: String, required: true, lowercase: true, trim: true },
-    homestayName: { type: String, required: true, trim: true },
-    ownerName: { type: String, required: true, trim: true },
+    recipientType: { type: String, enum: ['HOMESTAY', 'DRIVER'], default: 'HOMESTAY', index: true },
+    tenantId: { type: String, lowercase: true, trim: true, default: '' },
+    driverId: { type: String, trim: true, default: '' },
+    driverName: { type: String, default: '' },
+    driverPhone: { type: String, default: '' },
+    homestayName: { type: String, default: '', trim: true },
+    ownerName: { type: String, default: '', trim: true },
     ownerPhone: { type: String, default: '' },
     amount: { type: Number, required: true, min: 1 },
-    // Legacy docs used payoutMethod/bankDetails; scripts/migrate-indexes.ts copies them to method.
     method: { type: String, enum: ['UPI', 'BANK_TRANSFER'], default: 'UPI' },
     upiId: { type: String, trim: true },
     bank: {
@@ -62,11 +69,16 @@ const PayoutRequestSchema: Schema = new Schema(
   { timestamps: true }
 );
 
-// At most one PENDING payout per tenant: parallel requests can't both pass the balance check.
-// Explicit names: an older non-unique "tenantId_1" index exists in deployed DBs (see scripts/migrate-indexes.ts).
+// At most one PENDING payout per homestay tenant
 PayoutRequestSchema.index(
   { tenantId: 1, status: 1 },
-  { name: 'one_pending_payout_per_tenant', unique: true, partialFilterExpression: { status: 'PENDING' } }
+  { name: 'one_pending_payout_per_tenant', unique: true, partialFilterExpression: { recipientType: 'HOMESTAY', status: 'PENDING' } }
+);
+
+// At most one PENDING payout per driver
+PayoutRequestSchema.index(
+  { driverId: 1, status: 1 },
+  { name: 'one_pending_payout_per_driver', unique: true, partialFilterExpression: { recipientType: 'DRIVER', status: 'PENDING' } }
 );
 PayoutRequestSchema.index({ status: 1, requestedAt: -1 }, { name: 'status_requestedAt' });
 

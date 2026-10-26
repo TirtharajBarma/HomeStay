@@ -1,9 +1,10 @@
 {
   "expo": {
-    "name": "StayRide",
+    "name": "StayRide Partner — Host & Driver",
+    "description": "StayRide Partner Console for Himalayan Homestay Hosts and Cab Drivers across Darjeeling, Kurseong, Kalimpong and Sikkim.",
     "slug": "stayride",
     "scheme": "stayride",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -52,14 +53,12 @@
       "eas": {
         "projectId": "0bdb67a8-8671-40a4-93e5-925504d907ee"
       },
-      "updateVersion": "v1.0.2",
-      "updateDescription": "Dynamic settings version badge • Live OTA discovery • Enhanced changelog and release notes",
+      "updateVersion": "v1.0.3",
+      "updateDescription": "Unified cab booking with radar buffer, direct driver dialing, and security hardening",
       "updateNotes": [
-        "Live OTA version display and Apple-style update badges in settings",
-        "Real-time background update discovery and instant restart",
-        "Enhanced changelog and release notes parser"
+        "Unified cab booking with radar buffer, direct driver dialing, and security hardening"
       ],
-      "easUpdateMessage": "v1.0.2: Dynamic settings version badge • Live OTA discovery • Enhanced changelog and release notes"
+      "easUpdateMessage": "v1.0.3: Unified cab booking with radar buffer, direct driver dialing, and security hardening"
     },
     "plugins": [
       "./plugins/with-ios-local-no-push",

@@ -33,6 +33,7 @@ async function bootstrap() {
 
       // 4. Start automated background workers
       CronService.startIcalWorker(15);
+      CronService.startCabWorker(60);
     });
 
     const shutdown = async (signal: string) => {

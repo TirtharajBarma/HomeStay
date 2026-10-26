@@ -7,12 +7,11 @@
 //
 // Business-initiated messages must use a Meta-approved template. Set WHATSAPP_TPL_<EVENT> to the
 // approved template name (e.g. WHATSAPP_TPL_ASK_CAB) and its body variables {{1}}, {{2}}... are filled
-// from `params` in order. Without a template name the plain `text` is sent, which Meta delivers only
-// inside the 24-hour reply window (fine for testing with the free test number).
+// from `params` in order. Production sends require an approved template for every event.
 import { logger } from '../utils/logger.js';
 
 const TIMEOUT_MS = 4000;
-const API_VERSION = process.env.WHATSAPP_API_VERSION || 'v21.0';
+const API_VERSION = process.env.WHATSAPP_API_VERSION || 'v26.0';
 
 export type WhatsAppEvent =
   | 'ASK_CAB'
@@ -28,7 +27,10 @@ export type WhatsAppEvent =
   | 'REFUND_GUEST'
   | 'COMPLETION_REMINDER_DRIVER'
   | 'BIDDING_TIMEOUT_OWNER'
-  | 'DRIVER_WELCOME';
+  | 'DRIVER_WELCOME'
+  | 'PAYOUT_SETTLED_DRIVER'
+  | 'PAYOUT_REJECTED_DRIVER'
+  | 'VEHICLE_UPDATED_GUEST';
 
 export interface WhatsAppMessage {
   event: WhatsAppEvent;
@@ -41,10 +43,16 @@ export interface WhatsAppMessage {
 
 export type WhatsAppResult = 'SENT' | 'SKIPPED' | 'FAILED';
 
+const configured = (value: string | undefined) => {
+  const normalized = value?.trim() || '';
+  return Boolean(normalized && !/^(none|disabled|replace-with-|your[-_])/i.test(normalized));
+};
+
 const enabled = () =>
   process.env.NODE_ENV !== 'test' &&
   (process.env.WHATSAPP_DISPATCH_MODE === 'cloud_api' || process.env.WHATSAPP_DISPATCH_MODE === 'meta_cloud_api') &&
-  Boolean(process.env.WHATSAPP_PHONE_NUMBER_ID && process.env.WHATSAPP_ACCESS_TOKEN);
+  configured(process.env.WHATSAPP_PHONE_NUMBER_ID) &&
+  configured(process.env.WHATSAPP_ACCESS_TOKEN);
 
 /** Digits only with country code; a bare 10-digit Indian number gets 91. null when it cannot be a phone. */
 export function toWhatsAppNumber(phone: unknown): string | null {
@@ -65,19 +73,15 @@ export async function sendWhatsApp(isDemo: boolean, msg: WhatsAppMessage, langua
   const to = toWhatsAppNumber(msg.to);
   const isMetaEnabled = enabled();
 
-  // If unconfigured or demo, log the simulated message so developers can see it in Axiom and console!
+  // Skips are logged without guest phone numbers or message contents.
   if (isDemo || !to || !isMetaEnabled) {
     const reason = isDemo ? 'DEMO_TENANT' : !to ? 'INVALID_PHONE' : 'META_API_NOT_CONFIGURED';
-    console.log(`[whatsapp:simulated] event=${msg.event} to=${to || msg.to} reason=${reason} text="${msg.text.slice(0, 90)}..."`);
-    logger.info(`[WhatsApp Simulated] ${msg.event} to ${to || msg.to} (${reason})`, {
+    logger.info(`[WhatsApp Skipped] ${msg.event} (${reason})`, {
       action: 'whatsapp.dispatch',
       metadata: {
         event: msg.event,
-        to: to || msg.to,
         status: 'SKIPPED',
         reason,
-        previewText: msg.text.slice(0, 160),
-        params: msg.params,
         metaCloudApiEnabled: isMetaEnabled,
       },
     });
@@ -85,6 +89,13 @@ export async function sendWhatsApp(isDemo: boolean, msg: WhatsAppMessage, langua
   }
 
   const template = templateName || process.env[`WHATSAPP_TPL_${msg.event}`];
+  if (!template && process.env.NODE_ENV === 'production') {
+    logger.warn(`[WhatsApp Skipped] ${msg.event} (APPROVED_TEMPLATE_NOT_CONFIGURED)`, {
+      action: 'whatsapp.dispatch',
+      metadata: { event: msg.event, status: 'SKIPPED', reason: 'APPROVED_TEMPLATE_NOT_CONFIGURED' },
+    });
+    return 'SKIPPED';
+  }
   const body = template
     ? {
         messaging_product: 'whatsapp',
@@ -109,24 +120,23 @@ export async function sendWhatsApp(isDemo: boolean, msg: WhatsAppMessage, langua
     });
     if (!res.ok) {
       console.warn(`[whatsapp] ${msg.event} failed (HTTP ${res.status})`);
-      logger.warn(`[WhatsApp Failed] ${msg.event} to ${to} (HTTP ${res.status})`, {
+      logger.warn(`[WhatsApp Failed] ${msg.event} (HTTP ${res.status})`, {
         action: 'whatsapp.dispatch',
-        metadata: { event: msg.event, to, status: 'FAILED', httpStatus: res.status },
+        metadata: { event: msg.event, status: 'FAILED', httpStatus: res.status },
       });
       return 'FAILED';
     }
-    console.log(`[whatsapp:sent] event=${msg.event} to=${to}`);
-    logger.info(`[WhatsApp Sent] ${msg.event} to ${to}`, {
+    logger.info(`[WhatsApp Sent] ${msg.event}`, {
       action: 'whatsapp.dispatch',
-      metadata: { event: msg.event, to, status: 'SENT' },
+      metadata: { event: msg.event, status: 'SENT' },
     });
     return 'SENT';
   } catch (err: any) {
-    console.warn(`[whatsapp] ${msg.event} failed (network: ${err?.message})`);
-    logger.error(`[WhatsApp Error] ${msg.event} to ${to}`, {
+    console.warn(`[whatsapp] ${msg.event} failed (network)`);
+    logger.error(`[WhatsApp Error] ${msg.event}`, {
       action: 'whatsapp.dispatch',
-      error: { message: err?.message || 'Network error' },
-      metadata: { event: msg.event, to, status: 'FAILED' },
+      error: { message: 'Network error' },
+      metadata: { event: msg.event, status: 'FAILED' },
     });
     return 'FAILED';
   } finally {

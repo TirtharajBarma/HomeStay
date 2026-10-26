@@ -2,8 +2,8 @@
  * Application Version and Release Configuration
  * Auto-synced with EAS Updates & Local Builds
  */
-export const CURRENT_RELEASE_VERSION = "v1.0.2";
-export const RELEASE_DESCRIPTION = "Dynamic settings version badge • Live OTA discovery • Enhanced changelog and release notes";
+export const CURRENT_RELEASE_VERSION = "v1.0.3";
+export const RELEASE_DESCRIPTION = "Unified cab booking with radar buffer, direct driver dialing, and security hardening";
 export const APP_BINARY_VERSION = "v1.0.0 (Build 1)";
 export const ADMIN_NAME = "StayRide Admin";
 export const AUTHOR_CREDIT = "Built with ❤️ for StayRide";
@@ -18,6 +18,19 @@ export interface ReleaseHistoryItem {
 }
 
 export const INITIAL_RELEASE_HISTORY: ReleaseHistoryItem[] = [
+  {
+    version: "v1.0.3",
+    date: "Oct 27, 2026",
+    title: "Unified cab booking with radar animation • Direct driver dialing • Production security & admin controls",
+    notes: [
+      "Unified cab booking into a single flow with auto-prioritizing own fleet and regional drivers",
+      "Added 3.5s radar wave scanning animation when submitting cab requests",
+      "Added direct one-tap phone dialing button for fleet drivers on iOS and Android",
+      "Hardened admin session controls and dynamic mountain terrain surcharge support",
+    ],
+    type: "ota",
+    isNativeBuild: false,
+  },
   {
     version: "v1.0.2",
     date: "Oct 24, 2026",

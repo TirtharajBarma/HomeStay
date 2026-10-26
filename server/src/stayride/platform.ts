@@ -21,14 +21,16 @@ import { parseTime12 } from './time.js';
 import { getCabRequestModel } from '../models/cab-request.model.js';
 import { getPayoutRequestModel } from '../models/payout-request.model.js';
 import { User } from '../models/user.model.js';
+import { Driver } from '../models/driver.model.js';
 import { audit } from '../models/audit-log.model.js';
 import { CommissionService } from '../services/commission.service.js';
 import { logger } from '../utils/logger.js';
 import { httpError } from '../middlewares/error-handler.js';
 import { tenantDbModel } from '../utils/tenant-model.js';
 import { notify, PushMessage } from '../services/push.service.js';
-import { createPaymentLink } from '../services/payment-gateway.service.js';
+import { createPaymentLink, gatewayEnabled } from '../services/payment-gateway.service.js';
 import { PlatformConfig, ownFleetFee } from '../services/platform-config.js';
+import { tenantManager } from './store.js';
 
 export const OPEN_STATUSES = ['PENDING_REVIEW', 'FINDING_DRIVER', 'QUOTE_RECEIVED'];
 // Paid (advance collected) but not started: the only states where a removed driver can be replaced.
@@ -42,12 +44,16 @@ const cfgOf = (isDemo: boolean) => CommissionService.getPlatformConfig(isDemo);
 export const cabModel = (isDemo: boolean) => getCabRequestModel(isDemo) as mongoose.Model<any>;
 export const payoutModel = (isDemo: boolean) => getPayoutRequestModel(isDemo) as unknown as mongoose.Model<any>;
 /** Audit scope of a cab request, so the admin's homestay / driver audit filters find it. */
-const scope = (d: any) => ({ tenantId: String(d?.propertyId || ''), driverId: String(d?.assignedDriverUserId || '') });
+export const scope = (d: any) => ({ tenantId: String(d?.propertyId || ''), driverId: String(d?.assignedDriverUserId || '') });
 
 export function userModel(isDemo = false): mongoose.Model<any> {
   // Demo users live only in "test", everyone else only in "production"; never fall back to the
   // default connection (which points at production) when the DB is not ready.
   return tenantDbModel(isDemo, 'User', User.schema);
+}
+
+export function driverModel(isDemo = false): mongoose.Model<any> {
+  return tenantDbModel(isDemo, 'Driver', Driver.schema);
 }
 
 const conflict = (message: string) => httpError(409, message, 'INVALID_STATE');
@@ -60,7 +66,7 @@ const pushUsers = (isDemo: boolean, ids: unknown[], msg: PushMessage) => {
 const tripData = (d: any, type: string) => ({ type, reference: d.reference, ...(typeof d.tripId === 'number' ? { tripId: d.tripId } : {}) });
 
 /** WhatsApp from the company number. Every message is also pushed to the app where the person has it. */
-const whatsapp = async (isDemo: boolean, to: unknown, built: Omit<WhatsAppMessage, 'to'>): Promise<WhatsAppResult> => {
+export const whatsapp = async (isDemo: boolean, to: unknown, built: Omit<WhatsAppMessage, 'to'>): Promise<WhatsAppResult> => {
   const cfg = await cfgOf(isDemo);
   return sendWhatsApp(isDemo, { ...built, to: String(to ?? '') }, cfg.whatsappLanguage, cfg.whatsappTemplates[built.event]);
 };
@@ -167,6 +173,9 @@ export async function requestAdvance(tenantKey: string, isDemo: boolean, doc: an
           description: `StayRide cab advance for trip ${doc.reference}`,
           expiresAt: doc.advanceDueAt ? new Date(doc.advanceDueAt) : null,
         });
+    if (!isDemo && gatewayEnabled() && !link) {
+      throw new Error('Razorpay is enabled but could not create the required payment link.');
+    }
     let url: string;
     if (link) {
       // every issued id is kept: a guest paying an older link (re-priced / reopened) is still found and refunded
@@ -204,6 +213,7 @@ export async function expireStaleRequests(isDemo: boolean, extra: Record<string,
   await expireOldQuotes(isDemo, extra);
   await autoSelectLowestQuotes(isDemo, extra);
   await checkBiddingFallbacks(isDemo, extra);
+  await autoCompleteTrips(isDemo, extra);
   await sendCompletionReminders(isDemo, extra);
   const cutoff = Date.now() - (await cfgOf(isDemo)).requestExpiryHours * HOUR_MS;
   const Cab = cabModel(isDemo);
@@ -310,9 +320,21 @@ export function containsContactInfo(text: string): boolean {
 export async function dispatchRequest(tenantKey: string, isDemo: boolean, reference: string) {
   const Cab = cabModel(isDemo);
   await expireStaleRequests(isDemo, { reference });
+  const doc: any = await Cab.findOne({ reference, propertyId: tenantKey }).lean();
+  if (!doc) throw httpError(404, 'Trip not found');
+  if (OPEN_STATUSES.includes(doc.status) && doc.dispatched !== false) return doc; // already sent
+  if (!OPEN_STATUSES.includes(doc.status)) throw conflict('This request can no longer be sent to drivers.');
+
   const cfg = await cfgOf(isDemo);
-  const windowMin = cfg.quoteBiddingWindowMin ?? 5;
+  const defaultWindowMin = cfg.quoteBiddingWindowMin ?? ((cfg.quoteWindowHours || 4) * 60);
+  const tripPickupAt = istDateTime(doc.date, doc.time) ?? Number(doc.date);
+  const leadTimeMin = Math.max(0, Math.floor((tripPickupAt - Date.now()) / 60000));
+  let windowMin = defaultWindowMin;
+  if (leadTimeMin > 0 && leadTimeMin < defaultWindowMin + 30) {
+    windowMin = Math.max(10, leadTimeMin - 30);
+  }
   const biddingClosesAt = new Date(Date.now() + windowMin * 60000);
+
   const updated = await Cab.findOneAndUpdate(
     { reference, propertyId: tenantKey, status: { $in: OPEN_STATUSES }, dispatched: false },
     { $set: { dispatched: true, biddingClosesAt } },
@@ -322,10 +344,7 @@ export async function dispatchRequest(tenantKey: string, isDemo: boolean, refere
     await notifyNewRequest(isDemo, updated);
     return updated;
   }
-  const doc: any = await Cab.findOne({ reference, propertyId: tenantKey }).lean();
-  if (!doc) throw httpError(404, 'Trip not found');
-  if (OPEN_STATUSES.includes(doc.status) && doc.dispatched !== false) return doc; // already sent
-  throw conflict('This request can no longer be sent to drivers.');
+  return doc;
 }
 
 /**
@@ -373,9 +392,9 @@ function snapshotFrom(split: Awaited<ReturnType<typeof CommissionService.calcula
   };
 }
 
-async function pricedUpdate(doc: any, fare: number, isDemo: boolean) {
-  // Drivers quote their net in-hand cash. System calculates platform fee + homestay commission on top.
-  const split = await CommissionService.calculateGrossFromDriverCash(fare, String(doc.propertyId), isDemo);
+async function pricedUpdate(doc: any, fare: number, isDemo: boolean, isOwnDriver = false) {
+  // All-inclusive winning quote fare. System calculates advance, total commission, and splits.
+  const split = await CommissionService.calculateSplit(fare, String(doc.propertyId), isDemo, isOwnDriver);
   return {
     agreedFare: split.agreedFare,
     advanceAmount: split.advanceAmount,
@@ -486,14 +505,45 @@ export async function ownerConfirmQuote(tenantKey: string, isDemo: boolean, refe
   if (!doc) throw httpError(404, 'Trip not found');
   const quote = (doc.quotes || []).find((q: any) => String(q.driverId) === String(driverUserId) && q.status === 'PENDING');
   if (!quote) throw httpError(400, 'Choose one of the drivers who sent a quote.');
-  const driver = isDemo && String(quote.driverId) === 'demo-driver-1'
-    ? { vehicle: { plate: '' } }
-    : mongoose.Types.ObjectId.isValid(String(quote.driverId))
-      ? await userModel(isDemo).findOne({ _id: quote.driverId, role: 'driver', accountStatus: 'ACTIVE' }).lean()
-      : null;
+  let driver: any = null;
+  const quoteDriverIdStr = String(quote.driverId);
+  if (isDemo && quoteDriverIdStr === 'demo-driver-1') {
+    driver = { vehicle: { plate: '' } };
+  } else if (quoteDriverIdStr.startsWith('own-')) {
+    const ownId = quoteDriverIdStr.replace(/^own-/, '');
+    try {
+      const store = await tenantManager.load(tenantKey);
+      const d: any = (store.drivers || []).find((x: any) => String(x.id) === ownId);
+      if (d) driver = { vehicle: { plate: d.plate || d.vehicle || '' }, accountStatus: 'ACTIVE' };
+    } catch {}
+    if (!driver) {
+      try {
+        const d = await driverModel(isDemo).findOne({
+          $or: [{ id: ownId }, ...(mongoose.Types.ObjectId.isValid(ownId) ? [{ _id: ownId }] : [])],
+        }).lean();
+        if (d) driver = { vehicle: { plate: d.plate || '' }, accountStatus: 'ACTIVE' };
+      } catch {}
+    }
+  } else if (mongoose.Types.ObjectId.isValid(quoteDriverIdStr)) {
+    driver = await userModel(isDemo).findOne({ _id: quoteDriverIdStr, role: 'driver', accountStatus: 'ACTIVE' }).lean();
+    if (!driver) {
+      const d = await driverModel(isDemo).findOne({ _id: quoteDriverIdStr, status: { $in: ['Active', 'On a trip'] } }).lean();
+      if (d) driver = { vehicle: { plate: d.plate || '' }, accountStatus: 'ACTIVE' };
+    }
+  } else {
+    try {
+      const d = await driverModel(isDemo).findOne({ id: quoteDriverIdStr }).lean();
+      if (d) driver = { vehicle: { plate: d.plate || '' }, accountStatus: 'ACTIVE' };
+    } catch {}
+  }
+  // Fallback: If quote exists and has vehicle details, honor it
+  if (!driver && quote.driverPhone) {
+    driver = { vehicle: { plate: quote.driverVehicle || '' }, accountStatus: 'ACTIVE' };
+  }
   if (!driver) throw conflict('This driver is no longer available.');
   // Fare comes from the driver's quote, never from the client.
-  const priced = await pricedUpdate(doc, quote.quotedFare, isDemo);
+  const isOwn = Boolean(quote.isOwnDriver || quoteDriverIdStr.startsWith('own-'));
+  const priced = await pricedUpdate(doc, quote.quotedFare, isDemo, isOwn);
   const cfg = await cfgOf(isDemo);
   const updated = await Model.findOneAndUpdate(
     {
@@ -514,7 +564,12 @@ export async function ownerConfirmQuote(tenantKey: string, isDemo: boolean, refe
         assignedDriverUserId: String(quote.driverId),
         assignedDriverName: quote.driverName,
         assignedDriverPhone: quote.driverPhone,
-        vehicleDetails: { model: quote.driverVehicle || '', plate: (driver as any).vehicle?.plate || '' },
+        assignedDriverCategory: quote.driverCategory || 'INDIVIDUAL',
+        assignedDriverUnionName: quote.unionName || '',
+        vehicleDetails: {
+          model: quote.driverVehicleModel || (driver as any).vehicle?.model || quote.driverVehicle || '',
+          plate: quote.driverVehiclePlate || (driver as any).vehicle?.plate || '',
+        },
         'quotes.$[q].status': 'ACCEPTED',
         'quotes.$[o].status': 'REJECTED',
       },
@@ -558,6 +613,7 @@ export async function assignOwnFleet(
   const doc: any = await Model.findOne({ reference, propertyId: tenantKey }).lean();
   if (!doc) throw httpError(404, 'Trip not found');
   const noFee = fee <= 0; // admin set the fee to 0: nothing to collect, the trip is confirmed at once
+  const pickupOtp = doc.pickupOtp || String(crypto.randomInt(1000, 10000));
   const snapshot = {
     agreedFare: fare,
     advanceAmount: fee,
@@ -583,6 +639,7 @@ export async function assignOwnFleet(
         financialSnapshot: snapshot,
         status: noFee ? 'CONFIRMED' : 'AWAITING_ADVANCE_PAYMENT',
         advancePaid: noFee,
+        pickupOtp,
         advanceDueAt: noFee ? null : dueAt(cfg),
         paymentLinkId: '',
         paymentLinkUrl: '',
@@ -611,16 +668,42 @@ export async function assignOwnFleet(
 }
 
 /** Cancel by owner/admin. Paid advances become a PENDING refund that only admin can close. */
-export async function cancelRequest(filter: Record<string, any>, isDemo: boolean, actor: string, reason: string) {
+export async function cancelRequest(
+  filter: Record<string, any>,
+  isDemo: boolean,
+  actor: string,
+  reason: string,
+  isAdmin = false
+) {
   const Model = cabModel(isDemo);
   const doc: any = await Model.findOne(filter).lean();
   if (!doc) throw httpError(404, 'Trip not found');
   if (doc.status === 'CANCELLED') return doc;
-  if (['TRIP_STARTED', 'COMPLETED'].includes(doc.status)) throw conflict(`A ${doc.status.toLowerCase().replace('_', ' ')} trip cannot be cancelled.`);
+  if (doc.status === 'COMPLETED') throw conflict('A completed trip cannot be cancelled.');
   if (doc.hostPayoutId) throw conflict('This trip is already part of a payout.');
+  if (doc.driverPayoutId) throw conflict('This trip is part of an active driver payout request and cannot be cancelled until resolved.');
+
+  const isPlatformAdmin = Boolean(isAdmin || String(actor || '').toLowerCase().includes('admin'));
+
+  // Non-admins (such as homestay owners) cannot cancel trips once advance is paid or trip has started
+  if (!isPlatformAdmin) {
+    if (['TRIP_STARTED', 'COMPLETED'].includes(doc.status)) {
+      throw conflict(`A ${doc.status.toLowerCase().replace('_', ' ')} trip cannot be cancelled.`);
+    }
+    if (doc.advancePaid) {
+      throw conflict('This ride is booked with a paid advance deposit. Please contact StayRide admin support to cancel and process the refund.');
+    }
+  }
+
   const updated = await Model.findOneAndUpdate(
     // advancePaid pinned: if admin records the payment meanwhile, this fails instead of losing the refund
-    { _id: doc._id, status: { $nin: ['TRIP_STARTED', 'COMPLETED', 'CANCELLED'] }, hostPayoutId: null, advancePaid: doc.advancePaid ? true : { $ne: true } },
+    {
+      _id: doc._id,
+      status: isPlatformAdmin ? { $ne: 'CANCELLED' } : { $nin: ['TRIP_STARTED', 'COMPLETED', 'CANCELLED'] },
+      hostPayoutId: null,
+      driverPayoutId: null,
+      advancePaid: doc.advancePaid ? true : { $ne: true },
+    },
     {
       $set: {
         status: 'CANCELLED',
@@ -632,7 +715,22 @@ export async function cancelRequest(filter: Record<string, any>, isDemo: boolean
     { returnDocument: 'after' }
   );
   if (!updated) throw conflict('The trip changed meanwhile. Refresh and try again.');
-  await audit(actor, 'cab.cancel', 'CabRequest', String(doc._id), { reason, refundDue: doc.advancePaid ? doc.advanceAmount : 0 }, isDemo, scope(doc));
+  await audit(
+    actor,
+    'cab.cancel',
+    'CabRequest',
+    String(doc._id),
+    {
+      reason,
+      refundDue: doc.advancePaid ? doc.advanceAmount : 0,
+      cancelledByAdmin: isPlatformAdmin,
+      guestPhone: doc.guestPhone,
+      guestName: doc.guestName,
+      refundStatus: doc.advancePaid ? 'PENDING' : 'NONE',
+    },
+    isDemo,
+    scope(doc)
+  );
   const msg = { title: 'Trip cancelled', body: `Trip ${doc.reference} was cancelled.`, data: tripData(doc, 'TRIP_CANCELLED') };
   const drivers = [doc.assignedDriverUserId, ...(doc.quotes || []).filter((q: any) => q.status === 'PENDING').map((q: any) => q.driverId)].filter(Boolean);
   await Promise.allSettled([
@@ -690,8 +788,10 @@ export function driverTripView(d: any, driverUserId: string, driverPhone?: strin
     status: TRIP_STATUS[d.status] || d.status,
     driverView,
     cancellationReason: d.status === 'CANCELLED' ? d.cancellationReason || '' : null,
-    myQuote: mine ? { quotedFare: mine.quotedFare, status: mine.status, notes: mine.notes || '', counterFare: mine.counterFare ?? null } : null,
+    myQuote: mine ? { quotedFare: mine.quotedFare, status: mine.status, notes: mine.notes || '', counterFare: mine.counterFare ?? null, driverCategory: mine.driverCategory, unionName: mine.unionName } : null,
     assignedToMe: assigned,
+    assignedDriverCategory: d.assignedDriverCategory || 'INDIVIDUAL',
+    assignedDriverUnionName: d.assignedDriverUnionName || '',
     // No guest identity / cash due before the advance is paid.
     ...(contact ? { guestName: d.guestName, phone: d.guestPhone } : {}),
     ...(assigned
@@ -743,10 +843,11 @@ export async function listDriverTrips(isDemo: boolean, driver: any, quotesOn: bo
           .lean()
       : Promise.resolve([]),
   ]);
-  // Nearby only: when both the driver and the homestay have a location, hide requests beyond the radius.
+  // Nearby only: when both the driver and the pickup location (or homestay) have a location, hide requests beyond the radius.
   const radius = (await cfgOf(isDemo)).nearbyRadiusKm;
   const near = (open as any[]).filter((d) => {
-    const km = distanceKm(driver.location, d.homestayLocation);
+    const pickupOrigin = (d.pickupLocation?.lat && d.pickupLocation?.lng) ? d.pickupLocation : d.homestayLocation;
+    const km = distanceKm(driver.location, pickupOrigin);
     return radius <= 0 || km === null || km <= radius;
   }).slice(0, 50);
   const byRef = new Map<string, any>();
@@ -755,7 +856,14 @@ export async function listDriverTrips(isDemo: boolean, driver: any, quotesOn: bo
 }
 
 /** A driver quotes, or revises their own quote, while the request is still open. */
-export async function driverSubmitQuote(isDemo: boolean, reference: string, driver: any, fareInput: unknown, notes: unknown) {
+export async function driverSubmitQuote(
+  isDemo: boolean,
+  reference: string,
+  driver: any,
+  fareInput: unknown,
+  notes: unknown,
+  overrideVehicle?: { plate?: string; model?: string; driverName?: string }
+) {
   const cfg = await cfgOf(isDemo);
   const quotedFare = parseFare(fareInput, cfg.maxFare);
   const Model = cabModel(isDemo);
@@ -766,8 +874,17 @@ export async function driverSubmitQuote(isDemo: boolean, reference: string, driv
   }
   await expireStaleRequests(isDemo, { reference });
 
+  const plateOverride = typeof overrideVehicle?.plate === 'string' ? overrideVehicle.plate.trim().toUpperCase().slice(0, 25) : '';
+  const modelOverride = typeof overrideVehicle?.model === 'string' ? overrideVehicle.model.trim().slice(0, 50) : '';
+  const nameOverride = typeof overrideVehicle?.driverName === 'string' ? overrideVehicle.driverName.trim().slice(0, 60) : '';
+
+  const effectivePlate = plateOverride || driver.vehicle?.plate || '';
+  const effectiveModel = modelOverride || driver.vehicle?.model || driver.vehicle?.type || '';
+  const effectiveDriverName = nameOverride || driver.name || '';
+  const vehicleStr = [effectiveModel, effectivePlate].filter(Boolean).join(' ') || driver.vehicle?.type || '';
+
   // Anti-gouging protection against unreasonable fares exceeding vehicle tier baselines
-  const existingReq: any = await Model.findOne({ reference, status: { $in: OPEN_STATUSES }, dispatched: { $ne: false } }).select('vehicleType').lean();
+  const existingReq: any = await Model.findOne({ reference, status: { $in: OPEN_STATUSES }, dispatched: { $ne: false } }).select('vehicleType propertyId').lean();
   if (!existingReq) throw conflict('This request is no longer accepting quotes (or your quote was declined).');
   const estFare = (cfg.vehicles as any)?.[existingReq.vehicleType]?.estFare;
   if (estFare && estFare > 0) {
@@ -779,6 +896,18 @@ export async function driverSubmitQuote(isDemo: boolean, reference: string, driv
       );
     }
   }
+  // Determine if quoting driver is an in-house own-driver for this homestay
+  let isOwnDriver = Boolean(driver.isOwnDriver || String(driver._id).startsWith('own-'));
+  if (!isOwnDriver) {
+    try {
+      const store = await tenantManager.load(String(existingReq.propertyId));
+      const phone10 = String(driver.phone || '').replace(/\D/g, '').slice(-10);
+      isOwnDriver = Boolean(
+        (store.drivers || []).some((d: any) => d.active && String(d.phone || '').replace(/\D/g, '').slice(-10) === phone10)
+      );
+    } catch {}
+  }
+
   const revise = () =>
     Model.findOneAndUpdate(
       { reference, status: { $in: OPEN_STATUSES }, dispatched: { $ne: false }, quotes: { $elemMatch: { driverId, status: { $in: ['PENDING', 'EXPIRED'] } } } },
@@ -786,11 +915,18 @@ export async function driverSubmitQuote(isDemo: boolean, reference: string, driv
         $set: {
           'quotes.$.quotedFare': quotedFare,
           'quotes.$.notes': cleanNotes,
+          'quotes.$.driverVehicle': vehicleStr,
+          'quotes.$.driverVehiclePlate': effectivePlate,
+          'quotes.$.driverVehicleModel': effectiveModel,
+          'quotes.$.driverName': effectiveDriverName,
           'quotes.$.createdAt': new Date(),
           'quotes.$.status': 'PENDING', // an expired quote comes back to life with the new fare
           'quotes.$.counterFare': null,
           'quotes.$.counterAt': null,
           'quotes.$.driverRating': ratingOf(driver).driverRating || 0,
+          'quotes.$.isOwnDriver': isOwnDriver,
+          'quotes.$.driverCategory': driver.driverCategory || 'INDIVIDUAL',
+          'quotes.$.unionName': driver.unionName || '',
           status: 'QUOTE_RECEIVED',
         },
       },
@@ -806,13 +942,18 @@ export async function driverSubmitQuote(isDemo: boolean, reference: string, driv
         $push: {
           quotes: {
             driverId,
-            driverName: driver.name,
+            driverName: effectiveDriverName,
             driverPhone: driver.phone || '',
-            driverVehicle: [driver.vehicle?.model, driver.vehicle?.plate].filter(Boolean).join(' ') || driver.vehicle?.type || '',
+            driverVehicle: vehicleStr,
+            driverVehiclePlate: effectivePlate,
+            driverVehicleModel: effectiveModel,
             vehicleType: driver.vehicle?.type || '',
             driverRating: ratingOf(driver).driverRating || 0,
             quotedFare,
             notes: cleanNotes,
+            isOwnDriver,
+            driverCategory: driver.driverCategory || 'INDIVIDUAL',
+            unionName: driver.unionName || '',
             status: 'PENDING',
             createdAt: new Date(),
           },
@@ -844,6 +985,33 @@ export function distanceKm(a: any, b: any): number | null {
   return 6371 * 2 * Math.asin(Math.sqrt(h));
 }
 
+export const HILL_LANDMARK_COORDS: Record<string, { lat: number; lng: number }> = {
+  njp: { lat: 26.6853, lng: 88.4312 },
+  'new jalpaiguri': { lat: 26.6853, lng: 88.4312 },
+  bagdogra: { lat: 26.6812, lng: 88.3286 },
+  airport: { lat: 26.6812, lng: 88.3286 },
+  siliguri: { lat: 26.7271, lng: 88.3953 },
+  darjeeling: { lat: 27.0410, lng: 88.2663 },
+  kurseong: { lat: 26.8812, lng: 88.2789 },
+  kalimpong: { lat: 27.0594, lng: 88.4695 },
+  mirik: { lat: 26.8906, lng: 88.1887 },
+  ghum: { lat: 27.0112, lng: 88.2576 },
+  'tiger hill': { lat: 27.0000, lng: 88.2833 },
+};
+
+export function resolveDestinationCoordinates(trip: any): { lat: number; lng: number } | null {
+  const dests = trip.destinations || [];
+  const lastDest = dests.length ? dests[dests.length - 1] : null;
+  if (lastDest && typeof lastDest.lat === 'number' && Number.isFinite(lastDest.lat) && typeof lastDest.lng === 'number' && Number.isFinite(lastDest.lng)) {
+    return { lat: lastDest.lat, lng: lastDest.lng };
+  }
+  const addr = `${lastDest?.address || ''} ${trip.destination || ''}`.toLowerCase();
+  for (const [key, coords] of Object.entries(HILL_LANDMARK_COORDS)) {
+    if (addr.includes(key)) return coords;
+  }
+  return null;
+}
+
 /**
  * Drivers who should hear about a request: approved, available, same vehicle class (or none set), and
  * within the admin's radius of the homestay. Nearest first; drivers who never shared a location come
@@ -851,16 +1019,83 @@ export function distanceKm(a: any, b: any): number | null {
  * move to a 2dsphere index when the network is bigger.
  */
 export async function matchingDrivers(isDemo: boolean, doc: any, cfg: PlatformConfig): Promise<any[]> {
-  const vehicleMatch = { $or: [{ 'vehicle.type': doc.vehicleType }, { 'vehicle.type': { $in: [null, ''] } }, { 'vehicle.type': { $exists: false } }] };
+  const pax = Number(doc.passengers || 1);
+  let vehicleMatch: any;
+  if (pax > 4) {
+    // 5+ passengers requires a 6- to 7-seater mountain vehicle (Bolero, Scorpio, Innova, Xylo). Exclude 4-seater hatchbacks/sedans.
+    vehicleMatch = {
+      $and: [
+        {
+          $or: [
+            { 'vehicle.type': { $in: ['SUV', 'MUV', '7-seater', '9-seater'] } },
+            { 'vehicle.seats': { $gte: pax } },
+            { 'vehicle.type': { $in: [null, ''] } },
+            { 'vehicle.type': { $exists: false } },
+          ],
+        },
+        { 'vehicle.type': { $nin: ['Hatchback', 'Sedan'] } },
+      ],
+    };
+  } else if (doc.vehicleType) {
+    vehicleMatch = { $or: [{ 'vehicle.type': doc.vehicleType }, { 'vehicle.type': { $in: [null, ''] } }, { 'vehicle.type': { $exists: false } }] };
+  } else {
+    vehicleMatch = {};
+  }
+
+  // Active "On-Ride" check: find drivers who are currently driving on an active ride (TRIP_STARTED)
+  const activeTrips: any[] = await cabModel(isDemo).find({
+    status: 'TRIP_STARTED',
+    assignedDriverUserId: { $exists: true, $ne: null },
+  }).select('assignedDriverUserId').lean();
+
+  const onRideDriverIds = new Set(activeTrips.map((t) => String(t.assignedDriverUserId)));
+
   const all: any[] = await userModel(isDemo)
     .find({ role: 'driver', accountStatus: 'ACTIVE', isAvailable: { $ne: false }, ...vehicleMatch })
-    .select('_id phone location whatsappAlerts')
+    .select('_id name phone area vehicle driverCategory unionName location whatsappAlerts ratingSum ratingCount')
     .limit(2000)
     .lean();
-  const scored = all.map((d) => ({ d, km: distanceKm(d.location, doc.homestayLocation) }));
+
+  // Discard drivers who are currently on an active ride!
+  const availableDrivers = all.filter((d) => !onRideDriverIds.has(String(d._id)));
+
+  const pickupAddr = `${doc.pickupLocation?.address || ''} ${doc.homestayName || ''}`.toLowerCase();
+  const pickupOrigin = (doc.pickupLocation?.lat && doc.pickupLocation?.lng) ? doc.pickupLocation : doc.homestayLocation;
+
+  const scored = availableDrivers.map((d) => {
+    const km = distanceKm(d.location, pickupOrigin);
+    const dArea = String(d.area || '').toLowerCase().trim();
+    const areaMatch = Boolean(dArea && pickupAddr.includes(dArea));
+    const avgRating = d.ratingCount && d.ratingCount > 0 ? (d.ratingSum || 0) / d.ratingCount : 4.5;
+    return { d, km, areaMatch, avgRating };
+  });
+
   return scored
     .filter((x) => cfg.nearbyRadiusKm <= 0 || x.km === null || x.km <= cfg.nearbyRadiusKm)
-    .sort((x, y) => (x.km ?? Infinity) - (y.km ?? Infinity))
+    .sort((x, y) => {
+      // 1. If GPS is available on both, closest distance wins (rating tie-breaker within 2km)
+      if (x.km !== null && y.km !== null) {
+        if (Math.abs(x.km - y.km) > 2) {
+          return x.km - y.km;
+        }
+        if (y.avgRating !== x.avgRating) {
+          return y.avgRating - x.avgRating;
+        }
+        return x.km - y.km;
+      }
+      if (x.km !== null) return -1;
+      if (y.km !== null) return 1;
+
+      // 2. If no GPS, drivers whose registered hill area matches pickup town get priority
+      if (x.areaMatch && !y.areaMatch) return -1;
+      if (!x.areaMatch && y.areaMatch) return 1;
+
+      // 3. Review rating based priority
+      if (y.avgRating !== x.avgRating) {
+        return y.avgRating - x.avgRating;
+      }
+      return 0;
+    })
     .map((x) => x.d);
 }
 
@@ -892,9 +1127,23 @@ export async function notifyNewRequest(isDemo: boolean, doc: any) {
     data: tripData(doc, 'NEW_REQUEST'),
   });
 
-  // WhatsApp too, so drivers without the app (or not looking at it) still see it. Capped: each costs money.
-  // Drivers who opt out in the app (whatsappAlerts: false) only receive push notifications.
-  if (isDemo || cfg.driverBroadcastMax <= 0) return;
+  // Priority Tier: Broadcast WhatsApp to homestay's own drivers ("My Drivers")
+  try {
+    const store = await tenantManager.load(String(doc.propertyId));
+    const ownDrivers = (store.drivers || []).filter((d: any) => d.active && d.phone);
+    if (ownDrivers.length > 0) {
+      await Promise.allSettled(
+        ownDrivers.map((d: any) =>
+          whatsapp(isDemo, d.phone, messages.newRequestMessage(doc, driverQuoteLink(isDemo, `own-${d.id}`, doc.reference)))
+        )
+      );
+    }
+  } catch (err: any) {
+    console.warn(`[notifyNewRequest] Own drivers dispatch for ${doc.reference}:`, err?.message);
+  }
+
+  // Fallback Tier: WhatsApp to nearby mountain pool drivers (capped at driverBroadcastMax)
+  if (cfg.driverBroadcastMax <= 0) return;
   await Promise.allSettled(
     drivers
       .filter((d) => d.phone && d.whatsappAlerts !== false)
@@ -909,12 +1158,12 @@ async function transition(isDemo: boolean, filter: Record<string, any>, set: Rec
   return updated;
 }
 
-export async function startTrip(isDemo: boolean, filter: Record<string, any>, actor: string, otp?: string) {
+export async function startTrip(isDemo: boolean, filter: Record<string, any>, actor: string, otp?: string, requireOtp = true) {
   // Only after the advance is paid (CONFIRMED).
   const doc: any = await cabModel(isDemo).findOne({ ...filter, status: 'CONFIRMED', advancePaid: true, needsReassignment: { $ne: true } }).lean();
   if (!doc) throw conflict('Trip can start only after the advance is paid and a driver is assigned.');
 
-  if (doc.pickupOtp && otp && String(otp).trim() !== String(doc.pickupOtp).trim()) {
+  if (requireOtp && (!doc.pickupOtp || !otp || String(otp).trim() !== String(doc.pickupOtp).trim())) {
     throw httpError(400, 'Invalid Boarding Verification PIN. Please ask the passenger for their 4-digit PIN.');
   }
 
@@ -936,10 +1185,28 @@ export async function completeTrip(isDemo: boolean, filter: Record<string, any>,
   const driverShare = s ? s.advanceAmount - s.platformFeeAmount - s.homestayCommissionAmount : 0;
   const updated = await transition(
     isDemo,
-    { _id: doc._id, status: { $in: ['TRIP_STARTED', 'CONFIRMED'] } },
+    { _id: doc._id, status: 'TRIP_STARTED' },
     { status: 'COMPLETED', completedAt: new Date(), driverSettlementStatus: driverShare > 0 ? 'PENDING' : 'NONE' },
-    'Only a confirmed or started trip can be completed.'
+    'Only a started trip can be completed.'
   );
+
+  // Auto-update driver location to destination landmark coordinates (Zero-permission drop-off tracking)
+  if (mongoose.Types.ObjectId.isValid(updated.assignedDriverUserId)) {
+    const dropLoc = resolveDestinationCoordinates(updated);
+    if (dropLoc) {
+      await userModel(isDemo).updateOne(
+        { _id: updated.assignedDriverUserId },
+        {
+          $set: {
+            location: dropLoc,
+            locationPoint: { type: 'Point', coordinates: [dropLoc.lng, dropLoc.lat] },
+            locationUpdatedAt: new Date(),
+          },
+        }
+      ).catch(() => {});
+    }
+  }
+
   await audit(actor, 'cab.complete', 'CabRequest', String(doc._id), { driverShareOfAdvance: driverShare }, isDemo, scope(updated));
   await pushOwner(isDemo, String(updated.propertyId), { title: 'Trip completed', body: `Trip ${updated.reference} is complete. Rate your driver.`, data: tripData(updated, 'TRIP_COMPLETED') });
   return updated;
@@ -954,7 +1221,7 @@ export async function autoSelectLowestQuotes(isDemo: boolean, extra: Record<stri
   const Cab = cabModel(isDemo);
   const cfg = await cfgOf(isDemo);
   const now = new Date();
-  const windowMin = cfg.quoteBiddingWindowMin ?? 5;
+  const windowMin = cfg.quoteBiddingWindowMin ?? ((cfg.quoteWindowHours || 4) * 60);
   const cutoff = new Date(now.getTime() - windowMin * 60000);
   const candidates: any[] = await Cab.find({
     ...extra,
@@ -973,21 +1240,64 @@ export async function autoSelectLowestQuotes(isDemo: boolean, extra: Record<stri
     const pendingQuotes = (doc.quotes || []).filter((q: any) => q.status === 'PENDING');
     if (!pendingQuotes.length) continue;
 
-    // Lowest quotedFare first; if tied, highest rating; if tied, earliest quote
-    pendingQuotes.sort((a: any, b: any) => {
-      if (a.quotedFare !== b.quotedFare) return a.quotedFare - b.quotedFare;
-      if ((b.driverRating || 0) !== (a.driverRating || 0)) return (b.driverRating || 0) - (a.driverRating || 0);
-      return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
-    });
+    // Discard quotes from drivers who are currently driving on an active ride (TRIP_STARTED)
+    const onRideTrips: any[] = await Cab.find({
+      status: 'TRIP_STARTED',
+      assignedDriverUserId: { $exists: true, $ne: null },
+    }).select('assignedDriverUserId').lean();
+    const busyDriverIds = new Set(onRideTrips.map((t: any) => String(t.assignedDriverUserId)));
 
-    const winningQuote = pendingQuotes[0];
+    // Section 2 Driver Selection Rules: Priority Tier (Own Drivers) vs Fallback Tier (Mountain Pool)
+    const last10 = (p: string) => String(p || '').replace(/\D/g, '').slice(-10);
+    const ownPhones = new Set<string>();
+    try {
+      const store = await tenantManager.load(String(doc.propertyId));
+      for (const d of store.drivers || []) {
+        if (d.active && d.phone) ownPhones.add(last10(d.phone));
+      }
+    } catch {}
+
+    const isOwn = (q: any) => Boolean(q.isOwnDriver || (q.driverPhone && ownPhones.has(last10(q.driverPhone))));
+    const ownQuotes = pendingQuotes.filter(isOwn);
+    const poolQuotes = pendingQuotes.filter((q: any) => !isOwn(q));
+
+    // Exclude busy drivers from candidate pool
+    const availableOwnQuotes = ownQuotes.filter((q: any) => !busyDriverIds.has(String(q.driverId)));
+    const availablePoolQuotes = poolQuotes.filter((q: any) => !busyDriverIds.has(String(q.driverId)));
+
+    let winningQuote: any = null;
+
+    if (availableOwnQuotes.length > 0) {
+      // Priority Tier: Own homestay drivers win automatically. If tied, higher rating wins, then earliest quote.
+      availableOwnQuotes.sort((a: any, b: any) => {
+        if (a.quotedFare !== b.quotedFare) return a.quotedFare - b.quotedFare;
+        const rA = Number(a.driverRating || 0);
+        const rB = Number(b.driverRating || 0);
+        if (rA !== rB) return rB - rA;
+        return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+      });
+      winningQuote = availableOwnQuotes[0];
+    } else if (availablePoolQuotes.length > 0) {
+      // Fallback Tier: Lowest pool quote wins. If tied, higher rating wins, then earliest quote.
+      availablePoolQuotes.sort((a: any, b: any) => {
+        if (a.quotedFare !== b.quotedFare) return a.quotedFare - b.quotedFare;
+        const rA = Number(a.driverRating || 0);
+        const rB = Number(b.driverRating || 0);
+        if (rA !== rB) return rB - rA;
+        return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+      });
+      winningQuote = availablePoolQuotes[0];
+    }
+
+    if (!winningQuote) continue;
+
     try {
       await ownerConfirmQuote(
         String(doc.propertyId),
         isDemo,
         doc.reference,
         String(winningQuote.driverId),
-        'system:auto-lowest-bid'
+        isOwn(winningQuote) ? 'system:priority-own-driver' : 'system:lowest-pool-bid'
       );
       await Cab.updateOne({ _id: doc._id }, { $set: { autoAccepted: true } });
       autoSelectedCount++;
@@ -1008,19 +1318,20 @@ export async function autoCompleteTrips(isDemo: boolean, extra: Record<string, a
   const now = Date.now();
   const candidates: any[] = await Cab.find({
     ...extra,
-    status: { $in: ['CONFIRMED', 'TRIP_STARTED'] },
+    status: 'TRIP_STARTED',
     advancePaid: true,
   }).limit(50).lean();
 
   let completedCount = 0;
+  const AUTO_COMPLETE_BUFFER_MS = 8 * HOUR_MS; // Auto-complete buffer: 8 hours after pickup
   for (const doc of candidates) {
     const tripTimestamp = istDateTime(doc.date, doc.time) ?? Number(doc.date);
-    if (tripTimestamp <= now) {
+    if (tripTimestamp + AUTO_COMPLETE_BUFFER_MS <= now) {
       try {
         const s = doc.financialSnapshot;
         const driverShare = s ? s.advanceAmount - s.platformFeeAmount - s.homestayCommissionAmount : 0;
         const updated = await Cab.findOneAndUpdate(
-          { _id: doc._id, status: { $in: ['CONFIRMED', 'TRIP_STARTED'] }, advancePaid: true },
+          { _id: doc._id, status: 'TRIP_STARTED', advancePaid: true },
           {
             $set: {
               status: 'COMPLETED',
@@ -1034,6 +1345,22 @@ export async function autoCompleteTrips(isDemo: boolean, extra: Record<string, a
         );
         if (updated) {
           completedCount++;
+          // Auto-update driver location to destination landmark coordinates
+          if (mongoose.Types.ObjectId.isValid(updated.assignedDriverUserId)) {
+            const dropLoc = resolveDestinationCoordinates(updated);
+            if (dropLoc) {
+              await userModel(isDemo).updateOne(
+                { _id: updated.assignedDriverUserId },
+                {
+          $set: {
+            location: dropLoc,
+            locationPoint: { type: 'Point', coordinates: [dropLoc.lng, dropLoc.lat] },
+            locationUpdatedAt: new Date(),
+          },
+        }
+              ).catch(() => {});
+            }
+          }
           await audit('system:auto-complete', 'cab.complete', 'CabRequest', String(doc._id), { driverShareOfAdvance: driverShare, autoCompleted: true }, isDemo, scope(updated));
           await pushOwner(isDemo, String(updated.propertyId), {
             title: 'Trip completed',
@@ -1067,7 +1394,7 @@ export async function checkBiddingFallbacks(isDemo: boolean, extra: Record<strin
     biddingFallbackAlertSentAt: null,
     $or: [
       { biddingClosesAt: { $lte: now } },
-      { createdAt: { $lte: cutoff10m } },
+      { biddingClosesAt: null, createdAt: { $lte: new Date(now.getTime() - 240 * 60000) } },
     ],
   }).limit(20).lean();
 
@@ -1323,7 +1650,7 @@ export async function adminRecordPayment(isDemo: boolean, id: string, body: any,
 async function applyAdvancePayment(isDemo: boolean, doc: any, p: { transactionId: string; method: string; amount: number; note: string; actor: string }) {
   const Model = cabModel(isDemo);
   if (await Model.exists({ advancePaymentId: p.transactionId })) throw conflict('This transaction ID is already recorded on another request.');
-  const pickupOtp = doc.pickupOtp || String(Math.floor(1000 + Math.random() * 9000));
+  const pickupOtp = doc.pickupOtp || String(crypto.randomInt(1000, 10000));
   let updated;
   try {
     updated = await transition(
@@ -1617,28 +1944,58 @@ export async function settlePayout(isDemo: boolean, id: string, utrNumber: unkno
   const Payout = payoutModel(isDemo);
   const payout: any = await Payout.findById(id).lean();
   if (!payout) throw httpError(404, 'Payout not found.');
+
+  const isDriver = payout.recipientType === 'DRIVER';
   // Verify every locked request still belongs to this payout and its total matches before paying.
-  const locked = await cabModel(isDemo).find({ hostPayoutId: String(payout._id) }).select('financialSnapshot.homestayCommissionAmount').lean();
-  const total = locked.reduce((a: number, d: any) => a + (d.financialSnapshot?.homestayCommissionAmount || 0), 0);
+  const locked = isDriver
+    ? await cabModel(isDemo).find({ driverPayoutId: String(payout._id) }).select('financialSnapshot.driverShareOfAdvance').lean()
+    : await cabModel(isDemo).find({ hostPayoutId: String(payout._id) }).select('financialSnapshot.homestayCommissionAmount').lean();
+
+  const total = isDriver
+    ? locked.reduce((a: number, d: any) => a + (d.financialSnapshot?.driverShareOfAdvance || 0), 0)
+    : locked.reduce((a: number, d: any) => a + (d.financialSnapshot?.homestayCommissionAmount || 0), 0);
+
   if (locked.length !== (payout.cabRequestIds || []).length || total !== payout.amount) {
-    throw conflict('Payout does not match its locked trips. Reject it and ask the homestay to request again.');
+    throw conflict('Payout does not match its locked trips. Reject it and ask to request again.');
   }
+
   const updated = await Payout.findOneAndUpdate(
     { _id: payout._id, status: 'PENDING' },
     { $set: { status: 'SETTLED', utrNumber: utr, notes: String(notes || '').slice(0, 500), settledAt: new Date(), decidedBy: actor } },
     { returnDocument: 'after' }
   );
-  if (!updated) throw conflict('Payout is not pending (already settled or rejected).');
-  await audit(actor, 'payout.settle', 'PayoutRequest', id, { utr, amount: payout.amount, tenantKey: payout.tenantId }, isDemo);
-  await pushOwner(isDemo, payout.tenantId, { title: 'Payout sent', body: `₹${payout.amount.toLocaleString('en-IN')} was paid out (UTR ${utr}).`, data: { type: 'PAYOUT_SETTLED' } });
-  return updated;
+  const settled = updated || await Payout.findById(payout._id).lean();
+  if (!settled || settled.status !== 'SETTLED' || settled.utrNumber !== utr) {
+    throw conflict('Payout is not pending (already settled or rejected).');
+  }
+
+  if (isDriver) {
+    await cabModel(isDemo).updateMany({ driverPayoutId: String(payout._id) }, { $set: { driverSettlementStatus: 'SETTLED' } });
+    await audit(actor, 'driver.payout.settle', 'PayoutRequest', id, { utr, amount: payout.amount, driverId: payout.driverId }, isDemo);
+    if (updated && payout.driverPhone) {
+      whatsapp(isDemo, payout.driverPhone, messages.driverPayoutSettledMessage(payout.amount, utr)).catch(() => {});
+    }
+  } else {
+    await audit(actor, 'payout.settle', 'PayoutRequest', id, { utr, amount: payout.amount, tenantKey: payout.tenantId }, isDemo);
+    if (updated) await pushOwner(isDemo, payout.tenantId, { title: 'Payout sent', body: `₹${payout.amount.toLocaleString('en-IN')} was paid out (UTR ${utr}).`, data: { type: 'PAYOUT_SETTLED' } });
+  }
+
+  return settled;
 }
 
 export async function rejectPayout(isDemo: boolean, id: string, reason: unknown, actor: string) {
   const why = String(reason || '').trim().slice(0, 300);
   if (!why) throw httpError(400, 'A reason is required.');
   const Payout = payoutModel(isDemo);
-  const unlock = () => cabModel(isDemo).updateMany({ hostPayoutId: String(id) }, { $set: { hostPayoutId: null } });
+  const payout: any = await Payout.findById(id).lean();
+  if (!payout) throw httpError(404, 'Payout not found.');
+
+  const isDriver = payout.recipientType === 'DRIVER';
+  const unlock = () =>
+    isDriver
+      ? cabModel(isDemo).updateMany({ driverPayoutId: String(id) }, { $set: { driverPayoutId: null } })
+      : cabModel(isDemo).updateMany({ hostPayoutId: String(id) }, { $set: { hostPayoutId: null } });
+
   const updated: any = await Payout.findOneAndUpdate(
     { _id: id, status: 'PENDING' },
     { $set: { status: 'REJECTED', rejectedReason: why, decidedBy: actor, settledAt: new Date() } },
@@ -1651,9 +2008,146 @@ export async function rejectPayout(isDemo: boolean, id: string, reason: unknown,
   }
   // Unlock its trips so they can be requested again (idempotent; payoutSummary/requestPayout also heal).
   await unlock();
-  await audit(actor, 'payout.reject', 'PayoutRequest', id, { reason: why, amount: updated.amount }, isDemo, { tenantId: String(updated.tenantId) });
-  await pushOwner(isDemo, updated.tenantId, { title: 'Payout request rejected', body: why, data: { type: 'PAYOUT_REJECTED' } });
+
+  if (isDriver) {
+    await audit(actor, 'driver.payout.reject', 'PayoutRequest', id, { reason: why, amount: updated.amount, driverId: updated.driverId }, isDemo);
+    if (updated.driverPhone) {
+      whatsapp(isDemo, updated.driverPhone, messages.driverPayoutRejectedMessage(updated.amount, why)).catch(() => {});
+    }
+  } else {
+    await audit(actor, 'payout.reject', 'PayoutRequest', id, { reason: why, amount: updated.amount }, isDemo, { tenantId: String(updated.tenantId) });
+    await pushOwner(isDemo, updated.tenantId, { title: 'Payout request rejected', body: why, data: { type: 'PAYOUT_REJECTED' } });
+  }
   return updated;
+}
+
+// ---------------------------------------------------------------------------
+// Driver Wallet & Payout Operations
+// ---------------------------------------------------------------------------
+const eligibleDriverFilter = (driverId: string) => ({
+  assignedDriverUserId: driverId,
+  status: 'COMPLETED',
+  advancePaid: true,
+  driverSettlementStatus: 'PENDING',
+  driverPayoutId: null,
+  'financialSnapshot.driverShareOfAdvance': { $gt: 0 },
+});
+
+export async function releaseStaleDriverLocks(isDemo: boolean, driverId: string) {
+  const Cab = cabModel(isDemo);
+  const lockedTo: string[] = (await Cab.distinct('driverPayoutId', { assignedDriverUserId: driverId, driverPayoutId: { $ne: null } })).map(String);
+  if (!lockedTo.length) return;
+  const live = await payoutModel(isDemo)
+    .find({ _id: { $in: lockedTo.filter((x) => mongoose.Types.ObjectId.isValid(x)) }, status: { $ne: 'REJECTED' } })
+    .select('_id')
+    .lean();
+  const liveIds = new Set(live.map((p: any) => String(p._id)));
+  const dead = lockedTo.filter((x) => !liveIds.has(x));
+  if (dead.length) await Cab.updateMany({ assignedDriverUserId: driverId, driverPayoutId: { $in: dead } }, { $set: { driverPayoutId: null } });
+}
+
+export async function driverPayoutSummary(driverId: string, isDemo: boolean) {
+  await releaseStaleDriverLocks(isDemo, driverId);
+  const [eligible, pending, history] = await Promise.all([
+    cabModel(isDemo).find(eligibleDriverFilter(driverId)).select('reference date time financialSnapshot.driverShareOfAdvance').lean(),
+    payoutModel(isDemo).findOne({ driverId, recipientType: 'DRIVER', status: 'PENDING' }).lean(),
+    payoutModel(isDemo).find({ driverId, recipientType: 'DRIVER' }).sort({ createdAt: -1 }).limit(10).lean(),
+  ]);
+  const available = eligible.reduce((a: number, d: any) => a + (d.financialSnapshot?.driverShareOfAdvance || 0), 0);
+  return {
+    available,
+    eligibleTrips: eligible.length,
+    trips: eligible.map((d: any) => ({
+      reference: d.reference,
+      date: d.date,
+      time: d.time,
+      amount: d.financialSnapshot?.driverShareOfAdvance || 0,
+    })),
+    pendingPayout: pending ? { id: String((pending as any)._id), amount: (pending as any).amount, requestedAt: (pending as any).requestedAt } : null,
+    history: history.map((p: any) => ({
+      id: String(p._id),
+      amount: p.amount,
+      status: p.status,
+      method: p.method,
+      upiId: p.upiId,
+      settlementReference: p.utrNumber,
+      requestedAt: p.requestedAt || p.createdAt,
+      settledAt: p.settledAt,
+      rejectionReason: p.rejectionReason,
+    })),
+  };
+}
+
+export async function requestDriverPayout(
+  driverId: string,
+  driver: { name?: string; phone?: string },
+  isDemo: boolean,
+  body: any,
+  actor: string
+) {
+  const { method, upiId, bank } = parsePayoutMethod(body);
+  const Cab = cabModel(isDemo);
+  const Payout = payoutModel(isDemo);
+  const cfg = await cfgOf(isDemo);
+  await releaseStaleDriverLocks(isDemo, driverId);
+
+  const pending: any = await Payout.findOne({ driverId, recipientType: 'DRIVER', status: 'PENDING' }).lean();
+  if (pending) {
+    const lockedCount = await Cab.countDocuments({ driverPayoutId: String(pending._id) });
+    const ageMs = Date.now() - new Date(pending.requestedAt).getTime();
+    if (lockedCount === 0 && ageMs > 60_000) {
+      await Payout.deleteOne({ _id: pending._id, status: 'PENDING' });
+    } else {
+      throw conflict('You already have a payout request pending.');
+    }
+  }
+
+  const eligible = await Cab.find(eligibleDriverFilter(driverId)).select('_id tripId reference financialSnapshot.driverShareOfAdvance').lean();
+  const amount = eligible.reduce((a: number, d: any) => a + (d.financialSnapshot?.driverShareOfAdvance || 0), 0);
+  const threshold = cfg.minDriverPayoutThreshold;
+  if (amount < threshold) {
+    throw httpError(400, `Minimum payout balance required is ₹${threshold}. Your current balance is ₹${amount}.`);
+  }
+  if (body.expectedAmount !== undefined && Number(body.expectedAmount) !== amount) {
+    throw conflict(`Your balance changed to ₹${amount.toLocaleString('en-IN')}. Please review and request again.`);
+  }
+
+  const payoutId = new mongoose.Types.ObjectId();
+  try {
+    await Payout.create({
+      _id: payoutId,
+      recipientType: 'DRIVER',
+      driverId,
+      driverName: driver.name || 'Driver',
+      driverPhone: driver.phone || '',
+      homestayName: 'StayRide Driver Wallet',
+      ownerName: driver.name || 'Driver',
+      ownerPhone: driver.phone || '',
+      amount,
+      cabRequestIds: eligible.map((d: any) => String(d._id)),
+      tripIds: eligible.map((d: any) => d.tripId).filter((x: any) => typeof x === 'number'),
+      method,
+      upiId: method === 'UPI' ? upiId : undefined,
+      bank: method === 'BANK_TRANSFER' ? bank : undefined,
+      status: 'PENDING',
+      isDemo,
+      requestedAt: new Date(),
+    });
+  } catch (err: any) {
+    if (err?.code === 11000) throw conflict('You already have a payout request pending.');
+    throw err;
+  }
+
+  const ids = eligible.map((d: any) => d._id);
+  const lock = await Cab.updateMany({ _id: { $in: ids }, driverPayoutId: null }, { $set: { driverPayoutId: String(payoutId) } });
+  if (lock.modifiedCount !== ids.length) {
+    await Cab.updateMany({ driverPayoutId: String(payoutId) }, { $set: { driverPayoutId: null } });
+    await Payout.deleteOne({ _id: payoutId, status: 'PENDING' });
+    throw conflict('Your balance changed. Please try again.');
+  }
+
+  await audit(actor, 'driver.payout.request', 'PayoutRequest', String(payoutId), { driverId, amount, count: ids.length }, isDemo);
+  return Payout.findById(payoutId).lean();
 }
 
 // ---------------------------------------------------------------------------

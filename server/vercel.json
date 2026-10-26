@@ -1,5 +1,15 @@
 {
   "version": 2,
+  "crons": [
+    {
+      "path": "/api/v1/stayride/cron/cab-cycle",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/v1/stayride/cron/ical-sync",
+      "schedule": "*/15 * * * *"
+    }
+  ],
   "rewrites": [
     {
       "source": "/(.*)",

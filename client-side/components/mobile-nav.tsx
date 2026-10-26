@@ -107,11 +107,11 @@ export function MobileNav({
               Check Dates
             </Link>
             <Link
-              href="/cab-request"
+              href="/join-driver"
               className="flex min-h-12 w-full items-center justify-center gap-1.5 rounded-xl border border-amber-600/30 bg-amber-50 px-3 text-label-md font-semibold text-amber-900 shadow-sm"
             >
               <Icon name="local_taxi" className="text-[18px] text-amber-700" />
-              Book a Cab
+              Cab Join
             </Link>
           </div>
         </div>

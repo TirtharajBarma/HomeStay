@@ -16,9 +16,14 @@ export interface IDriverQuote {
   driverName: string;
   driverPhone: string;
   driverVehicle: string;
+  driverVehiclePlate?: string;
+  driverVehicleModel?: string;
   driverRating: number;
   quotedFare: number;
   notes?: string;
+  isOwnDriver?: boolean;
+  driverCategory?: "INDIVIDUAL" | "UNION";
+  unionName?: string;
   status: "PENDING" | "ACCEPTED" | "REJECTED" | "EXPIRED";
   createdAt: Date;
   // Owner's counter-offer on this quote; the driver accepts it (trip confirmed) or keeps his fare
@@ -104,7 +109,10 @@ export interface ICabRequest extends Document {
   paymentRecordedAt?: Date;
   paymentNote?: string;
   assignedDriverUserId?: string | null;
+  assignedDriverCategory?: "INDIVIDUAL" | "UNION";
+  assignedDriverUnionName?: string;
   hostPayoutId?: string | null; // PayoutRequest that covers this request's homestay commission
+  driverPayoutId?: string | null; // PayoutRequest that covers this request's driver wallet share
   refundStatus: "NONE" | "PENDING" | "REFUNDED";
   refundReference?: string;
   refundedAt?: Date | null;
@@ -160,9 +168,14 @@ const DriverQuoteSchema = new Schema<IDriverQuote>(
     driverName: { type: String, required: true },
     driverPhone: { type: String, required: true },
     driverVehicle: { type: String, required: true },
+    driverVehiclePlate: { type: String, default: "" },
+    driverVehicleModel: { type: String, default: "" },
     driverRating: { type: Number, default: 4.8 },
     quotedFare: { type: Number, required: true },
     notes: { type: String, default: "" },
+    isOwnDriver: { type: Boolean, default: false },
+    driverCategory: { type: String, enum: ["INDIVIDUAL", "UNION"], default: "INDIVIDUAL" },
+    unionName: { type: String, default: "" },
     status: {
       type: String,
       enum: ["PENDING", "ACCEPTED", "REJECTED", "EXPIRED"],
@@ -234,7 +247,7 @@ const CabRequestSchema = new Schema<ICabRequest>(
       plate: { type: String, default: "" },
     },
     quotes: { type: [DriverQuoteSchema], default: [] },
-    dispatched: { type: Boolean, default: true },
+    dispatched: { type: Boolean, default: false },
     advanceDueAt: { type: Date, default: null },
     ownFleet: { type: Boolean, default: false },
     ownDriverId: { type: Number, default: null },
@@ -287,7 +300,10 @@ const CabRequestSchema = new Schema<ICabRequest>(
     paymentRecordedAt: { type: Date, default: null },
     paymentNote: { type: String, default: "" },
     assignedDriverUserId: { type: String, default: null, index: true },
+    assignedDriverCategory: { type: String, enum: ["INDIVIDUAL", "UNION"], default: "INDIVIDUAL" },
+    assignedDriverUnionName: { type: String, default: "" },
     hostPayoutId: { type: String, default: null, index: true },
+    driverPayoutId: { type: String, default: null, index: true },
     refundStatus: { type: String, enum: ["NONE", "PENDING", "REFUNDED"], default: "NONE" },
     refundReference: { type: String, default: "" },
     refundedAt: { type: Date, default: null },

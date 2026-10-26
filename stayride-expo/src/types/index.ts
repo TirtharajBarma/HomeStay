@@ -147,6 +147,8 @@ export interface CabTrip {
   source?: 'MANUAL_OWNER' | 'NEARBY_BROADCAST' | 'GUEST_WEB_LINK' | 'ADMIN_DISPATCH';
   assignedDriverId?: number | string;
   assignedDriverName?: string;
+  assignedDriverCategory?: 'INDIVIDUAL' | 'UNION';
+  assignedDriverUnionName?: string;
   // Owner already rated the driver of this completed platform trip
   driverRated?: boolean;
   // Assigned driver was removed after the advance was paid; StayRide is finding a new one

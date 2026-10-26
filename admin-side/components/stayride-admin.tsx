@@ -929,7 +929,19 @@ export function DriversTab({ demo }: TabProps) {
                 {items.map((d) => (
                   <tr key={rid(d)} className="hover:bg-slate-900/40">
                     <td className="p-3">
-                      <p className="font-semibold text-white">{d.name} {d.deletedAt && <Badge tone="red">deleted</Badge>}</p>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <p className="font-semibold text-white">{d.name}</p>
+                        {d.deletedAt && <Badge tone="red">deleted</Badge>}
+                        {d.driverCategory === "UNION" ? (
+                          <span className="rounded bg-blue-900/60 text-blue-300 border border-blue-700/50 px-1.5 py-0.2 text-[10px] font-bold">
+                            Union: {d.unionName || "Syndicate"}
+                          </span>
+                        ) : (
+                          <span className="rounded bg-slate-800 text-slate-400 border border-slate-700 px-1.5 py-0.2 text-[10px] font-medium">
+                            Independent
+                          </span>
+                        )}
+                      </div>
                       <p className="text-slate-500">{d.email} • {d.phone || "—"}</p>
                     </td>
                     <td className="p-3 text-slate-300">
@@ -1057,7 +1069,7 @@ function CabRequestCard({ c, demo, onChanged }: { c: Any; demo: boolean; onChang
   const canAssign = ((open || c.status === "AWAITING_ADVANCE_PAYMENT") && !c.advancePaid) || !!c.needsReassignment;
   const canPay = c.status === "AWAITING_ADVANCE_PAYMENT" && !c.advancePaid;
   const canVoid = c.status === "CONFIRMED" && c.advancePaid && !c.hostPayoutId;
-  const canCancel = !["TRIP_STARTED", "COMPLETED", "CANCELLED"].includes(c.status) && !c.hostPayoutId;
+  const canCancel = !["COMPLETED", "CANCELLED"].includes(c.status) && !c.hostPayoutId;
   const canRefund = c.status === "CANCELLED" && c.refundStatus === "PENDING";
   const canStart = c.status === "CONFIRMED" && c.advancePaid && !c.needsReassignment;
   const canComplete = c.status === "TRIP_STARTED";
@@ -1376,32 +1388,67 @@ function payoutDest(p: Any) {
 }
 
 export function PayoutsTab({ demo }: TabProps) {
+  const [target, setTarget] = useState<"HOMESTAY" | "DRIVER">("HOMESTAY");
   const [status, setStatus] = useState("PENDING");
   const [page, setPage] = useState(0);
+
+  const endpoint = target === "HOMESTAY" ? "/host-payouts" : "/driver-payouts";
+
   const { data, error, loading, reload, updatedAt } = useLoad(
-    () => adminApi("/host-payouts", { demo, query: { status, ...pq(page) } }).then(toPage),
-    [demo, status, page],
+    () => adminApi(endpoint, { demo, query: { status, ...pq(page) } }).then(toPage),
+    [demo, target, status, page],
     true
   );
   const items = data?.items || [];
 
   function settle(p: Any) {
     const dest = payoutDest(p);
-    const utrNumber = ask(`UTR for ${inr(p.amount)} to ${p.ownerName} (${dest.text}):`);
+    const recipient = target === "HOMESTAY" ? (p.homestayName || p.ownerName) : (p.driverName || "Driver");
+    const utrNumber = ask(`UTR for ${inr(p.amount)} to ${recipient} (${dest.text}):`);
     if (!utrNumber) return;
     const notes = window.prompt("Notes (optional):") || "";
-    if (window.confirm(`Mark ${inr(p.amount)} to ${p.homestayName} as settled with UTR ${utrNumber}?`))
-      act(() => adminApi(`/host-payouts/${rid(p)}/settle`, { method: "POST", body: { utrNumber, notes }, demo }), reload);
+    if (window.confirm(`Mark ${inr(p.amount)} to ${recipient} as settled with UTR ${utrNumber}?`)) {
+      const settleEndpoint = target === "HOMESTAY" ? `/host-payouts/${rid(p)}/settle` : `/driver-payouts/${rid(p)}/settle`;
+      act(() => adminApi(settleEndpoint, { method: "POST", body: { utrNumber, notes }, demo }), reload);
+    }
   }
+
   function reject(p: Any) {
-    const reason = ask(`Reason for rejecting ${inr(p.amount)} payout to ${p.homestayName}:`);
-    if (reason && window.confirm(`Reject this payout? Its trips can be requested again.`))
-      act(() => adminApi(`/host-payouts/${rid(p)}/reject`, { method: "POST", body: { reason }, demo }), reload);
+    const recipient = target === "HOMESTAY" ? (p.homestayName || p.ownerName) : (p.driverName || "Driver");
+    const reason = ask(`Reason for rejecting ${inr(p.amount)} payout to ${recipient}:`);
+    if (reason && window.confirm(`Reject this payout? Its trips can be requested again.`)) {
+      const rejectEndpoint = target === "HOMESTAY" ? `/host-payouts/${rid(p)}/reject` : `/driver-payouts/${rid(p)}/reject`;
+      act(() => adminApi(rejectEndpoint, { method: "POST", body: { reason }, demo }), reload);
+    }
   }
 
   return (
     <Panel
-      title="Homestay commission payouts"
+      title={
+        <div className="flex flex-wrap items-center gap-3">
+          <span>{target === "HOMESTAY" ? "Homestay Commission Payouts" : "Driver Wallet UPI Payouts"}</span>
+          <div className="flex items-center gap-1 p-0.5 bg-slate-900 rounded-lg border border-slate-800">
+            <button
+              type="button"
+              onClick={() => { setTarget("HOMESTAY"); setPage(0); }}
+              className={`px-2.5 py-0.5 text-[11px] font-semibold rounded transition-all cursor-pointer ${
+                target === "HOMESTAY" ? "bg-emerald-600 text-white shadow-xs" : "text-slate-400 hover:text-white"
+              }`}
+            >
+              Homestay Payouts
+            </button>
+            <button
+              type="button"
+              onClick={() => { setTarget("DRIVER"); setPage(0); }}
+              className={`px-2.5 py-0.5 text-[11px] font-semibold rounded transition-all cursor-pointer ${
+                target === "DRIVER" ? "bg-emerald-600 text-white shadow-xs" : "text-slate-400 hover:text-white"
+              }`}
+            >
+              Driver Payouts
+            </button>
+          </div>
+        </div>
+      }
       onRefresh={reload}
       error={error}
       loading={loading}
@@ -1421,7 +1468,7 @@ export function PayoutsTab({ demo }: TabProps) {
             <table className="w-full text-left text-xs">
               <thead className="border-b border-slate-800 bg-slate-900/60 text-slate-400 font-semibold uppercase tracking-wider">
                 <tr>
-                  <th className="p-3">Homestay</th>
+                  <th className="p-3">{target === "HOMESTAY" ? "Homestay" : "Driver"}</th>
                   <th className="p-3">Amount</th>
                   <th className="p-3">Trips</th>
                   <th className="p-3">Pay to</th>
@@ -1436,8 +1483,17 @@ export function PayoutsTab({ demo }: TabProps) {
                   return (
                     <tr key={rid(p)} className="hover:bg-slate-900/40">
                       <td className="p-3">
-                        <p className="font-semibold text-white">{p.homestayName}</p>
-                        <p className="text-slate-500">{p.ownerName} • {p.ownerPhone || "—"} • {p.tenantId}</p>
+                        {target === "HOMESTAY" ? (
+                          <>
+                            <p className="font-semibold text-white">{p.homestayName}</p>
+                            <p className="text-slate-500">{p.ownerName} • {p.ownerPhone || "—"} • {p.tenantId}</p>
+                          </>
+                        ) : (
+                          <>
+                            <p className="font-semibold text-white">{p.driverName || "Driver"}</p>
+                            <p className="text-slate-500">{p.driverPhone || "—"} • ID: {p.driverId || "—"}</p>
+                          </>
+                        )}
                       </td>
                       <td className="p-3 font-mono font-bold text-emerald-400">{inr(p.amount)}</td>
                       <td className="p-3 text-slate-300">{Array.isArray(p.cabRequestIds) ? p.cabRequestIds.length : "—"}</td>
@@ -1477,42 +1533,60 @@ export function PayoutsTab({ demo }: TabProps) {
 // 7. Platform settings
 // ---------------------------------------------------------------------------
 /** Mirrors the server's CommissionService.split so unsaved values can be previewed. */
-function localSplit(fare: number, pf: number, hc: number, adv: number, min: number) {
+function localSplit(fare: number, totalComm: number, adminPct: number, homePct: number, adv: number, min: number) {
   const f = Math.round(fare);
-  const pfA = Math.round((f * pf) / 100);
-  const hcA = Math.round((f * hc) / 100);
-  const advance = Math.min(f, Math.max(min, Math.round((f * adv) / 100), pfA + hcA));
-  return { f, pfA, hcA, driver: f - pfA - hcA, advance, cash: f - advance, driverShare: advance - pfA - hcA };
+  const totalCommAmt = Math.round((f * totalComm) / 100);
+  const pfA = Math.round((totalCommAmt * adminPct) / 100);
+  const hcA = totalCommAmt - pfA;
+  const advance = Math.min(f, Math.max(min, Math.round((f * adv) / 100), totalCommAmt));
+  const driverExcess = Math.max(0, advance - totalCommAmt);
+  const cash = f - advance;
+  const driverTotal = cash + driverExcess;
+  return { f, totalCommAmt, pfA, hcA, driver: driverTotal, advance, cash, driverShare: driverExcess };
 }
 
 export function SettingsTab({ demo }: TabProps) {
-  // The demo toggle selects which database's settings are read and written.
   const { data, error, loading, reload, updatedAt } = useLoad(() => adminApi("/commission/settings", { demo }).then((r) => r.data as Any), [demo], true);
-  const [pf, setPf] = useState("");
-  const [hc, setHc] = useState("");
+  const [totalComm, setTotalComm] = useState("");
+  const [adminShare, setAdminShare] = useState("");
+  const [homeShare, setHomeShare] = useState("");
   const [adv, setAdv] = useState("");
   const [min, setMin] = useState("");
+  const [quoteWindow, setQuoteWindow] = useState("");
+  const [minThreshold, setMinThreshold] = useState("");
+  const [ownFleetComm, setOwnFleetComm] = useState("");
+  const [ownFleetMin, setOwnFleetMin] = useState("");
   const [features, setFeatures] = useState<Any>({});
   const [reason, setReason] = useState("");
-  const [fare, setFare] = useState("");
+  const [fare, setFare] = useState("3000");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!data) return;
-    setPf(String(data.globalPlatformFeePercent ?? ""));
-    setHc(String(data.globalHomestayCommissionPercent ?? ""));
-    setAdv(String(data.defaultAdvancePercent ?? ""));
-    setMin(String(data.minAdvanceAmount ?? ""));
+    setTotalComm(String(data.totalCommissionPercent ?? 10));
+    setAdminShare(String(data.adminSharePercentOfCommission ?? 50));
+    setHomeShare(String(data.homestaySharePercentOfCommission ?? 50));
+    setAdv(String(data.defaultAdvancePercent ?? 15));
+    setMin(String(data.minAdvanceAmount ?? 500));
+    setQuoteWindow(String(data.quoteWindowHours ?? 4));
+    setMinThreshold(String(data.minDriverPayoutThreshold ?? 100));
+    setOwnFleetComm(String(data.ownFleetCommissionPercent ?? 0));
+    setOwnFleetMin(String(data.ownFleetMinFee ?? 0));
     setFeatures(data.features || {});
   }, [data]);
 
   const dirty =
     !!data &&
     (reason !== "" ||
-      pf !== String(data.globalPlatformFeePercent ?? "") ||
-      hc !== String(data.globalHomestayCommissionPercent ?? "") ||
-      adv !== String(data.defaultAdvancePercent ?? "") ||
-      min !== String(data.minAdvanceAmount ?? "") ||
+      totalComm !== String(data.totalCommissionPercent ?? 10) ||
+      adminShare !== String(data.adminSharePercentOfCommission ?? 50) ||
+      homeShare !== String(data.homestaySharePercentOfCommission ?? 50) ||
+      adv !== String(data.defaultAdvancePercent ?? 15) ||
+      min !== String(data.minAdvanceAmount ?? 500) ||
+      quoteWindow !== String(data.quoteWindowHours ?? 4) ||
+      minThreshold !== String(data.minDriverPayoutThreshold ?? 100) ||
+      ownFleetComm !== String(data.ownFleetCommissionPercent ?? 0) ||
+      ownFleetMin !== String(data.ownFleetMinFee ?? 0) ||
       JSON.stringify(features) !== JSON.stringify(data.features || {}));
   useEditLock(dirty);
 
@@ -1521,18 +1595,29 @@ export function SettingsTab({ demo }: TabProps) {
   async function save(e: React.FormEvent) {
     e.preventDefault();
     if (!reason.trim()) return alert("A change reason is required.");
-    if ([pf, hc, adv, min].some((v) => v === "")) return alert("All rates are required.");
-    if (!window.confirm(`Apply to the ${which}: platform fee ${pf}%, homestay commission ${hc}%, advance ${adv}%, min advance ₹${min} and the feature switches, for all new requests?`)) return;
+    if ([totalComm, adminShare, homeShare, adv, min].some((v) => v === "")) return alert("All commission & advance rates are required.");
+    const tc = Number(totalComm);
+    const ap = Number(adminShare);
+    const hp = Number(homeShare);
+    if (ap + hp !== 100) return alert("StayRide Share % and Homestay Share % of the commission must total exactly 100%.");
+    if (!window.confirm(`Apply to the ${which}: Total commission ${totalComm}%, StayRide split ${adminShare}%, Homestay split ${homeShare}%, advance ${adv}%, min advance ₹${min}, own fleet ${ownFleetComm}% with ₹${ownFleetMin} minimum fee?`)) return;
     setSaving(true);
     await act(
       () => adminApi("/commission/settings", {
         method: "PUT",
         demo,
         body: {
-          globalPlatformFeePercent: Number(pf),
-          globalHomestayCommissionPercent: Number(hc),
+          totalCommissionPercent: tc,
+          adminSharePercentOfCommission: ap,
+          homestaySharePercentOfCommission: hp,
+          globalPlatformFeePercent: Math.round((tc * (ap / 100)) * 10) / 10,
+          globalHomestayCommissionPercent: Math.round((tc * (hp / 100)) * 10) / 10,
           defaultAdvancePercent: Number(adv),
           minAdvanceAmount: Number(min),
+          quoteWindowHours: Number(quoteWindow),
+          minDriverPayoutThreshold: Number(minThreshold),
+          ownFleetCommissionPercent: Number(ownFleetComm || 0),
+          ownFleetMinFee: Number(ownFleetMin || 0),
           features,
           changeReason: reason.trim(),
         },
@@ -1543,13 +1628,15 @@ export function SettingsTab({ demo }: TabProps) {
   }
 
   const setFeature = (k: string, field: "enabled" | "defaultOn", v: boolean) => setFeatures((f: Any) => ({ ...f, [k]: { ...f[k], [field]: v } }));
-  const sample = Number(fare) > 0 && [pf, hc, adv, min].every((v) => v !== "") ? localSplit(Number(fare), Number(pf), Number(hc), Number(adv), Number(min)) : null;
+  const sample = Number(fare) > 0 && [totalComm, adminShare, homeShare, adv, min].every((v) => v !== "")
+    ? localSplit(Number(fare), Number(totalComm), Number(adminShare), Number(homeShare), Number(adv), Number(min))
+    : null;
 
   return (
     <>
     <Panel
       title={<>Platform settings {demo ? <Badge tone="amber">DEMO DATASET</Badge> : <Badge tone="green">PRODUCTION</Badge>}</>}
-      subtitle="Global commission rates, minimum advance and feature switches."
+      subtitle="Dynamic commission architecture, advance floors, 4-hour bidding windows, and driver wallet thresholds."
       onRefresh={reload}
       error={error}
       loading={loading}
@@ -1558,17 +1645,82 @@ export function SettingsTab({ demo }: TabProps) {
       <div className={`rounded-xl border px-4 py-3 text-xs font-bold ${demo ? "border-amber-600/50 bg-amber-950/50 text-amber-300" : "border-emerald-700/50 bg-emerald-950/40 text-emerald-300"}`}>
         {demo
           ? "You are editing the DEMO (test) dataset settings. Production homestays are not affected. Untick “Demo dataset” to edit production."
-          : "You are editing PRODUCTION settings. Changes apply to all real homestays' new requests."}
+          : "You are editing PRODUCTION settings. Changes apply dynamically across all new cab requests."}
       </div>
       {data && (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <form onSubmit={save} className="space-y-4 text-xs">
-            <div className="grid grid-cols-2 gap-3">
-              <label className="text-slate-300">Platform fee %<input className={`${input} mt-1 w-full`} type="number" step="0.5" min="0" required value={pf} onChange={(e) => setPf(e.target.value)} /></label>
-              <label className="text-slate-300">Homestay commission %<input className={`${input} mt-1 w-full`} type="number" step="0.5" min="0" required value={hc} onChange={(e) => setHc(e.target.value)} /></label>
-              <label className="text-slate-300">Advance %<input className={`${input} mt-1 w-full`} type="number" step="0.5" min="0" required value={adv} onChange={(e) => setAdv(e.target.value)} /></label>
-              <label className="text-slate-300">Minimum advance ₹<input className={`${input} mt-1 w-full`} type="number" min="0" required value={min} onChange={(e) => setMin(e.target.value)} /></label>
+            <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-3 space-y-2.5">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400 block">
+                1. Commission Architecture (Deducted from Advance)
+              </span>
+              <div className="grid grid-cols-3 gap-2">
+                <label className="text-slate-300">
+                  Total Commission %
+                  <input className={`${input} mt-1 w-full`} type="number" step="0.5" min="0" max="30" required value={totalComm} onChange={(e) => setTotalComm(e.target.value)} />
+                </label>
+                <label className="text-slate-300">
+                  StayRide Share %
+                  <input className={`${input} mt-1 w-full`} type="number" step="1" min="0" max="100" required value={adminShare} onChange={(e) => setAdminShare(e.target.value)} />
+                </label>
+                <label className="text-slate-300">
+                  Homestay Share %
+                  <input className={`${input} mt-1 w-full`} type="number" step="1" min="0" max="100" required value={homeShare} onChange={(e) => setHomeShare(e.target.value)} />
+                </label>
+              </div>
             </div>
+
+            <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-3 space-y-2.5">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-blue-400 block">
+                2. Guest Advance & Booking Policy
+              </span>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="text-slate-300">
+                  Guest Advance %
+                  <input className={`${input} mt-1 w-full`} type="number" step="0.5" min="0" required value={adv} onChange={(e) => setAdv(e.target.value)} />
+                </label>
+                <label className="text-slate-300">
+                  Minimum Advance Floor ₹
+                  <input className={`${input} mt-1 w-full`} type="number" min="0" required value={min} onChange={(e) => setMin(e.target.value)} />
+                </label>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-3 space-y-2.5">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-amber-400 block">
+                3. Operations, Syndicates & Driver Wallet
+              </span>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="text-slate-300">
+                  Quote Window (Hrs)
+                  <input className={`${input} mt-1 w-full`} type="number" step="0.5" min="0.5" required value={quoteWindow} onChange={(e) => setQuoteWindow(e.target.value)} />
+                </label>
+                <label className="text-slate-300">
+                  Min Driver Payout ₹
+                  <input className={`${input} mt-1 w-full`} type="number" min="10" required value={minThreshold} onChange={(e) => setMinThreshold(e.target.value)} />
+                </label>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-3 space-y-2.5">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-purple-400 block">
+                4. Homestay In-House Fleet (&ldquo;My Drivers&rdquo;) Policy
+              </span>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="text-slate-300">
+                  Own Fleet Commission % (Default 0%)
+                  <input className={`${input} mt-1 w-full`} type="number" step="0.5" min="0" max="30" value={ownFleetComm} onChange={(e) => setOwnFleetComm(e.target.value)} />
+                </label>
+                <label className="text-slate-300">
+                  Own Fleet Minimum Fee ₹ (Default ₹0)
+                  <input className={`${input} mt-1 w-full`} type="number" min="0" max="5000" value={ownFleetMin} onChange={(e) => setOwnFleetMin(e.target.value)} />
+                </label>
+              </div>
+              <p className="text-[10px] text-slate-400">
+                Encourages homestays to bring their own cars. Set to 0% to allow homestays to keep 100% of their car&apos;s earnings.
+              </p>
+            </div>
+
             <table className="w-full text-left">
               <thead className="text-slate-400">
                 <tr><th className="p-1">Feature</th><th className="p-1">Enabled globally</th><th className="p-1">On by default for homestays</th></tr>
@@ -1589,32 +1741,69 @@ export function SettingsTab({ demo }: TabProps) {
                 ))}
               </tbody>
             </table>
+
             <label className="block text-slate-300">
               Change reason *
-              <input className={`${input} mt-1 w-full`} required value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why are these settings changing?" />
+              <input className={`${input} mt-1 w-full`} required value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Adjusted commission split to 50/50 and verified 4h window" />
             </label>
-            <button className={demo ? "rounded-lg bg-amber-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-amber-500 disabled:opacity-50" : btn.primary} disabled={saving}>
-              {saving ? "Saving..." : `Save ${demo ? "DEMO" : "PRODUCTION"} settings`}
+            <button className={demo ? "rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-500 disabled:opacity-50 cursor-pointer" : btn.primary} disabled={saving}>
+              {saving ? "Saving Settings..." : `Save ${demo ? "DEMO" : "PRODUCTION"} Settings`}
             </button>
             <p className="text-[11px] text-slate-500">
               Last change by {data.updatedBy || "—"} • {data.changeReason || "—"} • effective {dt(data.effectiveFrom)}
             </p>
           </form>
+
           <div className="space-y-3 text-xs">
             <label className="block text-slate-300">
-              Sample fare ₹
-              <input className={`${input} mt-1 w-full`} type="number" min="1" value={fare} onChange={(e) => setFare(e.target.value)} placeholder="Enter a fare to preview" />
+              Interactive Math Simulation Fare ₹
+              <input className={`${input} mt-1 w-full font-mono text-sm font-bold text-emerald-400`} type="number" min="1" value={fare} onChange={(e) => setFare(e.target.value)} placeholder="e.g. 3000" />
             </label>
             {sample ? (
-              <div className="rounded-xl border border-slate-800 bg-slate-900 p-3 space-y-1">
-                <p className="text-[11px] text-slate-500">Preview with the values on the left (unsaved until you save).</p>
-                <Money label="Fare" value={inr(sample.f)} />
-                <Money label={`Platform fee (${pf}%)`} value={inr(sample.pfA)} />
-                <Money label={`Homestay commission (${hc}%)`} value={inr(sample.hcA)} />
-                <Money label="Driver share" value={inr(sample.driver)} />
-                <Money label="Guest advance" value={inr(sample.advance)} />
-                <Money label="Cash to driver" value={inr(sample.cash)} />
-                <Money label="Driver share of advance" value={inr(sample.driverShare)} />
+              <div className="rounded-xl border border-slate-800 bg-slate-900 p-4 space-y-2.5">
+                <div className="flex justify-between items-center pb-2 border-b border-slate-800">
+                  <span className="font-bold text-white text-sm">Winning Driver Fare (All-Inclusive):</span>
+                  <span className="font-mono font-black text-emerald-400 text-base">{inr(sample.f)}</span>
+                </div>
+
+                <div className="space-y-1.5 text-slate-300">
+                  <div className="flex justify-between items-center text-blue-300">
+                    <span>Guest Advance Paid Online:</span>
+                    <span className="font-mono font-bold">{inr(sample.advance)}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-slate-400">
+                    <span>Total Commission ({totalComm}%):</span>
+                    <span className="font-mono font-semibold text-red-400">-{inr(sample.totalCommAmt)}</span>
+                  </div>
+                  <div className="pl-3 border-l-2 border-slate-700 space-y-1 text-[11px] text-slate-400">
+                    <div className="flex justify-between items-center">
+                      <span>• StayRide Share ({adminShare}%):</span>
+                      <span className="font-mono text-emerald-400">{inr(sample.pfA)}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span>• Homestay Host Wallet ({homeShare}%):</span>
+                      <span className="font-mono text-emerald-400">{inr(sample.hcA)}</span>
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center text-amber-300 pt-1">
+                    <span>Cash Driver Collects at Drop-Off:</span>
+                    <span className="font-mono font-bold">{inr(sample.cash)}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-emerald-400">
+                    <span>Excess Advance into Driver Wallet:</span>
+                    <span className="font-mono font-bold">+{inr(sample.driverShare)}</span>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-slate-800 flex justify-between items-center">
+                  <span className="font-extrabold text-white">Driver Total Net In-Hand:</span>
+                  <span className="font-mono font-black text-emerald-400 text-base">
+                    {inr(sample.driver)} ({100 - Number(totalComm)}%)
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-500 pt-1 leading-tight">
+                  Zero customer surcharge. Math is strictly zero-sum: {inr(sample.cash)} (cash) + {inr(sample.driverShare)} (wallet) + {inr(sample.totalCommAmt)} (comm) = {inr(sample.f)}.
+                </p>
               </div>
             ) : (
               <Empty>Enter a sample fare to preview the split.</Empty>
@@ -1627,6 +1816,7 @@ export function SettingsTab({ demo }: TabProps) {
     </>
   );
 }
+
 
 // Operational settings (server: services/platform-config.ts). The server validates and clamps every
 // value, and the apps and the guest page read them from the server, so nothing here is hard-coded there.
@@ -1644,6 +1834,8 @@ const NUM_FIELDS: { key: string; label: string; hint: string }[] = [
   { key: "guestLinkDays", label: "Guest link validity (days)", hint: "" },
   { key: "maxOpenRequestsPerPhone", label: "Open requests per guest phone", hint: "Abuse limit on the public guest page." },
   { key: "maxFare", label: "Maximum fare ₹", hint: "Sanity cap on any quote or assignment." },
+  { key: "hillSurchargeMultiplier", label: "Mountain Terrain Surcharge Multiplier", hint: "e.g. 1.15 for 15% surcharge on steep mountain routes." },
+  { key: "hillSurchargeDistanceKm", label: "Mountain Surcharge Threshold (km)", hint: "Distance in km beyond which mountain terrain surcharge kicks in (default 40 km)." },
   { key: "quoteValidityHours", label: "Driver quote valid for (hours)", hint: "After this a quote expires and the driver can quote again. 0 = never." },
   { key: "quoteBiddingWindowMin", label: "Driver bidding window (minutes)", hint: "Wait time for driver bids before auto-accepting lowest quote. 0 = instant on first bid." },
 ];

@@ -7,10 +7,17 @@ import crypto from 'node:crypto';
 const API = 'https://api.razorpay.com/v1/payment_links';
 const TIMEOUT_MS = 8000;
 
+const configured = (value: string | undefined) => {
+  const normalized = value?.trim() || '';
+  return Boolean(normalized && !/^(none|disabled|replace-with-|your[-_])/i.test(normalized));
+};
+
 export const gatewayEnabled = () =>
   process.env.NODE_ENV !== 'test' &&
   process.env.PAYMENT_GATEWAY_MODE === 'razorpay' &&
-  Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET);
+  configured(process.env.RAZORPAY_KEY_ID) &&
+  configured(process.env.RAZORPAY_KEY_SECRET) &&
+  configured(process.env.RAZORPAY_WEBHOOK_SECRET);
 
 export interface PaymentLinkInput {
   amountRupees: number;

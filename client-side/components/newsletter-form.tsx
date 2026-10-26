@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 
 import { hosts } from "@/lib/content";
 import { API_ENDPOINTS } from "@/lib/api-config";
+import { getRecaptchaToken } from "@/lib/recaptcha";
 
 import { Icon } from "./icon";
 
@@ -14,7 +15,7 @@ export function NewsletterForm() {
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!EMAIL.test(email.trim())) {
@@ -24,13 +25,19 @@ export function NewsletterForm() {
     }
 
     setError(null);
-    setDone(true);
-
-    fetch(API_ENDPOINTS.newsletter.subscribe(), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: email.trim() }),
-    }).catch(() => {});
+    try {
+      const recaptchaToken = await getRecaptchaToken("newsletter_subscribe");
+      const response = await fetch(API_ENDPOINTS.newsletter.subscribe(), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim(), recaptchaToken }),
+      });
+      if (!response.ok) throw new Error("Could not subscribe right now. Please try again later.");
+      setDone(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Security verification failed. Please try again.");
+      setDone(false);
+    }
   }
 
   if (done) {

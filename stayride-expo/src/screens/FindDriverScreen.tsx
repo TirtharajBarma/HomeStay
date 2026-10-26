@@ -14,6 +14,7 @@ import { FormScroll } from '../components/FormScroll';
 import { vehicleOptions, vehicleLabel } from '../utils/vehicle';
 import { RangeCalendar } from '../components/RangeCalendar';
 import { LocationPicker } from '../components/LocationPicker';
+import { RadarView } from '../components/RadarView';
 import { ownFleetFeeFor } from '../data/platformConfig';
 import { Driver, Guest, VehicleType } from '../types';
 
@@ -57,9 +58,7 @@ export const FindDriverScreen: React.FC = () => {
   // Leaving this form ends the submission: a reopened form gets a fresh Idempotency-Key
   useEffect(() => () => api.clearIdempotencyKeys('/trips'), []);
   const platformLocked = features?.platformDispatch === false;
-
-  // StayRide drivers (quotes) vs the owner's own fleet (direct assign)
-  const [bookingMode, setBookingMode] = useState<'NEARBY' | 'MY_DRIVERS'>('NEARBY');
+  const [isSearching, setIsSearching] = useState(false);
 
   // Pickup is the homestay as saved on the backend; the owner can override it with free text
   const homestayTitle = homestay.name || homestay.location || 'My Homestay';
@@ -93,9 +92,9 @@ export const FindDriverScreen: React.FC = () => {
   const [fleetDriverId, setFleetDriverId] = useState<Driver['id'] | null>(null);
   const fleetDriver = drivers.find((d) => d.id === fleetDriverId) || null;
 
-  // Seats of the vehicle that will actually go: the chosen own driver's, else the requested class
+  // Seats of the requested vehicle class
   const seatsFor = (type?: string | null) => vehicleOptions().find((v) => v.value === type)?.seats || 4;
-  const maxSeats = bookingMode === 'MY_DRIVERS' && fleetDriver ? seatsFor(fleetDriver.vehicleType) : seatsFor(vehicleType);
+  const maxSeats = seatsFor(vehicleType);
   const passengerOptions = Array.from({ length: maxSeats }, (_, i) => ({
     label: `${i + 1} ${i === 0 ? 'passenger' : 'passengers'}`,
     value: String(i + 1),
@@ -253,24 +252,30 @@ export const FindDriverScreen: React.FC = () => {
   const handleBroadcastToAll = async () => {
     if (!(await beginSubmit())) return;
     const passenger = getPassengerInfo();
+    setIsSearching(true);
     try {
-      const trip = await createTrip({
-        guestName: passenger.name,
-        phone: passenger.phone,
-        pickup,
-        ...pinFields,
-        destination: cleanDestinationSummary(),
-        destinations: formattedDestinations(),
-        date: pickupDate,
-        time: selectedTime,
-        passengers,
-        vehicleType,
-        source: 'NEARBY_BROADCAST',
-        dispatchMode: 'PLATFORM',
-      });
+      const [trip] = await Promise.all([
+        createTrip({
+          guestName: passenger.name,
+          phone: passenger.phone,
+          pickup,
+          ...pinFields,
+          destination: cleanDestinationSummary(),
+          destinations: formattedDestinations(),
+          date: pickupDate,
+          time: selectedTime,
+          passengers,
+          vehicleType,
+          source: 'NEARBY_BROADCAST',
+          dispatchMode: 'PLATFORM',
+        }),
+        new Promise((resolve) => setTimeout(resolve, 3500)), // 3.5s buffer with radar scanning animation
+      ]);
       setLastCreatedTrip(trip);
+      setIsSearching(false);
       setBroadcastSuccessModalVisible(true);
     } catch (err: any) {
+      setIsSearching(false);
       Alert.alert('Not sent', err?.message || 'Could not send the request. Please try again.');
     } finally {
       endSubmit();
@@ -321,39 +326,17 @@ export const FindDriverScreen: React.FC = () => {
   const usedPresets = new Set(destinations.map((d) => d.trim()));
   const DEFAULT_POPULAR_DESTS = ['Tiger Hill', 'Bagdogra Airport', 'NJP Station', 'Mall Road'];
   const allPresets = Array.from(new Set([...DEFAULT_POPULAR_DESTS, ...(config.sightseeingPresets || [])]));
-  const nearby = bookingMode === 'NEARBY';
-
-  const tab = (mode: 'NEARBY' | 'MY_DRIVERS', icon: IconName, label: string) => {
-    const active = bookingMode === mode;
-    return (
-      <TouchableOpacity
-        style={[styles.tab, active && styles.tabActive]}
-        onPress={() => setBookingMode(mode)}
-        accessibilityRole="tab"
-        accessibilityState={{ selected: active }}
-      >
-        <Ionicons name={icon} size={16} color={active ? Colors.white : Colors.textSecondary} />
-        <Text style={[styles.tabText, active && styles.tabTextActive]}>{label}</Text>
-      </TouchableOpacity>
-    );
-  };
+  const nearby = true;
 
   return (
     <View style={styles.container}>
       <Header title="Book a cab" onBack={() => navigation.goBack()} />
 
-      <View style={styles.tabs}>
-        {tab('NEARBY', 'navigate', 'StayRide drivers')}
-        {tab('MY_DRIVERS', 'people', `My fleet · ${drivers.length}`)}
-      </View>
-
       <FormScroll contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         <View style={styles.intro}>
-          <Ionicons name={nearby ? 'chatbubbles-outline' : 'flash-outline'} size={16} color={Colors.brandPrimaryDark} />
+          <Ionicons name="shield-checkmark" size={16} color={Colors.brandPrimaryDark} />
           <Text style={styles.introText}>
-            {nearby
-              ? 'Nearby drivers with the right seats quote a fare. Quotes appear in Cabs for you to accept or counter.'
-              : 'Assign one of your own drivers straight away at the fare you agreed. No quotes needed.'}
+            Your request automatically notifies your homestay fleet first, then expands to verified nearby mountain drivers. Driver quotes appear under Cabs.
           </Text>
         </View>
 
@@ -563,128 +546,33 @@ export const FindDriverScreen: React.FC = () => {
           </View>
         </Section>
 
-        {nearby ? (
-          <Section icon="car" title="Vehicle">
-            <PlatformSelect
-              label="Seats needed"
-              value={vehicleType}
-              options={vehicleOptions().map((v) => ({ label: v.label, value: v.value, icon: 'car-outline' as const, subLabel: `Usually around ${inr(v.estFare)}` }))}
-              onSelect={(v) => {
-                setVehicleType(v as VehicleType);
-                setPassengers((p) => Math.min(p, seatsFor(v)));
-              }}
-            />
-            <Text style={styles.hint}>Only drivers with this many seats or more get your request.</Text>
-          </Section>
-        ) : (
-          <>
-            <Section
-              icon="people"
-              title="Your driver"
-              right={
-                <TouchableOpacity onPress={() => navigation.navigate('MyDrivers')} hitSlop={8}>
-                  <Text style={styles.linkText}>Manage</Text>
-                </TouchableOpacity>
-              }
-            >
-              {drivers.length === 0 ? (
-                <View style={styles.empty}>
-                  <Ionicons name="car-outline" size={32} color={Colors.textTertiary} />
-                  <Text style={styles.emptyTitle}>No drivers in your fleet yet</Text>
-                  <Text style={styles.emptyText}>Add the drivers you work with, or switch to StayRide drivers.</Text>
-                  <TouchableOpacity style={styles.emptyBtn} onPress={() => navigation.navigate('MyDrivers')} accessibilityRole="button">
-                    <Text style={styles.emptyBtnText}>Add my driver</Text>
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                drivers.map((drv) => {
-                  const on = fleetDriverId === drv.id;
-                  return (
-                    <TouchableOpacity
-                      key={drv.id}
-                      style={[styles.driverRow, on && styles.driverRowOn]}
-                      onPress={() => {
-                        setFleetDriverId(drv.id);
-                        setPassengers((p) => Math.min(p, seatsFor(drv.vehicleType)));
-                      }}
-                      accessibilityRole="radio"
-                      accessibilityState={{ selected: on }}
-                    >
-                      <View style={styles.driverAvatar}>
-                        <Text style={styles.driverInitial}>{(drv.name || 'D').charAt(0).toUpperCase()}</Text>
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.driverName}>{drv.name}</Text>
-                        <Text style={styles.driverMeta} numberOfLines={1}>
-                          {[drv.vehicle, vehicleLabel(drv.vehicleType)].filter(Boolean).join(' · ')}
-                        </Text>
-                        <Text style={[styles.driverStatus, { color: drv.available ? Colors.statusGreen : Colors.statusOrange }]}>
-                          {drv.available ? 'Available' : 'On a trip'}
-                        </Text>
-                      </View>
-                      <Ionicons name={on ? 'radio-button-on' : 'radio-button-off'} size={22} color={on ? Colors.brandPrimary : Colors.textTertiary} />
-                    </TouchableOpacity>
-                  );
-                })
-              )}
-            </Section>
-
-            <Section icon="cash" title="Fare">
-              <Text style={styles.fieldLabel}>Fare agreed with your driver</Text>
-              <View style={styles.fareInput}>
-                <Text style={styles.rupee}>₹</Text>
-                <TextInput
-                  style={styles.fareText}
-                  placeholder="3000"
-                  value={ownFare}
-                  onChangeText={(t) => setOwnFare(t.replace(/[^0-9]/g, ''))}
-                  keyboardType="number-pad"
-                  placeholderTextColor={Colors.textTertiary}
-                  accessibilityLabel="Fare in rupees"
-                />
-              </View>
-              {fareNum > 0 ? (
-                <View style={styles.split}>
-                  <View style={styles.splitRow}>
-                    <Text style={styles.splitLabel}>Guest pays StayRide now (advance)</Text>
-                    <Text style={styles.splitValue}>{inr(ownFee)}</Text>
-                  </View>
-                  <View style={styles.splitRow}>
-                    <Text style={styles.splitLabel}>Guest pays your driver in cash</Text>
-                    <Text style={styles.splitValue}>{inr(fareNum - ownFee)}</Text>
-                  </View>
-                </View>
-              ) : null}
-              <Text style={styles.hint}>
-                StayRide fee: {config.ownFleetFeePercent}% of the fare (min {inr(config.ownFleetMinFee)}), paid by the guest as the advance.
-              </Text>
-            </Section>
-          </>
-        )}
+        <Section icon="car" title="Vehicle">
+          <PlatformSelect
+            label="Seats needed"
+            value={vehicleType}
+            options={vehicleOptions().map((v) => ({ label: v.label, value: v.value, icon: 'car-outline' as const, subLabel: `Usually around ${inr(v.estFare)}` }))}
+            onSelect={(v) => {
+              setVehicleType(v as VehicleType);
+              setPassengers((p) => Math.min(p, seatsFor(v)));
+            }}
+          />
+          <Text style={styles.hint}>Both your in-house fleet and verified regional mountain drivers with matching seats receive this request.</Text>
+        </Section>
       </FormScroll>
 
       {/* Sticky action */}
       <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-        {nearby ? (
-          platformLocked ? (
-            <FeatureLocked feature="platformDispatch" title="Send to StayRide drivers" />
-          ) : (
-            <TouchableOpacity style={[styles.cta, submitting && { opacity: 0.6 }]} onPress={handleBroadcastToAll} disabled={submitting} accessibilityRole="button">
-              <Ionicons name="paper-plane" size={18} color={Colors.white} />
-              <Text style={styles.ctaText}>{submitting ? 'Sending…' : 'Get quotes from drivers'}</Text>
-            </TouchableOpacity>
-          )
+        {platformLocked ? (
+          <FeatureLocked feature="platformDispatch" title="Send cab request" />
         ) : (
           <TouchableOpacity
-            style={[styles.cta, (submitting || drivers.length === 0) && { opacity: 0.6 }]}
-            onPress={() => handleDirectAssignMyDriver(fleetDriver)}
-            disabled={submitting || drivers.length === 0}
+            style={[styles.cta, (submitting || isSearching) && { opacity: 0.6 }]}
+            onPress={handleBroadcastToAll}
+            disabled={submitting || isSearching}
             accessibilityRole="button"
           >
-            <Ionicons name="checkmark-circle" size={18} color={Colors.white} />
-            <Text style={styles.ctaText}>
-              {submitting ? 'Assigning…' : fleetDriver ? `Assign ${fleetDriver.name.split(' ')[0]}${fareNum > 0 ? ` · ${inr(fareNum)}` : ''}` : 'Choose a driver'}
-            </Text>
+            <Ionicons name="paper-plane" size={18} color={Colors.white} />
+            <Text style={styles.ctaText}>{submitting || isSearching ? 'Finding drivers…' : 'Find drivers & get quotes'}</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -720,6 +608,19 @@ export const FindDriverScreen: React.FC = () => {
         </TouchableOpacity>
       </Modal>
 
+      {/* Radar scanning buffer modal (3-4s finding nearby drivers) */}
+      <Modal visible={isSearching} transparent animationType="fade">
+        <View style={styles.radarOverlay}>
+          <View style={styles.radarCard}>
+            <RadarView size={190} />
+            <Text style={styles.radarTitle}>Finding Nearby Drivers…</Text>
+            <Text style={styles.radarSubtitle}>
+              Scanning mountain routes and notifying your homestay fleet and nearby verified drivers.
+            </Text>
+          </View>
+        </View>
+      </Modal>
+
       {/* Request sent */}
       <Modal visible={broadcastSuccessModalVisible} transparent animationType="fade" onRequestClose={() => setBroadcastSuccessModalVisible(false)}>
         <View style={styles.modalOverlay}>
@@ -729,7 +630,7 @@ export const FindDriverScreen: React.FC = () => {
             </View>
             <Text style={styles.modalTitle}>Request sent</Text>
             <Text style={styles.modalText}>
-              {lastCreatedTrip?.ref ? `Trip ${lastCreatedTrip.ref}. ` : ''}Driver quotes will appear under <Text style={{ fontWeight: '700' }}>Cabs ➔ Requested</Text>.
+              {lastCreatedTrip?.ref ? `Trip ${lastCreatedTrip.ref}. ` : ''}Your fleet drivers and nearby pool drivers have been notified. Driver quotes will appear under <Text style={{ fontWeight: '700' }}>Cabs ➔ Requested</Text>.
             </Text>
             <TouchableOpacity
               style={[styles.cta, { alignSelf: 'stretch' }]}
@@ -922,4 +823,34 @@ const styles = StyleSheet.create({
   successIcon: { width: 60, height: 60, borderRadius: 30, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
   modalTitle: { fontSize: 18, fontWeight: '800', color: Colors.textPrimary, textAlign: 'center', marginBottom: 8 },
   modalText: { fontSize: 13, color: Colors.textSecondary, textAlign: 'center', lineHeight: 19, marginBottom: 18 },
+  radarOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.88)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  radarCard: {
+    backgroundColor: Colors.white,
+    borderRadius: 24,
+    padding: 28,
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: 320,
+    ...Shadows.card,
+  },
+  radarTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: Colors.textPrimary,
+    marginTop: 20,
+    textAlign: 'center',
+  },
+  radarSubtitle: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+    marginTop: 8,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
 });

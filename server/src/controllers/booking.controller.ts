@@ -4,6 +4,15 @@ import { BookingService } from "../services/booking.service.js";
 export class BookingController {
   static async createBooking(req: Request, res: Response) {
     try {
+      // The legacy room checkout only validates card details in the client and
+      // has no server-side payment authorization or capture. Never confirm a
+      // paid booking from that flow in production.
+      if (process.env.NODE_ENV === "production") {
+        return res.status(503).json({
+          success: false,
+          error: "Room bookings are temporarily unavailable while payments are configured.",
+        });
+      }
       const booking = await BookingService.createBooking(req.body);
       res.status(201).json({
         success: true,
