@@ -1,12 +1,16 @@
-const defaultSupportPhone = process.env.NEXT_PUBLIC_SUPPORT_PHONE?.trim() || "";
+import { siteConfig } from "./site-config";
 
 export const hosts = {
   names: "Verified Himalayan Hosts",
-  since: "StayRide Network",
-  email: "support@stayride.in",
-  bookingEmail: "bookings@stayride.in",
-  phone: defaultSupportPhone || "StayRide Support Desk",
-  phoneHref: defaultSupportPhone ? `tel:${defaultSupportPhone.replace(/\s+/g, "")}` : "mailto:support@stayride.in",
+  since: `${siteConfig.appName} Network`,
+  email: siteConfig.supportEmail || "",
+  bookingEmail: siteConfig.bookingEmail || siteConfig.supportEmail || "",
+  phone: siteConfig.supportPhone || `${siteConfig.appName} Support Desk`,
+  phoneHref: siteConfig.supportPhone
+    ? `tel:${siteConfig.supportPhone.replace(/\s+/g, "")}`
+    : siteConfig.supportEmail
+    ? `mailto:${siteConfig.supportEmail}`
+    : "#",
   location: "Darjeeling & Sikkim Hills",
   region: "Eastern Himalayas",
   replyTime: "≤ 1 hr reply",
@@ -145,7 +149,7 @@ export const valueBadges = [
 ];
 
 export const estateStory = [
-  "StayRide was built directly in the Himalayan foothills of Darjeeling and Sikkim to connect travelers with authentic homestay hospitality and transparent, reliable door-to-door mountain transportation.",
+  `${siteConfig.appName} was built directly in the Himalayan foothills of Darjeeling and Sikkim to connect travelers with authentic homestay hospitality and transparent, reliable door-to-door mountain transportation.`,
   "Every homestay on our network is owned and operated by local families. From warm cups of fresh-plucked garden tea to verified local drivers meeting you right at Bagdogra or NJP station, we connect you directly with the people who call these hills home.",
 ];
 

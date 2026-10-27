@@ -10,7 +10,7 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error("StayRide Global Unhandled Error:", error);
+    console.error("Global Unhandled Error:", error);
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://home-stay-ten.vercel.app/api/v1";
       fetch(`${apiUrl}/telemetry/report`, {
@@ -39,7 +39,7 @@ export default function GlobalError({
           <div>
             <h2 className="text-base font-bold text-[#1F2328]">Application Error</h2>
             <p className="text-xs text-[#57606A] mt-1">
-              StayRide encountered an unexpected issue. Please reload the app.
+              An unexpected issue occurred. Please reload the app.
             </p>
           </div>
           <button

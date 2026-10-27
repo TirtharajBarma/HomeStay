@@ -52,7 +52,7 @@ export const HowItWorksScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <Header title="How StayRide works" onBack={() => navigation.goBack()} />
+      <Header title="How it works" onBack={() => navigation.goBack()} />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.hero}>
           <Ionicons name="trail-sign" size={30} color={Colors.white} />
@@ -74,16 +74,16 @@ export const HowItWorksScreen: React.FC = () => {
             <Text style={styles.wayTitle}>Ask your guest</Text>
           </View>
           <Text style={styles.wayText}>
-            StayRide WhatsApps a checked-in guest a link. Their request appears in Cabs → Guest inquiries, where you choose nearby drivers or your own.
+            Our system WhatsApps a checked-in guest a link. Their request appears in Cabs → Guest inquiries, where you choose nearby drivers or your own.
           </Text>
         </View>
         <View style={styles.wayCard}>
           <View style={styles.wayHead}>
             <Ionicons name="navigate" size={18} color={Colors.brandPrimaryDark} />
-            <Text style={styles.wayTitle}>Nearby StayRide drivers</Text>
+            <Text style={styles.wayTitle}>Nearby regional drivers</Text>
           </View>
           <Text style={styles.wayText}>
-            Drivers near your homestay with the right seats get the request and quote a fare. Accept a quote or send a counter-offer. The guest then pays a small advance to StayRide, and the rest in cash to the driver.
+            Drivers near your homestay with the right seats get the request and quote a fare. Accept a quote or send a counter-offer. The guest then pays a small advance online, and the rest in cash to the driver.
           </Text>
         </View>
         <View style={styles.wayCard}>
@@ -92,31 +92,31 @@ export const HowItWorksScreen: React.FC = () => {
             <Text style={styles.wayTitle}>Your own drivers</Text>
           </View>
           <Text style={styles.wayText}>
-            Pick a driver from your fleet and enter the fare you agreed. The guest pays StayRide&apos;s small own-fleet fee as the advance; the rest goes to your driver.
+            Pick a driver from your fleet and enter the fare you agreed. The guest pays a small own-fleet fee as the advance; the rest goes to your driver.
           </Text>
         </View>
 
         <Text style={styles.section}>The money on a {inr(EXAMPLE_FARE)} trip</Text>
         <View style={styles.card}>
-          <Text style={styles.cardLabel}>With a StayRide driver</Text>
+          <Text style={styles.cardLabel}>With a network driver</Text>
           <Row label="Fare quoted by the driver" value={inr(EXAMPLE_FARE)} strong />
           <Row label={`Your commission (${hc}%)`} value={`+${inr(hcAmt)}`} accent />
-          <Row label={`StayRide platform fee (${pf}%)`} value={inr(pfAmt)} />
-          <Row label="Guest pays StayRide now (advance)" value={inr(advance)} />
+          <Row label={`Platform fee (${pf}%)`} value={inr(pfAmt)} />
+          <Row label="Guest pays advance now" value={inr(advance)} />
           <Row label="Guest pays the driver in cash" value={inr(EXAMPLE_FARE - advance)} />
           <View style={styles.divider} />
           <Text style={styles.cardLabel}>With your own driver</Text>
           <Row label="Fare you agreed with your driver" value={inr(EXAMPLE_FARE)} strong />
-          <Row label={`StayRide fee (${config.ownFleetFeePercent}%, min ${inr(config.ownFleetMinFee)}), as the advance`} value={inr(ownFee)} />
+          <Row label={`Platform fee (${config.ownFleetFeePercent}%, min ${inr(config.ownFleetMinFee)}), as the advance`} value={inr(ownFee)} />
           <Row label="Your driver gets in cash" value={inr(EXAMPLE_FARE - ownFee)} />
-          <Text style={styles.note}>Rates are set by StayRide and shown on every quote before you confirm.</Text>
+          <Text style={styles.note}>Rates are set by platform administrators and shown on every quote before you confirm.</Text>
         </View>
 
         <Text style={styles.section}>Getting paid</Text>
         <View style={styles.card}>
           <Step n={1} icon="checkmark-circle" title="Earned" text="Your commission counts once the trip is completed and the guest's advance was paid." />
           <Step n={2} icon="cash" title="Requested" text="Tap Redeem in Cab commission to request everything earned, by UPI or bank transfer." />
-          <Step n={3} icon="wallet" title="Paid" text="StayRide transfers it and marks the payout settled with a reference number." />
+          <Step n={3} icon="wallet" title="Paid" text="The platform transfers it and marks the payout settled with a bank UTR reference number." />
         </View>
 
         <Text style={styles.section}>Safe for everyone</Text>

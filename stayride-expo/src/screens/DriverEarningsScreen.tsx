@@ -167,7 +167,7 @@ export const DriverEarningsScreen: React.FC = () => {
           )}
 
           <Text style={styles.walletNote}>
-            Excess advance deposits over StayRide platform commission are credited to your wallet instantly upon ride completion.
+            Excess advance deposits over platform commission are credited to your wallet instantly upon ride completion.
           </Text>
         </View>
 
@@ -296,7 +296,7 @@ export const DriverEarningsScreen: React.FC = () => {
               Available balance: <Text style={{ fontWeight: '800', color: '#16A34A' }}>{formatINR(availableBalance)}</Text>
             </Text>
             <Text style={styles.modalHint}>
-              Enter your Google Pay, PhonePe, or Paytm UPI ID. Funds are transferred manually by StayRide Admin with full bank UTR confirmation.
+              Enter your Google Pay, PhonePe, or Paytm UPI ID. Funds are transferred with full bank UTR confirmation.
             </Text>
 
             <TextInput

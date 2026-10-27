@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { hosts } from "@/lib/content";
+import { siteConfig } from "@/lib/site-config";
 
 import { Icon } from "./icon";
 import { NewsletterForm } from "./newsletter-form";
@@ -8,12 +8,13 @@ import { NewsletterForm } from "./newsletter-form";
 const linkClass =
   "inline-flex min-h-11 items-center text-body-sm text-on-surface-variant transition-colors duration-150 hover:text-primary";
 
-const supportPhone = process.env.NEXT_PUBLIC_SUPPORT_PHONE?.trim() || "";
+const supportPhone = siteConfig.supportPhone || process.env.NEXT_PUBLIC_SUPPORT_PHONE?.trim() || "";
 const cleanPhone = supportPhone.replace(/[^0-9]/g, "");
+const supportEmail = siteConfig.supportEmail;
 
 const supportLinks = [
   ...(supportPhone ? [{ href: `tel:${supportPhone.replace(/\s+/g, "")}`, label: supportPhone }] : []),
-  { href: "mailto:support@stayride.in", label: "support@stayride.in" },
+  ...(supportEmail ? [{ href: `mailto:${supportEmail}`, label: supportEmail }] : []),
   ...(cleanPhone ? [{ href: `https://wa.me/${cleanPhone}`, label: "WhatsApp Support" }] : []),
 ];
 
@@ -23,7 +24,7 @@ const columns = [
     links: [
       { href: "/#accommodations", label: "Browse Homestays" },
       { href: "/#experiences", label: "Local Experiences" },
-      { href: "/#story", label: "About StayRide" },
+      { href: "/#story", label: `About ${siteConfig.appName}` },
     ],
   },
   {
@@ -50,7 +51,7 @@ export function SiteFooter() {
               <Icon name="local_taxi" className="text-[18px]" />
             </span>
             <span className="font-display text-headline-md font-semibold text-primary">
-              StayRide
+              {siteConfig.appName}
             </span>
           </div>
           <p className="mb-4 text-body-sm text-on-surface-variant">
@@ -58,7 +59,7 @@ export function SiteFooter() {
           </p>
           <NewsletterForm />
           <p className="mt-4 text-body-sm text-outline">
-            © {new Date().getFullYear()} StayRide Network. Connecting travelers with authentic hosts and local drivers.
+            © {new Date().getFullYear()} {siteConfig.appName} Network. Connecting travelers with authentic hosts and local drivers.
           </p>
         </div>
 

@@ -4,6 +4,7 @@
 // an invented fact. The text describes what the app actually does; update it when behaviour changes.
 // NOTE: this is a starting template, not legal advice. Have it reviewed before publishing.
 import { BusinessDetails } from '../services/platform-config.js';
+import { env } from '../config/env.js';
 
 export const LEGAL_VERSION = '2026-10-19';
 export const LEGAL_DOCS = ['privacy', 'terms', 'refunds'] as const;
@@ -14,11 +15,12 @@ export interface LegalSection {
   body: string;
 }
 
-const fill = (v: string, label: string) => v || `[${label}: to be added by StayRide]`;
+const fill = (v: string, label: string) => v || `[${label}: to be configured in platform settings]`;
 
 function contact(b: BusinessDetails) {
+  const brand = b.name || env.appName || 'Homestay & Cab Platform';
   return [
-    `${fill(b.legalName, 'registered business name')} (${b.name || 'StayRide'})`,
+    `${fill(b.legalName, 'registered business name')} (${brand})`,
     `Address: ${fill(b.address, 'registered address')}`,
     `Email: ${fill(b.email, 'support email')}${b.phone ? ` · Phone: ${b.phone}` : ''}`,
     b.website ? `Website: ${b.website}` : '',
@@ -28,7 +30,7 @@ function contact(b: BusinessDetails) {
 }
 
 function privacy(b: BusinessDetails): LegalSection[] {
-  const brand = b.name || 'StayRide';
+  const brand = b.name || env.appName || 'Homestay & Cab Platform';
   return [
     { heading: 'Who we are', body: `${brand} helps homestay owners manage rooms and guests, and helps local cab drivers get trips from homestays near them. This policy applies to both homestay owners and drivers, and explains what personal data the ${brand} app collects and how it is used.\n\n${contact(b)}` },
     {
@@ -76,7 +78,7 @@ function privacy(b: BusinessDetails): LegalSection[] {
 }
 
 function terms(b: BusinessDetails): LegalSection[] {
-  const brand = b.name || 'StayRide';
+  const brand = b.name || env.appName || 'Homestay & Cab Platform';
   return [
     { heading: 'About these terms', body: `These terms apply when you use the ${brand} app as a homestay owner or a driver.\n\n${contact(b)}` },
     { heading: 'Who can use the app', body: 'You must be 18 or older and give true details. You are responsible for activity on your account and for keeping your sign-in secure.' },
@@ -87,13 +89,13 @@ function terms(b: BusinessDetails): LegalSection[] {
     {
       heading: 'Fares, advances and fees',
       body:
-        'For a trip with a StayRide driver, the fare is the driver’s quote (or a counter-offer the driver accepts). The guest pays an advance to StayRide; the rest is paid in cash to the driver. The advance covers StayRide’s platform fee and the homestay’s commission. When a homestay uses its own driver, StayRide charges an own-fleet fee, paid by the guest as the advance. The amounts are shown before a trip is confirmed. There are no hidden charges.',
+        'For a trip with a network driver, the fare is the driver’s quote (or a counter-offer the driver accepts). The guest pays an advance online; the rest is paid in cash to the driver. The advance covers the platform fee and the homestay’s commission. When a homestay uses its own driver, the platform charges an own-fleet fee, paid by the guest as the advance. The amounts are shown before a trip is confirmed. There are no hidden charges.',
     },
     { heading: 'Cancellations and refunds', body: 'See the Refund & Cancellation Policy in the app.' },
     {
       heading: 'Fair use',
       body:
-        'Do not arrange trips that started on StayRide outside the platform to avoid fees, share false information, harass other users, or misuse guest data. Drivers must not add phone numbers or links to quotes. We may suspend accounts that break these rules.',
+        'Do not arrange trips that started through the service outside the platform to avoid fees, share false information, harass other users, or misuse guest data. Drivers must not add phone numbers or links to quotes. We may suspend accounts that break these rules.',
     },
     {
       heading: 'Liability',
@@ -105,7 +107,7 @@ function terms(b: BusinessDetails): LegalSection[] {
     },
     {
       heading: 'For drivers',
-      body: 'Driver accounts are reviewed by StayRide before you get trip requests. You must hold a valid driving licence, vehicle registration, permits and insurance, and keep your vehicle details correct. Your quote is the full fare: the guest pays StayRide an advance and pays you the balance in cash at the trip. Once you accept a trip, complete it or cancel it in the app as early as possible so the guest can be refunded and another driver found.',
+      body: 'Driver accounts are reviewed before you get trip requests. You must hold a valid driving licence, vehicle registration, permits and insurance, and keep your vehicle details correct. Your quote is the full fare: the guest pays an advance online and pays you the balance in cash at the trip. Once you accept a trip, complete it or cancel it in the app as early as possible so the guest can be refunded and another driver found.',
     },
     { heading: 'Ending your account', body: 'You can delete your account at any time in the app: owners in More → Account & privacy, drivers in Profile → Account & privacy. We may suspend or close accounts that break these terms or the law.' },
     { heading: 'Law', body: `These terms follow the laws of India. Courts at ${fill(b.address ? b.address.split(',').slice(-2, -1)[0]?.trim() || '' : '', 'city')} have jurisdiction. Version ${LEGAL_VERSION}.` },
@@ -125,10 +127,10 @@ function refunds(b: BusinessDetails): LegalSection[] {
     },
     {
       heading: 'For drivers',
-      body: '• The advance is collected and held by StayRide; drivers do not collect or refund it directly.\n• If a driver cancels a confirmed trip, the guest’s advance is refunded in full and the trip may be re-dispatched to other drivers.\n• The cash balance is collected directly by the driver from the guest upon trip drop-off. If a trip does not occur, no cash balance is payable.',
+      body: '• The advance is collected and held securely; drivers do not collect or refund it directly.\n• If a driver cancels a confirmed trip, the guest’s advance is refunded in full and the trip may be re-dispatched to other drivers.\n• The cash balance is collected directly by the driver from the guest upon trip drop-off. If a trip does not occur, no cash balance is payable.',
     },
-    { heading: 'Cash paid to drivers', body: 'The remaining balance is paid in cash directly to the driver at destination. StayRide does not collect this cash portion and cannot refund it directly; our support team is available to mediate any on-road disputes.' },
-    { heading: 'Room bookings', body: 'Room charges are paid to the homestay, not to StayRide. Their cancellation and refund terms are set by the individual homestay.' },
+    { heading: 'Cash paid to drivers', body: 'The remaining balance is paid in cash directly to the driver at destination. The platform does not collect this cash portion and cannot refund it directly; our support team is available to mediate any on-road disputes.' },
+    { heading: 'Room bookings', body: 'Room charges are paid to the homestay, not to the platform. Their cancellation and refund terms are set by the individual homestay.' },
     { heading: 'Questions & disputes', body: `For any booking dispute or refund enquiry, contact ${fill(b.email, 'support email')} with your trip reference number. Version ${LEGAL_VERSION}.` },
   ];
 }

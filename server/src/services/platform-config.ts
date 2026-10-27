@@ -3,6 +3,7 @@
 // (owner snapshot, driver snapshot and the public guest link) instead of shipping their own copy.
 // Defaults apply until the admin saves a value; every saved value is validated and clamped here.
 import { parseTime12 } from '../stayride/time.js';
+import { env } from '../config/env.js';
 
 export const VEHICLE_KEYS = ['Sedan', 'SUV', '7-seater', '9-seater'] as const;
 export type VehicleKey = (typeof VEHICLE_KEYS)[number];
@@ -193,7 +194,7 @@ export const DEFAULT_PLATFORM_CONFIG: PlatformConfig = {
   quoteBiddingWindowMin: 240,
   whatsappTemplates: {},
   // Fill these in Operations settings before publishing the app: they appear in the legal pages
-  business: { name: 'StayRide', legalName: '', address: '', email: '', phone: '', upiId: '', grievanceOfficer: '', grievanceEmail: '', website: '' },
+  business: { name: env.appName || 'Homestay & Cab Network', legalName: '', address: '', email: env.supportEmail || '', phone: '', upiId: '', grievanceOfficer: '', grievanceEmail: '', website: env.guestWebUrl || '' },
   icalAllowedHosts: ['airbnb.com', 'airbnb.co.in', 'booking.com', 'vrbo.com', 'expedia.com', 'agoda.com', 'makemytrip.com', 'goibibo.com', 'calendar.google.com', 'tripadvisor.com'],
 };
 
@@ -312,6 +313,8 @@ export function publicConfig(cfg: PlatformConfig) {
     ownFleetMinFee: cfg.ownFleetMinFee,
     upiId: cfg.business?.upiId || '',
     supportPhone: cfg.business?.phone || '',
+    supportEmail: cfg.business?.email || '',
+    website: cfg.business?.website || '',
   };
 }
 

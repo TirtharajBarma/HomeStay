@@ -12,7 +12,7 @@ import {
 const SHOW_LEGACY = process.env.NEXT_PUBLIC_SHOW_LEGACY_PORTAL === "true";
 type Tab = "dashboard" | "users" | "homestays" | "drivers" | "cab-requests" | "payouts" | "settings" | "appeals" | "audit" | "legacy";
 const TABS: Array<[Tab, string, string]> = [
-  ["dashboard", "monitoring", "StayRide"],
+  ["dashboard", "monitoring", "Overview"],
   ["users", "group", "Users"],
   ["homestays", "villa", "Homestays"],
   ["drivers", "badge", "Drivers"],

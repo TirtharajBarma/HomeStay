@@ -292,7 +292,7 @@ export const FindDriverScreen: React.FC = () => {
       return;
     }
     if (!(fareNum > 0)) {
-      Alert.alert('Enter the fare', 'Type the fare you agreed with your driver. StayRide takes its fee from it as the guest advance.');
+      Alert.alert('Enter the fare', 'Type the fare you agreed with your driver. The platform fee is taken from it as the guest advance.');
       return;
     }
     if (!(await beginSubmit())) return;
@@ -665,8 +665,8 @@ export const FindDriverScreen: React.FC = () => {
               {fmtDay(pickupDate)} at {selectedTime}
               {'\n\n'}
               {lastCreatedTrip?.status === 'CONFIRMED'
-                ? 'StayRide sent the trip details to your driver and the guest on WhatsApp.'
-                : `StayRide sent the guest a WhatsApp link to pay the ${inr(lastCreatedTrip?.advanceAmount ?? ownFee)} advance. Phone numbers are shared with your driver and the guest once it is paid.`}
+                ? 'Trip details have been sent to your driver and the guest on WhatsApp.'
+                : `A WhatsApp link has been sent to the guest to pay the ${inr(lastCreatedTrip?.advanceAmount ?? ownFee)} advance. Phone numbers are shared with your driver and the guest once it is paid.`}
             </Text>
             <TouchableOpacity
               style={[styles.cta, { alignSelf: 'stretch' }]}

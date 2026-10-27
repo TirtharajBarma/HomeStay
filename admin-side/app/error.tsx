@@ -10,7 +10,7 @@ export default function AdminError({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error("StayRide Admin Tower Error:", error);
+    console.error("Admin Tower Error:", error);
     try {
       fetch("/api/v1/telemetry/report", {
         method: "POST",

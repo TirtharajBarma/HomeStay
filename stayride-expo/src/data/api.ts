@@ -233,7 +233,7 @@ class ApiService {
         .catch(() => undefined);
       if (code === 'ACCOUNT_BLOCKED') {
         // Blocked, not signed out: keep the session so "Try again" works once the admin unblocks
-        this.accountErrorListener?.(code, 'This account is blocked. Contact StayRide support.');
+        this.accountErrorListener?.(code, 'This account is blocked. Please contact platform support.');
         return false;
       }
       await this.clearSession();

@@ -25,7 +25,7 @@ export const AccountScreen: React.FC = () => {
   const [confirmText, setConfirmText] = useState('');
 
   const email = session?.owner?.email || session?.driver?.email || user?.primaryEmailAddress?.emailAddress || '';
-  const isDemo = email.toLowerCase() === 'demo@stayride.in';
+  const isDemo = email.toLowerCase() === (process.env.EXPO_PUBLIC_DEMO_HOST_EMAIL || 'demo@stayride.in').toLowerCase() || email.toLowerCase().startsWith('demo@');
   const google = (user as any)?.externalAccounts?.find((a: any) => a.provider === 'google' || a.provider === 'oauth_google');
   const hasPassword = Boolean((user as any)?.passwordEnabled);
 
@@ -34,7 +34,7 @@ export const AccountScreen: React.FC = () => {
     if (!user) return;
     setBusy('google');
     try {
-      const redirectUrl = Linking.createURL('/dashboard', { scheme: 'stayride' });
+      const redirectUrl = Linking.createURL('/dashboard', { scheme: process.env.EXPO_PUBLIC_SCHEME || 'partner-app' });
       const ext: any = await (user as any).createExternalAccount({ strategy: 'oauth_google', redirectUrl });
       const url = ext?.verification?.externalVerificationRedirectURL?.toString();
       if (!url) throw new Error('Google did not return a sign-in page.');
@@ -158,7 +158,7 @@ export const AccountScreen: React.FC = () => {
         <Text style={styles.group}>Privacy & legal</Text>
         <View style={styles.card}>
           {row('shield-checkmark', 'Privacy Policy', 'What we collect and why', () => navigation.navigate('Legal', { doc: 'privacy' }))}
-          {row('document-text', 'Terms of Service', 'Rules for using StayRide', () => navigation.navigate('Legal', { doc: 'terms' }))}
+          {row('document-text', 'Terms of Service', 'Platform terms & conditions', () => navigation.navigate('Legal', { doc: 'terms' }))}
           {row('cash', 'Refund & Cancellation Policy', 'Advances, refunds, room bookings', () => navigation.navigate('Legal', { doc: 'refunds' }))}
         </View>
 

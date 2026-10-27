@@ -5,6 +5,7 @@
 // Privacy rule from the cab flow: the guest never gets the driver's phone, and the driver never gets
 // the guest's phone, until the advance is paid (ADVANCE_PAID_* messages only).
 import type { WhatsAppMessage } from '../services/whatsapp.service.js';
+import { config } from '../config/env.js';
 
 type Built = Omit<WhatsAppMessage, 'to'>;
 
@@ -147,13 +148,13 @@ export const tripCancelledGuestMessage = (doc: any): Built => {
   };
 };
 
-/** StayRide refunded the advance. */
+/** The platform refunded the advance. */
 export const refundGuestMessage = (doc: any, reference: string): Built => {
   const params = [doc.guestName, rupees(doc.advanceAmount), doc.reference, reference];
   return {
     event: 'REFUND_GUEST',
     params,
-    text: `Hi ${params[0]}, StayRide has refunded your advance of ${params[1]} for trip ${params[2]} (reference ${params[3]}). Your bank may take a few days to show it.`,
+    text: `Hi ${params[0]}, ${config.appName} has refunded your advance of ${params[1]} for trip ${params[2]} (reference ${params[3]}). Your bank may take a few days to show it.`,
   };
 };
 
@@ -197,7 +198,7 @@ export const biddingTimeoutOwnerMessage = (doc: any, homestayName: string, owner
   };
 };
 
-/** Welcome alert to newly registered drivers on StayRide */
+/** Welcome alert to newly registered drivers */
 export const driverWelcomeMessage = (driverName: string, vehiclePlate: string): Built => {
   const params = [driverName, vehiclePlate];
   return {
@@ -205,9 +206,9 @@ export const driverWelcomeMessage = (driverName: string, vehiclePlate: string): 
     params,
     text:
       `Namaste ${params[0]}!\n` +
-      `Your driver registration (${params[1]}) has been submitted to StayRide.\n\n` +
+      `Your driver registration (${params[1]}) has been submitted to ${config.appName}.\n\n` +
       `Our operations team will review your vehicle details shortly. Once approved, you will receive trip booking alerts directly on this WhatsApp number.\n\n` +
-      `Happy driving with StayRide!`,
+      `Happy driving with ${config.appName}!`,
   };
 };
 
@@ -217,7 +218,7 @@ export const driverPayoutSettledMessage = (amount: number, utr: string): Built =
   return {
     event: 'PAYOUT_SETTLED_DRIVER',
     params,
-    text: `StayRide Payout: ₹${params[0]} has been sent to your UPI account (Bank UTR: ${params[1]}).`,
+    text: `${config.appName} Payout: ₹${params[0]} has been sent to your UPI account (Bank UTR: ${params[1]}).`,
   };
 };
 
@@ -227,7 +228,7 @@ export const driverPayoutRejectedMessage = (amount: number, reason: string): Bui
   return {
     event: 'PAYOUT_REJECTED_DRIVER',
     params,
-    text: `StayRide Payout: Your payout request of ₹${params[0]} was declined (${params[1]}). Your wallet balance is restored.`,
+    text: `${config.appName} Payout: Your payout request of ₹${params[0]} was declined (${params[1]}). Your wallet balance is restored.`,
   };
 };
 

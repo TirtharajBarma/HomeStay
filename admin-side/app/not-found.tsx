@@ -10,7 +10,7 @@ export default function AdminNotFound() {
         <div>
           <h2 className="text-lg font-bold text-white">Desk Not Found</h2>
           <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
-            The requested control desk or administration view does not exist in the StayRide Tower.
+            The requested control desk or administration view does not exist in the Admin Tower.
           </p>
         </div>
         <Link

@@ -38,7 +38,7 @@ export const CampaignScreen: React.FC = () => {
   const [selectedAudience, setSelectedAudience] = useState(AUDIENCES[0]);
   const [title, setTitle] = useState(`Special holiday stay at ${homestay.name || 'our homestay'}`);
   const [message, setMessage] = useState(
-    `Hi {name}! Plan your next mountain holiday at ${homestay.name || 'our homestay'} with 15% off and a free pickup. Book on StayRide.`
+    `Hi {name}! Plan your next mountain holiday at ${homestay.name || 'our homestay'} with 15% off and a free pickup. Contact us to reserve.`
   );
 
   const consentCount = guests.filter((g) => g.marketingConsent).length;

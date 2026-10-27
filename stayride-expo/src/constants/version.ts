@@ -5,8 +5,8 @@
 export const CURRENT_RELEASE_VERSION = "v1.0.3";
 export const RELEASE_DESCRIPTION = "Unified cab booking with radar buffer, direct driver dialing, and security hardening";
 export const APP_BINARY_VERSION = "v1.0.0 (Build 1)";
-export const ADMIN_NAME = "StayRide Admin";
-export const AUTHOR_CREDIT = "Built with ❤️ for StayRide";
+export const ADMIN_NAME = process.env.EXPO_PUBLIC_APP_NAME ? `${process.env.EXPO_PUBLIC_APP_NAME} Admin` : "Platform Admin";
+export const AUTHOR_CREDIT = "Built with ❤️ for Mountain Hospitality";
 
 export interface ReleaseHistoryItem {
   version: string;

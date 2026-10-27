@@ -14,6 +14,7 @@ import {
   settlePayout, rejectPayout, expireStaleRequests, overlayTrips, onDriverStatusChange, releaseDriverTrips, adminRefundUnmatched,
 } from "../stayride/platform.js";
 import { httpError } from "../middlewares/error-handler.js";
+import { config } from "../config/env.js";
 
 const router = Router();
 
@@ -278,7 +279,7 @@ router.delete("/stayride/users/:id", async (req, res) => {
   await protectAdmins(req, demo, target, "delete");
   const updated = await userModel(demo).findByIdAndUpdate(
     target._id,
-    { $set: { accountStatus: "BLOCKED", statusReason: String(req.body?.reason || "Deleted by StayRide admin").slice(0, 300), deletedAt: target.deletedAt || new Date() }, $inc: { tokenVersion: 1 } },
+    { $set: { accountStatus: "BLOCKED", statusReason: String(req.body?.reason || "Deleted by platform admin").slice(0, 300), deletedAt: target.deletedAt || new Date() }, $inc: { tokenVersion: 1 } },
     { returnDocument: "after" }
   ).select(USER_FIELDS).lean();
   if (!updated) throw httpError(404, "User not found.");
@@ -336,7 +337,8 @@ router.post("/stayride/drivers", async (req, res) => {
   if (!phone || phone.replace(/[^0-9]/g, "").length < 10) throw httpError(400, "Valid 10-digit driver phone is required.");
 
   const cleanPhone = phone.startsWith("+") ? phone : `+91${phone.replace(/[^0-9]/g, "").slice(-10)}`;
-  const cleanEmail = String(req.body?.email || "").trim().toLowerCase() || `driver.${cleanPhone.replace(/[^0-9]/g, "")}@stayride.in`;
+  const driverDomain = process.env.DRIVER_EMAIL_DOMAIN || `driver.${config.appDomain || 'local'}`;
+  const cleanEmail = String(req.body?.email || "").trim().toLowerCase() || `driver.${cleanPhone.replace(/[^0-9]/g, "")}@${driverDomain}`;
   const vehicleType = String(req.body?.vehicleType || "SUV");
   const model = String(req.body?.model || "").trim();
   const plate = String(req.body?.plate || "").trim();
@@ -368,7 +370,7 @@ router.post("/stayride/drivers", async (req, res) => {
   });
 
   await audit(actor(req), "driver.create", "User", String(created._id), { targetName: name, targetPhone: cleanPhone, vehicle: created.vehicle }, demo, { actorRole: "ADMIN", driverId: String(created._id) });
-  return ok(res, { id: String(created._id), name: created.name, phone: created.phone, vehicle: created.vehicle, accountStatus: created.accountStatus }, "Driver registered and active on StayRide.");
+  return ok(res, { id: String(created._id), name: created.name, phone: created.phone, vehicle: created.vehicle, accountStatus: created.accountStatus }, "Driver registered and active.");
 });
 
 // ---------------------------------------------------------------------------
@@ -415,7 +417,7 @@ const cabAction = (fn: (demo: boolean, id: string, req: Request) => Promise<any>
 router.post("/cab-requests/:id/assign-driver", cabAction((d, id, req) => adminAssignDriver(d, id, req.body, actor(req)), "Driver assigned and fare locked."));
 router.post("/cab-requests/:id/record-payment", cabAction((d, id, req) => adminRecordPayment(d, id, req.body, actor(req)), "Advance payment recorded."));
 router.post("/cab-requests/:id/void-payment", cabAction((d, id, req) => adminVoidPayment(d, id, req.body.reason, actor(req)), "Payment voided."));
-router.post("/cab-requests/:id/cancel", cabAction((d, id, req) => cancelRequest({ _id: id }, d, actor(req), String(req.body.reason || "Cancelled by StayRide admin"), true), "Request cancelled."));
+router.post("/cab-requests/:id/cancel", cabAction((d, id, req) => cancelRequest({ _id: id }, d, actor(req), String(req.body.reason || "Cancelled by platform admin"), true), "Request cancelled."));
 router.post("/cab-requests/:id/refund", cabAction((d, id, req) => adminMarkRefunded(d, id, req.body.reference, actor(req)), "Refund recorded."));
 router.post("/cab-requests/:id/start", cabAction((d, id, req) => startTrip(d, { _id: id }, actor(req), undefined, false), "Trip started."));
 router.post("/cab-requests/:id/complete", cabAction((d, id, req) => completeTrip(d, { _id: id }, actor(req)), "Trip completed."));

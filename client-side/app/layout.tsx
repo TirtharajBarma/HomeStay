@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Playfair_Display, Plus_Jakarta_Sans } from "next/font/google";
+import { siteConfig } from "@/lib/site-config";
 
 import "./globals.css";
 
@@ -22,13 +23,13 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   title: {
-    default: "StayRide | Mountain Homestays & Verified Cab Network",
-    template: "%s | StayRide",
+    default: `${siteConfig.appName} | Mountain Homestays & Verified Cab Network`,
+    template: `%s | ${siteConfig.appName}`,
   },
   description:
     "Verified mountain homestays and authentic cab transfers across Darjeeling, Sikkim, and the Eastern Himalayas.",
   openGraph: {
-    siteName: "StayRide",
+    siteName: siteConfig.appName,
     locale: "en_IN",
     type: "website",
   },

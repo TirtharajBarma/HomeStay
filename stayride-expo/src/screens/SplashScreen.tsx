@@ -4,6 +4,8 @@ import { useNavigation } from '@react-navigation/native';
 import { Colors } from '../theme/colors';
 import { useStayRide } from '../data/store';
 
+const APP_TITLE = process.env.EXPO_PUBLIC_APP_NAME || 'Homestay & Cabs';
+
 export const SplashScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { session, loading } = useStayRide();
@@ -84,7 +86,7 @@ export const SplashScreen: React.FC = () => {
           },
         ]}
       >
-        <Text style={styles.appName}>StayRide</Text>
+        <Text style={styles.appName}>{APP_TITLE}</Text>
         <Text style={styles.tagline}>Cosy stays in the clouds. Mountain cabs, zero hassle.</Text>
       </Animated.View>
 

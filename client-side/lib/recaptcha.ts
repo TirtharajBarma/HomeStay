@@ -15,14 +15,14 @@ async function loadRecaptcha(siteKey: string): Promise<void> {
   if (window.grecaptcha) return;
   if (!scriptLoad) {
     scriptLoad = new Promise<void>((resolve, reject) => {
-      const existing = document.querySelector<HTMLScriptElement>("script[data-stayride-recaptcha]");
+      const existing = document.querySelector<HTMLScriptElement>("script[data-platform-recaptcha]");
       if (existing) {
         existing.addEventListener("load", () => resolve(), { once: true });
         existing.addEventListener("error", () => reject(new Error("Could not load security verification.")), { once: true });
         return;
       }
       const script = document.createElement("script");
-      script.dataset.stayrideRecaptcha = "true";
+      script.dataset.platformRecaptcha = "true";
       script.src = `https://www.google.com/recaptcha/api.js?render=${encodeURIComponent(siteKey)}`;
       script.async = true;
       script.defer = true;

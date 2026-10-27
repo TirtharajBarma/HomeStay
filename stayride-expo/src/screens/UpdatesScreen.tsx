@@ -118,8 +118,8 @@ export const UpdatesScreen: React.FC = () => {
               : isNativeRequired
               ? 'A new app version is required'
               : manualStatus === 'dev_mode'
-              ? `StayRide ${activeVersion} (Dev Mode)`
-              : `StayRide ${activeVersion}`}
+              ? `${process.env.EXPO_PUBLIC_APP_NAME || 'Partner'} ${activeVersion} (Dev Mode)`
+              : `${process.env.EXPO_PUBLIC_APP_NAME || 'Partner'} ${activeVersion}`}
           </Text>
 
           <Text style={styles.heroSubtitle}>

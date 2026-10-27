@@ -1,6 +1,6 @@
 "use client";
 
-// Driver quote page, opened from the StayRide WhatsApp message: drivers who do not use the app send
+// Driver quote page, opened from the dispatch WhatsApp message: drivers who do not use the app send
 // their fare (or accept the homestay's counter-offer) here. The signed link identifies the driver and
 // the trip; guest contact details are never shown before the advance is paid.
 // Also includes the driver's Sovereign Wallet & Instant UPI Payout console.
@@ -8,6 +8,7 @@ import React, { useEffect, useState, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Icon } from "@/components/icon";
 import { API_ENDPOINTS, apiFetch } from "@/lib/api-config";
+import { siteConfig } from "@/lib/site-config";
 
 type QuoteView = {
   reference: string;
@@ -338,7 +339,7 @@ function DriverQuoteContent() {
       <div className="min-h-screen bg-[#F8F9FA] flex items-center justify-center p-6">
         <div className="flex flex-col items-center gap-3">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-600 border-t-transparent" />
-          <p className="text-xs font-medium text-[#57606A]">Loading StayRide Trip Details…</p>
+          <p className="text-xs font-medium text-[#57606A]">Loading Trip Details…</p>
         </div>
       </div>
     );
@@ -386,7 +387,7 @@ function DriverQuoteContent() {
             </div>
             <div>
               <div className="flex items-center gap-1.5">
-                <span className="font-bold text-xs text-[#1F2328]">StayRide Driver Portal</span>
+                <span className="font-bold text-xs text-[#1F2328]">{siteConfig.appName} Driver Portal</span>
                 <span className="rounded bg-emerald-50 px-1 py-0.2 text-[9px] font-bold text-emerald-800 border border-emerald-200">
                   Verified
                 </span>
@@ -490,7 +491,7 @@ function DriverQuoteContent() {
                     Instant UPI Withdrawal
                   </label>
                   <p className="text-[11px] text-[#57606A]">
-                    Enter your GPay / PhonePe / Paytm UPI ID. Funds are transferred manually by StayRide Admin.
+                    Enter your GPay / PhonePe / Paytm UPI ID. Funds are transferred manually by {siteConfig.appName} Admin.
                   </p>
                   <div className="flex gap-2">
                     <input
@@ -742,7 +743,7 @@ function DriverQuoteContent() {
                     </span>
                     <p className="text-2xl font-black text-amber-900">{inr(view.remainingCashAmount)}</p>
                     <p className="text-[10px] text-amber-800">
-                      Collect directly from passenger in cash or personal UPI. The rest is already credited to your StayRide wallet.
+                      Collect directly from passenger in cash or personal UPI. The rest is already credited to your wallet.
                     </p>
                   </div>
                 )}
@@ -1053,7 +1054,7 @@ function DriverQuoteContent() {
                         <div className="flex justify-between items-center">
                           <span className="flex items-center gap-1">
                             <Icon name="account_balance_wallet" className="text-xs text-emerald-700" />
-                            <span>2. Credited to your StayRide wallet:</span>
+                            <span>2. Credited to your platform wallet:</span>
                           </span>
                           <strong className="font-extrabold text-emerald-700">+{inr(calculatedWalletExcess)}</strong>
                         </div>
@@ -1061,7 +1062,7 @@ function DriverQuoteContent() {
                         <div className="flex justify-between items-center text-[#57606A]">
                           <span className="flex items-center gap-1">
                             <Icon name="percent" className="text-xs" />
-                            <span>StayRide & Homestay Commission ({commPct}%):</span>
+                            <span>Platform & Homestay Commission ({commPct}%):</span>
                           </span>
                           <span className="font-semibold text-red-600">-{inr(calculatedCommission)}</span>
                         </div>
@@ -1135,7 +1136,7 @@ function DriverQuoteContent() {
 
 export default function DriverQuotePage() {
   return (
-    <Suspense fallback={<div className="p-12 text-center text-emerald-700 font-medium">Loading StayRide…</div>}>
+    <Suspense fallback={<div className="p-12 text-center text-emerald-700 font-medium">Loading…</div>}>
       <DriverQuoteContent />
     </Suspense>
   );

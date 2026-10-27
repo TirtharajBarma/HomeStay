@@ -70,7 +70,15 @@ export class AuthService {
     homestayName?: string;
   }) {
     const cleanEmail = data.email.toLowerCase().trim();
-    const reservedEmails = ['demo@stayride.in', 'driver@stayride.in', 'demo-driver@stayride.in', 'stay@mountainviewgangtok.com', 'stay@mountainview.in'];
+    const reservedEmails = [
+      'demo@stayride.in',
+      'driver@stayride.in',
+      'demo-driver@stayride.in',
+      'stay@mountainviewgangtok.com',
+      'stay@mountainview.in',
+      (config.demoHostEmail || '').toLowerCase().trim(),
+      (config.demoDriverEmail || '').toLowerCase().trim(),
+    ].filter(Boolean);
     if (reservedEmails.includes(cleanEmail)) {
       throw new Error(`The email '${cleanEmail}' is reserved for demo showcase accounts and cannot be registered.`);
     }

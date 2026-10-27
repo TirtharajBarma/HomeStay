@@ -39,7 +39,7 @@ export interface Booking {
   status: BookingStatus;
   paid: boolean;
   amount: number;
-  source: 'StayRide link' | 'Walk-in' | 'Phone' | 'WhatsApp' | 'Repeat booking' | string;
+  source: 'Direct link' | 'Walk-in' | 'Phone' | 'WhatsApp' | 'Repeat booking' | string;
   actualCheckOut?: number; // server: when the guest actually left
   payments?: BookingPayment[]; // money received (advance, balance…); paid = received >= amount
   external?: { source: string; uid: string; feedId: string; conflict?: boolean }; // imported from an OTA calendar

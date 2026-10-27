@@ -198,7 +198,7 @@ export class AdminController {
       // StayRide homestays are keyed by the owner's email.
       const tenantKey = String(prop.email || "").toLowerCase().trim();
       if (!tenantKey) {
-        return res.json({ success: true, message: "Property status updated (no StayRide account linked).", data: prop });
+        return res.json({ success: true, message: "Property status updated (no platform account linked).", data: prop });
       }
       if (status === "suspended") {
         await getTenantControlModel(false).updateOne(

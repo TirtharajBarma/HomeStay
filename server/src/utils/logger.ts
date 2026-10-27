@@ -40,7 +40,7 @@ class TelemetryLogger {
   private readonly batchSize = 30;
   private readonly flushIntervalMs = 2500;
   private readonly axiomToken = process.env.AXIOM_TOKEN || "";
-  private readonly axiomDataset = process.env.AXIOM_DATASET || "stayride-api";
+  private readonly axiomDataset = process.env.AXIOM_DATASET || "platform-api";
   private readonly logtailToken = process.env.LOGTAIL_SOURCE_TOKEN || "";
   private readonly environment = process.env.NODE_ENV || "development";
 
@@ -120,7 +120,7 @@ class TelemetryLogger {
       level: "info",
       message,
       timestamp: new Date().toISOString(),
-      service: "stayride-api",
+      service: "platform-api",
       environment: this.environment,
       ...meta,
     });
@@ -131,7 +131,7 @@ class TelemetryLogger {
       level: "warn",
       message,
       timestamp: new Date().toISOString(),
-      service: "stayride-api",
+      service: "platform-api",
       environment: this.environment,
       ...meta,
     });
@@ -142,7 +142,7 @@ class TelemetryLogger {
       level: "error",
       message,
       timestamp: new Date().toISOString(),
-      service: "stayride-api",
+      service: "platform-api",
       environment: this.environment,
       error: error
         ? {

@@ -535,7 +535,7 @@ export function CheckoutForm({ stay, booking }: { stay: Stay; booking: Booking }
             aria-invalid={Boolean(errors.terms)}
           />
           <span className="text-body-sm text-on-surface-variant">
-            I have read and agree to the house rules, quiet hours, and StayRide guest terms. I
+            I have read and agree to the house rules, quiet hours, and guest terms. I
             understand free cancellation until {cancellationDeadline(booking.checkIn)}.
           </span>
         </label>

@@ -105,7 +105,7 @@ export const DriverTripsScreen: React.FC = () => {
     reportOutcome(
       outcome,
       'Quote Submitted',
-      `Your total fare quote of ₹${amount.toLocaleString('en-IN')} was submitted. StayRide will calculate the advance, commission, and wallet share from the current settings.`
+      `Your total fare quote of ₹${amount.toLocaleString('en-IN')} was submitted. Advance and commission will be calculated automatically.`
     );
   };
 
@@ -118,7 +118,7 @@ export const DriverTripsScreen: React.FC = () => {
   const handleWhatsAppPassenger = (phone: string, guestName: string) => {
     const cleanPhone = phone.replace(/[^0-9]/g, '');
     const phoneWithCountry = cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone;
-    const msg = `Hello ${guestName}, this is ${driverName}, your StayRide cab driver. I am getting ready for your pickup.`;
+    const msg = `Hello ${guestName}, this is ${driverName}, your assigned cab driver. I am getting ready for your pickup.`;
     Linking.openURL(`whatsapp://send?phone=${phoneWithCountry}&text=${encodeURIComponent(msg)}`).catch(() => {
       Alert.alert('WhatsApp Error', 'WhatsApp is not installed.');
     });
@@ -226,7 +226,7 @@ export const DriverTripsScreen: React.FC = () => {
         <View style={{ backgroundColor: '#FFFBEB', borderBottomWidth: 1, borderColor: '#FDE68A', paddingHorizontal: 16, paddingVertical: 10, flexDirection: 'row', alignItems: 'center' }}>
           <Ionicons name="time-outline" size={18} color="#D97706" style={{ marginRight: 8 }} />
           <Text style={{ fontSize: 13, color: '#92400E', flex: 1 }}>
-            Your driver profile is currently under review by StayRide. Once approved, you can receive trip dispatches and submit quotes.
+            Your driver profile is currently under review. Once approved, you can receive trip dispatches and submit quotes.
           </Text>
         </View>
       )}
@@ -235,7 +235,7 @@ export const DriverTripsScreen: React.FC = () => {
         <View style={{ backgroundColor: '#FEF2F2', borderBottomWidth: 1, borderColor: '#FECACA', paddingHorizontal: 16, paddingVertical: 10, flexDirection: 'row', alignItems: 'center' }}>
           <Ionicons name="alert-circle-outline" size={18} color="#DC2626" style={{ marginRight: 8 }} />
           <Text style={{ fontSize: 13, color: '#991B1B', flex: 1 }}>
-            Account Suspended: {statusReason || 'Please contact StayRide admin support.'}
+            Account Suspended: {statusReason || 'Please contact platform support.'}
           </Text>
         </View>
       )}

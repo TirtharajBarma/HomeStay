@@ -25,7 +25,7 @@ import { estateImages, kindFilters, getLiveStays, type Stay } from "@/lib/stays"
 
 export const metadata: Metadata = {
   description:
-    "Handcrafted hillside cottages, tea terraces and verified door-to-door hill transfers across Darjeeling & Sikkim — powered by StayRide.",
+    "Handcrafted hillside cottages, tea terraces and verified door-to-door hill transfers across Darjeeling & Sikkim.",
 };
 
 const MAX_GUESTS = 4;
@@ -185,7 +185,7 @@ function Experiences() {
             The Homestay Difference
           </span>
           <h2 className="mt-1 font-display text-headline-lg-mobile font-semibold text-primary md:text-headline-lg">
-            What makes a StayRide journey special
+            What makes a mountain journey special
           </h2>
           <p className="mt-2 text-body-lg text-on-surface-variant">
             Connect directly with verified local homestay owners and regional hill drivers for an authentic, unhurried Himalayan experience.
@@ -240,7 +240,7 @@ function Testimonials() {
             Voices from the Valley
           </h2>
           <p className="text-body-sm text-on-surface-variant">
-            Reflections from travellers exploring the Himalayan foothills with StayRide.
+            Reflections from travellers exploring the Himalayan foothills.
           </p>
         </div>
 

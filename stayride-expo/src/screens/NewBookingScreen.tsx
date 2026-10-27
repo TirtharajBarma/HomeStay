@@ -24,7 +24,7 @@ import { FormScroll } from '../components/FormScroll';
 import { Guest, PaymentMethod, Room } from '../types';
 
 const SOURCE_OPTIONS = [
-  { label: 'StayRide Public Web Link', value: 'StayRide link', icon: 'globe-outline' as const },
+  { label: 'Public Web Booking Link', value: 'Direct link', icon: 'globe-outline' as const },
   { label: 'Walk-in Direct', value: 'Walk-in', icon: 'walk-outline' as const },
   { label: 'Phone Call', value: 'Phone', icon: 'call-outline' as const },
   { label: 'WhatsApp Chat', value: 'WhatsApp', icon: 'chatbubble-ellipses-outline' as const },
@@ -57,7 +57,7 @@ export const NewBookingScreen: React.FC = () => {
 
   // Opened from the occupancy calendar: that room and night are preselected
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(() => initialRoom);
-  const [source, setSource] = useState('StayRide link');
+  const [source, setSource] = useState('Direct link');
   const [guestsCount, setGuestsCount] = useState('1');
 
   // Dates: default checkIn = today midnight, checkOut = in 2 days
@@ -200,7 +200,7 @@ export const NewBookingScreen: React.FC = () => {
                   onPress: () => {
                     const inStr = new Date(checkIn).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
                     const outStr = new Date(checkOut).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-                    const homestayName = homestay?.name || 'StayRide Homestay';
+                    const homestayName = homestay?.name || 'Our Homestay';
                     const message = `Namaste ${trimmedName}! 🙏\n\nYour booking at *${homestayName}* is confirmed:\n🏨 Room: ${pickedRoom.number} (${pickedRoom.type})\n📅 Check-in: ${inStr}\n📅 Check-out: ${outStr} (${nights} night${nights > 1 ? 's' : ''})\n👥 Guests: ${parsedCount}\n💰 Total: ₹${parsedAmount.toLocaleString('en-IN')}${receivedNum > 0 ? ` (Advance paid: ₹${receivedNum.toLocaleString('en-IN')})` : ''}\n\nWe look forward to hosting you in the hills! Let us know if you need airport or station cab pickup.`;
                     const cleanPhone = phoneToSend.replace(/\D/g, '');
                     const targetPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;

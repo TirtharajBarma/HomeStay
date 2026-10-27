@@ -150,7 +150,7 @@ export const BookingDetailScreen: React.FC = () => {
   const handleCancelBooking = () => {
     Alert.alert(
       'Cancel this booking?',
-      `Room ${booking.roomNumber} will be free again for these dates. Let the guest know yourself; StayRide does not message them.`,
+      `Room ${booking.roomNumber} will be free again for these dates. Please notify the guest directly.`,
       [
         { text: 'Keep booking', style: 'cancel' },
         {

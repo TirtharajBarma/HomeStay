@@ -112,7 +112,8 @@ export const MoreScreen: React.FC = () => {
   };
 
   const isDemoAccount =
-    session?.owner?.email?.toLowerCase().trim() === 'demo@stayride.in';
+    session?.owner?.email?.toLowerCase().trim() === (process.env.EXPO_PUBLIC_DEMO_HOST_EMAIL || 'demo@stayride.in').toLowerCase() ||
+    session?.owner?.email?.toLowerCase().trim().startsWith('demo@');
 
   useEffect(() => {
     api.checkHealth().then((live) => setBackendLive(live));
@@ -214,7 +215,7 @@ export const MoreScreen: React.FC = () => {
             <Text style={styles.profileName}>{homestay.name || 'My Homestay'}</Text>
           </View>
           <Text style={styles.profileLink}>
-            {(homestay.link || 'stayride.in/h/my-homestay').replace('https://', '')}
+            {(homestay.link || '').replace(/^https?:\/\//, '') || 'homestay-preview'}
           </Text>
           <TouchableOpacity
             style={styles.openProfileBtn}
@@ -254,13 +255,13 @@ export const MoreScreen: React.FC = () => {
           )}
         </View>
 
-        {/* StayRide Group */}
-        <Text style={styles.groupHeader}>StayRide</Text>
+        {/* Cabs & Mobility Group */}
+        <Text style={styles.groupHeader}>Cabs & Mobility</Text>
         <View style={styles.cardGroup}>
           {renderRow(
             'car',
             'Find a Driver',
-            'Your own drivers or StayRide drivers',
+            'Your own drivers or regional drivers',
             () => navigation.navigate('FindDriver')
           )}
           {renderRow(
@@ -271,7 +272,7 @@ export const MoreScreen: React.FC = () => {
           )}
           {renderRow(
             'information-circle',
-            'How StayRide works',
+            'How it works',
             'Bookings, the 3 cab options and your earnings',
             () => navigation.navigate('HowItWorks')
           )}
@@ -343,7 +344,7 @@ export const MoreScreen: React.FC = () => {
           {renderRow(
             'phone-portrait-outline',
             'Sign out of all devices',
-            'End your StayRide session on every phone',
+            'End your login session on every phone',
             () =>
               confirmLogoutAll(logoutAllDevices, async () => {
                 try {
@@ -379,12 +380,14 @@ export const MoreScreen: React.FC = () => {
 
         {/* Footer Credit & Version */}
         <View style={styles.footerWrap}>
-          <Text style={styles.footerBrandTitle}>STAYRIDE HOST</Text>
+          <Text style={styles.footerBrandTitle}>
+            {process.env.EXPO_PUBLIC_APP_NAME ? `${process.env.EXPO_PUBLIC_APP_NAME.toUpperCase()} PARTNER` : 'PARTNER PORTAL'}
+          </Text>
           <Text style={styles.footerVersionText}>
             Version {updateInfo.activeVersion} {updateInfo.isEmbeddedLaunch ? '· Base' : '· OTA'}
           </Text>
           <Text style={styles.footerSubText}>
-            StayRide Partner App for Homestay Hosts
+            Partner App for Homestay Hosts & Drivers
           </Text>
         </View>
       </ScrollView>

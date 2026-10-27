@@ -273,7 +273,7 @@ function checkPhoto(p: unknown): string {
   if (p.startsWith('https://')) {
     if (p.length > 1000) throw bad('Photo URL is too long (max 1000 characters).');
     // New photos must be images uploaded to our own Cloudinary account (not any outside link)
-    if (!p.startsWith(CloudinaryService.deliveryPrefix())) throw bad('Photos must be uploaded from the StayRide app.');
+    if (!p.startsWith(CloudinaryService.deliveryPrefix())) throw bad('Photos must be uploaded through the app or dashboard.');
     return p;
   }
   const m = DATA_IMAGE.exec(p);
@@ -373,14 +373,14 @@ export class StayRideMemoryStore {
         phone: '+91 98001 23456',
         email: 'stay@mountainviewgangtok.com',
         ownerName: 'Tashi Bhutia',
-        link: 'https://stayride.in/h/mountain-view-gangtok',
+        link: `${config.guestWebUrl}/h/mountain-view-gangtok`,
         mapQuery: 'Mountain View Homestay Gangtok Sikkim',
         amenities: [
           'Free Wi-Fi',
           '24x7 Hot Water',
           'Home Breakfast',
           'Mountain View',
-          'In-house Cabs (StayRide)',
+          'In-house Cabs',
           'Private Parking',
         ],
         photos: [
@@ -451,8 +451,8 @@ export class StayRideMemoryStore {
     ];
 
     this.bookings = [
-      { id: 1, guestId: 1, guestName: 'Ananya Roy', phone: '+91 98301 12345', checkIn: t - 2 * DAY, checkOut: t + 1 * DAY, roomNumber: '101', guests: 2, status: 'CHECKED_IN', paid: true, amount: 8400, source: 'StayRide link' },
-      { id: 2, guestId: 2, guestName: 'Vikram Mehta', phone: '+91 98200 45678', checkIn: t - 1 * DAY, checkOut: t + 2 * DAY, roomNumber: '201', guests: 4, status: 'CHECKED_IN', paid: false, amount: 12600, source: 'StayRide link' },
+      { id: 1, guestId: 1, guestName: 'Ananya Roy', phone: '+91 98301 12345', checkIn: t - 2 * DAY, checkOut: t + 1 * DAY, roomNumber: '101', guests: 2, status: 'CHECKED_IN', paid: true, amount: 8400, source: 'Direct link' },
+      { id: 2, guestId: 2, guestName: 'Vikram Mehta', phone: '+91 98200 45678', checkIn: t - 1 * DAY, checkOut: t + 2 * DAY, roomNumber: '201', guests: 4, status: 'CHECKED_IN', paid: false, amount: 12600, source: 'Direct link' },
       { id: 3, guestId: 3, guestName: 'Pooja Chawla', phone: '+91 97110 88990', checkIn: t + 1 * DAY, checkOut: t + 4 * DAY, roomNumber: '203', guests: 2, status: 'CONFIRMED', paid: false, amount: 7200, source: 'WhatsApp' },
       { id: 4, guestId: 4, guestName: 'Siddharth Sen', phone: '+91 98314 33221', checkIn: t - 14 * DAY, checkOut: t - 11 * DAY, roomNumber: '102', guests: 1, status: 'CHECKED_OUT', paid: true, amount: 8400, source: 'Repeat booking' },
     ];
@@ -481,7 +481,7 @@ export class StayRideMemoryStore {
 
     this.campaigns = [
       { id: 1, title: 'Autumn Leaf Festival in Sikkim', message: 'Hi {name}! Autumn colors have arrived in Gangtok. Enjoy 15% off your weekend stay + complimentary airport pickup.', audience: 'All guests', status: 'COMPLETED', recipients: 14, sent: 14, failed: 0, createdOn: t - 15 * DAY },
-      { id: 2, title: 'Kanchenjunga Winter Glow Discount', message: 'Dear {name}, clear blue skies and snow peaks await you at Mountain View Homestay. Book directly on StayRide for best rates.', audience: 'Repeat guests', status: 'CREATED', recipients: 5, sent: 0, failed: 0, createdOn: t - 2 * DAY },
+      { id: 2, title: 'Kanchenjunga Winter Glow Discount', message: 'Dear {name}, clear blue skies and snow peaks await you at Mountain View Homestay. Book directly with us for best rates.', audience: 'Repeat guests', status: 'CREATED', recipients: 5, sent: 0, failed: 0, createdOn: t - 2 * DAY },
     ];
   }
 
@@ -1022,7 +1022,7 @@ export class StayRideMemoryStore {
   updateItem(collection: TenantCollection, id: number, body: any) {
     const item: any = (this[collection] as any[]).find((x) => x.id === id);
     if (!item) return null;
-    if (collection === 'trips' && isPlatformTrip(item)) throw Object.assign(new Error('This trip is managed by StayRide (platform trip).'), { status: 409, code: 'PLATFORM_MANAGED' });
+    if (collection === 'trips' && isPlatformTrip(item)) throw Object.assign(new Error('This trip is managed by the platform.'), { status: 409, code: 'PLATFORM_MANAGED' });
     const fields = clean(TENANT_COLLECTIONS[collection], body);
     const next = { ...item, ...fields };
     if (collection === 'bookings' && !(next.checkOut > next.checkIn)) throw bad('Check-out must be after check-in.');
@@ -1034,7 +1034,7 @@ export class StayRideMemoryStore {
     const list = this[collection] as any[];
     const item = list.find((x) => x.id === id);
     if (!item) return null;
-    if (collection === 'trips' && isPlatformTrip(item)) throw Object.assign(new Error('This trip is managed by StayRide (platform trip).'), { status: 409, code: 'PLATFORM_MANAGED' });
+    if (collection === 'trips' && isPlatformTrip(item)) throw Object.assign(new Error('This trip is managed by the platform.'), { status: 409, code: 'PLATFORM_MANAGED' });
     if (collection === 'guests' && this.bookings.some((b) => b.guestId === id && (b.status === 'CONFIRMED' || b.status === 'CHECKED_IN'))) {
       throw Object.assign(new Error('This guest has an active booking. Cancel or check out the booking first.'), { status: 409 });
     }
@@ -1140,8 +1140,23 @@ export const StayRideTenantModel =
   mongoose.models.StayRideTenant ||
   model('StayRideTenant', StayRideTenantSchema);
 
-const DEMO_KEYS = new Set(['demo', 'demo@stayride.in', 'stay@mountainviewgangtok.com', 'stay@mountainview.in']);
-export const isDemoKey = (key: string) => DEMO_KEYS.has((key || '').toLowerCase().trim());
+export const DEMO_TENANT = config.demoHostEmail || 'demo-tenant';
+const DEMO_KEYS = new Set(
+  [
+    'demo',
+    'demo-tenant',
+    DEMO_TENANT,
+    (config.demoHostEmail || '').toLowerCase().trim(),
+    (config.demoDriverEmail || '').toLowerCase().trim(),
+    'demo@stayride.in',
+    'stay@mountainviewgangtok.com',
+    'stay@mountainview.in',
+  ].filter(Boolean)
+);
+export const isDemoKey = (key: string) => {
+  const clean = (key || '').toLowerCase().trim();
+  return DEMO_KEYS.has(clean) || clean.startsWith('demo@') || clean === 'demo';
+};
 
 export class ConflictError extends Error {
   status = 409;
@@ -1151,7 +1166,6 @@ export class ConflictError extends Error {
   }
 }
 
-const DEMO_TENANT = 'demo@stayride.in';
 const MAX_TENANT_BYTES = 8 * 1024 * 1024;
 export const normKey = (k: string) => (isDemoKey(k) ? DEMO_TENANT : (k || '').toLowerCase().trim());
 

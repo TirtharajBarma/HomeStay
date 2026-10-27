@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { hosts } from "@/lib/content";
+import { siteConfig } from "@/lib/site-config";
 
 import { Icon } from "./icon";
 import { MobileNav, type NavLink } from "./mobile-nav";
@@ -23,13 +24,13 @@ const navLinks = [
   {
     href: "/join-driver",
     label: "Cab Join",
-    hint: "Drive with StayRide Network",
+    hint: `Drive with ${siteConfig.appName} Network`,
     icon: "local_taxi",
     active: false,
   },
   {
     href: "/#story",
-    label: "About StayRide",
+    label: `About ${siteConfig.appName}`,
     hint: "Empowering Himalayan hosts & drivers",
     icon: "menu_book",
     active: false,
@@ -53,7 +54,7 @@ export function SiteHeader() {
           </span>
           <span className="flex min-w-0 flex-col">
             <span className="truncate font-display text-headline-sm font-semibold tracking-tight text-primary sm:text-headline-md">
-              StayRide
+              {siteConfig.appName}
             </span>
             <span className="-mt-0.5 hidden text-label-sm tracking-wider text-outline xs:block sm:block">
               HIMALAYAN STAYS &amp; CABS
@@ -114,7 +115,7 @@ export function BrandLockup() {
       </span>
       <span className="flex min-w-0 flex-col">
         <span className="truncate font-display text-headline-sm font-semibold leading-tight tracking-tight text-primary sm:text-headline-md">
-          StayRide
+          {siteConfig.appName}
         </span>
         <span className="hidden text-label-sm font-medium tracking-wider text-on-surface-variant sm:block">
           HIMALAYAN STAYS &amp; CABS

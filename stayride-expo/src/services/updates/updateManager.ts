@@ -700,7 +700,7 @@ export function useAppUpdateManager(): AppUpdateInfo {
       }
     },
     contactAdmin: async () => {
-      await Linking.openURL(`https://api.whatsapp.com/send?text=${encodeURIComponent(`New build update for StayRide: ${activeVersion}`)}`);
+      await Linking.openURL(`https://api.whatsapp.com/send?text=${encodeURIComponent(`New build update for ${process.env.EXPO_PUBLIC_APP_NAME || 'App'}: ${activeVersion}`)}`);
     },
   };
 }

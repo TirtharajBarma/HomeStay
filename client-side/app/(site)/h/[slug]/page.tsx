@@ -5,6 +5,7 @@ import { Icon } from "@/components/icon";
 import { Stars } from "@/components/stars";
 import { StayGallery } from "@/components/stay-gallery";
 import { getLiveStay, getPlatformConfig } from "@/lib/stays";
+import { siteConfig } from "@/lib/site-config";
 
 export async function generateMetadata({
   params,
@@ -36,7 +37,7 @@ export default async function DedicatedHomestayPage({
   const hasHostDirectPhone = Boolean(stay.phone && stay.phone.trim());
   const effectivePhone = stay.phone?.trim() || platformConfig?.supportPhone?.trim() || process.env.NEXT_PUBLIC_SUPPORT_PHONE?.trim() || "";
   const cleanPhone = effectivePhone.replace(/\D/g, "");
-  const contactEmail = stay.email?.trim() || "support@stayride.in";
+  const contactEmail = stay.email?.trim() || siteConfig.supportEmail || "";
 
   const query = await searchParams;
   const ref = typeof query.ref === "string" ? query.ref : null;
@@ -90,7 +91,7 @@ export default async function DedicatedHomestayPage({
                   className="flex items-center gap-2 rounded-xl border border-outline-variant/60 bg-surface px-4 py-2.5 text-sm font-semibold text-on-surface hover:bg-surface-container"
                 >
                   <Icon name="chat" className="text-lg text-secondary" />
-                  <span>{hasHostDirectPhone ? "Message Host" : "Message StayRide Desk"}</span>
+                  <span>{hasHostDirectPhone ? "Message Host" : `Message ${siteConfig.appName} Desk`}</span>
                 </a>
               ) : (
                 <a
@@ -137,7 +138,7 @@ export default async function DedicatedHomestayPage({
       {/* 3. High-Quality Photo Gallery */}
       <StayGallery stay={stay} />
 
-      {/* 3b. Accommodations & Rooms (Live from StayRide Host App) */}
+      {/* 3b. Accommodations & Rooms (Live from Host App) */}
       {stay.rooms && stay.rooms.length > 0 ? (
         <section className="my-10 scroll-mt-20">
           <div className="mb-6 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
@@ -150,7 +151,7 @@ export default async function DedicatedHomestayPage({
               </h2>
             </div>
             <p className="text-xs text-on-surface-variant">
-              Live inventory maintained by your host via StayRide
+              Live inventory maintained directly by your host
             </p>
           </div>
 
@@ -229,7 +230,7 @@ export default async function DedicatedHomestayPage({
         </section>
       ) : null}
 
-      {/* 4. Cabs: requested through the secure StayRide link the host sends on WhatsApp */}
+      {/* 4. Cabs: requested through the secure link the host sends on WhatsApp */}
       <section id="cab-transfers" className="my-12 scroll-mt-20">
         <div className="rounded-3xl border border-outline-variant/50 bg-surface-container-lowest p-6 sm:p-8 shadow-md">
           <span className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-secondary">
@@ -238,7 +239,7 @@ export default async function DedicatedHomestayPage({
           </span>
           <h2 className="mt-1 font-serif text-2xl font-bold text-primary sm:text-3xl">Need a cab during your stay?</h2>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-on-surface-variant">
-            Ask your host for a cab or request directly online. StayRide sends verified local drivers for airport/railway transfers, sunrise sightseeing, and day excursions. You pay a small online advance booking fee, and the rest directly in cash to your driver at destination.
+            Ask your host for a cab or request directly online. We arrange verified local drivers for airport/railway transfers, sunrise sightseeing, and day excursions. You pay a small online advance booking fee, and the rest directly in cash to your driver at destination.
           </p>
           <div className="mt-4 flex flex-wrap gap-3">
             <a
@@ -318,7 +319,7 @@ export default async function DedicatedHomestayPage({
               {hasHostDirectPhone
                 ? "Direct communication with the homestay host for arrival coordination, baggage assistance, or custom meal requests."
                 : cleanPhone
-                ? "Direct contact with StayRide Host Concierge for arrival coordination and assistance at this homestay."
+                ? `Direct contact with ${siteConfig.appName} Host Concierge for arrival coordination and assistance at this homestay.`
                 : "Direct communication with the homestay desk for arrival coordination and assistance with your stay."}
             </p>
 
@@ -332,7 +333,7 @@ export default async function DedicatedHomestayPage({
                     className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-xs font-semibold text-on-primary shadow transition hover:opacity-95"
                   >
                     <Icon name="chat" className="text-base" />
-                    <span>{hasHostDirectPhone ? "WhatsApp the Host" : "WhatsApp StayRide Desk"}</span>
+                    <span>{hasHostDirectPhone ? "WhatsApp the Host" : `WhatsApp ${siteConfig.appName} Desk`}</span>
                   </a>
 
                   <a
@@ -340,7 +341,7 @@ export default async function DedicatedHomestayPage({
                     className="flex w-full items-center justify-center gap-2 rounded-xl border border-outline-variant/50 bg-surface py-3 text-xs font-semibold text-on-surface hover:bg-surface-container"
                   >
                     <Icon name="call" className="text-base text-primary" />
-                    <span>{hasHostDirectPhone ? "Call Host Desk" : "Call StayRide Desk"}</span>
+                    <span>{hasHostDirectPhone ? "Call Host Desk" : `Call ${siteConfig.appName} Desk`}</span>
                   </a>
                 </>
               ) : (

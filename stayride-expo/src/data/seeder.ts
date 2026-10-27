@@ -44,23 +44,23 @@ export function generateSeedData() {
   ];
 
   const bookings: Booking[] = [
-    { id: 1, guestId: 1, guestName: 'Rahul Sharma', phone: '+91 98301 44521', checkIn: today, checkOut: plusDays(2), roomNumber: '102', guests: 2, status: 'CONFIRMED', paid: false, amount: 5200, source: 'StayRide link' },
+    { id: 1, guestId: 1, guestName: 'Rahul Sharma', phone: '+91 98301 44521', checkIn: today, checkOut: plusDays(2), roomNumber: '102', guests: 2, status: 'CONFIRMED', paid: false, amount: 5200, source: 'Direct link' },
     { id: 2, guestId: 2, guestName: 'Priya Verma', phone: '+91 99032 77810', checkIn: plusDays(-1), checkOut: plusDays(1), roomNumber: '201', guests: 2, status: 'CHECKED_IN', paid: true, amount: 8400, source: 'Repeat booking' },
     { id: 3, guestId: 4, guestName: 'Sunita Rai', phone: '+91 94198 55210', checkIn: plusDays(-1), checkOut: plusDays(2), roomNumber: '102', guests: 3, status: 'CHECKED_IN', paid: false, amount: 7800, source: 'Phone' },
-    { id: 4, guestId: 5, guestName: 'Vikram Singh', phone: '+91 98111 90909', checkIn: plusDays(2), checkOut: plusDays(4), roomNumber: '104', guests: 2, status: 'CONFIRMED', paid: false, amount: 5200, source: 'StayRide link' },
+    { id: 4, guestId: 5, guestName: 'Vikram Singh', phone: '+91 98111 90909', checkIn: plusDays(2), checkOut: plusDays(4), roomNumber: '104', guests: 2, status: 'CONFIRMED', paid: false, amount: 5200, source: 'Direct link' },
     { id: 5, guestId: 6, guestName: 'Ananya Bose', phone: '+91 98311 66112', checkIn: plusDays(1), checkOut: plusDays(3), roomNumber: '103', guests: 2, status: 'CONFIRMED', paid: true, amount: 3600, source: 'Walk-in' },
-    { id: 6, guestId: 7, guestName: 'Karan Thapa', phone: '+91 97330 40404', checkIn: plusDays(3), checkOut: plusDays(5), roomNumber: '202', guests: 2, status: 'CONFIRMED', paid: false, amount: 5200, source: 'StayRide link' },
+    { id: 6, guestId: 7, guestName: 'Karan Thapa', phone: '+91 97330 40404', checkIn: plusDays(3), checkOut: plusDays(5), roomNumber: '202', guests: 2, status: 'CONFIRMED', paid: false, amount: 5200, source: 'Direct link' },
     { id: 7, guestId: 8, guestName: 'Meera Iyer', phone: '+91 99450 78787', checkIn: today, checkOut: plusDays(1), roomNumber: '101', guests: 1, status: 'CONFIRMED', paid: false, amount: 1800, source: 'Walk-in' },
     { id: 8, guestId: 12, guestName: 'Neha Gupta', phone: '+91 98765 43210', checkIn: today, checkOut: plusDays(2), roomNumber: '202', guests: 2, status: 'CONFIRMED', paid: true, amount: 5200, source: 'WhatsApp' },
-    { id: 9, guestId: 9, guestName: 'Dev Patel', phone: '+91 98200 31313', checkIn: plusDays(-12), checkOut: plusDays(-9), roomNumber: '202', guests: 2, status: 'CHECKED_OUT', paid: true, amount: 7800, source: 'StayRide link' },
+    { id: 9, guestId: 9, guestName: 'Dev Patel', phone: '+91 98200 31313', checkIn: plusDays(-12), checkOut: plusDays(-9), roomNumber: '202', guests: 2, status: 'CHECKED_OUT', paid: true, amount: 7800, source: 'Direct link' },
     { id: 10, guestId: 10, guestName: 'Ritu Chettri', phone: '+91 99340 56565', checkIn: plusDays(-6), checkOut: plusDays(-4), roomNumber: '204', guests: 4, status: 'CHECKED_OUT', paid: true, amount: 8400, source: 'Repeat booking' },
-    { id: 11, guestId: 1, guestName: 'Rahul Sharma', phone: '+91 98301 44521', checkIn: plusDays(-30), checkOut: plusDays(-28), roomNumber: '101', guests: 2, status: 'CHECKED_OUT', paid: true, amount: 3600, source: 'StayRide link' },
-    { id: 12, guestId: 11, guestName: 'Sandeep Kumar', phone: '+91 90000 12121', checkIn: plusDays(5), checkOut: plusDays(7), roomNumber: '204', guests: 2, status: 'CANCELLED', paid: false, amount: 8400, source: 'StayRide link' },
+    { id: 11, guestId: 1, guestName: 'Rahul Sharma', phone: '+91 98301 44521', checkIn: plusDays(-30), checkOut: plusDays(-28), roomNumber: '101', guests: 2, status: 'CHECKED_OUT', paid: true, amount: 3600, source: 'Direct link' },
+    { id: 12, guestId: 11, guestName: 'Sandeep Kumar', phone: '+91 90000 12121', checkIn: plusDays(5), checkOut: plusDays(7), roomNumber: '204', guests: 2, status: 'CANCELLED', paid: false, amount: 8400, source: 'Direct link' },
   ];
 
   // Deterministic history generator (108 records matching Seeder.java)
   const roomNums = ['101', '102', '103', '104', '201', '202', '203', '204'];
-  const sources = ['StayRide link', 'Walk-in', 'Phone', 'WhatsApp', 'Repeat booking'];
+  const sources = ['Direct link', 'Walk-in', 'Phone', 'WhatsApp', 'Repeat booking'];
   const nightly = [1800, 1800, 2600, 2600, 4200, 1800, 2600];
   let curBkId = 13;
   for (let i = 0; i < 48; i++) {
@@ -108,7 +108,7 @@ export function generateSeedData() {
   ];
 
   const campaigns: Campaign[] = [
-    { id: 1, title: '20% off your next Darjeeling stay', message: 'Hi {name}! You are invited back to Mountain View Homestay with 20% off your next Darjeeling trip. Book on StayRide.', audience: 'All guests', status: 'COMPLETED', recipients: 14, sent: 13, failed: 1, createdOn: plusDays(-9) },
+    { id: 1, title: '20% off your next Darjeeling stay', message: 'Hi {name}! You are invited back to Mountain View Homestay with 20% off your next Darjeeling trip.', audience: 'All guests', status: 'COMPLETED', recipients: 14, sent: 13, failed: 1, createdOn: plusDays(-9) },
     { id: 2, title: 'Winter special: snow trip to Lachung', message: 'Hello {name}! Freeze the season with our Lachung snow package. Cab included, 15% off stays this winter.', audience: 'Repeat guests', status: 'CREATED', recipients: 5, sent: 0, failed: 0, createdOn: plusDays(-1) },
   ];
 
@@ -119,7 +119,7 @@ export function generateSeedData() {
     phone: '+91 98320 11223',
     email: 'stay@mountainview.in',
     ownerName: 'Tshering Bhutia',
-    link: 'https://stayride.in/h/mountain-view-gangtok',
+    link: `${process.env.EXPO_PUBLIC_WEB_URL || ''}/h/mountain-view-gangtok`,
     mapQuery: 'MG Marg, Gangtok, Sikkim',
     amenities: [
       'Free Wi-Fi',
@@ -131,7 +131,7 @@ export function generateSeedData() {
       'Luggage Storage',
       'Mountain View',
       'Laundry Service',
-      'In-house Cabs (StayRide)',
+      'In-house Cabs & Sightseeing',
     ],
     photos: [
       'Front elevation',

@@ -186,7 +186,7 @@ export const CabRequestDetailScreen: React.FC = () => {
       Alert.alert(
         'Driver assigned',
         ownFee > 0
-          ? `StayRide sent ${trip.guestName} a link to pay the ₹${ownFee.toLocaleString('en-IN')} advance. Phones are shared with ${driver.name} and the guest once it is paid.`
+          ? `Sent ${trip.guestName} a link to pay the ₹${ownFee.toLocaleString('en-IN')} advance. Phones are shared with ${driver.name} and the guest once it is paid.`
           : `${driver.name} and ${trip.guestName} got the trip details on WhatsApp.`
       );
       return outcome;
@@ -205,8 +205,8 @@ export const CabRequestDetailScreen: React.FC = () => {
       />
       <Text style={styles.assignMeta}>
         {fareNum > 0
-          ? `Guest pays StayRide ₹${ownFee.toLocaleString('en-IN')} advance · ₹${(fareNum - ownFee).toLocaleString('en-IN')} cash to the driver`
-          : `StayRide fee: ${config.ownFleetFeePercent}% of the fare (min ₹${config.ownFleetMinFee}), paid by the guest as the advance.`}
+          ? `Guest pays ₹${ownFee.toLocaleString('en-IN')} advance · ₹${(fareNum - ownFee).toLocaleString('en-IN')} cash to the driver`
+          : `Platform fee: ${config.ownFleetFeePercent}% of the fare (min ₹${config.ownFleetMinFee}), paid by the guest as the advance.`}
       </Text>
     </View>
   );
@@ -250,7 +250,7 @@ export const CabRequestDetailScreen: React.FC = () => {
     run(async () => {
       const outcome = await confirmTripQuote(trip.id, driverId);
       if (!outcome.ok) return outcome;
-      Alert.alert('Driver Confirmed', 'StayRide will collect the guest advance.');
+      Alert.alert('Driver Confirmed', 'The system will collect the guest advance.');
       return outcome;
     });
 
@@ -441,7 +441,7 @@ export const CabRequestDetailScreen: React.FC = () => {
             </Text>
             <Text style={styles.driverTagText}>
               {trip.driverName
-                ? `${trip.driverName} ${trip.ownerDriver ? '(your driver)' : '(StayRide)'}`
+                ? `${trip.driverName} ${trip.ownerDriver ? '(your driver)' : '(network)'}`
                 : 'No driver assigned'}
             </Text>
           </View>
@@ -454,7 +454,7 @@ export const CabRequestDetailScreen: React.FC = () => {
             <Text style={styles.driverName}>
               {trip.driverName}{' '}
               <Text style={styles.driverTypeTag}>
-                · {trip.ownerDriver ? 'Your driver' : 'StayRide network'}
+                · {trip.ownerDriver ? 'Your driver' : 'Partner network'}
               </Text>
             </Text>
             {assignedDriver ? (
@@ -492,7 +492,7 @@ export const CabRequestDetailScreen: React.FC = () => {
                   {status.replace(/_/g, ' ')}
                 </Text>
               </View>
-              <Text style={styles.actionZoneSubtitle}>StayRide Dispatch Network</Text>
+              <Text style={styles.actionZoneSubtitle}>Dispatch Network</Text>
             </View>
             <Text style={styles.actionZoneBodyText}>
               {trip.refundStatus === 'PENDING'
@@ -502,7 +502,7 @@ export const CabRequestDetailScreen: React.FC = () => {
                 : status === 'NEW_REQUEST'
                 ? 'New guest request. Choose how to find a driver.'
                 : status === 'FINDING_DRIVER'
-                ? 'Request sent to StayRide. Driver quotes will appear here.'
+                ? 'Request sent to network drivers. Driver quotes will appear here.'
                 : status === 'QUOTE_RECEIVED'
                 ? 'Quotes received from mountain drivers. Choose a driver below.'
                 : status === 'AWAITING_ADVANCE'
@@ -559,7 +559,7 @@ export const CabRequestDetailScreen: React.FC = () => {
             {trip.needsReassignment && (
               <View style={[styles.banner, { backgroundColor: Colors.statusRedBg, marginTop: 8 }]}>
                 <Text style={[styles.bannerText, { color: Colors.statusRed }]}>
-                  Needs a new driver: your driver is no longer available. StayRide is assigning a new driver at the same agreed fare.
+                  Needs a new driver: your driver is no longer available. Reassigning a new driver at the same agreed fare.
                 </Text>
               </View>
             )}
@@ -677,7 +677,7 @@ export const CabRequestDetailScreen: React.FC = () => {
               <View style={[styles.banner, { backgroundColor: Colors.statusPurpleBg }]}>
                 <ActivityIndicator size="small" color={Colors.statusPurple} style={{ marginRight: 8 }} />
                 <Text style={[styles.bannerText, { color: Colors.statusPurple }]}>
-                  Finding a driver from the StayRide network…
+                  Finding a driver from the partner network…
                 </Text>
               </View>
             )}
@@ -717,11 +717,11 @@ export const CabRequestDetailScreen: React.FC = () => {
               <>
                 <View style={[styles.banner, { backgroundColor: Colors.statusPurpleBg, marginBottom: 12 }]}>
                   <Text style={[styles.bannerText, { color: Colors.statusPurple }]}>
-                    StayRide network drivers
+                    Regional network drivers
                   </Text>
                 </View>
                 <Text style={styles.resultsHeader}>
-                  StayRide drivers near you ({networkMatches().length})
+                  Drivers near you ({networkMatches().length})
                 </Text>
                 {networkMatches().map((d) => (
                   <View key={d.id} style={styles.assignRow}>
@@ -803,7 +803,7 @@ export const CabRequestDetailScreen: React.FC = () => {
                 style={styles.outlineBtn}
                 onPress={beginNetworkSearch}
               >
-                <Text style={styles.outlineBtnText}>Search StayRide network instead</Text>
+                <Text style={styles.outlineBtnText}>Search regional network instead</Text>
               </TouchableOpacity>
             )}
             {searchMode === 'network' && (

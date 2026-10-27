@@ -170,7 +170,7 @@ export async function requestAdvance(tenantKey: string, isDemo: boolean, doc: an
           reference: doc.reference,
           guestName: doc.guestName,
           guestPhone: doc.guestPhone,
-          description: `StayRide cab advance for trip ${doc.reference}`,
+          description: `Cab advance for trip ${doc.reference}`,
           expiresAt: doc.advanceDueAt ? new Date(doc.advanceDueAt) : null,
         });
     if (!isDemo && gatewayEnabled() && !link) {
@@ -456,7 +456,7 @@ export async function overlayTrips(tenantKey: string, isDemo: boolean, trips: an
     if (!t.reference) return { ...t, platform: false, driverRated: false };
     const d: any = byRef.get(t.reference);
     // The request write failed after the trip was saved (see cancelOrphanRequests): nothing is live.
-    if (!d) return { ...t, platform: true, status: 'CANCELLED', cancellationReason: 'This request did not reach StayRide. Please create it again.', quotes: [], driverRated: false };
+    if (!d) return { ...t, platform: true, status: 'CANCELLED', cancellationReason: 'This request could not be processed. Please create it again.', quotes: [], driverRated: false };
     const snap = d.financialSnapshot || null;
     const earned = d.status === 'COMPLETED' && d.advancePaid && snap ? snap.homestayCommissionAmount : 0;
     return {
@@ -691,7 +691,7 @@ export async function cancelRequest(
       throw conflict(`A ${doc.status.toLowerCase().replace('_', ' ')} trip cannot be cancelled.`);
     }
     if (doc.advancePaid) {
-      throw conflict('This ride is booked with a paid advance deposit. Please contact StayRide admin support to cancel and process the refund.');
+      throw conflict('This ride is booked with a paid advance deposit. Please contact support to cancel and process the refund.');
     }
   }
 
@@ -1604,7 +1604,7 @@ export async function adminAssignDriver(isDemo: boolean, id: string, body: any, 
   }
   const pushes: Promise<unknown>[] = [];
   if (driverUserId && driverUserId !== previous) {
-    pushes.push(pushUsers(isDemo, [driverUserId], { title: 'New trip assigned', body: `StayRide assigned you trip ${doc.reference}.`, data: tripData(doc, 'TRIP_ASSIGNED') }));
+    pushes.push(pushUsers(isDemo, [driverUserId], { title: 'New trip assigned', body: `You were assigned trip ${doc.reference}.`, data: tripData(doc, 'TRIP_ASSIGNED') }));
   }
   if (previous && previous !== driverUserId) {
     pushes.push(pushUsers(isDemo, [previous], { title: 'Trip reassigned', body: `Trip ${doc.reference} was given to another driver.`, data: tripData(doc, 'DRIVER_REMOVED') }));
@@ -1615,7 +1615,7 @@ export async function adminAssignDriver(isDemo: boolean, id: string, body: any, 
     pushes.push(
       whatsapp(isDemo, phone, messages.advancePaidDriverMessage(updated, driverQuoteLink(isDemo, updated.assignedDriverUserId, updated.reference))),
       whatsapp(isDemo, updated.guestPhone, messages.advancePaidGuestMessage(updated)),
-      pushOwner(isDemo, String(doc.propertyId), { title: 'New driver assigned', body: `StayRide assigned ${name} to trip ${doc.reference}.`, data: tripData(updated, 'TRIP_ASSIGNED') })
+      pushOwner(isDemo, String(doc.propertyId), { title: 'New driver assigned', body: `Assigned ${name} to trip ${doc.reference}.`, data: tripData(updated, 'TRIP_ASSIGNED') })
     );
   } else {
     // A new fare means a new advance: give the guest a way to pay it; WhatsApp-only drivers hear it too
@@ -2120,7 +2120,7 @@ export async function requestDriverPayout(
       driverId,
       driverName: driver.name || 'Driver',
       driverPhone: driver.phone || '',
-      homestayName: 'StayRide Driver Wallet',
+      homestayName: 'Driver Wallet',
       ownerName: driver.name || 'Driver',
       ownerPhone: driver.phone || '',
       amount,
@@ -2165,7 +2165,7 @@ export async function rateDriver(tenantKey: string, isDemo: boolean, reference: 
     { $set: { rating: { stars, comment, ratedAt: new Date(), ratedBy: actor } } },
     { returnDocument: 'after' }
   );
-  if (!updated) throw conflict('Only a completed StayRide trip can be rated, and only once.');
+  if (!updated) throw conflict('Only a completed trip can be rated, and only once.');
   // ponytail: two writes; a crash between them loses one rating from the average (the trip stays rated).
   if (mongoose.Types.ObjectId.isValid(updated.assignedDriverUserId)) {
     await userModel(isDemo).updateOne({ _id: updated.assignedDriverUserId, role: 'driver' }, { $inc: { ratingSum: stars, ratingCount: 1 } });
@@ -2220,10 +2220,10 @@ export const driverRatingFields = (u: any) => ({ rating: ratingOf(u).driverRatin
 // ---------------------------------------------------------------------------
 export async function onDriverStatusChange(isDemo: boolean, driverUserId: string, status: string, actor: string) {
   // A driver who can't use the app any more (pending review or blocked) can't keep trips either
-  if (status === 'BLOCKED') await releaseDriverTrips(isDemo, driverUserId, actor, 'Your StayRide driver account was blocked. Contact StayRide support.');
-  if (status === 'PENDING_APPROVAL') await releaseDriverTrips(isDemo, driverUserId, actor, 'Your StayRide driver account is under review again. Your upcoming trips were given back to StayRide.');
+  if (status === 'BLOCKED') await releaseDriverTrips(isDemo, driverUserId, actor, 'Your driver account was blocked. Please contact support.');
+  if (status === 'PENDING_APPROVAL') await releaseDriverTrips(isDemo, driverUserId, actor, 'Your driver account is under review again. Your upcoming trips were released.');
   if (status === 'ACTIVE') {
-    await pushUsers(isDemo, [driverUserId], { title: 'You are approved', body: 'Your StayRide driver account is active. You can now quote on trips.', data: { type: 'DRIVER_APPROVED' } });
+    await pushUsers(isDemo, [driverUserId], { title: 'You are approved', body: 'Your driver account is active. You can now quote on trips.', data: { type: 'DRIVER_APPROVED' } });
   }
 }
 
@@ -2237,7 +2237,7 @@ export async function releaseDriverTrips(isDemo: boolean, driverUserId: string, 
   const Cab = cabModel(isDemo);
   const id = String(driverUserId);
   const noDriver = { assignedDriverUserId: null, assignedDriverName: '', assignedDriverPhone: '', vehicleDetails: { model: '', plate: '' } };
-  const removedMsg = (d: any) => ({ title: 'Driver removed', body: `The driver for trip ${d.reference} is no longer available. StayRide will arrange another.`, data: tripData(d, 'DRIVER_REMOVED') });
+  const removedMsg = (d: any) => ({ title: 'Driver removed', body: `The driver for trip ${d.reference} is no longer available. Arranging another driver.`, data: tripData(d, 'DRIVER_REMOVED') });
 
   await Cab.updateMany(
     { status: { $in: OPEN_STATUSES }, quotes: { $elemMatch: { driverId: id, status: 'PENDING' } } },

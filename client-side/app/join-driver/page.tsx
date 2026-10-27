@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { API_ENDPOINTS, apiFetch } from "@/lib/api-config";
+import { siteConfig } from "@/lib/site-config";
 import { Icon } from "@/components/icon";
 import { getRecaptchaToken } from "@/lib/recaptcha";
 
@@ -138,7 +139,7 @@ export default function JoinDriverPage() {
         <div className="mb-6 flex items-center justify-between">
           <Link href="/" className="inline-flex items-center gap-2 text-sm font-bold text-emerald-800 hover:text-emerald-900">
             <Icon name="arrow_back" className="text-base" />
-            <span>StayRide Mountain Network</span>
+            <span>{siteConfig.appName} Mountain Network</span>
           </Link>
           <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-900">
             <Icon name="verified" className="text-xs text-emerald-700" /> Driver Onboarding
@@ -148,7 +149,7 @@ export default function JoinDriverPage() {
         {/* Hero Card */}
         <div className="rounded-2xl border border-[#D0D7DE] bg-white p-6 shadow-xs sm:p-8 mb-6">
           <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-[#1F2328]">
-            Drive with StayRide
+            Drive with {siteConfig.appName}
           </h1>
           <p className="mt-1.5 text-xs sm:text-sm text-[#57606A] leading-relaxed">
             Get door-to-door hill trip requests from verified homestays in Darjeeling, Kalimpong, Siliguri, and Sikkim. Direct in-hand cash from passengers, WhatsApp trip broadcasts, no heavy app required.
@@ -472,7 +473,7 @@ export default function JoinDriverPage() {
                   className="mt-0.5 rounded border-[#D0D7DE] text-emerald-600 focus:ring-emerald-500"
                 />
                 <span className="leading-tight">
-                  I agree to operate under StayRide hill safety guidelines, collect only agreed cash fares, and provide clean, punctual service to homestay guests.
+                  I agree to operate under {siteConfig.appName} hill safety guidelines, collect only agreed cash fares, and provide clean, punctual service to homestay guests.
                 </span>
               </label>
             </div>

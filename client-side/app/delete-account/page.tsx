@@ -5,6 +5,7 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { API_ENDPOINTS, apiFetch } from "@/lib/api-config";
+import { siteConfig } from "@/lib/site-config";
 
 type Business = { name?: string; email?: string; grievanceEmail?: string };
 
@@ -17,8 +18,8 @@ export default function DeleteAccountPage() {
       .catch(() => {});
   }, []);
 
-  const email = business.grievanceEmail || business.email;
-  const name = business.name || "StayRide";
+  const email = business.grievanceEmail || business.email || siteConfig.supportEmail;
+  const name = business.name || siteConfig.appName;
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-10 text-on-surface">
@@ -42,7 +43,7 @@ export default function DeleteAccountPage() {
               the email address you sign in with, or include the phone number on your account.
             </>
           ) : (
-            "Contact StayRide support from the email address you sign in with."
+            `Contact ${siteConfig.appName} support from the email address you sign in with.`
           )}{" "}
           We confirm and delete it within 30 days.
         </p>

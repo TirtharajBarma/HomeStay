@@ -19,7 +19,7 @@ export const FeatureLocked: React.FC<FeatureLockedProps> = ({ feature, title }) 
 
   const submit = async () => {
     if (!reason.trim()) {
-      Alert.alert('Reason needed', 'Please tell StayRide why you need this feature.');
+      Alert.alert('Reason needed', 'Please provide a reason why you need this feature.');
       return;
     }
     setSending(true);
@@ -31,13 +31,13 @@ export const FeatureLocked: React.FC<FeatureLockedProps> = ({ feature, title }) 
     }
     setOpen(false);
     setReason('');
-    Alert.alert('Request sent', 'StayRide will review your request.');
+    Alert.alert('Request sent', 'Platform admin will review your request.');
   };
 
   return (
     <View style={styles.card}>
       <Text style={styles.title}>{title}</Text>
-      <Text style={styles.body}>This feature is not enabled for your homestay by StayRide.</Text>
+      <Text style={styles.body}>This feature is currently not enabled for your homestay.</Text>
       <TouchableOpacity style={styles.btn} onPress={() => setOpen(true)}>
         <Text style={styles.btnText}>Request access</Text>
       </TouchableOpacity>

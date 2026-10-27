@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import mongoose from 'mongoose';
 import crypto from 'node:crypto';
-import { tenantManager, StayRideMemoryStore, isDemoKey, pick, WRITABLE, clean } from './store.js';
+import { tenantManager, StayRideMemoryStore, isDemoKey, DEMO_TENANT, pick, WRITABLE, clean } from './store.js';
 import { beginIdempotent } from './idempotency.js';
 import {
   OPEN_STATUSES, cabModel, payoutModel, userModel, parseFare, overlayTrips, ownerConfirmQuote, cancelRequest, expireStaleRequests,
@@ -82,7 +82,13 @@ const bearer = (req: Request) => {
   return h && h.startsWith('Bearer ') ? h.slice(7) : '';
 };
 
-const RESERVED_EMAILS = new Set(['driver@stayride.in', 'demo-driver@stayride.in']);
+const driverEmailDomain = process.env.DRIVER_EMAIL_DOMAIN || `driver.${config.appDomain || 'local'}`;
+const RESERVED_EMAILS = new Set([
+  'driver@stayride.in',
+  'demo-driver@stayride.in',
+  (config.demoDriverEmail || '').toLowerCase().trim(),
+  `driver@${config.appDomain || 'local'}`,
+].filter(Boolean));
 export const isReservedEmail = (email: string) => isDemoKey(email) || RESERVED_EMAILS.has((email || '').toLowerCase().trim());
 
 // ==========================================
@@ -172,10 +178,12 @@ stayrideV1Router.post('/auth/login', async (req: Request, res: Response) => {
   }
 
   const isDemoHost =
-    config.demoEnabled && cleanEmail === 'demo@stayride.in' && (cleanPass === 'demo123' || cleanPass === 'demo');
+    config.demoEnabled &&
+    (cleanEmail === 'demo@stayride.in' || cleanEmail === (config.demoHostEmail || '').toLowerCase()) &&
+    (cleanPass === 'demo123' || cleanPass === 'demo');
   const isDemoDriver =
     config.demoEnabled &&
-    (cleanEmail === 'demo-driver@stayride.in' || cleanEmail === 'driver@stayride.in') &&
+    (cleanEmail === 'demo-driver@stayride.in' || cleanEmail === 'driver@stayride.in' || cleanEmail === (config.demoDriverEmail || '').toLowerCase()) &&
     (cleanPass === 'demo123' || cleanPass === 'demo');
   if (!config.demoEnabled && isReservedEmail(cleanEmail)) {
     return res.status(403).json({ error: { message: 'The demo account is disabled.' } });
@@ -183,14 +191,14 @@ stayrideV1Router.post('/auth/login', async (req: Request, res: Response) => {
 
   // 1A. DEMO HOST LOGIN
   if (isDemoHost) {
-    const tenantKey = 'demo@stayride.in';
+    const tenantKey = cleanEmail;
     const store = await tenantManager.load(tenantKey);
 
     const tokenPayload: StayRideAuthPayload = {
       id: 'demo-owner-1',
-      email: 'demo@stayride.in',
+      email: cleanEmail,
       role: 'owner',
-      tenantKey: 'demo@stayride.in',
+      tenantKey,
       isDemo: true,
     };
 
@@ -204,12 +212,12 @@ stayrideV1Router.post('/auth/login', async (req: Request, res: Response) => {
         id: 1,
         name: store.homestay.ownerName || 'Tshering Bhutia (Demo Host)',
         phone: store.homestay.phone || '+91 98001 23456',
-        email: 'demo@stayride.in',
+        email: cleanEmail,
       },
       homestay: {
         id: 1,
         name: store.homestay.name || 'Mountain View Homestay',
-        link: store.homestay.link || 'https://stayride.in/h/mountain-view-gangtok',
+        link: store.homestay.link || `${config.guestWebUrl}/h/mountain-view-gangtok`,
       },
     });
   }
@@ -220,7 +228,7 @@ stayrideV1Router.post('/auth/login', async (req: Request, res: Response) => {
       id: 'demo-driver-1',
       email: cleanEmail,
       role: 'driver',
-      tenantKey: 'demo@stayride.in',
+      tenantKey: DEMO_TENANT,
       isDemo: true,
     };
 
@@ -269,7 +277,7 @@ stayrideV1Router.post('/auth/login', async (req: Request, res: Response) => {
     }
 
     if (user.role !== 'owner' && user.role !== 'driver') {
-      return res.status(403).json({ error: { message: 'This account cannot sign in to the StayRide app.' } });
+      return res.status(403).json({ error: { message: 'This account cannot sign in to this portal.' } });
     }
     const userRole = user.role as 'owner' | 'driver';
 
@@ -280,7 +288,7 @@ stayrideV1Router.post('/auth/login', async (req: Request, res: Response) => {
         userRole: user.role,
         ip: req.ip,
       });
-      return res.status(403).json({ error: { message: 'This account is blocked. Contact StayRide support.', code: 'ACCOUNT_BLOCKED' } });
+      return res.status(403).json({ error: { message: 'This account is blocked. Please contact support.', code: 'ACCOUNT_BLOCKED' } });
     }
 
     // 2A. DRIVER USER LOGIN (pending drivers can sign in but see "awaiting approval")
@@ -323,7 +331,7 @@ stayrideV1Router.post('/auth/login', async (req: Request, res: Response) => {
         userRole: "owner",
         ip: req.ip,
       });
-      return res.status(403).json({ error: { message: `Your homestay account is suspended by StayRide${account.blockReason ? `: ${account.blockReason}` : '.'}`, code: 'ACCOUNT_BLOCKED' } });
+      return res.status(403).json({ error: { message: `Your homestay account is suspended${account.blockReason ? `: ${account.blockReason}` : '.'}`, code: 'ACCOUNT_BLOCKED' } });
     }
     const store = await tenantManager.load(tenantKey);
 
@@ -413,7 +421,7 @@ stayrideV1Router.post('/auth/signup', async (req: Request, res: Response) => {
       const cfg = await CommissionService.getPlatformConfig(false);
       const vt = VEHICLE_TYPES.includes(vehicleType) ? vehicleType : 'SUV';
       if (cfg.vehicles[vt as keyof typeof cfg.vehicles]?.enabled === false) {
-        return res.status(400).json({ error: { message: 'This vehicle type is currently disabled by StayRide.' } });
+        return res.status(400).json({ error: { message: 'This vehicle type is currently not enabled.' } });
       }
     }
 
@@ -623,7 +631,12 @@ stayrideV1Router.post('/auth/clerk-status', async (req: Request, res: Response) 
   const primaryPhone = clerkUser.phoneNumbers?.find((p) => p.id === clerkUser.primaryPhoneNumberId)?.phoneNumber;
   const digitsPhone = primaryPhone ? primaryPhone.replace(/\D/g, '').slice(-10) : '';
   const phoneFilters = digitsPhone
-    ? [{ phone: digitsPhone }, { phone: `+91${digitsPhone}` }, { email: `driver_${digitsPhone}@driver.stayride.in` }]
+    ? [
+        { phone: digitsPhone },
+        { phone: `+91${digitsPhone}` },
+        { email: `driver_${digitsPhone}@${driverEmailDomain}` },
+        { email: `driver_${digitsPhone}@driver.stayride.in` },
+      ]
     : [];
   const user: any = await getUserModel(false)
     .findOne({ $or: [{ clerkId: clerkUserId }, ...(email ? [{ email }] : []), ...phoneFilters] })
@@ -669,7 +682,12 @@ stayrideV1Router.post('/auth/clerk-sync', async (req: Request, res: Response) =>
     const clerkDigitsPhone = primaryPhone ? primaryPhone.replace(/\D/g, '').slice(-10) : '';
     const lookupPhone = cleanPhone || clerkDigitsPhone;
     const phoneFilters = lookupPhone
-      ? [{ phone: lookupPhone }, { phone: `+91${lookupPhone}` }, { email: `driver_${lookupPhone}@driver.stayride.in` }]
+      ? [
+          { phone: lookupPhone },
+          { phone: `+91${lookupPhone}` },
+          { email: `driver_${lookupPhone}@${driverEmailDomain}` },
+          { email: `driver_${lookupPhone}@driver.stayride.in` },
+        ]
       : [];
     const cleanName = (clerkUser.fullName || clerkUser.firstName || (requestedRole === 'driver' ? 'Driver' : 'Host')).trim();
 
@@ -692,7 +710,7 @@ stayrideV1Router.post('/auth/clerk-sync', async (req: Request, res: Response) =>
     }
 
     if (user && user.accountStatus === 'BLOCKED') {
-      return res.status(403).json({ error: { message: 'This account is blocked. Contact StayRide support.', code: 'ACCOUNT_BLOCKED' } });
+      return res.status(403).json({ error: { message: 'This account is blocked. Please contact support.', code: 'ACCOUNT_BLOCKED' } });
     }
     if (user && user.clerkId && user.clerkId !== clerkId) {
       return res.status(409).json({ error: { message: 'This email is already linked to a different sign-in account.' } });
@@ -708,7 +726,7 @@ stayrideV1Router.post('/auth/clerk-sync', async (req: Request, res: Response) =>
       const cfg = await CommissionService.getPlatformConfig(false);
       const vt = VEHICLE_TYPES.includes(vehicleType) ? vehicleType : 'SUV';
       if (cfg.vehicles[vt as keyof typeof cfg.vehicles]?.enabled === false) {
-        return res.status(400).json({ error: { message: 'This vehicle type is currently disabled by StayRide.' } });
+        return res.status(400).json({ error: { message: 'This vehicle type is currently not enabled.' } });
       }
     }
     // New accounts must accept the Terms + Privacy Policy and confirm they are 18 or older
@@ -759,7 +777,12 @@ stayrideV1Router.post('/auth/clerk-sync', async (req: Request, res: Response) =>
         user.clerkId = clerkId;
         modified = true;
       }
-      if (cleanEmail && user.email && user.email.startsWith('driver_') && user.email.endsWith('@driver.stayride.in')) {
+      if (
+        cleanEmail &&
+        user.email &&
+        user.email.startsWith('driver_') &&
+        (user.email.endsWith(`@${driverEmailDomain}`) || user.email.endsWith('@driver.stayride.in'))
+      ) {
         user.email = cleanEmail;
         modified = true;
       }
@@ -791,7 +814,7 @@ stayrideV1Router.post('/auth/clerk-sync', async (req: Request, res: Response) =>
 
     const account = await CommissionService.getAccountState(cleanEmail, false);
     if (account.blocked) {
-      return res.status(403).json({ error: { message: 'Your homestay account is suspended by StayRide.', code: 'ACCOUNT_BLOCKED' } });
+      return res.status(403).json({ error: { message: 'Your homestay account is suspended.', code: 'ACCOUNT_BLOCKED' } });
     }
 
     // Owner role return
@@ -1137,7 +1160,7 @@ stayrideV1Router.post('/public/properties/:slug/cab-requests', requireRecaptcha(
   let isDemo = false;
 
   if (slug === 'demo' || slug === 'demo-homestay') {
-    tenantKey = 'demo@stayride.in';
+    tenantKey = DEMO_TENANT;
     isDemo = true;
   } else {
     const prop = await PropertyService.getPropertyBySlug(slug);
@@ -1367,7 +1390,7 @@ async function quoteLinkDriver(token: unknown, res: Response) {
   }
 
   if (!driver || driver.accountStatus !== 'ACTIVE') {
-    res.status(403).json({ error: { message: 'Your driver account is not active. Contact StayRide support.', code: 'DRIVER_NOT_ACTIVE' } });
+    res.status(403).json({ error: { message: 'Your driver account is not active. Please contact support.', code: 'DRIVER_NOT_ACTIVE' } });
     return null;
   }
   return { ...link, driver };
@@ -1405,7 +1428,7 @@ stayrideV1Router.post('/public/driver-quote/quote', async (req: Request, res: Re
   if (!ctx) return;
   const settings = await CommissionService.getSettings(ctx.isDemo);
   if (!CommissionService.globalFeatures(settings).driverQuotes.enabled) {
-    return res.status(403).json({ error: { message: 'Driver quotes are currently disabled by StayRide.', code: 'FEATURE_DISABLED' } });
+    return res.status(403).json({ error: { message: 'Driver quotes are currently disabled.', code: 'FEATURE_DISABLED' } });
   }
   await driverSubmitQuote(ctx.isDemo, ctx.reference, ctx.driver, req.body?.quotedFare, req.body?.notes, {
     plate: req.body?.vehiclePlate,
@@ -1556,10 +1579,10 @@ stayrideV1Router.post('/public/driver-signup', requireRecaptcha('driver_signup')
           message: 'Your registration is already received and under review. We will alert you on WhatsApp once approved.',
         });
       }
-      return res.status(409).json({ error: { message: 'This phone number is already registered with StayRide.' } });
+      return res.status(409).json({ error: { message: `This phone number is already registered with ${config.appName}.` } });
     }
 
-    const dummyEmail = `driver_${cleanPhone}@driver.stayride.in`;
+    const dummyEmail = `driver_${cleanPhone}@${driverEmailDomain}`;
     const user = await UserModel.create({
       termsAcceptedAt: new Date(),
       termsVersion: LEGAL_VERSION,
@@ -1799,10 +1822,10 @@ async function driverGate(req: Request, res: Response, next: () => void) {
   if (authOf(req).role !== 'driver') return res.status(403).json({ error: { message: 'Driver account required.', code: 'FORBIDDEN' } });
   const driver = await loadDriver(req);
   if (!driver || driver.accountStatus === 'BLOCKED') {
-    return res.status(403).json({ error: { message: 'Your driver account is blocked. Contact StayRide support.', code: 'ACCOUNT_BLOCKED' } });
+    return res.status(403).json({ error: { message: 'Your driver account is blocked. Please contact support.', code: 'ACCOUNT_BLOCKED' } });
   }
   if (driver.accountStatus !== 'ACTIVE') {
-    return res.status(403).json({ error: { message: 'Your driver account is awaiting approval by StayRide.', code: 'DRIVER_NOT_APPROVED' } });
+    return res.status(403).json({ error: { message: 'Your driver account is awaiting approval.', code: 'DRIVER_NOT_APPROVED' } });
   }
   (req as any).driver = driver;
   next();
@@ -1813,7 +1836,7 @@ stayrideV1Router.get('/snapshot', async (req: Request, res: Response, next: () =
   if (authOf(req).role !== 'driver') return next();
   const driver = await loadDriver(req);
   if (!driver || driver.accountStatus === 'BLOCKED') {
-    return res.status(403).json({ error: { message: 'Your driver account is blocked. Contact StayRide support.', code: 'ACCOUNT_BLOCKED' } });
+    return res.status(403).json({ error: { message: 'Your driver account is blocked. Please contact support.', code: 'ACCOUNT_BLOCKED' } });
   }
   const trips = driver.accountStatus === 'ACTIVE' ? await driverTrips(isDemoKey(authOf(req).tenantKey), driver) : [];
   return res.json({
@@ -1877,7 +1900,7 @@ stayrideV1Router.post('/driver/trips/:reference/quote', driverGate, async (req: 
   const isDemo = isDemoKey(authOf(req).tenantKey);
   const settings = await CommissionService.getSettings(isDemo);
   if (!CommissionService.globalFeatures(settings).driverQuotes.enabled) {
-    return res.status(403).json({ error: { message: 'Driver quotes are currently disabled by StayRide.', code: 'FEATURE_DISABLED' } });
+    return res.status(403).json({ error: { message: 'Driver quotes are currently disabled.', code: 'FEATURE_DISABLED' } });
   }
   const updated = await driverSubmitQuote(
     isDemo,
@@ -1950,7 +1973,7 @@ async function pushTokenUser(req: Request, res: Response): Promise<any | null | 
   if (isDemoKey(u.tenantKey)) return null; // demo: accepted, never stored
   const user: any = mongoose.Types.ObjectId.isValid(u.id) ? await getUserModel(false).findById(u.id).select('accountStatus role').lean() : null;
   if (!user || user.accountStatus === 'BLOCKED' || user.role !== u.role) {
-    res.status(403).json({ error: { message: 'This account is blocked. Contact StayRide support.', code: 'ACCOUNT_BLOCKED' } });
+    res.status(403).json({ error: { message: 'This account is blocked. Please contact support.', code: 'ACCOUNT_BLOCKED' } });
     return undefined;
   }
   return user;
@@ -2032,16 +2055,16 @@ stayrideV1Router.use(async (req: Request, res: Response, next: () => void) => {
   if (!isDemoKey(u.tenantKey)) {
     const user: any = (req as any).stayrideAccount;
     if (user?.accountStatus === 'PENDING_APPROVAL') {
-      return res.status(403).json({ error: { message: 'Your homestay account is pending approval by StayRide.', code: 'OWNER_NOT_APPROVED' } });
+      return res.status(403).json({ error: { message: 'Your homestay account is pending approval.', code: 'OWNER_NOT_APPROVED' } });
     }
     if (!user || user.accountStatus !== 'ACTIVE' || user.role !== 'owner') {
-      return res.status(403).json({ error: { message: 'This account is blocked. Contact StayRide support.', code: 'ACCOUNT_BLOCKED' } });
+      return res.status(403).json({ error: { message: 'This account is blocked. Please contact support.', code: 'ACCOUNT_BLOCKED' } });
     }
   }
   const account = await CommissionService.getAccountState(u.tenantKey, isDemoKey(u.tenantKey));
   if (account.blocked) {
     return res.status(403).json({
-      error: { message: `Your homestay account is suspended by StayRide${account.blockReason ? `: ${account.blockReason}` : '.'}`, code: 'ACCOUNT_BLOCKED' },
+      error: { message: `Your homestay account is suspended${account.blockReason ? `: ${account.blockReason}` : '.'}`, code: 'ACCOUNT_BLOCKED' },
     });
   }
   (req as any).account = account;
@@ -2050,7 +2073,7 @@ stayrideV1Router.use(async (req: Request, res: Response, next: () => void) => {
 
 const requireFeature = (key: FeatureKey) => (req: Request, res: Response, next: () => void) => {
   if ((req as any).account?.features?.[key]) return next();
-  return res.status(403).json({ error: { message: 'This feature is not enabled for your homestay. You can request access from StayRide.', code: 'FEATURE_DISABLED', feature: key } });
+  return res.status(403).json({ error: { message: 'This feature is not enabled for your homestay. You can request access from platform admin.', code: 'FEATURE_DISABLED', feature: key } });
 };
 
 // O1: Idempotency-Key on owner create endpoints. Same tenant + key within 24h replays the stored
@@ -2339,7 +2362,7 @@ stayrideV1Router.delete('/drivers/:id', async (req: Request, res: Response) => {
 //  - PLATFORM trips: a CabRequest is the source of truth; owners can confirm a driver quote or
 //    cancel, but only admin / the assigned driver move money or completion.
 // ==========================================
-const PLATFORM_MANAGED = { error: { message: 'This trip is managed by StayRide (platform trip).', code: 'PLATFORM_MANAGED' } };
+const PLATFORM_MANAGED = { error: { message: 'This trip is managed by the platform.', code: 'PLATFORM_MANAGED' } };
 
 async function overlayOne(req: Request, trip: any) {
   const { tenantKey, isDemo } = tenantOf(req);
@@ -2361,7 +2384,7 @@ stayrideV1Router.post('/trips', async (req: Request, res: Response) => {
   if (inputError) return res.status(400).json({ error: { message: inputError } });
   const platform = req.body.dispatchMode === 'PLATFORM';
   if (platform && !(req as any).account.features.platformDispatch) {
-    return res.status(403).json({ error: { message: 'Sending requests to StayRide drivers is not enabled for your homestay.', code: 'FEATURE_DISABLED', feature: 'platformDispatch' } });
+    return res.status(403).json({ error: { message: 'Sending requests to network drivers is not enabled for your homestay.', code: 'FEATURE_DISABLED', feature: 'platformDispatch' } });
   }
   const make = (s: StayRideMemoryStore) => withEstimate(cfg, s.createTrip({ ...input, pickup: input.pickup || s.homestay.location || s.homestay.name }));
   // Every trip is a StayRide request now (StayRide earns on own-fleet trips too). An own-driver booking
@@ -2499,23 +2522,23 @@ stayrideV1Router.post('/trips/:id/confirm-quote', async (req: Request, res: Resp
 stayrideV1Router.post('/trips/:id/dispatch', async (req: Request, res: Response) => {
   const { tenantKey, isDemo } = tenantOf(req);
   if (!(req as any).account.features.platformDispatch) {
-    return res.status(403).json({ error: { message: 'Sending requests to StayRide drivers is not enabled for your homestay.', code: 'FEATURE_DISABLED', feature: 'platformDispatch' } });
+    return res.status(403).json({ error: { message: 'Sending requests to network drivers is not enabled for your homestay.', code: 'FEATURE_DISABLED', feature: 'platformDispatch' } });
   }
   const store = await loadReqStore(req);
   const trip = store.trip(Number(req.params.id));
   if (!trip) return notFound(res, 'Trip');
-  if (!trip.reference) return res.status(409).json({ error: { message: 'Only StayRide requests can be sent to drivers.', code: 'INVALID_STATE' } });
+  if (!trip.reference) return res.status(409).json({ error: { message: 'Only platform cab requests can be sent to drivers.', code: 'INVALID_STATE' } });
   await dispatchRequest(tenantKey, isDemo, trip.reference);
   return res.json(await overlayOne(req, trip));
 });
 
-// Owner counter-offers a driver's quote (StayRide trips): the driver accepts, or quotes again
+// Owner counter-offers a driver's quote (network trips): the driver accepts, or quotes again
 stayrideV1Router.post('/trips/:id/counter', async (req: Request, res: Response) => {
   const { tenantKey, isDemo, actor } = tenantOf(req);
   const store = await loadReqStore(req);
   const trip = store.trip(Number(req.params.id));
   if (!trip) return notFound(res, 'Trip');
-  if (!trip.reference) return res.status(409).json({ error: { message: 'Counter-offers are for StayRide driver quotes.', code: 'INVALID_STATE' } });
+  if (!trip.reference) return res.status(409).json({ error: { message: 'Counter-offers are for platform driver quotes.', code: 'INVALID_STATE' } });
   await ownerCounterOffer(tenantKey, isDemo, trip.reference, str(req.body?.driverId, 64), req.body?.fare, actor);
   return res.json(await overlayOne(req, trip));
 });
@@ -2533,20 +2556,20 @@ stayrideV1Router.post('/trips/:id/cancel', async (req: Request, res: Response) =
   res.json(await mutateReq(req, (s) => s.cancelTrip(id)));
 });
 
-// Owner rates the StayRide driver of a completed platform trip (once).
+// Owner rates the driver of a completed platform trip (once).
 stayrideV1Router.post('/trips/:id/rate', async (req: Request, res: Response) => {
   const { tenantKey, isDemo, actor } = tenantOf(req);
   const store = await loadReqStore(req);
   const trip = store.trip(Number(req.params.id));
   if (!trip) return notFound(res, 'Trip');
-  if (!trip.reference) return res.status(409).json({ error: { message: 'Only StayRide platform trips can be rated.', code: 'INVALID_STATE' } });
+  if (!trip.reference) return res.status(409).json({ error: { message: 'Only completed platform trips can be rated.', code: 'INVALID_STATE' } });
   await rateDriver(tenantKey, isDemo, trip.reference, req.body, actor);
   res.json(await overlayOne(req, trip));
 });
 
 // Platform commission is paid only through admin-settled payouts.
 stayrideV1Router.post('/trips/:id/commission/pay', (_req: Request, res: Response) => {
-  res.status(410).json({ error: { message: 'Commission is settled by StayRide through payouts.', code: 'GONE' } });
+  res.status(410).json({ error: { message: 'Commission is settled through admin payouts.', code: 'GONE' } });
 });
 
 // ==========================================
@@ -2643,7 +2666,7 @@ stayrideV1Router.post('/appeals', async (req: Request, res: Response) => {
   // driverQuotes is one platform-wide switch for drivers, not something a homestay can be granted
   if (!FEATURE_KEYS.includes(featureKey) || featureKey === 'driverQuotes') return res.status(400).json({ error: { message: 'Unknown feature.' } });
   const reason = str(req.body.reason, 500);
-  if (!reason) return res.status(400).json({ error: { message: 'Please tell StayRide why you need this feature.' } });
+  if (!reason) return res.status(400).json({ error: { message: 'Please state why you need this feature.' } });
   const Appeal = getFeatureAppealModel(isDemo);
   if (await Appeal.exists({ propertyId: tenantKey, featureKey, status: 'PENDING' })) {
     return res.status(409).json({ error: { message: 'You already have a pending request for this feature.' } });

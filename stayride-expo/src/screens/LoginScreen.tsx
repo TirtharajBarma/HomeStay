@@ -33,6 +33,10 @@ import { VehicleType } from '../types';
 // Complete any pending auth session (required for Clerk OAuth in Expo)
 WebBrowser.maybeCompleteAuthSession();
 
+const APP_NAME = process.env.EXPO_PUBLIC_APP_NAME || 'Platform';
+const DEMO_HOST_EMAIL = process.env.EXPO_PUBLIC_DEMO_HOST_EMAIL || 'demo@stayride.in';
+const DEMO_DRIVER_EMAIL = process.env.EXPO_PUBLIC_DEMO_DRIVER_EMAIL || 'driver@stayride.in';
+
 const useWarmUpBrowser = () => {
   useEffect(() => {
     void WebBrowser.warmUpAsync();
@@ -174,7 +178,7 @@ export const LoginScreen: React.FC = () => {
     detailsError() || (!consent ? 'Please confirm you are 18+ and accept the Terms and Privacy Policy.' : null);
 
   const goStep = (next: number) => {
-    const error = next === 2 && !role ? 'Choose how you will use StayRide.' : next === 3 ? detailsError() : null;
+    const error = next === 2 && !role ? `Choose how you will use ${APP_NAME}.` : next === 3 ? detailsError() : null;
     if (error) return Alert.alert('Almost there', error);
     if (next === 3 && role === 'owner' && !coords) {
       Alert.alert(
@@ -219,21 +223,21 @@ export const LoginScreen: React.FC = () => {
       if (status?.role === 'admin') {
         await signOut().catch(() => {});
         syncing.current = false;
-        Alert.alert('Use the admin website', 'Administrator accounts sign in on the StayRide web control panel, not in the app.');
+        Alert.alert('Use the admin website', 'Administrator accounts sign in on the web control panel, not in the app.');
         return;
       }
       if (status?.exists) {
         if (status.blocked) {
           await signOut().catch(() => {});
           syncing.current = false;
-          Alert.alert(status.deleted ? 'Account deleted' : 'Account blocked', status.deleted ? 'This account was deleted. Contact StayRide support if this is a mistake.' : 'This account is blocked. Contact StayRide support.');
+          Alert.alert(status.deleted ? 'Account deleted' : 'Account blocked', status.deleted ? 'This account was deleted. Contact support if this is a mistake.' : 'This account is blocked. Contact support.');
           return;
         }
         const wasCreating = Boolean(pendingProfile.current);
         await syncClerkUser(user, token, { role: status.role });
         pendingProfile.current = null;
         navigation.replace('Main');
-        if (wasCreating) Alert.alert('Welcome back', 'You already had a StayRide account, so we signed you in.');
+        if (wasCreating) Alert.alert('Welcome back', 'You already had an account, so we signed you in.');
         return;
       }
       const profile = pendingProfile.current ?? profileFromMetadata(user.unsafeMetadata);
@@ -254,7 +258,7 @@ export const LoginScreen: React.FC = () => {
       await signOut().catch(() => {});
       syncing.current = false;
       pendingProfile.current = null;
-      Alert.alert('Sign in failed', clerkMessage(err, 'Could not connect your account to StayRide. Please try again.'));
+      Alert.alert('Sign in failed', clerkMessage(err, 'Could not connect your account. Please try again.'));
     } finally {
       setLoading(false);
     }
@@ -301,7 +305,7 @@ export const LoginScreen: React.FC = () => {
     pendingProfile.current = forProfile;
     setGoogleLoading(true);
     try {
-      const redirectUrl = Linking.createURL('/dashboard', { scheme: 'stayride' });
+      const redirectUrl = Linking.createURL('/dashboard', { scheme: process.env.EXPO_PUBLIC_SCHEME || 'partner-app' });
       const { createdSessionId, setActive: setOAuthActive } = await startOAuthFlow({ redirectUrl });
       const activate = setOAuthActive || setActive;
       if (createdSessionId && activate) await activate({ session: createdSessionId }); // finishSignIn runs next
@@ -341,7 +345,7 @@ export const LoginScreen: React.FC = () => {
       if (!password) setPasswordError('Please enter your password.');
       return Alert.alert('Sign in', 'Enter your email and password.');
     }
-    if (DEMO_ENABLED && ['demo@stayride.in', 'driver@stayride.in', 'demo-driver@stayride.in'].includes(cleanEmail.toLowerCase())) {
+    if (DEMO_ENABLED && [DEMO_HOST_EMAIL.toLowerCase(), DEMO_DRIVER_EMAIL.toLowerCase(), 'demo-driver@stayride.in'].includes(cleanEmail.toLowerCase())) {
       return demoLogin(cleanEmail);
     }
     if (!isSignInLoaded || !signIn) return Alert.alert('Please wait', 'Sign-in is still starting.');
@@ -583,7 +587,7 @@ export const LoginScreen: React.FC = () => {
           />
           {field('reader-outline', { placeholder: 'Vehicle number, e.g. WB-76-A-1234', value: vehicleNumber, onChangeText: setVehicleNumber, autoCapitalize: 'characters' })}
           {field('map-outline', { placeholder: 'Area you drive in, e.g. Darjeeling, NJP', value: area, onChangeText: setArea })}
-          <Text style={styles.hint}>Driver accounts are reviewed by StayRide before you get trip requests.</Text>
+          <Text style={styles.hint}>Driver accounts are reviewed by operations before you get trip requests.</Text>
         </>
       )}
     </View>
@@ -664,7 +668,7 @@ export const LoginScreen: React.FC = () => {
           <View style={styles.logo}>
             <Ionicons name="business" size={26} color={Colors.brandPrimaryDark} />
           </View>
-          <Text style={styles.brand}>StayRide</Text>
+          <Text style={styles.brand}>{APP_NAME}</Text>
           <Text style={styles.tagline}>Homestays and hill rides, in one app</Text>
         </View>
 
@@ -771,10 +775,10 @@ export const LoginScreen: React.FC = () => {
                   </Text>
                   {DEMO_ENABLED && (
                     <View style={styles.demoRow}>
-                      <TouchableOpacity style={styles.demoBtn} disabled={busy} onPress={() => demoLogin('demo@stayride.in')}>
+                      <TouchableOpacity style={styles.demoBtn} disabled={busy} onPress={() => demoLogin(DEMO_HOST_EMAIL)}>
                         <Text style={styles.demoText}>Demo host</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity style={styles.demoBtn} disabled={busy} onPress={() => demoLogin('driver@stayride.in')}>
+                      <TouchableOpacity style={styles.demoBtn} disabled={busy} onPress={() => demoLogin(DEMO_DRIVER_EMAIL)}>
                         <Text style={styles.demoText}>Demo driver</Text>
                       </TouchableOpacity>
                     </View>
@@ -842,7 +846,7 @@ export const LoginScreen: React.FC = () => {
           </View>
           <ScrollView contentContainerStyle={{ gap: 14, paddingBottom: 40 }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
             <Text style={styles.subtitle}>
-              Signed in with Google as {user?.primaryEmailAddress?.emailAddress}. Tell us how you will use StayRide.
+              Signed in with Google as {user?.primaryEmailAddress?.emailAddress}. Tell us how you will use {APP_NAME}.
             </Text>
             {stepHeader(2)}
             {step === 1 ? (

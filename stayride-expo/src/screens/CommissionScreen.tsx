@@ -61,12 +61,12 @@ export const CommissionScreen: React.FC = () => {
     try {
       setLoadingHistory(true);
       const res = await api.get('/payouts/history');
-      if (!Array.isArray(res)) throw new Error('Unexpected reply from StayRide.');
+      if (!Array.isArray(res)) throw new Error('Unexpected reply from server.');
       setPayoutHistory(res);
       setHistoryError(null);
     } catch (e: any) {
       // Never show an empty history when we simply could not load it
-      setHistoryError(e?.message && !/network|abort/i.test(e.message) ? e.message : 'No connection to StayRide.');
+      setHistoryError(e?.message && !/network|abort/i.test(e.message) ? e.message : 'No connection to server.');
     } finally {
       setLoadingHistory(false);
     }
@@ -139,7 +139,7 @@ export const CommissionScreen: React.FC = () => {
         ...destination,
         expectedAmount: available,
       });
-      Alert.alert('Payout Request Submitted', res?.message || 'Your payout request was submitted to StayRide.');
+      Alert.alert('Payout Request Submitted', res?.message || 'Your payout request was submitted successfully.');
       closeWithdrawModal();
     } catch (err: any) {
       Alert.alert('Request Failed', err?.message || 'Could not reach server. Please try again.');
@@ -159,7 +159,7 @@ export const CommissionScreen: React.FC = () => {
           <View style={styles.balanceHeader}>
             <Text style={styles.balanceLabel}>Available Commission Balance</Text>
             <View style={styles.escrowBadge}>
-              <Text style={styles.escrowBadgeText}>Held by StayRide</Text>
+              <Text style={styles.escrowBadgeText}>Held in Escrow</Text>
             </View>
           </View>
 
@@ -167,7 +167,7 @@ export const CommissionScreen: React.FC = () => {
 
           {payoutSummary && (
             <Text style={styles.summaryMeta}>
-              From {payoutSummary.eligibleTrips} completed StayRide trip{payoutSummary.eligibleTrips === 1 ? '' : 's'}
+              From {payoutSummary.eligibleTrips} completed trip{payoutSummary.eligibleTrips === 1 ? '' : 's'}
               {pendingPayout ? ` · Payout of ${formatINR(pendingPayout.amount)} pending` : ''}
             </Text>
           )}
@@ -249,7 +249,7 @@ export const CommissionScreen: React.FC = () => {
         {/* Trip Commission Ledger */}
         <Text style={styles.sectionHeader}>Trip Commission Breakdown</Text>
         <Text style={styles.subtext}>
-          Your commission per completed StayRide trip. EARNED can be withdrawn, REQUESTED is in your payout
+          Your commission per completed trip. EARNED can be withdrawn, REQUESTED is in your payout
           request, PAID was transferred to you.
           {commissionRates
             ? ` Platform fee ${commissionRates.pfPercent}% · Homestay commission ${commissionRates.hcPercent}%.`
@@ -300,7 +300,7 @@ export const CommissionScreen: React.FC = () => {
           <View style={styles.modalContainer}>
             <Text style={styles.modalTitle}>Redeem Commission</Text>
             <Text style={styles.modalSub}>
-              Choose how StayRide should pay you: UPI or bank transfer.
+              Choose how you should be paid: UPI or bank transfer.
             </Text>
 
             <View style={{ marginTop: 14 }}>
@@ -373,7 +373,7 @@ export const CommissionScreen: React.FC = () => {
               />
             </View>
             )}
-            <Text style={styles.helperText}>StayRide reviews and settles payout requests.</Text>
+            <Text style={styles.helperText}>Operations reviews and settles payout requests.</Text>
 
             <View style={styles.modalActions}>
               <TouchableOpacity

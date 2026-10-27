@@ -407,7 +407,7 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const unsubExpired = api.onSessionExpired((code) => {
       signOutLocal(
         code === 'SESSION_REVOKED'
-          ? 'You were signed out because your StayRide sessions were ended (for example with "Sign out of all devices"). Please sign in again.'
+          ? 'You were signed out because your sessions were ended (for example with "Sign out of all devices"). Please sign in again.'
           : undefined
       ).catch(() => {});
     });
@@ -676,7 +676,7 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     await outbox.remove(entry.id);
     opts?.rollback?.();
     sync().catch(() => {}); // the request may have reached the server; adopt whatever it holds
-    return { ok: false, synced: false, error: result?.error && !/network|abort/i.test(result.error) ? result.error : 'No connection to StayRide. Nothing was saved, please try again.' };
+    return { ok: false, synced: false, error: result?.error && !/network|abort/i.test(result.error) ? result.error : 'No connection to server. Nothing was saved, please try again.' };
   };
 
   // ------------------------- Computed Metrics -------------------------
@@ -1713,7 +1713,7 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           homestay: {
             id: 1,
             name: 'Mountain View Homestay',
-            link: 'https://stayride.in/h/mountain-view-gangtok',
+            link: `${process.env.EXPO_PUBLIC_WEB_URL || ''}/h/mountain-view-gangtok`,
           },
         };
         await api.saveSession(demoSession);
@@ -1809,7 +1809,7 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       await api.post('/auth/logout-all');
     } catch (e: any) {
       pushTriedRef.current = false; // re-register on the next sync since we are still signed in
-      return { ok: false, synced: false, error: e instanceof ApiError ? e.message : 'No connection to StayRide. Please try again.' };
+      return { ok: false, synced: false, error: e instanceof ApiError ? e.message : 'No connection to server. Please try again.' };
     }
     await logout();
     return { ok: true, synced: true };

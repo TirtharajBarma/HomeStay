@@ -27,7 +27,7 @@ const AMENITIES: { label: string; icon: IconName }[] = [
   { label: 'Luggage Storage', icon: 'briefcase' },
   { label: 'Mountain View', icon: 'image' },
   { label: 'Laundry Service', icon: 'shirt' },
-  { label: 'In-house Cabs (StayRide)', icon: 'navigate' },
+  { label: 'In-house Cabs & Mobility', icon: 'navigate' },
   { label: 'Airport Pickup', icon: 'airplane' },
   { label: 'Restaurant', icon: 'restaurant' },
   { label: 'Garden', icon: 'leaf' },

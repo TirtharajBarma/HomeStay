@@ -69,7 +69,7 @@ const ymd = (ms: number) => new Date(ms + IST_OFFSET).toISOString().slice(0, 10)
 export function buildIcs(store: StayRideMemoryStore, roomId: number): string {
   const room = store.room(roomId);
   const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
-  const out = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//StayRide//Room Calendar//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH'];
+  const out = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Platform//Room Calendar//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH'];
   if (room) {
     out.push(`X-WR-CALNAME:${(store.homestay.name || 'Homestay').replace(/[,;\n]/g, ' ')} - Room ${room.number}`);
     const from = istDayStart(Date.now()) - 86400000;

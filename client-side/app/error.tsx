@@ -10,7 +10,7 @@ export default function Error({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error("StayRide Client Error:", error);
+    console.error("Client Error:", error);
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://home-stay-ten.vercel.app/api/v1";
       fetch(`${apiUrl}/telemetry/report`, {

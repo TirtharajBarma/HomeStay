@@ -322,7 +322,7 @@ export function DashboardTab({ demo }: TabProps) {
   const payouts: Any[] = Array.isArray(data?.payouts) ? data!.payouts : [];
   const rateHint = (p: number | undefined) => `Completed + advance paid${typeof p === "number" ? ` • current global rate ${roundPct(p)}%` : ""}`;
   return (
-    <Panel title="StayRide money dashboard" subtitle="Live totals from cab requests and homestay payouts." onRefresh={reload} error={error} loading={loading} updatedAt={updatedAt}>
+    <Panel title="Platform revenue dashboard" subtitle="Live totals from cab requests and homestay payouts." onRefresh={reload} error={error} loading={loading} updatedAt={updatedAt}>
       {data && (
         <>
           <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
@@ -1612,8 +1612,8 @@ export function SettingsTab({ demo }: TabProps) {
     const tc = Number(totalComm);
     const ap = Number(adminShare);
     const hp = Number(homeShare);
-    if (ap + hp !== 100) return alert("StayRide Share % and Homestay Share % of the commission must total exactly 100%.");
-    if (!window.confirm(`Apply to the ${which}: Total commission ${totalComm}%, StayRide split ${adminShare}%, Homestay split ${homeShare}%, advance ${adv}%, min advance ₹${min}, own fleet ${ownFleetComm}% with ₹${ownFleetMin} minimum fee?`)) return;
+    if (ap + hp !== 100) return alert("Platform Share % and Homestay Share % of the commission must total exactly 100%.");
+    if (!window.confirm(`Apply to the ${which}: Total commission ${totalComm}%, Platform split ${adminShare}%, Homestay split ${homeShare}%, advance ${adv}%, min advance ₹${min}, own fleet ${ownFleetComm}% with ₹${ownFleetMin} minimum fee?`)) return;
     setSaving(true);
     await act(
       () => adminApi("/commission/settings", {
@@ -1673,7 +1673,7 @@ export function SettingsTab({ demo }: TabProps) {
                   <input className={`${input} mt-1 w-full`} type="number" step="0.5" min="0" max="30" required value={totalComm} onChange={(e) => setTotalComm(e.target.value)} />
                 </label>
                 <label className="text-slate-300">
-                  StayRide Share %
+                  Platform Share %
                   <input className={`${input} mt-1 w-full`} type="number" step="1" min="0" max="100" required value={adminShare} onChange={(e) => setAdminShare(e.target.value)} />
                 </label>
                 <label className="text-slate-300">
@@ -1790,7 +1790,7 @@ export function SettingsTab({ demo }: TabProps) {
                   </div>
                   <div className="pl-3 border-l-2 border-slate-700 space-y-1 text-[11px] text-slate-400">
                     <div className="flex justify-between items-center">
-                      <span>• StayRide Share ({adminShare}%):</span>
+                      <span>• Platform Share ({adminShare}%):</span>
                       <span className="font-mono text-emerald-400">{inr(sample.pfA)}</span>
                     </div>
                     <div className="flex justify-between items-center">
@@ -1836,7 +1836,7 @@ export function SettingsTab({ demo }: TabProps) {
 const VEHICLE_KEYS = ["Sedan", "SUV", "7-seater", "9-seater"] as const;
 const NUM_FIELDS: { key: string; label: string; hint: string }[] = [
   { key: "advanceWindowMin", label: "Advance payment window (minutes)", hint: "0 = no deadline. Keep 0 while payments are recorded by hand; set e.g. 30 once Razorpay is on." },
-  { key: "ownFleetFeePercent", label: "Own-fleet fee %", hint: "StayRide's fee when the owner uses their own driver (paid by the guest as the advance)." },
+  { key: "ownFleetFeePercent", label: "Own-fleet fee %", hint: "Platform fee when the owner uses their own driver (paid by the guest as the advance)." },
   { key: "ownFleetMinFee", label: "Own-fleet minimum fee ₹", hint: "Floor, so an under-reported fare still pays." },
   { key: "nearbyRadiusKm", label: "Nearby radius (km)", hint: "Drivers further than this from the homestay are not notified. 0 = everyone." },
   { key: "driverBroadcastMax", label: "WhatsApp drivers per request", hint: "Each message costs money; push goes to all matching drivers." },
@@ -1859,8 +1859,8 @@ const BUSINESS_FIELDS: { key: string; label: string; hint?: string }[] = [
   { key: "legalName", label: "Registered business name" },
   { key: "address", label: "Registered address (city, state)" },
   { key: "email", label: "Support email" },
-  { key: "phone", label: "Support Phone / WhatsApp", hint: "Primary StayRide support line for guest help, WhatsApp inquiries, and homestay contact fallback." },
-  { key: "upiId", label: "Platform Collection UPI ID (VPA)", hint: "VPA for advance booking fee payments (e.g. stayride@okhdfcbank)" },
+  { key: "phone", label: "Support Phone / WhatsApp", hint: "Primary platform support line for guest help, WhatsApp inquiries, and homestay contact fallback." },
+  { key: "upiId", label: "Platform Collection UPI ID (VPA)", hint: "VPA for advance booking fee payments (e.g. platform@okhdfcbank)" },
   { key: "grievanceOfficer", label: "Grievance Officer name" },
   { key: "grievanceEmail", label: "Grievance email" },
   { key: "website", label: "Website" },
@@ -2172,7 +2172,7 @@ function OperationsSettings({ demo }: TabProps) {
                     <input
                       className={`${input} w-full font-mono`}
                       value={cfg.whatsappTemplates?.[e.key] ?? ""}
-                      placeholder="e.g. stayride_ask_cab"
+                      placeholder="e.g. ask_cab_template"
                       onChange={(ev) => set("whatsappTemplates", { ...(cfg.whatsappTemplates || {}), [e.key]: ev.target.value.trim().toLowerCase() })}
                     />
                   </td>

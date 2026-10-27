@@ -113,7 +113,7 @@ export const CabsScreen: React.FC = () => {
     Alert.alert(
       'Driver Confirmed',
       confirmed.platform && confirmed.status === 'AWAITING_ADVANCE'
-        ? `Driver confirmed${confirmed.fare ? ` at ₹${confirmed.fare.toLocaleString()}` : ''}. Waiting for the guest advance (collected by StayRide).`
+        ? `Driver confirmed${confirmed.fare ? ` at ₹${confirmed.fare.toLocaleString()}` : ''}. Waiting for the guest advance (collected online).`
         : `Driver confirmed${confirmed.fare ? ` at ₹${confirmed.fare.toLocaleString()}` : ''}. You can now send the trip details to ${confirmed.guestName} via WhatsApp.`,
       [
         { text: 'Later', style: 'cancel' },
@@ -129,9 +129,9 @@ export const CabsScreen: React.FC = () => {
   const platformNote = (t: CabTrip) => {
     if (t.refundStatus === 'PENDING') return 'Refund pending';
     if (t.refundStatus === 'REFUNDED') return 'Advance refunded';
-    if (t.status === 'FINDING_DRIVER') return 'Request sent to StayRide. Driver quotes will appear here.';
-    if (t.status === 'AWAITING_ADVANCE') return 'Waiting for guest advance (collected by StayRide)';
-    if (t.status === 'CONFIRMED' && t.advancePaid) return 'Advance paid to StayRide';
+    if (t.status === 'FINDING_DRIVER') return 'Request sent. Driver quotes will appear here.';
+    if (t.status === 'AWAITING_ADVANCE') return 'Waiting for guest advance (collected online)';
+    if (t.status === 'CONFIRMED' && t.advancePaid) return 'Advance paid online';
     return null;
   };
 
@@ -146,13 +146,13 @@ export const CabsScreen: React.FC = () => {
     const rupees = (n?: number) => (typeof n === 'number' ? `₹${n.toLocaleString()}` : 'to be confirmed');
 
     const msg =
-      `*STAYRIDE CAB BOOKING CONFIRMED* 🏔️🚗\n` +
+      `*CAB BOOKING CONFIRMED* 🏔️🚗\n` +
       `Dear ${trip.guestName},\n` +
       `Your cab arranged by ${homestay.name || 'your homestay'} is confirmed!\n\n` +
       `• Pickup: ${trip.pickup}\n` +
       `• Destination: ${trip.destination}\n` +
       `• Date & Time: ${new Date(trip.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} at ${trip.time}\n` +
-      `• Driver: ${trip.driverName || trip.assignedDriverName || 'Your StayRide driver'}${trip.assignedDriverUnionName ? ` (${trip.assignedDriverUnionName})` : ''}\n` +
+      `• Driver: ${trip.driverName || trip.assignedDriverName || 'Your driver'}${trip.assignedDriverUnionName ? ` (${trip.assignedDriverUnionName})` : ''}\n` +
       `• Vehicle: ${trip.vehicleType}\n\n` +
       `💰 *Fare Details:*\n` +
       `• Total Fare: ${rupees(fare)}\n` +

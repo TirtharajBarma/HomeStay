@@ -45,8 +45,8 @@ export const DriverProfileScreen: React.FC = () => {
       val ? 'You are Online' : 'You are Offline',
       val
         ? pushEnabled
-          ? 'New StayRide ride requests will reach you here and as notifications.'
-          : 'New StayRide ride requests will appear in My Rides.'
+          ? 'New ride requests will reach you here and as notifications.'
+          : 'New ride requests will appear in My Rides.'
         : 'You will not receive any new ride requests until you go online again.'
     );
   };
@@ -118,7 +118,7 @@ export const DriverProfileScreen: React.FC = () => {
           <View style={styles.ratingBadge}>
             <Ionicons name="shield-checkmark" size={14} color="#F59E0B" />
             <Text style={styles.ratingText}>
-              {driver?.status === 'ACTIVE' ? 'Approved by StayRide' : driver?.status === 'BLOCKED' ? 'Blocked' : driver?.status === 'PENDING_APPROVAL' ? 'Awaiting approval' : '—'}
+              {driver?.status === 'ACTIVE' ? 'Approved & Active' : driver?.status === 'BLOCKED' ? 'Blocked' : driver?.status === 'PENDING_APPROVAL' ? 'Awaiting approval' : '—'}
             </Text>
           </View>
         </View>
@@ -247,7 +247,7 @@ export const DriverProfileScreen: React.FC = () => {
           <Text style={styles.cardSectionTitle}>App &amp; Support</Text>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Network Version:</Text>
-            <Text style={styles.infoVal}>StayRide Driver v{Constants.expoConfig?.version ?? '2.0'}</Text>
+            <Text style={styles.infoVal}>Driver Partner v{Constants.expoConfig?.version ?? '2.0'}</Text>
           </View>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Seats:</Text>

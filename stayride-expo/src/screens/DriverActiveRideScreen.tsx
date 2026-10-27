@@ -91,7 +91,7 @@ export const DriverActiveRideScreen: React.FC = () => {
             setCompleting(true);
             const outcome = await driverCompleteTrip(activeRide.reference);
             setCompleting(false);
-            reportOutcome(outcome, 'Trip Completed!', 'StayRide has recorded this trip as completed.');
+            reportOutcome(outcome, 'Trip Completed!', 'Trip has been recorded as completed.');
           },
         },
       ]

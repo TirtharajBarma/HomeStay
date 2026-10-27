@@ -197,10 +197,10 @@ When you are ready to switch from testing to live third-party services, update t
    * `WHATSAPP_ACCESS_TOKEN=<your-system-user-token>`
 
 ### 3. Adding a Custom Domain
-1. In Vercel, attach your domains (e.g. `api.stayride.in`, `admin.stayride.in`, `stayride.in`).
+1. In Vercel, attach your domains (e.g. `api.your-domain.com`, `admin.your-domain.com`, `your-domain.com`).
 2. Update `.env`:
-   * `GUEST_WEB_URL=https://stayride.in`
-   * `PUBLIC_API_URL=https://api.stayride.in`
-   * `CORS_ORIGIN=https://admin.stayride.in,https://stayride.in,http://localhost:3000,http://localhost:3003...`
-3. In [Resend Domains](https://resend.com/domains), verify `stayride.in` via DNS TXT/MX records, then update:
-   * `SMTP_FROM="StayRide" <no-reply@stayride.in>`
+   * `GUEST_WEB_URL=https://your-domain.com`
+   * `PUBLIC_API_URL=https://api.your-domain.com`
+   * `CORS_ORIGIN=https://admin.your-domain.com,https://your-domain.com,http://localhost:3000,http://localhost:3003...`
+3. In [Resend Domains](https://resend.com/domains), verify your custom domain via DNS TXT/MX records, then update:
+   * `SMTP_FROM="Your Platform" <no-reply@your-domain.com>`

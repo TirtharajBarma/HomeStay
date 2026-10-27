@@ -12,7 +12,20 @@ if (!jwtSecret || jwtSecret === KNOWN_LEAKED_SECRET) {
 // Deployed = running on Vercel. Everything that must fail closed keys off this.
 const onVercel = Boolean(process.env.VERCEL);
 const isPreview = onVercel && process.env.VERCEL_ENV === "preview";
-const guestWebUrl = (process.env.GUEST_WEB_URL || "https://stayride.in").replace(/\/+$/, "");
+
+// Generic, environment-first URL resolution with ZERO brand hardcoding
+const guestWebUrl = (
+  process.env.GUEST_WEB_URL ||
+  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "") ||
+  "http://localhost:3000"
+).replace(/\/+$/, "");
+
+const publicApiUrl = (
+  process.env.PUBLIC_API_URL ||
+  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "") ||
+  "http://localhost:5050"
+).replace(/\/+$/, "");
+
 const originOf = (u: string) => {
   try {
     return new URL(u).origin;
@@ -21,15 +34,40 @@ const originOf = (u: string) => {
   }
 };
 
+const appDomain = (
+  process.env.APP_DOMAIN ||
+  (() => {
+    try {
+      return new URL(guestWebUrl).host;
+    } catch {
+      return "localhost";
+    }
+  })()
+);
+
+const appName = process.env.APP_NAME || "Homestay & Cab Network";
+const supportEmail = process.env.SUPPORT_EMAIL || (appDomain !== "localhost" ? `support@${appDomain}` : "");
+const demoHostEmail = (process.env.DEMO_HOST_EMAIL || "demo@example.com").toLowerCase().trim();
+const demoDriverEmail = (process.env.DEMO_DRIVER_EMAIL || "driver@example.com").toLowerCase().trim();
+
 export const config = {
   port: parseInt(process.env.PORT || "5050", 10),
   mongoUri: process.env.MONGODB_URI || "",
   // Browser origins allowed by CORS (plus localhost when not deployed). The guest web page is always allowed.
-  corsOrigins: [...(process.env.CORS_ORIGIN || "").split(","), originOf(guestWebUrl)].map((s) => s.trim().replace(/\/+$/, "")).filter(Boolean),
+  corsOrigins: [
+    ...(process.env.CORS_ORIGIN || "").split(","),
+    originOf(guestWebUrl),
+    originOf(publicApiUrl),
+  ].map((s) => s.trim().replace(/\/+$/, "")).filter(Boolean),
   nodeEnv: process.env.NODE_ENV || "development",
   isDeployed: onVercel,
   isPreview,
-  // Shared demo account (demo@stayride.in). Off on Vercel unless DEMO_ENABLED=true.
+  appName,
+  appDomain,
+  supportEmail,
+  demoHostEmail,
+  demoDriverEmail,
+  // Shared demo account. Off on Vercel unless DEMO_ENABLED=true.
   demoEnabled: process.env.DEMO_ENABLED !== undefined ? process.env.DEMO_ENABLED === "true" : !onVercel,
   // Legacy guest APIs expose older booking and driver surfaces; keep them off unless explicitly enabled.
   legacyApiEnabled: process.env.LEGACY_API_ENABLED === "true",
@@ -41,7 +79,10 @@ export const config = {
   clerkWebhookSecret: process.env.CLERK_WEBHOOK_SIGNING_SECRET || "",
   // Public site that hosts the guest cab-request page (client-side app)
   guestWebUrl,
+  publicApiUrl,
 };
+
+export const env = config;
 
 // ---------------------------------------------------------------------------
 // Database names. Demo data always lives in "test"; everything else in the live database, resolved

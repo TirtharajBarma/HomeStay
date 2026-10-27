@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Icon } from "@/components/icon";
 import { API_ENDPOINTS, apiFetch } from "@/lib/api-config";
+import { siteConfig } from "@/lib/site-config";
 import { getRecaptchaToken } from "@/lib/recaptcha";
 import { WebLocationPicker, PickedLocation } from "@/components/web-location-picker";
 
@@ -160,6 +161,7 @@ type PublicConfig = {
   vehicles?: { value: string; label: string; seats: number; estFare?: number }[];
   upiId?: string;
   supportPhone?: string;
+  supportEmail?: string;
 };
 
 type GuestLink = {
@@ -452,8 +454,9 @@ function CabRequestFormContent() {
                   vehicles: FALLBACK_VEHICLES,
                   sightseeingPresets: [],
                   routePresets: [],
-                  upiId: "stayride@okhdfcbank",
-                  supportPhone: process.env.NEXT_PUBLIC_SUPPORT_PHONE?.replace(/[^0-9]/g, "") || "",
+                  upiId: siteConfig.upiId || process.env.NEXT_PUBLIC_UPI_ID || "",
+                  supportPhone: (siteConfig.supportPhone || process.env.NEXT_PUBLIC_SUPPORT_PHONE || "").replace(/[^0-9]/g, ""),
+                  supportEmail: siteConfig.supportEmail || "",
                 },
               });
               setLinkState("valid");
@@ -471,8 +474,9 @@ function CabRequestFormContent() {
                       vehicles: live.vehicles || prev.config?.vehicles || FALLBACK_VEHICLES,
                       sightseeingPresets: live.sightseeingPresets || prev.config?.sightseeingPresets || [],
                       routePresets: live.routePresets || prev.config?.routePresets || [],
-                      upiId: live.upiId || prev.config?.upiId || "stayride@okhdfcbank",
-                      supportPhone: live.supportPhone || prev.config?.supportPhone || process.env.NEXT_PUBLIC_SUPPORT_PHONE?.replace(/[^0-9]/g, "") || "",
+                      upiId: live.upiId || prev.config?.upiId || siteConfig.upiId || process.env.NEXT_PUBLIC_UPI_ID || "",
+                      supportPhone: live.supportPhone || prev.config?.supportPhone || (siteConfig.supportPhone || process.env.NEXT_PUBLIC_SUPPORT_PHONE || "").replace(/[^0-9]/g, ""),
+                      supportEmail: (live as any).supportEmail || prev.config?.supportEmail || siteConfig.supportEmail || "",
                     },
                   } : prev);
                 })
@@ -645,15 +649,16 @@ function CabRequestFormContent() {
     }
   };
 
-  const activeUpiId = tripStatus?.config?.upiId || link?.config?.upiId || process.env.NEXT_PUBLIC_UPI_ID || "stayride@upi";
-  const activeSupportPhone = (tripStatus?.config?.supportPhone || link?.config?.supportPhone || process.env.NEXT_PUBLIC_SUPPORT_PHONE || "").replace(/\D/g, "");
+  const activeUpiId = tripStatus?.config?.upiId || link?.config?.upiId || siteConfig.upiId || process.env.NEXT_PUBLIC_UPI_ID || "";
+  const activeSupportPhone = (tripStatus?.config?.supportPhone || link?.config?.supportPhone || siteConfig.supportPhone || process.env.NEXT_PUBLIC_SUPPORT_PHONE || "").replace(/\D/g, "");
+  const activeSupportEmail = tripStatus?.config?.supportEmail || link?.config?.supportEmail || siteConfig.supportEmail || process.env.NEXT_PUBLIC_SUPPORT_EMAIL || "";
 
   if (linkState === "loading") {
     return (
       <div className="min-h-screen bg-surface flex items-center justify-center p-6">
         <div className="flex flex-col items-center gap-3">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-600 border-t-transparent" />
-          <p className="text-xs font-medium text-[#57606A]">Connecting to StayRide verified cab network…</p>
+          <p className="text-xs font-medium text-[#57606A]">Connecting to verified cab network…</p>
         </div>
       </div>
     );
@@ -673,10 +678,10 @@ function CabRequestFormContent() {
                 Exclusive Guest Concierge
               </span>
               <h1 className="mt-2 text-xl font-extrabold text-[#1F2328]">
-                StayRide Hill Cabs
+                {siteConfig.appName} Hill Cabs
               </h1>
               <p className="mt-2 text-xs sm:text-sm text-[#57606A] leading-relaxed">
-                StayRide Hill Cabs are arranged exclusively for guests of our partner homestays. Check your WhatsApp for your private booking link, or ask your host to send you a booking invite.
+                Hill Cabs are arranged exclusively for guests of our partner homestays. Check your WhatsApp for your private booking link, or ask your host to send you a booking invite.
               </p>
             </div>
 
@@ -729,7 +734,7 @@ function CabRequestFormContent() {
             href="/"
             className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#1F2328] px-5 py-2.5 text-xs font-semibold text-white shadow-sm hover:opacity-95"
           >
-            Go to StayRide Home
+            Go to Home
           </Link>
         </div>
       </div>
@@ -738,16 +743,16 @@ function CabRequestFormContent() {
 
   return (
     <div className="min-h-screen bg-[#F8F9FA] text-[#1F2328] antialiased">
-      {/* Top Google-style Navigation Bar */}
+      {/* Top Navigation Bar */}
       <header className="sticky top-0 z-30 border-b border-[#E1E4E8] bg-white/95 backdrop-blur-md px-4 py-3.5 shadow-xs">
         <div className="mx-auto flex max-w-2xl items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600 text-white font-bold text-sm shadow-xs">
-              SR
+              HC
             </div>
             <div>
               <div className="flex items-center gap-1.5">
-                <span className="font-bold text-[#1F2328] text-sm tracking-tight">StayRide</span>
+                <span className="font-bold text-[#1F2328] text-sm tracking-tight">{siteConfig.appName}</span>
                 <span className="rounded bg-emerald-50 px-1.5 py-0.2 text-[10px] font-semibold text-emerald-800 border border-emerald-200">
                   Verified Mountain Network
                 </span>
@@ -761,7 +766,7 @@ function CabRequestFormContent() {
           <div className="flex items-center gap-2">
             {activeSupportPhone ? (
               <a
-                href={`https://wa.me/${activeSupportPhone}?text=${encodeURIComponent("Hello StayRide, I need assistance with cab booking.")}`}
+                href={`https://wa.me/${activeSupportPhone}?text=${encodeURIComponent(`Hello, I need assistance with cab booking on ${siteConfig.appName}.`)}`}
                 target="_blank"
                 rel="noreferrer"
                 className="inline-flex items-center gap-1.5 rounded-full border border-[#D0D7DE] bg-white px-3 py-1.5 text-xs font-semibold text-[#24292F] hover:bg-[#F6F8FA] transition-colors"
@@ -769,15 +774,15 @@ function CabRequestFormContent() {
                 <Icon name="support_agent" className="text-sm text-emerald-700" />
                 <span>Help</span>
               </a>
-            ) : (
+            ) : activeSupportEmail ? (
               <a
-                href="mailto:support@stayride.in?subject=StayRide%20Cab%20Assistance"
+                href={`mailto:${activeSupportEmail}?subject=${encodeURIComponent(`${siteConfig.appName} Cab Assistance`)}`}
                 className="inline-flex items-center gap-1.5 rounded-full border border-[#D0D7DE] bg-white px-3 py-1.5 text-xs font-semibold text-[#24292F] hover:bg-[#F6F8FA] transition-colors"
               >
                 <Icon name="support_agent" className="text-sm text-emerald-700" />
                 <span>Help</span>
               </a>
-            )}
+            ) : null}
           </div>
         </div>
       </header>
@@ -952,7 +957,7 @@ function CabRequestFormContent() {
                   {/* 1-Tap UPI Intent Button (Opens PhonePe / GPay on Android) */}
                   <div>
                     <a
-                      href={`upi://pay?pa=${encodeURIComponent(activeUpiId)}&pn=StayRide&am=${tripStatus.advanceAmount}&cu=INR&tn=${encodeURIComponent(`Advance for ${tripStatus.reference}`)}`}
+                      href={`upi://pay?pa=${encodeURIComponent(activeUpiId)}&pn=${encodeURIComponent(siteConfig.appName)}&am=${tripStatus.advanceAmount}&cu=INR&tn=${encodeURIComponent(`Advance for ${tripStatus.reference}`)}`}
                       className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white shadow hover:bg-emerald-700 transition-all cursor-pointer"
                     >
                       <Icon name="account_balance_wallet" className="text-base" /> Pay {formatInr(tripStatus.advanceAmount)} via UPI App
@@ -988,7 +993,7 @@ function CabRequestFormContent() {
                     {showQr && (
                       <div className="flex flex-col items-center justify-center pt-2">
                         <img
-                          src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`upi://pay?pa=${activeUpiId}&pn=StayRide&am=${tripStatus.advanceAmount}&cu=INR&tn=${encodeURIComponent(`Advance for ${tripStatus.reference}`)}`)}`}
+                          src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`upi://pay?pa=${activeUpiId}&pn=${encodeURIComponent(siteConfig.appName)}&am=${tripStatus.advanceAmount}&cu=INR&tn=${encodeURIComponent(`Advance for ${tripStatus.reference}`)}`)}`}
                           alt="UPI Payment QR Code"
                           className="h-44 w-44 rounded-lg border border-[#D0D7DE] p-1 bg-white"
                         />
@@ -1020,14 +1025,14 @@ function CabRequestFormContent() {
                           </a>
                         </div>
                       </>
-                    ) : (
+                    ) : activeSupportEmail ? (
                       <a
-                        href={`mailto:support@stayride.in?subject=${encodeURIComponent(`Payment Confirmation - Reference ${tripStatus.reference}`)}`}
+                        href={`mailto:${activeSupportEmail}?subject=${encodeURIComponent(`Payment Confirmation - Reference ${tripStatus.reference}`)}`}
                         className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#128C7E] hover:underline"
                       >
-                        <Icon name="mail" className="text-sm" /> Email Payment Confirmation (support@stayride.in)
+                        <Icon name="mail" className="text-sm" /> Email Payment Confirmation ({activeSupportEmail})
                       </a>
-                    )}
+                    ) : null}
                   </div>
                 </div>
               )}
@@ -2107,7 +2112,7 @@ function CabRequestFormContent() {
 
 export default function CabRequestPage() {
   return (
-    <Suspense fallback={<div className="p-12 text-center text-emerald-700 font-medium">Loading StayRide…</div>}>
+    <Suspense fallback={<div className="p-12 text-center text-emerald-700 font-medium">Loading…</div>}>
       <CabRequestFormContent />
     </Suspense>
   );
