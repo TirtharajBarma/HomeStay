@@ -1120,9 +1120,22 @@ function CabRequestCard({ c, demo, onChanged }: { c: Any; demo: boolean; onChang
           </p>
           <p className="text-slate-300">
             {c.guestName} • {c.guestPhone} • {c.passengers ?? "—"} pax • {c.vehicleType || "—"} • {formatDate(c.date)} {c.time || ""}
+            {c.guestBudget ? ` • Target: ${inr(c.guestBudget)}` : ""}
           </p>
           <p className="text-slate-400">
-            {c.pickupLocation?.address || "—"} ➔ {(c.destinations || []).map((d: Any) => d.address).join(" ➔ ") || "—"}
+            {c.pickupLocation?.address || "—"}
+            {c.pickupLocation?.lat && c.pickupLocation?.lng && (
+              <a
+                href={`https://www.google.com/maps/search/?api=1&query=${c.pickupLocation.lat},${c.pickupLocation.lng}`}
+                target="_blank"
+                rel="noreferrer"
+                className="ml-1.5 inline-flex items-center text-emerald-400 hover:underline text-xs"
+              >
+                📍 Pin ({Number(c.pickupLocation.lat).toFixed(4)}, {Number(c.pickupLocation.lng).toFixed(4)})
+              </a>
+            )}
+            {" ➔ "}
+            {(c.destinations || []).map((d: Any) => d.address).join(" ➔ ") || "—"}
             {c.isRoundTrip ? " (round trip)" : ""}
           </p>
           {c.assignedDriverName && <p className="text-slate-300">Driver: {c.assignedDriverName} • {c.assignedDriverPhone || "—"}{c.assignedDriverUserId ? " (platform)" : " (manual)"}</p>}

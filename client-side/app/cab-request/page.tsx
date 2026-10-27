@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { Icon } from "@/components/icon";
 import { API_ENDPOINTS, apiFetch } from "@/lib/api-config";
 import { getRecaptchaToken } from "@/lib/recaptcha";
+import { WebLocationPicker, PickedLocation } from "@/components/web-location-picker";
 
 export interface RoutePreset {
   id: string;
@@ -268,7 +269,18 @@ function CabRequestFormContent() {
   // Pickup & Drop locations
   const [pickup, setPickup] = useState("");
   const [customPickup, setCustomPickup] = useState(false);
+  const [pickupCoords, setPickupCoords] = useState<{ latitude: number; longitude: number } | null>(null);
   const [customDestinations, setCustomDestinations] = useState<string[]>([""]);
+
+  // Interactive Blinkit/Zepto Map Picker state (stationary center pin)
+  const [mapTarget, setMapTarget] = useState<
+    | { type: "pickup"; title: string; initialAddress: string }
+    | { type: "drop"; index: number; title: string; initialAddress: string }
+    | null
+  >(null);
+
+  // Guest Target Budget (Optional, ₹ - InDrive style)
+  const [guestBudget, setGuestBudget] = useState<string>("");
 
   // Autocomplete / Suggestions state
   const [activeSuggestIdx, setActiveSuggestIdx] = useState<number | null>(null);
@@ -593,6 +605,9 @@ function CabRequestFormContent() {
       const payload = {
         pickup: resolvedPickup,
         destinations,
+        pickupLat: pickupCoords?.latitude ?? null,
+        pickupLng: pickupCoords?.longitude ?? null,
+        guestBudget: guestBudget ? Number(guestBudget) : null,
         date: selectedDateObj.getTime(),
         time,
         passengers,
@@ -1275,6 +1290,21 @@ function CabRequestFormContent() {
                           <Icon name="location_on" className="text-xs text-emerald-700" />
                           <span>Pickup Location</span>
                         </label>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setMapTarget({
+                              type: "pickup",
+                              title: "Move Map Pin for Pickup",
+                              initialAddress: getResolvedPickup(),
+                            })
+                          }
+                          className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 hover:text-emerald-900 transition-colors cursor-pointer"
+                          title="Pin on Map (Blinkit style)"
+                        >
+                          <Icon name="pin_drop" className="text-xs" />
+                          <span>{pickupCoords ? "Adjust Pin on Map" : "Move Pin on Map"}</span>
+                        </button>
                       </div>
 
                       {/* 2-Option Pickup Selection: At Homestay vs Other Location */}
@@ -1320,33 +1350,85 @@ function CabRequestFormContent() {
                       </div>
 
                       {!customPickup ? (
-                        <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-3 flex items-center justify-between">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-800">
-                              <Icon name="storefront" className="text-sm" />
-                            </span>
-                            <div className="min-w-0">
-                              <p className="text-xs font-bold text-emerald-950 truncate">
-                                {link?.homestayName || "Verified Partner Homestay"}
-                              </p>
-                              <p className="text-[11px] text-emerald-800/80 truncate">
-                                Driver navigates straight to homestay gate
-                              </p>
+                        <div className="space-y-1.5">
+                          <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-3 flex items-center justify-between">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-800">
+                                <Icon name="storefront" className="text-sm" />
+                              </span>
+                              <div className="min-w-0">
+                                <p className="text-xs font-bold text-emerald-950 truncate">
+                                  {link?.homestayName || "Verified Partner Homestay"}
+                                </p>
+                                <p className="text-[11px] text-emerald-800/80 truncate">
+                                  Driver navigates straight to homestay gate
+                                </p>
+                              </div>
                             </div>
+                            <span className="shrink-0 rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-900 uppercase">
+                              Homestay
+                            </span>
                           </div>
-                          <span className="shrink-0 rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-900 uppercase">
-                            Homestay
-                          </span>
+
+                          {pickupCoords && (
+                            <div className="flex items-center justify-between rounded-lg bg-emerald-50 px-2.5 py-1 text-[11px] text-emerald-900 border border-emerald-200">
+                              <span className="flex items-center gap-1 font-medium">
+                                <Icon name="my_location" className="text-xs text-emerald-700" />
+                                <span>GPS Pin: {pickupCoords.latitude.toFixed(5)}, {pickupCoords.longitude.toFixed(5)}</span>
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setPickupCoords(null)}
+                                className="text-[10px] text-emerald-700 font-bold hover:underline"
+                              >
+                                Reset Pin
+                              </button>
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <div className="space-y-2 pt-1">
-                          <input
-                            type="text"
-                            value={pickup}
-                            onChange={(e) => setPickup(e.target.value)}
-                            placeholder="Enter pickup address, landmark, or station"
-                            className="w-full rounded-xl border border-[#D0D7DE] bg-white px-3.5 py-2.5 text-xs text-[#1F2328] focus:border-emerald-600 focus:outline-none shadow-2xs"
-                          />
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="text"
+                              value={pickup}
+                              onChange={(e) => setPickup(e.target.value)}
+                              placeholder="Enter pickup address, landmark, or station"
+                              className="w-full rounded-xl border border-[#D0D7DE] bg-white px-3.5 py-2.5 text-xs text-[#1F2328] focus:border-emerald-600 focus:outline-none shadow-2xs"
+                            />
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setMapTarget({
+                                  type: "pickup",
+                                  title: "Move Map Pin for Pickup",
+                                  initialAddress: pickup,
+                                })
+                              }
+                              className="inline-flex items-center gap-1 shrink-0 rounded-xl border border-emerald-600/40 bg-emerald-50/70 px-3 py-2.5 text-xs font-bold text-emerald-800 hover:bg-emerald-100 transition-colors cursor-pointer"
+                              title="Move pin on map"
+                            >
+                              <Icon name="pin_drop" className="text-sm text-emerald-700" />
+                              <span className="hidden sm:inline">Map Pin</span>
+                            </button>
+                          </div>
+
+                          {pickupCoords && (
+                            <div className="flex items-center justify-between rounded-lg bg-emerald-50 px-2.5 py-1 text-[11px] text-emerald-900 border border-emerald-200">
+                              <span className="flex items-center gap-1 font-medium">
+                                <Icon name="my_location" className="text-xs text-emerald-700" />
+                                <span>GPS Pin: {pickupCoords.latitude.toFixed(5)}, {pickupCoords.longitude.toFixed(5)}</span>
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setPickupCoords(null)}
+                                className="text-[10px] text-emerald-700 font-bold hover:underline"
+                              >
+                                Clear Pin
+                              </button>
+                            </div>
+                          )}
+
                           <div className="flex flex-wrap gap-1.5">
                             {["Bagdogra Airport (IXB)", "NJP Railway Station", "Darjeeling Mall", "Siliguri Junction"].map((preset) => (
                               <button
@@ -1416,6 +1498,22 @@ function CabRequestFormContent() {
                                     </button>
                                   )}
                                 </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setMapTarget({
+                                      type: "drop",
+                                      index: idx,
+                                      title: `Set Destination ${idx + 1} Pin`,
+                                      initialAddress: dest,
+                                    })
+                                  }
+                                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#D0D7DE] text-[#57606A] hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 transition-colors cursor-pointer"
+                                  title="Pick drop location on map"
+                                >
+                                  <Icon name="pin_drop" className="text-sm" />
+                                </button>
 
                                 {customDestinations.length > 1 && (
                                   <button
@@ -1848,6 +1946,28 @@ function CabRequestFormContent() {
                       className="w-full rounded-xl border border-[#D0D7DE] px-3.5 py-2.5 text-xs text-[#1F2328] focus:border-emerald-600 focus:outline-none shadow-2xs"
                     />
                   </div>
+
+                  {/* Target Budget (Optional, ₹ - InDrive style) */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-bold text-[#1F2328]">Target Budget (Optional, ₹)</label>
+                      <span className="text-[10px] text-[#57606A]">Guest price expectation</span>
+                    </div>
+                    <div className="relative flex items-center">
+                      <span className="absolute left-3.5 text-xs font-bold text-[#57606A]">₹</span>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={guestBudget}
+                        onChange={(e) => setGuestBudget(e.target.value.replace(/\D/g, ""))}
+                        placeholder="e.g. 2500"
+                        className="w-full rounded-xl border border-[#D0D7DE] pl-7 pr-3.5 py-2.5 text-xs text-[#1F2328] focus:border-emerald-600 focus:outline-none shadow-2xs bg-white"
+                      />
+                    </div>
+                    <p className="mt-1 text-[11px] text-[#57606A]">
+                      Local verified drivers will see your target budget when submitting their quotes on WhatsApp.
+                    </p>
+                  </div>
                 </div>
 
                 {/* Trip Review Summary Card (Zero Prices) */}
@@ -1896,6 +2016,20 @@ function CabRequestFormContent() {
                       <span className="text-[#57606A] shrink-0 font-medium">Passengers:</span>
                       <span className="font-semibold text-[#1F2328]">{passengers} {passengers === 1 ? "Passenger" : "Passengers"}</span>
                     </div>
+
+                    {pickupCoords && (
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="text-[#57606A] shrink-0 font-medium">GPS Pin:</span>
+                        <span className="font-mono text-[11px] text-[#57606A]">{pickupCoords.latitude.toFixed(4)}, {pickupCoords.longitude.toFixed(4)}</span>
+                      </div>
+                    )}
+
+                    {guestBudget && (
+                      <div className="flex items-start justify-between gap-2 border-t border-[#E1E4E8] pt-2">
+                        <span className="text-[#57606A] shrink-0 font-medium">Target Budget:</span>
+                        <span className="font-bold text-emerald-800">₹{Number(guestBudget).toLocaleString("en-IN")}</span>
+                      </div>
+                    )}
 
                     {guestName && (
                       <div className="flex items-start justify-between gap-2 border-t border-[#E1E4E8] pt-2">
@@ -1946,6 +2080,27 @@ function CabRequestFormContent() {
           </div>
         )}
       </div>
+
+      {/* Interactive Blinkit/Zepto Map Picker Modal */}
+      <WebLocationPicker
+        isOpen={mapTarget !== null}
+        title={mapTarget?.title}
+        initialAddress={mapTarget?.initialAddress}
+        initialCoords={mapTarget?.type === "pickup" ? pickupCoords : null}
+        onClose={() => setMapTarget(null)}
+        onConfirm={(loc: PickedLocation) => {
+          if (mapTarget?.type === "pickup") {
+            setPickup(loc.address);
+            setPickupCoords({ latitude: loc.latitude, longitude: loc.longitude });
+            setCustomPickup(true);
+          } else if (mapTarget?.type === "drop") {
+            const copy = [...customDestinations];
+            copy[mapTarget.index] = loc.address;
+            setCustomDestinations(copy);
+          }
+          setMapTarget(null);
+        }}
+      />
     </div>
   );
 }
