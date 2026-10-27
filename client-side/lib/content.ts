@@ -1,12 +1,12 @@
-const defaultSupportPhone = process.env.NEXT_PUBLIC_SUPPORT_PHONE || "+91 98837 57307";
+const defaultSupportPhone = process.env.NEXT_PUBLIC_SUPPORT_PHONE?.trim() || "";
 
 export const hosts = {
   names: "Verified Himalayan Hosts",
   since: "StayRide Network",
   email: "support@stayride.in",
   bookingEmail: "bookings@stayride.in",
-  phone: defaultSupportPhone,
-  phoneHref: `tel:${defaultSupportPhone.replace(/\s+/g, "")}`,
+  phone: defaultSupportPhone || "StayRide Support Desk",
+  phoneHref: defaultSupportPhone ? `tel:${defaultSupportPhone.replace(/\s+/g, "")}` : "mailto:support@stayride.in",
   location: "Darjeeling & Sikkim Hills",
   region: "Eastern Himalayas",
   replyTime: "≤ 1 hr reply",

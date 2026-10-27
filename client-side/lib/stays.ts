@@ -171,7 +171,7 @@ function propertyToStay(p: Raw): Stay {
     ],
     story: [str(p.bio) || "A tranquil mountain retreat offering authentic Himalayan hospitality and door-to-door cab services."],
     reviews: [],
-    phone: str(p.phone) || "+919830041000",
+    phone: str(p.phone) || "",
     email: str(p.email) || "",
     rooms: mappedRooms,
   };
@@ -269,4 +269,21 @@ export const getLiveStay = cache(async (slug: string): Promise<Stay | undefined>
   }
 
   return undefined;
+});
+
+/** Cached fetch of live platform configuration set by Admin in the tower */
+export const getPlatformConfig = cache(async (): Promise<{ supportPhone: string; upiId: string } | null> => {
+  try {
+    const res = await fetch(API_ENDPOINTS.platform.publicConfig(), { next: { revalidate: 60 } });
+    const json = await res.json().catch(() => null);
+    if (json?.config) {
+      return {
+        supportPhone: typeof json.config.supportPhone === "string" ? json.config.supportPhone : "",
+        upiId: typeof json.config.upiId === "string" ? json.config.upiId : "",
+      };
+    }
+  } catch {
+    // If backend unreachable, return null so callers use safe defaults
+  }
+  return null;
 });

@@ -8,7 +8,14 @@ import { NewsletterForm } from "./newsletter-form";
 const linkClass =
   "inline-flex min-h-11 items-center text-body-sm text-on-surface-variant transition-colors duration-150 hover:text-primary";
 
-const supportPhone = process.env.NEXT_PUBLIC_SUPPORT_PHONE || "+91 98837 57307";
+const supportPhone = process.env.NEXT_PUBLIC_SUPPORT_PHONE?.trim() || "";
+const cleanPhone = supportPhone.replace(/[^0-9]/g, "");
+
+const supportLinks = [
+  ...(supportPhone ? [{ href: `tel:${supportPhone.replace(/\s+/g, "")}`, label: supportPhone }] : []),
+  { href: "mailto:support@stayride.in", label: "support@stayride.in" },
+  ...(cleanPhone ? [{ href: `https://wa.me/${cleanPhone}`, label: "WhatsApp Support" }] : []),
+];
 
 const columns = [
   {
@@ -29,11 +36,7 @@ const columns = [
   },
   {
     title: "Support & Desk",
-    links: [
-      { href: `tel:${supportPhone.replace(/\s+/g, "")}`, label: supportPhone },
-      { href: "mailto:support@stayride.in", label: "support@stayride.in" },
-      { href: "https://wa.me/919883757307", label: "WhatsApp Support" },
-    ],
+    links: supportLinks,
   },
 ];
 

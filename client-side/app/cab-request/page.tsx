@@ -81,18 +81,74 @@ const FALLBACK_TIMES = [
   "08:00 PM",
 ];
 
-const VEHICLE_COPY: Record<string, { description: string; tag: string; icon: string }> = {
-  SUV: { description: "High ground clearance Bolero / Innova / Scorpio. Best for hill curves.", tag: "Most Popular in Hills", icon: "directions_car" },
-  Sedan: { description: "Comfortable Dzire / Etios. Best for couples & smooth town roads.", tag: "Budget Friendly", icon: "directions_car" },
-  "7-seater": { description: "Spacious Ertiga / Maxi cab for families with multiple bags.", tag: "Family Choice", icon: "airport_shuttle" },
-  "9-seater": { description: "High capacity Tempo Traveller for touring groups.", tag: "Large Group", icon: "airport_shuttle" },
-};
-
 const FALLBACK_VEHICLES = [
-  { value: "SUV", label: "6-7 Seater Mountain SUV", seats: 7, estFare: 3000 },
-  { value: "Sedan", label: "4 Seater Sedan / Hatchback", seats: 4, estFare: 2200 },
-  { value: "7-seater", label: "7 Seater Family MPV", seats: 7, estFare: 3200 },
-  { value: "9-seater", label: "9+ Seater Group Traveller", seats: 9, estFare: 4200 },
+  { value: "SUV", label: "6-7 Seater Mountain SUV", seats: 7 },
+  { value: "Sedan", label: "4 Seater Sedan / Hatchback", seats: 4 },
+  { value: "7-seater", label: "7 Seater Family MPV", seats: 7 },
+  { value: "9-seater", label: "9-10 Seater Large Group Cruiser", seats: 10 },
+];
+
+export interface PopularTransferRoute {
+  id: string;
+  name: string;
+  from: string;
+  to: string;
+  direction: "outbound" | "inbound";
+  icon: string;
+}
+
+const POPULAR_TRANSFER_ROUTES: PopularTransferRoute[] = [
+  {
+    id: "homestay-to-bagdogra",
+    name: "HOMESTAY ➔ BAGDOGRA AIRPORT",
+    from: "Homestay",
+    to: "Bagdogra Airport (IXB)",
+    direction: "outbound",
+    icon: "flight_takeoff",
+  },
+  {
+    id: "homestay-to-njp",
+    name: "HOMESTAY ➔ NJP RAILWAY STATION",
+    from: "Homestay",
+    to: "NJP Railway Station",
+    direction: "outbound",
+    icon: "train",
+  },
+  {
+    id: "njp-to-homestay",
+    name: "NJP RAILWAY STATION ➔ HOMESTAY",
+    from: "NJP Railway Station",
+    to: "Homestay",
+    direction: "inbound",
+    icon: "home",
+  },
+  {
+    id: "bagdogra-to-homestay",
+    name: "BAGDOGRA AIRPORT ➔ HOMESTAY",
+    from: "Bagdogra Airport (IXB)",
+    to: "Homestay",
+    direction: "inbound",
+    icon: "home",
+  },
+];
+
+const DEFAULT_TOURIST_DESTINATIONS = [
+  "Tiger Hill Sunrise Point",
+  "Batasia Loop & War Memorial",
+  "Darjeeling Mall Road / Chowrasta",
+  "Japanese Peace Pagoda",
+  "Rock Garden & Ganga Maya Park",
+  "Happy Valley Tea Estate",
+  "Padmaja Naidu Zoo & HMI",
+  "Ghoom Monastery",
+  "Lamahatta Eco Park",
+  "Mirik Lake",
+  "Pashupati Nagar (Nepal Border)",
+  "Bagdogra Airport (IXB)",
+  "NJP Railway Station",
+  "Kalimpong Town",
+  "Gangtok MG Marg",
+  "Pelling Skywalk",
 ];
 
 type PublicConfig = {
@@ -194,7 +250,7 @@ function CabRequestFormContent() {
   const homestayParam = searchParams.get("h") || searchParams.get("homestay") || "";
   const isNoLink = !token && !refParam && !homestayParam;
 
-  // Multi-step form state: 1 = Route, 2 = Schedule & Vehicle, 3 = Guest Details & Review
+  // Multi-step form state: 1 = Route & Stops, 2 = Schedule & Travelers, 3 = Review & Submit
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
 
   const [linkState, setLinkState] = useState<"loading" | "valid" | "invalid">(() =>
@@ -202,29 +258,34 @@ function CabRequestFormContent() {
   );
   const [link, setLink] = useState<GuestLink | null>(null);
 
+  // Active Tab: Custom Tour is the default active tab on initial page load
+  const [activeTab, setActiveTab] = useState<"custom" | "popular">("custom");
+  const [selectedPopularRouteId, setSelectedPopularRouteId] = useState<string>("homestay-to-bagdogra");
+
+  // Round Trip preference (Requirement 5)
+  const [isRoundTrip, setIsRoundTrip] = useState<boolean>(false);
+
+  // Pickup & Drop locations
   const [pickup, setPickup] = useState("");
   const [customPickup, setCustomPickup] = useState(false);
-
-  // Route selection
-  const [selectedRoutePresetId, setSelectedRoutePresetId] = useState<string>("darjeeling-7-point");
-  const [routeCategory, setRouteCategory] = useState<string>("ALL");
   const [customDestinations, setCustomDestinations] = useState<string[]>([""]);
-  const [isCustomRoute, setIsCustomRoute] = useState(false);
 
-  // Schedule & Vehicle
+  // Autocomplete / Suggestions state
+  const [activeSuggestIdx, setActiveSuggestIdx] = useState<number | null>(null);
+  const [placesList, setPlacesList] = useState<string[]>([]);
+
+  // Schedule & Passengers (Requirement 7: Number of Passengers only)
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowYmd = toLocalYmd(tomorrow);
   const [date, setDate] = useState(tomorrowYmd);
   const [time, setTime] = useState("09:00 AM");
-  const [vehicleType, setVehicleType] = useState<string>("SUV");
-  const [passengers, setPassengers] = useState(3);
+  const [passengers, setPassengers] = useState(2);
 
   // Guest Details
   const [guestName, setGuestName] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
   const [notes, setNotes] = useState("");
-  const [guestBudget, setGuestBudget] = useState("");
 
   // Submission & Lifecycle
   const [clientRequestId] = useState(() =>
@@ -254,43 +315,76 @@ function CabRequestFormContent() {
   const [ratingSuccess, setRatingSuccess] = useState<boolean>(false);
   const [ratingError, setRatingError] = useState<string>("");
 
-  const activeRoutePresets: RoutePreset[] =
-    link?.config?.routePresets && link.config.routePresets.length > 0
-      ? link.config.routePresets
-      : DEFAULT_ROUTE_PRESETS;
+  // Fetch curated places for tourist suggestions
+  useEffect(() => {
+    apiFetch<{ data?: Array<{ name?: string }> }>(API_ENDPOINTS.cabs.places())
+      .then((res) => {
+        if (res?.data && Array.isArray(res.data)) {
+          setPlacesList(res.data.map((p) => p.name || "").filter(Boolean));
+        }
+      })
+      .catch(() => {});
+  }, []);
 
-  const vehicleOptions =
-    link?.config?.vehicles && link.config.vehicles.length > 0
-      ? link.config.vehicles
-      : FALLBACK_VEHICLES;
-
-  const timeOptions =
-    link?.config?.pickupTimes && link.config.pickupTimes.length > 0
-      ? link.config.pickupTimes
-      : FALLBACK_TIMES;
-
-  const selectedPreset = activeRoutePresets.find((r) => r.id === selectedRoutePresetId);
-
-  // Dynamic route-specific fare calculation
-  const getEstimatedFare = (vType: string) => {
-    if (!isCustomRoute && selectedPreset && selectedPreset.fares && selectedPreset.fares[vType]) {
-      return {
-        fare: selectedPreset.fares[vType],
-        isPreset: true,
-        routeName: selectedPreset.name,
-      };
-    }
-    const matched = vehicleOptions.find((v) => v.value === vType);
-    const baseline = matched?.estFare || (vType === "SUV" ? 3000 : vType === "Sedan" ? 2200 : vType === "7-seater" ? 3200 : 4200);
-    return {
-      fare: baseline,
-      isPreset: false,
-      routeName: isCustomRoute ? customDestinations.filter(Boolean).join(" → ") : "Custom Route",
-    };
+  const getFilteredSuggestions = (query: string) => {
+    const q = query.trim().toLowerCase();
+    const presets = Array.from(
+      new Set([
+        ...DEFAULT_TOURIST_DESTINATIONS,
+        ...placesList,
+        ...(link?.config?.sightseeingPresets || []),
+      ])
+    );
+    if (!q) return presets.slice(0, 8);
+    return presets.filter((p) => p.toLowerCase().includes(q)).slice(0, 8);
   };
 
-  const currentFareEstimate = getEstimatedFare(vehicleType);
-  const estimatedAdvance = Math.max(200, Math.round(currentFareEstimate.fare * 0.10));
+  const handleSelectSuggestion = (place: string, idx: number) => {
+    const copy = [...customDestinations];
+    copy[idx] = place;
+    setCustomDestinations(copy);
+    setActiveSuggestIdx(null);
+  };
+
+  const handleSelectPopularRoute = (routeId: string) => {
+    setSelectedPopularRouteId(routeId);
+    const route = POPULAR_TRANSFER_ROUTES.find((r) => r.id === routeId);
+    if (!route) return;
+
+    const homestayPlace = link?.pickup || link?.homestayName || "Verified Partner Homestay";
+    if (route.direction === "outbound") {
+      setCustomPickup(false);
+      setPickup(homestayPlace);
+      setCustomDestinations([route.to]);
+    } else {
+      setCustomPickup(true);
+      setPickup(route.from);
+      setCustomDestinations([homestayPlace]);
+    }
+  };
+
+  const getResolvedPickup = (): string => {
+    if (activeTab === "popular") {
+      const route = POPULAR_TRANSFER_ROUTES.find((r) => r.id === selectedPopularRouteId);
+      if (!route) return link?.pickup || link?.homestayName || "Verified Partner Homestay";
+      const homestayPlace = link?.pickup || link?.homestayName || "Verified Partner Homestay";
+      return route.direction === "outbound" ? homestayPlace : route.from;
+    }
+    if (!customPickup) {
+      return link?.pickup || link?.homestayName || "Verified Partner Homestay";
+    }
+    return pickup.trim();
+  };
+
+  const getResolvedDestinations = (): string[] => {
+    if (activeTab === "popular") {
+      const route = POPULAR_TRANSFER_ROUTES.find((r) => r.id === selectedPopularRouteId);
+      if (!route) return ["Bagdogra Airport (IXB)"];
+      const homestayPlace = link?.pickup || link?.homestayName || "Verified Partner Homestay";
+      return [route.direction === "outbound" ? route.to : homestayPlace];
+    }
+    return customDestinations.map((d) => d.trim()).filter(Boolean);
+  };
 
   const fetchStatus = async (reference: string) => {
     setStatusLoading(true);
@@ -347,7 +441,7 @@ function CabRequestFormContent() {
                   sightseeingPresets: [],
                   routePresets: [],
                   upiId: "stayride@okhdfcbank",
-                  supportPhone: process.env.NEXT_PUBLIC_SUPPORT_PHONE?.replace(/[^0-9]/g, "") || "919883757307",
+                  supportPhone: process.env.NEXT_PUBLIC_SUPPORT_PHONE?.replace(/[^0-9]/g, "") || "",
                 },
               });
               setLinkState("valid");
@@ -366,7 +460,7 @@ function CabRequestFormContent() {
                       sightseeingPresets: live.sightseeingPresets || prev.config?.sightseeingPresets || [],
                       routePresets: live.routePresets || prev.config?.routePresets || [],
                       upiId: live.upiId || prev.config?.upiId || "stayride@okhdfcbank",
-                      supportPhone: live.supportPhone || prev.config?.supportPhone || process.env.NEXT_PUBLIC_SUPPORT_PHONE?.replace(/[^0-9]/g, "") || "919883757307",
+                      supportPhone: live.supportPhone || prev.config?.supportPhone || process.env.NEXT_PUBLIC_SUPPORT_PHONE?.replace(/[^0-9]/g, "") || "",
                     },
                   } : prev);
                 })
@@ -461,17 +555,14 @@ function CabRequestFormContent() {
 
   const handleFormSubmit = async () => {
     setErrorMessage("");
-    if (!pickup.trim()) {
-      setErrorMessage("Please enter a pickup location.");
+    const resolvedPickup = getResolvedPickup();
+    const destinations = getResolvedDestinations();
+
+    if (!resolvedPickup) {
+      setErrorMessage("Please select or enter a pickup location.");
       setCurrentStep(1);
       return;
     }
-
-    const destinations = isCustomRoute
-      ? customDestinations.map((d) => d.trim()).filter(Boolean)
-      : selectedPreset
-      ? [selectedPreset.name]
-      : [];
 
     if (destinations.length === 0) {
       setErrorMessage("Please select or enter at least one destination.");
@@ -492,21 +583,24 @@ function CabRequestFormContent() {
       return;
     }
 
+    // Auto-map vehicle size for backend compatibility based on passengers
+    const autoVehicleType = passengers > 4 ? (passengers > 7 ? "9-seater" : "7-seater") : "SUV";
+
     setSubmitting(true);
     try {
       const recaptchaToken = await getRecaptchaToken("guest_cab_request");
       const selectedDateObj = new Date(`${date}T12:00:00Z`);
       const payload = {
-        pickup: pickup.trim(),
+        pickup: resolvedPickup,
         destinations,
         date: selectedDateObj.getTime(),
         time,
         passengers,
-        vehicleType,
+        vehicleType: autoVehicleType,
+        isRoundTrip,
         guestName: guestName.trim(),
         phone: cleanPhone,
         notes: notes.trim(),
-        guestBudget: guestBudget ? Number(guestBudget) : undefined,
         clientRequestId,
         recaptchaToken,
       };
@@ -537,7 +631,7 @@ function CabRequestFormContent() {
   };
 
   const activeUpiId = tripStatus?.config?.upiId || link?.config?.upiId || process.env.NEXT_PUBLIC_UPI_ID || "stayride@upi";
-  const activeSupportPhone = (tripStatus?.config?.supportPhone || link?.config?.supportPhone || process.env.NEXT_PUBLIC_SUPPORT_PHONE || "919800000001").replace(/\D/g, "");
+  const activeSupportPhone = (tripStatus?.config?.supportPhone || link?.config?.supportPhone || process.env.NEXT_PUBLIC_SUPPORT_PHONE || "").replace(/\D/g, "");
 
   if (linkState === "loading") {
     return (
@@ -650,15 +744,25 @@ function CabRequestFormContent() {
           </div>
 
           <div className="flex items-center gap-2">
-            <a
-              href={`https://wa.me/${activeSupportPhone}?text=${encodeURIComponent("Hello StayRide, I need assistance with cab booking.")}`}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1.5 rounded-full border border-[#D0D7DE] bg-white px-3 py-1.5 text-xs font-semibold text-[#24292F] hover:bg-[#F6F8FA] transition-colors"
-            >
-              <Icon name="support_agent" className="text-sm text-emerald-700" />
-              <span>Help</span>
-            </a>
+            {activeSupportPhone ? (
+              <a
+                href={`https://wa.me/${activeSupportPhone}?text=${encodeURIComponent("Hello StayRide, I need assistance with cab booking.")}`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-full border border-[#D0D7DE] bg-white px-3 py-1.5 text-xs font-semibold text-[#24292F] hover:bg-[#F6F8FA] transition-colors"
+              >
+                <Icon name="support_agent" className="text-sm text-emerald-700" />
+                <span>Help</span>
+              </a>
+            ) : (
+              <a
+                href="mailto:support@stayride.in?subject=StayRide%20Cab%20Assistance"
+                className="inline-flex items-center gap-1.5 rounded-full border border-[#D0D7DE] bg-white px-3 py-1.5 text-xs font-semibold text-[#24292F] hover:bg-[#F6F8FA] transition-colors"
+              >
+                <Icon name="support_agent" className="text-sm text-emerald-700" />
+                <span>Help</span>
+              </a>
+            )}
           </div>
         </div>
       </header>
@@ -878,26 +982,37 @@ function CabRequestFormContent() {
                     )}
                   </div>
 
-                  {/* WhatsApp Verification */}
+                  {/* Verification & Help */}
                   <div className="pt-1 text-center space-y-2">
-                    <a
-                      href={`https://wa.me/${activeSupportPhone}?text=${encodeURIComponent(`Namaste, I have paid the advance of ₹${tripStatus.advanceAmount} for cab reference ${tripStatus.reference}. Please confirm my booking.`)}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#128C7E] hover:underline"
-                    >
-                      <Icon name="chat" className="text-sm" /> Share Payment Screenshot on WhatsApp
-                    </a>
-                    <div className="pt-1 border-t border-amber-200/60">
+                    {activeSupportPhone ? (
+                      <>
+                        <a
+                          href={`https://wa.me/${activeSupportPhone}?text=${encodeURIComponent(`Namaste, I have paid the advance of ₹${tripStatus.advanceAmount} for cab reference ${tripStatus.reference}. Please confirm my booking.`)}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#128C7E] hover:underline"
+                        >
+                          <Icon name="chat" className="text-sm" /> Share Payment Screenshot on WhatsApp
+                        </a>
+                        <div className="pt-1 border-t border-amber-200/60">
+                          <a
+                            href={`https://wa.me/${activeSupportPhone}?text=${encodeURIComponent(`Namaste, regarding cab request ${tripStatus.reference}: the quoted fare is ₹${tripStatus.agreedFare}. Can you assist with the pricing or vehicle options?`)}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#57606A] hover:text-[#1F2328] hover:underline"
+                          >
+                            <Icon name="chat" className="text-xs text-emerald-700" /> Need a Different Fare or Vehicle? Chat with Desk
+                          </a>
+                        </div>
+                      </>
+                    ) : (
                       <a
-                        href={`https://wa.me/${activeSupportPhone}?text=${encodeURIComponent(`Namaste, regarding cab request ${tripStatus.reference}: my budget is around ₹${tripStatus.guestBudget || currentFareEstimate.fare}, but quote is ₹${tripStatus.agreedFare}. Can you assist?`)}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#57606A] hover:text-[#1F2328] hover:underline"
+                        href={`mailto:support@stayride.in?subject=${encodeURIComponent(`Payment Confirmation - Reference ${tripStatus.reference}`)}`}
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#128C7E] hover:underline"
                       >
-                        <Icon name="chat" className="text-xs text-emerald-700" /> Need a Different Fare or Vehicle? Chat with Host
+                        <Icon name="mail" className="text-sm" /> Email Payment Confirmation (support@stayride.in)
                       </a>
-                    </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -1066,12 +1181,12 @@ function CabRequestFormContent() {
           /* Multi-Step Booking Form */
           <div className="space-y-6">
             {/* Step Progress Stepper Bar */}
-            <div className="rounded-2xl border border-[#D0D7DE] bg-white p-3.5 shadow-xs">
+            <div className="rounded-2xl border border-[#D0D7DE] bg-white p-2.5 sm:p-3 shadow-xs">
               <div className="grid grid-cols-3 gap-2 text-center">
                 <button
                   type="button"
                   onClick={() => setCurrentStep(1)}
-                  className={`flex items-center justify-center gap-1.5 py-1 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
+                  className={`flex items-center justify-center gap-1.5 py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
                     currentStep === 1 ? "bg-emerald-50 text-emerald-900 border border-emerald-200" : "text-[#57606A] hover:bg-[#F6F8FA]"
                   }`}
                 >
@@ -1084,27 +1199,27 @@ function CabRequestFormContent() {
                 <button
                   type="button"
                   onClick={() => setCurrentStep(2)}
-                  className={`flex items-center justify-center gap-1.5 py-1 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
+                  className={`flex items-center justify-center gap-1.5 py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
                     currentStep === 2 ? "bg-emerald-50 text-emerald-900 border border-emerald-200" : "text-[#57606A] hover:bg-[#F6F8FA]"
                   }`}
                 >
                   <span className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] ${currentStep === 2 ? "bg-emerald-600 text-white" : "bg-[#D0D7DE] text-white"}`}>
                     2
                   </span>
-                  <span>Vehicle & Time</span>
+                  <span>Schedule</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setCurrentStep(3)}
-                  className={`flex items-center justify-center gap-1.5 py-1 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
+                  className={`flex items-center justify-center gap-1.5 py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
                     currentStep === 3 ? "bg-emerald-50 text-emerald-900 border border-emerald-200" : "text-[#57606A] hover:bg-[#F6F8FA]"
                   }`}
                 >
                   <span className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] ${currentStep === 3 ? "bg-emerald-600 text-white" : "bg-[#D0D7DE] text-white"}`}>
                     3
                   </span>
-                  <span>Review & Pay</span>
+                  <span>Review</span>
                 </button>
               </div>
             </div>
@@ -1117,251 +1232,375 @@ function CabRequestFormContent() {
 
             {/* STEP 1: ROUTE & ITINERARY */}
             {currentStep === 1 && (
-              <div className="space-y-5 rounded-2xl border border-[#D0D7DE] bg-white p-5 sm:p-6 shadow-xs">
-                <div>
-                  <h2 className="text-base font-bold text-[#1F2328]">Where are you traveling?</h2>
-                  <p className="text-xs text-[#57606A]">Select a popular mountain route or customize your itinerary.</p>
+              <div className="space-y-5 rounded-2xl border border-[#D0D7DE] bg-white p-4 sm:p-6 shadow-xs">
+                {/* 2 Tabs: Custom Tour (Default) & Popular Mountain Routes */}
+                <div className="grid grid-cols-2 gap-1.5 p-1 bg-[#F6F8FA] border border-[#D0D7DE] rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("custom")}
+                    className={`flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      activeTab === "custom"
+                        ? "bg-white text-emerald-950 shadow-xs border border-emerald-600/30 font-extrabold"
+                        : "text-[#57606A] hover:text-[#1F2328]"
+                    }`}
+                  >
+                    <Icon name="edit_road" className="text-sm text-emerald-700" />
+                    <span>Custom Tour</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab("popular");
+                      handleSelectPopularRoute(selectedPopularRouteId || "homestay-to-bagdogra");
+                    }}
+                    className={`flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      activeTab === "popular"
+                        ? "bg-white text-emerald-950 shadow-xs border border-emerald-600/30 font-extrabold"
+                        : "text-[#57606A] hover:text-[#1F2328]"
+                    }`}
+                  >
+                    <Icon name="alt_route" className="text-sm text-emerald-700" />
+                    <span>Popular Mountain Routes</span>
+                  </button>
                 </div>
 
-                {/* Pickup Location Mode */}
-                <div className="space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-[#1F2328] flex items-center gap-1.5">
-                      <Icon name="location_on" className="text-xs text-emerald-700" />
-                      <span>Pickup Point</span>
-                    </label>
-                    <span className="text-[11px] text-[#57606A]">Where will driver meet you?</span>
-                  </div>
-
-                  {/* 2-Option Segmented Selector */}
-                  <div className="grid grid-cols-2 gap-2 p-1 bg-[#F6F8FA] border border-[#D0D7DE] rounded-xl">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCustomPickup(false);
-                        const homestayLoc = link?.pickup
-                          ? (link.homestayName && !link.pickup.toLowerCase().includes(link.homestayName.toLowerCase())
-                              ? `${link.homestayName}, ${link.pickup}`
-                              : link.pickup)
-                          : link?.homestayName || "Homestay gate";
-                        setPickup(homestayLoc);
-                      }}
-                      className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                        !customPickup
-                          ? "bg-white text-emerald-950 shadow-xs border border-emerald-600/30"
-                          : "text-[#57606A] hover:text-[#1F2328]"
-                      }`}
-                    >
-                      <Icon name="home" className="text-sm text-emerald-700" />
-                      <span>At the Homestay</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setCustomPickup(true)}
-                      className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                        customPickup
-                          ? "bg-white text-emerald-950 shadow-xs border border-emerald-600/30"
-                          : "text-[#57606A] hover:text-[#1F2328]"
-                      }`}
-                    >
-                      <Icon name="flight_land" className="text-sm text-emerald-700" />
-                      <span>Airport / Station / Other</span>
-                    </button>
-                  </div>
-
-                  {!customPickup ? (
-                    /* Homestay Pickup Card */
-                    <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3.5 space-y-1.5">
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-xs font-bold text-emerald-950">{link?.homestayName || "Verified Partner Homestay"}</span>
-                            <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[9px] font-extrabold text-emerald-800 uppercase tracking-wide">
-                              Verified Stay
-                            </span>
-                          </div>
-                          <p className="mt-1 text-xs text-emerald-900 leading-snug font-medium">
-                            {pickup || `${link?.homestayName || "Homestay"}, Darjeeling`}
-                          </p>
-                        </div>
-                      </div>
-                      <p className="text-[11px] text-emerald-800/80 pt-1 border-t border-emerald-200/60">
-                        Driver receives verified GPS coordinates and navigates straight to your homestay gate.
-                      </p>
-                    </div>
-                  ) : (
-                    /* Custom Pickup Input with Quick Airport/Station Chips */
+                {/* TAB 1: CUSTOM TOUR (Default Active) */}
+                {activeTab === "custom" && (
+                  <div className="space-y-4">
+                    {/* Pickup Location Mode */}
                     <div className="space-y-2">
-                      <div className="flex flex-wrap gap-1.5">
-                        {["Bagdogra Airport (IXB)", "NJP Railway Station", "Darjeeling Mall / Chowrasta", "Siliguri Junction"].map((preset) => (
-                          <button
-                            key={preset}
-                            type="button"
-                            onClick={() => setPickup(preset)}
-                            className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold transition-colors cursor-pointer ${
-                              pickup === preset
-                                ? "bg-emerald-100 border-emerald-400 text-emerald-900 font-bold"
-                                : "bg-[#F6F8FA] border-[#D0D7DE] text-[#24292F] hover:bg-[#E1E4E8]"
-                            }`}
-                          >
-                            + {preset}
-                          </button>
-                        ))}
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-[#1F2328] flex items-center gap-1.5">
+                          <Icon name="location_on" className="text-xs text-emerald-700" />
+                          <span>Pickup Location</span>
+                        </label>
                       </div>
-                      <input
-                        type="text"
-                        value={pickup}
-                        onChange={(e) => setPickup(e.target.value)}
-                        className="w-full rounded-xl border border-[#D0D7DE] bg-white px-3.5 py-2.5 text-xs text-[#1F2328] focus:border-emerald-600 focus:outline-none shadow-xs"
-                        placeholder="Enter specific gate, airport terminal, or landmark address"
-                      />
-                    </div>
-                  )}
-                </div>
 
-                {/* Mode Switch: Popular Routes vs Custom */}
-                <div className="flex items-center gap-2 border-b border-[#E1E4E8] pb-3">
-                  <button
-                    type="button"
-                    onClick={() => setIsCustomRoute(false)}
-                    className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
-                      !isCustomRoute ? "bg-[#1F2328] text-white" : "bg-[#F6F8FA] text-[#57606A] hover:bg-[#E1E4E8]"
-                    }`}
-                  >
-                    Popular Mountain Routes
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsCustomRoute(true)}
-                    className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
-                      isCustomRoute ? "bg-[#1F2328] text-white" : "bg-[#F6F8FA] text-[#57606A] hover:bg-[#E1E4E8]"
-                    }`}
-                  >
-                    Custom Itinerary
-                  </button>
-                </div>
-
-                {/* Popular Route Presets */}
-                {!isCustomRoute ? (
-                  <div className="space-y-3">
-                    {/* Category Filter Pills */}
-                    <div className="flex flex-wrap gap-1.5">
-                      {[
-                        { key: "ALL", label: "All Routes" },
-                        { key: "AIRPORT_STATION", label: "Airport / Railway" },
-                        { key: "SIGHTSEEING", label: "Sightseeing" },
-                        { key: "DAY_EXCURSION", label: "Excursions" },
-                      ].map((cat) => (
+                      {/* 2-Option Pickup Selection: At Homestay vs Other Location */}
+                      <div className="grid grid-cols-2 gap-2">
                         <button
-                          key={cat.key}
                           type="button"
-                          onClick={() => setRouteCategory(cat.key)}
-                          className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors cursor-pointer ${
-                            routeCategory === cat.key
-                              ? "bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold"
-                              : "bg-[#F6F8FA] text-[#57606A] border border-[#D0D7DE] hover:bg-[#E1E4E8]"
+                          onClick={() => {
+                            setCustomPickup(false);
+                            const homestayLoc = link?.pickup
+                              ? (link.homestayName && !link.pickup.toLowerCase().includes(link.homestayName.toLowerCase())
+                                  ? `${link.homestayName}, ${link.pickup}`
+                                  : link.pickup)
+                              : link?.homestayName || "Homestay gate";
+                            setPickup(homestayLoc);
+                          }}
+                          className={`flex items-center justify-center gap-2 py-2.5 px-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                            !customPickup
+                              ? "bg-emerald-50/70 border-emerald-600 text-emerald-950 ring-1 ring-emerald-600 shadow-2xs"
+                              : "bg-[#F6F8FA] border-[#D0D7DE] text-[#57606A] hover:bg-[#E1E4E8]"
                           }`}
                         >
-                          {cat.label}
+                          <Icon name="home" className="text-sm text-emerald-700" />
+                          <span>At Homestay</span>
                         </button>
-                      ))}
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCustomPickup(true);
+                            if (!pickup || pickup === link?.pickup || pickup === link?.homestayName) {
+                              setPickup("");
+                            }
+                          }}
+                          className={`flex items-center justify-center gap-2 py-2.5 px-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                            customPickup
+                              ? "bg-emerald-50/70 border-emerald-600 text-emerald-950 ring-1 ring-emerald-600 shadow-2xs"
+                              : "bg-[#F6F8FA] border-[#D0D7DE] text-[#57606A] hover:bg-[#E1E4E8]"
+                          }`}
+                        >
+                          <Icon name="edit_location" className="text-sm text-emerald-700" />
+                          <span>Other Location</span>
+                        </button>
+                      </div>
+
+                      {!customPickup ? (
+                        <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-3 flex items-center justify-between">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-800">
+                              <Icon name="storefront" className="text-sm" />
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-emerald-950 truncate">
+                                {link?.homestayName || "Verified Partner Homestay"}
+                              </p>
+                              <p className="text-[11px] text-emerald-800/80 truncate">
+                                Driver navigates straight to homestay gate
+                              </p>
+                            </div>
+                          </div>
+                          <span className="shrink-0 rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-900 uppercase">
+                            Homestay
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="space-y-2 pt-1">
+                          <input
+                            type="text"
+                            value={pickup}
+                            onChange={(e) => setPickup(e.target.value)}
+                            placeholder="Enter pickup address, landmark, or station"
+                            className="w-full rounded-xl border border-[#D0D7DE] bg-white px-3.5 py-2.5 text-xs text-[#1F2328] focus:border-emerald-600 focus:outline-none shadow-2xs"
+                          />
+                          <div className="flex flex-wrap gap-1.5">
+                            {["Bagdogra Airport (IXB)", "NJP Railway Station", "Darjeeling Mall", "Siliguri Junction"].map((preset) => (
+                              <button
+                                key={preset}
+                                type="button"
+                                onClick={() => setPickup(preset)}
+                                className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors cursor-pointer ${
+                                  pickup === preset
+                                    ? "bg-emerald-100 border-emerald-400 text-emerald-900 font-bold"
+                                    : "bg-[#F6F8FA] border-[#D0D7DE] text-[#57606A] hover:bg-[#E1E4E8]"
+                                }`}
+                              >
+                                + {preset}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
-                    {/* Route Preset Cards */}
-                    <div className="grid grid-cols-1 gap-2.5 pt-1">
-                      {activeRoutePresets
-                        .filter((r) => routeCategory === "ALL" || r.category === routeCategory)
-                        .map((route) => {
-                          const isSelected = selectedRoutePresetId === route.id;
+                    {/* Drop Locations (Multiple stops + Suggestions) */}
+                    <div className="space-y-2.5 pt-1">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-[#1F2328] flex items-center gap-1.5">
+                          <Icon name="navigation" className="text-xs text-emerald-700" />
+                          <span>Drop Locations</span>
+                        </label>
+                        <span className="text-[11px] text-[#57606A]">Add 1 or more stops</span>
+                      </div>
+
+                      <div className="space-y-2.5">
+                        {customDestinations.map((dest, idx) => {
+                          const suggestions = getFilteredSuggestions(dest);
+                          const isShowingSuggestions = activeSuggestIdx === idx;
+
                           return (
-                            <div
-                              key={route.id}
-                              onClick={() => setSelectedRoutePresetId(route.id)}
-                              className={`rounded-xl border p-3.5 cursor-pointer transition-all ${
-                                isSelected
-                                  ? "border-emerald-600 bg-emerald-50/40 ring-1 ring-emerald-600 shadow-xs"
-                                  : "border-[#D0D7DE] bg-white hover:border-[#8C959F]"
-                              }`}
-                            >
-                              <div className="flex items-start justify-between gap-2">
-                                <div>
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="font-bold text-xs text-[#1F2328]">{route.name}</span>
-                                    {route.category === "AIRPORT_STATION" && (
-                                      <span className="rounded bg-blue-50 px-1.5 py-0.2 text-[9px] font-bold text-blue-800">
-                                        Transfer
-                                      </span>
-                                    )}
-                                  </div>
-                                  {route.description && (
-                                    <p className="mt-0.5 text-[11px] text-[#57606A]">{route.description}</p>
-                                  )}
-                                  {route.duration && (
-                                    <span className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-800">
-                                      <Icon name="schedule" className="text-[10px]" /> {route.duration}
-                                    </span>
+                            <div key={idx} className="relative">
+                              <div className="flex items-center gap-2">
+                                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#F6F8FA] border border-[#D0D7DE] text-[11px] font-bold text-[#57606A]">
+                                  {idx + 1}
+                                </span>
+                                <div className="relative flex-1">
+                                  <input
+                                    type="text"
+                                    value={dest}
+                                    onFocus={() => setActiveSuggestIdx(idx)}
+                                    onChange={(e) => {
+                                      const copy = [...customDestinations];
+                                      copy[idx] = e.target.value;
+                                      setCustomDestinations(copy);
+                                      setActiveSuggestIdx(idx);
+                                    }}
+                                    placeholder={idx === 0 ? "Enter destination (e.g. Tiger Hill, Batasia Loop)" : `Destination ${idx + 1}`}
+                                    className="w-full rounded-xl border border-[#D0D7DE] bg-white px-3.5 py-2.5 text-xs text-[#1F2328] focus:border-emerald-600 focus:outline-none shadow-2xs pr-8"
+                                  />
+                                  {dest && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const copy = [...customDestinations];
+                                        copy[idx] = "";
+                                        setCustomDestinations(copy);
+                                      }}
+                                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8C959F] hover:text-[#1F2328] cursor-pointer"
+                                    >
+                                      <Icon name="close" className="text-xs" />
+                                    </button>
                                   )}
                                 </div>
 
-                                <div className="text-right shrink-0">
-                                  <span className="text-[10px] text-[#57606A] block">From</span>
-                                  <span className="text-sm font-extrabold text-emerald-800">
-                                    {formatInr(route.fares.Sedan || route.fares.SUV)}
-                                  </span>
-                                  <div className="text-[10px] text-[#57606A] font-medium mt-0.5">
-                                    {route.fares.Sedan && route.fares.SUV ? (
-                                      <span>Sedan {formatInr(route.fares.Sedan)} · SUV {formatInr(route.fares.SUV)}</span>
+                                {customDestinations.length > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const copy = customDestinations.filter((_, i) => i !== idx);
+                                      setCustomDestinations(copy.length > 0 ? copy : [""]);
+                                      setActiveSuggestIdx(null);
+                                    }}
+                                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#D0D7DE] text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                                    title="Remove this destination"
+                                  >
+                                    <Icon name="delete" className="text-sm" />
+                                  </button>
+                                )}
+                              </div>
+
+                              {/* Interactive Autocomplete / Tourist Spots Popover */}
+                              {isShowingSuggestions && (
+                                <div className="absolute z-20 left-9 right-0 mt-1 rounded-xl border border-[#D0D7DE] bg-white p-2 shadow-lg space-y-1">
+                                  <div className="flex items-center justify-between px-2 py-1 border-b border-[#F0F2F5]">
+                                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#57606A]">
+                                      Suggested Tourist Spots & Places
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => setActiveSuggestIdx(null)}
+                                      className="text-[10px] text-emerald-700 font-bold hover:underline cursor-pointer"
+                                    >
+                                      Done
+                                    </button>
+                                  </div>
+                                  <div className="max-h-48 overflow-y-auto divide-y divide-[#F6F8FA]">
+                                    {suggestions.length > 0 ? (
+                                      suggestions.map((place) => (
+                                        <button
+                                          key={place}
+                                          type="button"
+                                          onMouseDown={(e) => e.preventDefault()}
+                                          onClick={() => handleSelectSuggestion(place, idx)}
+                                          className="w-full text-left px-2.5 py-1.5 text-xs text-[#1F2328] hover:bg-emerald-50 hover:text-emerald-900 rounded-lg flex items-center justify-between transition-colors cursor-pointer"
+                                        >
+                                          <span className="truncate">{place}</span>
+                                          <Icon name="north_west" className="text-xs text-[#8C959F]" />
+                                        </button>
+                                      ))
                                     ) : (
-                                      <span>Fixed Rate</span>
+                                      <div className="px-2.5 py-2 text-xs text-[#57606A]">
+                                        Type a specific landmark or attraction
+                                      </div>
                                     )}
                                   </div>
                                 </div>
-                              </div>
+                              )}
                             </div>
                           );
                         })}
-                    </div>
-                  </div>
-                ) : (
-                  /* Custom Destination Input */
-                  <div className="space-y-3">
-                    <label className="text-xs font-semibold text-[#57606A] block">
-                      Custom Destinations / Hill Points
-                    </label>
-                    {customDestinations.map((dest, idx) => (
-                      <div key={idx} className="flex gap-2">
-                        <input
-                          type="text"
-                          value={dest}
-                          onChange={(e) => {
-                            const copy = [...customDestinations];
-                            copy[idx] = e.target.value;
-                            setCustomDestinations(copy);
-                          }}
-                          placeholder={`Stop ${idx + 1} (e.g. Batasia Loop, Rock Garden)`}
-                          className="w-full rounded-xl border border-[#D0D7DE] px-3.5 py-2 text-xs text-[#1F2328] focus:border-emerald-600 focus:outline-none"
-                        />
-                        {customDestinations.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => setCustomDestinations(customDestinations.filter((_, i) => i !== idx))}
-                            className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#D0D7DE] text-red-600 hover:bg-red-50 cursor-pointer"
-                          >
-                            <Icon name="close" className="text-sm" />
-                          </button>
-                        )}
                       </div>
-                    ))}
-                    {customDestinations.length < 5 && (
+
+                      {/* Add Destination Button (Up to 6 stops) */}
+                      {customDestinations.length < 6 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCustomDestinations([...customDestinations, ""]);
+                            setActiveSuggestIdx(customDestinations.length);
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-emerald-600/60 bg-emerald-50/50 px-3.5 py-2 text-xs font-bold text-emerald-800 hover:bg-emerald-100/60 transition-colors cursor-pointer"
+                        >
+                          <Icon name="add" className="text-xs font-bold" />
+                          <span>Add Destination</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Round Trip Toggle (Requirement 5) */}
+                    <div className="rounded-xl border border-[#D0D7DE] bg-[#F6F8FA] p-3.5 flex items-center justify-between">
+                      <div className="space-y-0.5 pr-2">
+                        <span className="text-xs font-bold text-[#1F2328] flex items-center gap-1.5">
+                          <Icon name="sync_alt" className="text-xs text-emerald-700" />
+                          <span>Return to Homestay</span>
+                        </span>
+                        <p className="text-[11px] text-[#57606A]">
+                          {isRoundTrip
+                            ? "Round trip: Driver will wait and take you back to homestay."
+                            : "One-way trip: Driver drops you off at the final destination."}
+                        </p>
+                      </div>
                       <button
                         type="button"
-                        onClick={() => setCustomDestinations([...customDestinations, ""])}
-                        className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:underline cursor-pointer"
+                        role="switch"
+                        aria-checked={isRoundTrip}
+                        onClick={() => setIsRoundTrip(!isRoundTrip)}
+                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                          isRoundTrip ? "bg-emerald-600" : "bg-[#D0D7DE]"
+                        }`}
                       >
-                        <Icon name="add" className="text-xs" /> Add Another Hill Stop
+                        <span
+                          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                            isRoundTrip ? "translate-x-5" : "translate-x-0"
+                          }`}
+                        />
                       </button>
-                    )}
+                    </div>
+                  </div>
+                )}
+
+                {/* TAB 2: POPULAR MOUNTAIN ROUTES (4 Transfer Options Only, Zero Prices) */}
+                {activeTab === "popular" && (
+                  <div className="space-y-4">
+                    <div>
+                      <h3 className="text-xs font-bold text-[#1F2328]">Select Transfer Route</h3>
+                      <p className="text-[11px] text-[#57606A]">Direct transfers between your homestay and major transit hubs.</p>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      {POPULAR_TRANSFER_ROUTES.map((route) => {
+                        const isSelected = selectedPopularRouteId === route.id;
+                        return (
+                          <button
+                            key={route.id}
+                            type="button"
+                            onClick={() => handleSelectPopularRoute(route.id)}
+                            className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
+                              isSelected
+                                ? "border-emerald-600 bg-emerald-50/50 ring-1 ring-emerald-600 shadow-2xs"
+                                : "border-[#D0D7DE] bg-white hover:border-[#8C959F]"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <span className={`flex h-8 w-8 items-center justify-center rounded-lg text-sm ${
+                                  isSelected ? "bg-emerald-600 text-white" : "bg-[#F6F8FA] text-emerald-800"
+                                }`}>
+                                  <Icon name={route.direction === "outbound" ? "flight_takeoff" : "flight_land"} className="text-base" />
+                                </span>
+                                <div>
+                                  <span className="text-xs font-extrabold tracking-wide text-[#1F2328] block">
+                                    {route.name}
+                                  </span>
+                                  <span className="text-[11px] text-[#57606A]">
+                                    {route.direction === "outbound" ? "Homestay Drop to Hub" : "Hub Pickup to Homestay"}
+                                  </span>
+                                </div>
+                              </div>
+                              {isSelected && (
+                                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
+                                  <Icon name="check" className="text-xs" />
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Round Trip Toggle for Transfer */}
+                    <div className="rounded-xl border border-[#D0D7DE] bg-[#F6F8FA] p-3.5 flex items-center justify-between">
+                      <div className="space-y-0.5 pr-2">
+                        <span className="text-xs font-bold text-[#1F2328] flex items-center gap-1.5">
+                          <Icon name="sync_alt" className="text-xs text-emerald-700" />
+                          <span>Round Trip Transfer</span>
+                        </span>
+                        <p className="text-[11px] text-[#57606A]">
+                          {isRoundTrip
+                            ? "Round trip: Includes return transfer."
+                            : "One-way transfer."}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={isRoundTrip}
+                        onClick={() => setIsRoundTrip(!isRoundTrip)}
+                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                          isRoundTrip ? "bg-emerald-600" : "bg-[#D0D7DE]"
+                        }`}
+                      >
+                        <span
+                          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                            isRoundTrip ? "translate-x-5" : "translate-x-0"
+                          }`}
+                        />
+                      </button>
+                    </div>
                   </div>
                 )}
 
@@ -1369,42 +1608,53 @@ function CabRequestFormContent() {
                 <div className="pt-2">
                   <button
                     type="button"
-                    onClick={() => setCurrentStep(2)}
+                    onClick={() => {
+                      const pickupLoc = getResolvedPickup();
+                      const drops = getResolvedDestinations();
+                      if (!pickupLoc) {
+                        setErrorMessage("Please choose or specify a pickup location.");
+                        return;
+                      }
+                      if (drops.length === 0) {
+                        setErrorMessage("Please specify at least one drop location.");
+                        return;
+                      }
+                      setErrorMessage("");
+                      setCurrentStep(2);
+                    }}
                     className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 transition-all cursor-pointer"
                   >
-                    <span>Choose Vehicle & Schedule</span>
+                    <span>Continue to Schedule & Travelers</span>
                     <Icon name="arrow_forward" className="text-sm" />
                   </button>
                 </div>
               </div>
             )}
 
-            {/* STEP 2: SCHEDULE & VEHICLE */}
+            {/* STEP 2: SCHEDULE & TRAVELERS */}
             {currentStep === 2 && (
-              <div className="space-y-5 rounded-2xl border border-[#D0D7DE] bg-white p-5 sm:p-6 shadow-xs">
+              <div className="space-y-5 rounded-2xl border border-[#D0D7DE] bg-white p-4 sm:p-6 shadow-xs">
                 <div>
-                  <h2 className="text-base font-bold text-[#1F2328]">When and in what car?</h2>
-                  <p className="text-xs text-[#57606A]">Mountain routes require high clearance and experienced local drivers.</p>
+                  <h2 className="text-base font-bold text-[#1F2328]">When are you traveling?</h2>
+                  <p className="text-xs text-[#57606A]">Set your schedule and traveler count. Verified local drivers will receive your request.</p>
                 </div>
 
                 {/* Date Selection */}
                 <div className="space-y-2">
-                  <label className="text-xs font-semibold text-[#57606A] block">Date of Travel</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="date"
-                      value={date}
-                      min={toLocalYmd(new Date())}
-                      onChange={(e) => setDate(e.target.value)}
-                      className="w-full rounded-xl border border-[#D0D7DE] px-3.5 py-2.5 text-xs text-[#1F2328] focus:border-emerald-600 focus:outline-none"
-                    />
-                  </div>
+                  <label className="text-xs font-bold text-[#1F2328] block">Date of Travel</label>
+                  <input
+                    type="date"
+                    value={date}
+                    min={toLocalYmd(new Date())}
+                    onChange={(e) => setDate(e.target.value)}
+                    className="w-full rounded-xl border border-[#D0D7DE] px-3.5 py-2.5 text-xs text-[#1F2328] focus:border-emerald-600 focus:outline-none bg-white shadow-2xs"
+                  />
                 </div>
 
                 {/* Time Selection */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-semibold text-[#57606A] block">Pickup Time</label>
+                    <label className="text-xs font-bold text-[#1F2328] block">Pickup Time</label>
                     <span className="text-[11px] text-emerald-800 font-bold bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
                       <Icon name="schedule" className="text-xs text-emerald-700" />
                       <span>{time}</span>
@@ -1424,7 +1674,7 @@ function CabRequestFormContent() {
                           setTime(toTime12(e.target.value));
                         }
                       }}
-                      className="w-full rounded-xl border border-[#D0D7DE] bg-white py-2.5 pl-10 pr-24 text-sm font-bold text-[#1F2328] focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600 shadow-xs cursor-pointer"
+                      className="w-full rounded-xl border border-[#D0D7DE] bg-white py-2.5 pl-10 pr-24 text-sm font-bold text-[#1F2328] focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600 shadow-2xs cursor-pointer"
                     />
                     <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-[11px] text-[#57606A] font-medium">
                       Tap for clock
@@ -1451,7 +1701,7 @@ function CabRequestFormContent() {
                             onClick={() => setTime(slot.label)}
                             className={`flex flex-col items-start px-2.5 py-2 rounded-xl text-left border transition-all cursor-pointer ${
                               isMatch
-                                ? "bg-emerald-600 text-white border-emerald-600 shadow-xs ring-1 ring-emerald-600"
+                                ? "bg-emerald-600 text-white border-emerald-600 shadow-2xs ring-1 ring-emerald-600"
                                 : "bg-[#F6F8FA] border-[#D0D7DE] text-[#24292F] hover:bg-[#E1E4E8]"
                             }`}
                           >
@@ -1468,83 +1718,53 @@ function CabRequestFormContent() {
                   </div>
                 </div>
 
-                {/* Passenger Stepper */}
-                <div className="flex items-center justify-between rounded-xl border border-[#D0D7DE] p-3.5 bg-[#F6F8FA]">
-                  <div>
-                    <span className="text-xs font-bold text-[#1F2328] block">Passengers</span>
-                    <span className="text-[11px] text-[#57606A]">Adults + Children</span>
+                {/* Requirement 7: Passenger Count Only (No Vehicle Class Selection) */}
+                <div className="space-y-2 pt-1">
+                  <label className="text-xs font-bold text-[#1F2328] block">Number of Passengers</label>
+                  <div className="flex items-center justify-between rounded-xl border border-[#D0D7DE] p-4 bg-[#F6F8FA]">
+                    <div>
+                      <span className="text-xs font-bold text-[#1F2328] block">Total Travelers</span>
+                      <span className="text-[11px] text-[#57606A]">Adults + Children traveling together</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        disabled={passengers <= 1}
+                        onClick={() => setPassengers(Math.max(1, passengers - 1))}
+                        className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#D0D7DE] bg-white font-bold text-base text-[#1F2328] hover:bg-[#F0F2F5] disabled:opacity-40 cursor-pointer transition-colors"
+                      >
+                        –
+                      </button>
+                      <input
+                        type="number"
+                        min={1}
+                        max={20}
+                        value={passengers}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value, 10);
+                          if (!isNaN(val) && val >= 1) {
+                            setPassengers(Math.min(20, val));
+                          }
+                        }}
+                        className="w-12 text-center font-bold text-sm text-[#1F2328] bg-transparent focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        disabled={passengers >= 20}
+                        onClick={() => setPassengers(Math.min(20, passengers + 1))}
+                        className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#D0D7DE] bg-white font-bold text-base text-[#1F2328] hover:bg-[#F0F2F5] disabled:opacity-40 cursor-pointer transition-colors"
+                      >
+                        +
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <button
-                      type="button"
-                      disabled={passengers <= 1}
-                      onClick={() => setPassengers(Math.max(1, passengers - 1))}
-                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#D0D7DE] bg-white font-bold text-sm disabled:opacity-40 cursor-pointer"
-                    >
-                      –
-                    </button>
-                    <span className="font-bold text-sm text-[#1F2328] w-4 text-center">{passengers}</span>
-                    <button
-                      type="button"
-                      disabled={passengers >= 10}
-                      onClick={() => setPassengers(passengers + 1)}
-                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#D0D7DE] bg-white font-bold text-sm disabled:opacity-40 cursor-pointer"
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-
-                {/* Vehicle Selection Cards with Dynamic Route Estimates */}
-                <div className="space-y-2.5">
-                  <label className="text-xs font-semibold text-[#57606A] block">
-                    Select Vehicle Class (Route-Specific Estimate)
-                  </label>
-                  <div className="grid grid-cols-1 gap-2.5">
-                    {vehicleOptions.map((v) => {
-                      const isSelected = vehicleType === v.value;
-                      const copy = VEHICLE_COPY[v.value] || { description: "Verified local mountain cab.", tag: "Available", icon: "directions_car" };
-                      const routeFare = getEstimatedFare(v.value).fare;
-                      const advEst = Math.max(200, Math.round(routeFare * 0.10));
-
-                      return (
-                        <div
-                          key={v.value}
-                          onClick={() => setVehicleType(v.value)}
-                          className={`rounded-2xl border p-4 cursor-pointer transition-all ${
-                            isSelected
-                              ? "border-emerald-600 bg-emerald-50/40 ring-1 ring-emerald-600 shadow-xs"
-                              : "border-[#D0D7DE] bg-white hover:border-[#8C959F]"
-                          }`}
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <span className="font-bold text-xs text-[#1F2328]">{v.label}</span>
-                                <span className="rounded bg-emerald-100 px-1.5 py-0.2 text-[9px] font-bold text-emerald-800">
-                                  {copy.tag}
-                                </span>
-                              </div>
-                              <p className="mt-1 text-[11px] text-[#57606A] leading-relaxed">{copy.description}</p>
-                              <div className="mt-1.5 flex items-center gap-3 text-[10px] text-[#57606A]">
-                                <span>Up to {v.seats} seats</span>
-                                <span>Advance deposit ~{formatInr(advEst)}</span>
-                              </div>
-                            </div>
-
-                            <div className="text-right shrink-0">
-                              <span className="text-[10px] text-[#57606A] block">Est. Route Fare</span>
-                              <span className="text-sm font-extrabold text-[#1F2328]">{formatInr(routeFare)}</span>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <p className="text-[11px] text-[#57606A]">
+                    Drivers with suitably-sized mountain vehicles will send you their quotes directly.
+                  </p>
                 </div>
 
                 {/* Navigation Buttons */}
-                <div className="flex gap-2 pt-2">
+                <div className="flex gap-2 pt-3">
                   <button
                     type="button"
                     onClick={() => setCurrentStep(1)}
@@ -1554,38 +1774,49 @@ function CabRequestFormContent() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setCurrentStep(3)}
+                    onClick={() => {
+                      if (!date) {
+                        setErrorMessage("Please select a date of travel.");
+                        return;
+                      }
+                      if (!passengers || passengers < 1) {
+                        setErrorMessage("Please specify at least 1 passenger.");
+                        return;
+                      }
+                      setErrorMessage("");
+                      setCurrentStep(3);
+                    }}
                     className="w-2/3 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 transition-all cursor-pointer"
                   >
-                    <span>Guest Details & Review</span>
+                    <span>Continue to Review</span>
                     <Icon name="arrow_forward" className="text-sm" />
                   </button>
                 </div>
               </div>
             )}
 
-            {/* STEP 3: GUEST CONTACT & REVIEW */}
+            {/* STEP 3: GUEST DETAILS & REVIEW */}
             {currentStep === 3 && (
-              <div className="space-y-5 rounded-2xl border border-[#D0D7DE] bg-white p-5 sm:p-6 shadow-xs">
+              <div className="space-y-5 rounded-2xl border border-[#D0D7DE] bg-white p-4 sm:p-6 shadow-xs">
                 <div>
-                  <h2 className="text-base font-bold text-[#1F2328]">Passenger Details & Summary</h2>
-                  <p className="text-xs text-[#57606A]">Driver contact details are shared as soon as the advance is placed.</p>
+                  <h2 className="text-base font-bold text-[#1F2328]">Passenger Details & Trip Review</h2>
+                  <p className="text-xs text-[#57606A]">Enter your contact information and verify your itinerary before submitting.</p>
                 </div>
 
                 <div className="space-y-3">
                   <div>
-                    <label className="text-xs font-semibold text-[#57606A] block mb-1">Guest Full Name</label>
+                    <label className="text-xs font-bold text-[#1F2328] block mb-1">Guest Full Name</label>
                     <input
                       type="text"
                       value={guestName}
                       onChange={(e) => setGuestName(e.target.value)}
                       placeholder="e.g. Ankit Sharma"
-                      className="w-full rounded-xl border border-[#D0D7DE] px-3.5 py-2.5 text-xs text-[#1F2328] focus:border-emerald-600 focus:outline-none"
+                      className="w-full rounded-xl border border-[#D0D7DE] px-3.5 py-2.5 text-xs text-[#1F2328] focus:border-emerald-600 focus:outline-none shadow-2xs"
                     />
                   </div>
 
                   <div>
-                    <label className="text-xs font-semibold text-[#57606A] block mb-1">
+                    <label className="text-xs font-bold text-[#1F2328] block mb-1">
                       WhatsApp Contact Number (10 Digits)
                     </label>
                     <div className="flex gap-2">
@@ -1597,68 +1828,88 @@ function CabRequestFormContent() {
                         value={guestPhone}
                         onChange={(e) => setGuestPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
                         placeholder="9876543210"
-                        className="w-full rounded-xl border border-[#D0D7DE] px-3.5 py-2.5 text-xs text-[#1F2328] focus:border-emerald-600 focus:outline-none"
+                        className="w-full rounded-xl border border-[#D0D7DE] px-3.5 py-2.5 text-xs text-[#1F2328] focus:border-emerald-600 focus:outline-none shadow-2xs"
                       />
                     </div>
+                    <p className="mt-1 text-[11px] text-[#57606A]">
+                      Drivers will send their quotes and booking confirmation directly to this WhatsApp number.
+                    </p>
                   </div>
 
                   <div>
-                    <label className="text-xs font-semibold text-[#57606A] block mb-1">
-                      Luggage or Special Instructions (Optional)
+                    <label className="text-xs font-bold text-[#1F2328] block mb-1">
+                      Luggage or Special Requests (Optional)
                     </label>
                     <input
                       type="text"
                       value={notes}
                       onChange={(e) => setNotes(e.target.value)}
-                      placeholder="e.g. 3 large bags, need luggage roof rack"
-                      className="w-full rounded-xl border border-[#D0D7DE] px-3.5 py-2.5 text-xs text-[#1F2328] focus:border-emerald-600 focus:outline-none"
+                      placeholder="e.g. 3 large bags, elderly passenger, luggage roof rack needed"
+                      className="w-full rounded-xl border border-[#D0D7DE] px-3.5 py-2.5 text-xs text-[#1F2328] focus:border-emerald-600 focus:outline-none shadow-2xs"
                     />
-                  </div>
-
-                  <div>
-                    <label className="text-xs font-semibold text-[#57606A] block mb-1">
-                      Target Budget (Optional, ₹)
-                    </label>
-                    <input
-                      type="number"
-                      value={guestBudget}
-                      onChange={(e) => setGuestBudget(e.target.value.replace(/\D/g, ""))}
-                      placeholder={`e.g. ${currentFareEstimate.fare}`}
-                      className="w-full rounded-xl border border-[#D0D7DE] px-3.5 py-2.5 text-xs text-[#1F2328] focus:border-emerald-600 focus:outline-none"
-                    />
-                    <p className="mt-1 text-[11px] text-[#57606A]">
-                      Helps nearby verified mountain drivers quote matching your expectation.
-                    </p>
                   </div>
                 </div>
 
-                {/* Booking Itinerary Summary Card */}
-                <div className="rounded-xl border border-[#D0D7DE] bg-[#F6F8FA] p-4 space-y-2.5 text-xs">
-                  <div className="flex justify-between">
-                    <span className="text-[#57606A]">Route:</span>
-                    <span className="font-bold text-[#1F2328] text-right truncate max-w-[200px]">
-                      {isCustomRoute ? customDestinations.filter(Boolean).join(" → ") : selectedPreset?.name}
+                {/* Trip Review Summary Card (Zero Prices) */}
+                <div className="rounded-xl border border-[#D0D7DE] bg-[#F6F8FA] p-4 space-y-3 text-xs">
+                  <div className="flex items-center justify-between border-b border-[#E1E4E8] pb-2">
+                    <span className="font-bold text-[#1F2328] text-xs">Trip Summary</span>
+                    <span className="rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-900">
+                      {isRoundTrip ? "Round Trip" : "One-Way"}
                     </span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-[#57606A]">Pickup Time:</span>
-                    <span className="font-semibold text-[#1F2328]">{date} at {time}</span>
+
+                  <div className="space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-[#57606A] shrink-0 font-medium">Pickup:</span>
+                      <span className="font-bold text-[#1F2328] text-right truncate">
+                        {getResolvedPickup()}
+                      </span>
+                    </div>
+
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-[#57606A] shrink-0 font-medium">
+                        {getResolvedDestinations().length > 1 ? "Drop Locations:" : "Drop Location:"}
+                      </span>
+                      <div className="text-right">
+                        {getResolvedDestinations().map((d, i) => (
+                          <div key={i} className="font-bold text-[#1F2328]">
+                            {getResolvedDestinations().length > 1 ? `${i + 1}. ${d}` : d}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-[#57606A] shrink-0 font-medium">Return to Homestay:</span>
+                      <span className="font-bold text-[#1F2328]">
+                        {isRoundTrip ? "Yes (Driver waits & returns)" : "No (One-way drop)"}
+                      </span>
+                    </div>
+
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-[#57606A] shrink-0 font-medium">Schedule:</span>
+                      <span className="font-semibold text-[#1F2328]">{date} at {time}</span>
+                    </div>
+
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-[#57606A] shrink-0 font-medium">Passengers:</span>
+                      <span className="font-semibold text-[#1F2328]">{passengers} {passengers === 1 ? "Passenger" : "Passengers"}</span>
+                    </div>
+
+                    {guestName && (
+                      <div className="flex items-start justify-between gap-2 border-t border-[#E1E4E8] pt-2">
+                        <span className="text-[#57606A] shrink-0 font-medium">Guest:</span>
+                        <span className="font-semibold text-[#1F2328]">{guestName} {guestPhone ? `(+91 ${guestPhone})` : ""}</span>
+                      </div>
+                    )}
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-[#57606A]">Vehicle & Seats:</span>
-                    <span className="font-semibold text-[#1F2328]">{vehicleType} · {passengers} Pax</span>
-                  </div>
-                  <div className="flex justify-between border-t border-[#E1E4E8] pt-2">
-                    <span className="text-[#57606A]">Driver Cash Fare (to driver):</span>
-                    <span className="font-semibold text-[#1F2328]">{formatInr(currentFareEstimate.fare - estimatedAdvance)}</span>
-                  </div>
-                  <div className="flex justify-between text-emerald-800">
-                    <span className="font-medium">Online Booking Fee (~10%):</span>
-                    <span className="font-bold">{formatInr(estimatedAdvance)}</span>
-                  </div>
-                  <div className="flex justify-between border-t border-[#E1E4E8] pt-1.5 font-bold text-[#1F2328]">
-                    <span>Total Estimated Fare:</span>
-                    <span className="text-sm font-extrabold text-emerald-700">{formatInr(currentFareEstimate.fare)}</span>
+
+                  <div className="rounded-lg bg-emerald-50/70 border border-emerald-200 p-2.5 text-[11px] text-emerald-900 leading-snug">
+                    <p className="font-semibold">💡 No immediate payment required.</p>
+                    <p className="text-emerald-800/90 mt-0.5">
+                      Drivers will quote their competitive prices based on your exact route and passengers. You can choose the best quote.
+                    </p>
                   </div>
                 </div>
 
@@ -1680,12 +1931,12 @@ function CabRequestFormContent() {
                     {submitting ? (
                       <span className="inline-flex items-center gap-2">
                         <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                        Dispatches…
+                        Submitting Request…
                       </span>
                     ) : (
                       <>
                         <Icon name="local_taxi" className="text-sm" />
-                        <span>Request Mountain Cab</span>
+                        <span>Submit Cab Request</span>
                       </>
                     )}
                   </button>

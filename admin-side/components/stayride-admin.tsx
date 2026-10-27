@@ -1846,7 +1846,7 @@ const BUSINESS_FIELDS: { key: string; label: string; hint?: string }[] = [
   { key: "legalName", label: "Registered business name" },
   { key: "address", label: "Registered address (city, state)" },
   { key: "email", label: "Support email" },
-  { key: "phone", label: "Support phone" },
+  { key: "phone", label: "Support Phone / WhatsApp", hint: "Primary StayRide support line for guest help, WhatsApp inquiries, and homestay contact fallback." },
   { key: "upiId", label: "Platform Collection UPI ID (VPA)", hint: "VPA for advance booking fee payments (e.g. stayride@okhdfcbank)" },
   { key: "grievanceOfficer", label: "Grievance Officer name" },
   { key: "grievanceEmail", label: "Grievance email" },
@@ -2134,7 +2134,8 @@ function OperationsSettings({ demo }: TabProps) {
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {BUSINESS_FIELDS.map((f) => (
                 <label key={f.key} className="text-slate-400">
-                  {f.label}
+                  <span>{f.label}</span>
+                  {f.hint && <p className="text-[11px] text-slate-500 font-normal leading-tight mt-0.5">{f.hint}</p>}
                   <input
                     className={`${input} mt-1 w-full`}
                     value={cfg.business?.[f.key] ?? ""}

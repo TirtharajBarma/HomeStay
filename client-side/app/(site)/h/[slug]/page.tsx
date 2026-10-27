@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { Icon } from "@/components/icon";
 import { Stars } from "@/components/stars";
 import { StayGallery } from "@/components/stay-gallery";
-import { getLiveStay } from "@/lib/stays";
+import { getLiveStay, getPlatformConfig } from "@/lib/stays";
 
 export async function generateMetadata({
   params,
@@ -28,6 +28,15 @@ export default async function DedicatedHomestayPage({
   const stay = await getLiveStay(slug);
 
   if (!stay) notFound();
+
+  const platformConfig = await getPlatformConfig();
+
+  // Prefer real homestay phone entered by host.
+  // If absent, fallback to Admin platform support phone, then env var.
+  const hasHostDirectPhone = Boolean(stay.phone && stay.phone.trim());
+  const effectivePhone = stay.phone?.trim() || platformConfig?.supportPhone?.trim() || process.env.NEXT_PUBLIC_SUPPORT_PHONE?.trim() || "";
+  const cleanPhone = effectivePhone.replace(/\D/g, "");
+  const contactEmail = stay.email?.trim() || "support@stayride.in";
 
   const query = await searchParams;
   const ref = typeof query.ref === "string" ? query.ref : null;
@@ -73,15 +82,25 @@ export default async function DedicatedHomestayPage({
                 <Icon name="directions_car" className="text-lg" />
                 <span>Book Cab Transfer</span>
               </a>
-              <a
-                href={`https://wa.me/${(stay.phone || "919830041000").replace(/[^0-9]/g, "")}?text=${encodeURIComponent(`Hello! I have a confirmed booking at ${stay.name}.`)}`}
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center gap-2 rounded-xl border border-outline-variant/60 bg-surface px-4 py-2.5 text-sm font-semibold text-on-surface hover:bg-surface-container"
-              >
-                <Icon name="chat" className="text-lg text-secondary" />
-                <span>Message Host</span>
-              </a>
+              {cleanPhone ? (
+                <a
+                  href={`https://wa.me/${cleanPhone}?text=${encodeURIComponent(`Hello! I have a confirmed booking at ${stay.name}.`)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-2 rounded-xl border border-outline-variant/60 bg-surface px-4 py-2.5 text-sm font-semibold text-on-surface hover:bg-surface-container"
+                >
+                  <Icon name="chat" className="text-lg text-secondary" />
+                  <span>{hasHostDirectPhone ? "Message Host" : "Message StayRide Desk"}</span>
+                </a>
+              ) : (
+                <a
+                  href={`mailto:${contactEmail}?subject=${encodeURIComponent(`Confirmed Booking Inquiry - ${stay.name}`)}`}
+                  className="flex items-center gap-2 rounded-xl border border-outline-variant/60 bg-surface px-4 py-2.5 text-sm font-semibold text-on-surface hover:bg-surface-container"
+                >
+                  <Icon name="mail" className="text-lg text-secondary" />
+                  <span>Email Host</span>
+                </a>
+              )}
             </div>
           </div>
         </div>
@@ -137,10 +156,13 @@ export default async function DedicatedHomestayPage({
 
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {stay.rooms.map((room) => {
-              const cleanPhone = (stay.phone || "919830041000").replace(/[^0-9]/g, "");
-              const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(
-                `Hello! I would like to inquire about booking ${room.type || "Room"} ${room.number} at ${stay.name}.`
-              )}`;
+              const waUrl = cleanPhone
+                ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(
+                    `Hello! I would like to inquire about booking ${room.type || "Room"} ${room.number} at ${stay.name}.`
+                  )}`
+                : `mailto:${contactEmail}?subject=${encodeURIComponent(
+                    `Room Booking Inquiry: ${room.type || "Room"} ${room.number} at ${stay.name}`
+                  )}`;
               const isAvailable = room.status !== "MAINTENANCE" && room.status !== "Maintenance";
 
               return (
@@ -185,12 +207,12 @@ export default async function DedicatedHomestayPage({
                   <div className="mt-6 flex flex-col gap-2 pt-4 border-t border-outline-variant/30">
                     <a
                       href={waUrl}
-                      target="_blank"
-                      rel="noreferrer"
+                      target={cleanPhone ? "_blank" : undefined}
+                      rel={cleanPhone ? "noreferrer" : undefined}
                       className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-xs font-semibold text-on-primary shadow transition hover:opacity-95"
                     >
-                      <Icon name="chat" className="text-base" />
-                      <span>Book on WhatsApp</span>
+                      <Icon name={cleanPhone ? "chat" : "mail"} className="text-base" />
+                      <span>{cleanPhone ? "Book on WhatsApp" : "Inquire via Email"}</span>
                     </a>
                     <a
                       href={`/cab-request?homestay=${encodeURIComponent(stay.slug)}`}
@@ -293,27 +315,43 @@ export default async function DedicatedHomestayPage({
               Host Assistance Desk
             </h3>
             <p className="mt-1 text-xs text-outline">
-              Direct communication with the homestay host for arrival coordination, baggage assistance, or custom meal requests.
+              {hasHostDirectPhone
+                ? "Direct communication with the homestay host for arrival coordination, baggage assistance, or custom meal requests."
+                : cleanPhone
+                ? "Direct contact with StayRide Host Concierge for arrival coordination and assistance at this homestay."
+                : "Direct communication with the homestay desk for arrival coordination and assistance with your stay."}
             </p>
 
             <div className="mt-4 space-y-3">
-              <a
-                href={`https://wa.me/${(stay.phone || "919830041000").replace(/[^0-9]/g, "")}?text=${encodeURIComponent(`Hello Host, I am inquiring regarding my stay at ${stay.name}.`)}`}
-                target="_blank"
-                rel="noreferrer"
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-xs font-semibold text-on-primary shadow transition hover:opacity-95"
-              >
-                <Icon name="chat" className="text-base" />
-                <span>WhatsApp the Host</span>
-              </a>
+              {cleanPhone ? (
+                <>
+                  <a
+                    href={`https://wa.me/${cleanPhone}?text=${encodeURIComponent(`Hello, I am inquiring regarding my stay at ${stay.name}.`)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-xs font-semibold text-on-primary shadow transition hover:opacity-95"
+                  >
+                    <Icon name="chat" className="text-base" />
+                    <span>{hasHostDirectPhone ? "WhatsApp the Host" : "WhatsApp StayRide Desk"}</span>
+                  </a>
 
-              <a
-                href={`tel:${stay.phone || "+919830041000"}`}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-outline-variant/50 bg-surface py-3 text-xs font-semibold text-on-surface hover:bg-surface-container"
-              >
-                <Icon name="call" className="text-base text-primary" />
-                <span>Call Host Desk</span>
-              </a>
+                  <a
+                    href={`tel:${cleanPhone}`}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-outline-variant/50 bg-surface py-3 text-xs font-semibold text-on-surface hover:bg-surface-container"
+                  >
+                    <Icon name="call" className="text-base text-primary" />
+                    <span>{hasHostDirectPhone ? "Call Host Desk" : "Call StayRide Desk"}</span>
+                  </a>
+                </>
+              ) : (
+                <a
+                  href={`mailto:${contactEmail}?subject=${encodeURIComponent(`Stay Inquiry: ${stay.name}`)}`}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-xs font-semibold text-on-primary shadow transition hover:opacity-95"
+                >
+                  <Icon name="mail" className="text-base" />
+                  <span>Email Homestay Desk</span>
+                </a>
+              )}
             </div>
 
             <div className="mt-6 border-t border-outline-variant/30 pt-4 text-xs text-outline space-y-2">
