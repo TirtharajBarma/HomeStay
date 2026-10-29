@@ -88,7 +88,8 @@ Warm regards,
 ${homestay} Team
     `.trim();
 
-    const ownerEmail = data.ownerEmail || "host@homestay-estate.com";
+    const defaultFrom = process.env.SMTP_FROM || `"${config.appName || "StayCabs"}" <bookings@send.${config.appDomain || "staycabs.in"}>`;
+    const ownerEmail = data.ownerEmail || config.supportEmail || `support@${config.appDomain || "staycabs.in"}`;
     const ownerSubject = `New Guest Booking Alert: ${data.reference} (${data.guestName})`;
     const ownerBody = `
 New Booking Notification for ${homestay}:
@@ -105,18 +106,22 @@ The reservation schedule and CRM have been updated automatically.
     const transporter = this.getTransporter();
     if (transporter) {
       try {
-        await transporter.sendMail({
-          from: process.env.SMTP_FROM || `"Homestay Stays" <no-reply@homestay-estate.com>`,
-          to: data.guestEmail,
-          subject: guestSubject,
-          text: guestBody,
-        });
-        await transporter.sendMail({
-          from: process.env.SMTP_FROM || `"Homestay Stays" <no-reply@homestay-estate.com>`,
-          to: ownerEmail,
-          subject: ownerSubject,
-          text: ownerBody,
-        });
+        if (data.guestEmail && data.guestEmail.includes("@")) {
+          await transporter.sendMail({
+            from: defaultFrom,
+            to: data.guestEmail,
+            subject: guestSubject,
+            text: guestBody,
+          });
+        }
+        if (ownerEmail && ownerEmail.includes("@")) {
+          await transporter.sendMail({
+            from: defaultFrom,
+            to: ownerEmail,
+            subject: ownerSubject,
+            text: ownerBody,
+          });
+        }
         logger.info(`[EMAIL SENT] Booking confirmation dispatched to ${data.guestEmail}`, {
           tenantId: data.ownerEmail,
           metadata: { reference: data.reference, guest: data.guestName, room: data.roomName, amount: data.totalAmount },
@@ -171,7 +176,8 @@ Your driver will meet you at the pickup location.
 Safe travels in the hills!
     `.trim();
 
-    const driverEmail = data.driverEmail || `${data.driverName.toLowerCase().replace(/\s+/g, ".")}@gumtreevalley.in`;
+    const defaultFrom = process.env.SMTP_FROM || `"${config.appName || "StayCabs"}" <bookings@send.${config.appDomain || "staycabs.in"}>`;
+    const driverEmail = data.driverEmail || "";
     const driverSubject = `New Trip Dispatch: ${data.reference} - Pickup at ${data.pickup}`;
     const driverBody = `
 New Cab Booking Dispatch:
@@ -189,18 +195,22 @@ Please arrive 10 minutes prior to pickup time.
     const transporter = this.getTransporter();
     if (transporter) {
       try {
-        await transporter.sendMail({
-          from: process.env.SMTP_FROM || `"Hill Cabs" <no-reply@hilltransit.com>`,
-          to: data.guestEmail,
-          subject: guestSubject,
-          text: guestBody,
-        });
-        await transporter.sendMail({
-          from: process.env.SMTP_FROM || `"Hill Cabs" <no-reply@hilltransit.com>`,
-          to: driverEmail,
-          subject: driverSubject,
-          text: driverBody,
-        });
+        if (data.guestEmail && data.guestEmail.includes("@")) {
+          await transporter.sendMail({
+            from: defaultFrom,
+            to: data.guestEmail,
+            subject: guestSubject,
+            text: guestBody,
+          });
+        }
+        if (driverEmail && driverEmail.includes("@")) {
+          await transporter.sendMail({
+            from: defaultFrom,
+            to: driverEmail,
+            subject: driverSubject,
+            text: driverBody,
+          });
+        }
         logger.info(`[EMAIL SENT] Cab transfer alert dispatched to ${data.guestEmail} and driver ${driverEmail}`, {
           driverId: driverEmail,
           metadata: { reference: data.reference, guest: data.guestName, fare: data.fareAmount, driver: data.driverName },

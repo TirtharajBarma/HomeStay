@@ -1240,7 +1240,9 @@ stayrideV1Router.get('/public/cab-requests/:reference', async (req: Request, res
 
   const phoneParam = String(req.query.phone || '').replace(/\D/g, '');
   const guestPhoneDigits = String(doc.guestPhone || '').replace(/\D/g, '');
-  const isVerifiedGuest = Boolean(link || (phoneParam && guestPhoneDigits.endsWith(phoneParam)));
+  const isVerifiedGuest = Boolean(
+    link || (phoneParam.length >= 10 && guestPhoneDigits.length >= 10 && guestPhoneDigits.slice(-10) === phoneParam.slice(-10))
+  );
   const showContact = isVerifiedGuest && ['CONFIRMED', 'EN_ROUTE_PICKUP', 'ARRIVED_HOMESTAY', 'TRIP_STARTED', 'COMPLETED'].includes(doc.status);
 
   return res.json({
@@ -1491,7 +1493,13 @@ stayrideV1Router.post('/public/driver-quote/location', async (req: Request, res:
     if (mongoose.Types.ObjectId.isValid(driverIdStr)) {
       await getUserModel(ctx.isDemo).updateOne(
         { _id: driverIdStr },
-        { $set: { location: { lat, lng }, locationUpdatedAt: new Date() } }
+        {
+          $set: {
+            location: { lat, lng, updatedAt: new Date() },
+            locationPoint: { type: 'Point', coordinates: [lng, lat] },
+            locationUpdatedAt: new Date(),
+          },
+        }
       );
     }
   }
@@ -1551,7 +1559,10 @@ stayrideV1Router.post('/public/driver-signup', requireRecaptcha('driver_signup')
   if (!cleanPhone || cleanPhone.length !== 10) {
     return res.status(400).json({ error: { message: 'A valid 10-digit mobile number is required.' } });
   }
-  if (!cleanPlate || cleanPlate.length < 5) {
+  if (cleanCategory === 'UNION' && !cleanUnion) {
+    return res.status(400).json({ error: { message: 'Taxi Union or Syndicate name is required.' } });
+  }
+  if (cleanCategory !== 'UNION' && (!cleanPlate || cleanPlate.length < 5)) {
     return res.status(400).json({ error: { message: 'A valid vehicle registration number plate is required.' } });
   }
   if (!cleanArea) {
@@ -1560,9 +1571,11 @@ stayrideV1Router.post('/public/driver-signup', requireRecaptcha('driver_signup')
 
   try {
     const UserModel = getUserModel(false);
-    const existing = await UserModel.findOne({
-      $or: [{ phone: cleanPhone }, { 'vehicle.plate': cleanPlate }],
-    });
+    const existing = await UserModel.findOne(
+      cleanCategory === 'UNION'
+        ? { phone: cleanPhone }
+        : { $or: [{ phone: cleanPhone }, { 'vehicle.plate': cleanPlate }] }
+    );
 
     if (existing) {
       if (existing.role === 'driver') {
@@ -1596,7 +1609,12 @@ stayrideV1Router.post('/public/driver-signup', requireRecaptcha('driver_signup')
       accountStatus: 'PENDING_APPROVAL',
       isAvailable: true,
       whatsappAlerts: true,
-      vehicle: {
+      vehicle: cleanCategory === 'UNION' ? {
+        type: 'Fleet',
+        model: cleanUnion,
+        plate: 'UNION-FLEET',
+        area: cleanArea,
+      } : {
         type: vt,
         model: cleanModel || vt,
         plate: cleanPlate,
@@ -1605,7 +1623,7 @@ stayrideV1Router.post('/public/driver-signup', requireRecaptcha('driver_signup')
     });
 
     // Automated WhatsApp welcome alert using dedicated DRIVER_WELCOME template
-    const welcome = driverWelcomeMessage(cleanName, cleanPlate);
+    const welcome = driverWelcomeMessage(cleanName, cleanCategory === 'UNION' ? cleanUnion : cleanPlate);
     sendWhatsApp(false, {
       event: welcome.event as any,
       to: cleanPhone,

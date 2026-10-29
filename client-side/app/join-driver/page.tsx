@@ -46,8 +46,7 @@ export default function JoinDriverPage() {
   const [vehicleModel, setVehicleModel] = useState("");
   const [drivingLicense, setDrivingLicense] = useState("");
   const [driverCategory, setDriverCategory] = useState<"INDIVIDUAL" | "UNION">("INDIVIDUAL");
-  const [unionName, setUnionName] = useState(MOUNTAIN_UNIONS[0]);
-  const [customUnion, setCustomUnion] = useState("");
+  const [unionNameInput, setUnionNameInput] = useState("");
   const [acceptedTerms, setAcceptedTerms] = useState(true);
 
   const [busy, setBusy] = useState(false);
@@ -61,19 +60,24 @@ export default function JoinDriverPage() {
     e.preventDefault();
     setError("");
 
+    const isUnion = driverCategory === "UNION";
     const cleanPhone = phone.replace(/\D/g, "").slice(-10);
-    const cleanPlate = vehicleNumber.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
-    const effectiveUnion = driverCategory === "UNION" ? (unionName === "Other Local Syndicate / Stand" ? customUnion.trim() : unionName) : "";
+    const cleanPlate = isUnion ? "UNION-FLEET" : vehicleNumber.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const effectiveUnion = isUnion ? unionNameInput.trim() : "";
 
+    if (isUnion && !effectiveUnion) {
+      setError("Please enter your Taxi Union / Syndicate name.");
+      return;
+    }
     if (name.trim().length < 2) {
-      setError("Please enter your full name as shown on your Driving License.");
+      setError(isUnion ? "Please enter contact person name." : "Please enter your full name as shown on your Driving License.");
       return;
     }
     if (cleanPhone.length !== 10) {
       setError("Please enter a valid 10-digit WhatsApp mobile number.");
       return;
     }
-    if (cleanPlate.length < 5) {
+    if (!isUnion && cleanPlate.length < 5) {
       setError("Please enter a valid vehicle number plate (e.g. WB74AB1234).");
       return;
     }
@@ -98,10 +102,10 @@ export default function JoinDriverPage() {
           name: name.trim(),
           phone: cleanPhone,
           area,
-          vehicleType,
+          vehicleType: isUnion ? "Fleet" : vehicleType,
           vehicleNumber: cleanPlate,
-          vehicleModel: vehicleModel.trim(),
-          drivingLicense: drivingLicense.trim(),
+          vehicleModel: isUnion ? effectiveUnion : vehicleModel.trim(),
+          drivingLicense: isUnion ? "UNION-FLEET" : drivingLicense.trim(),
           driverCategory,
           unionName: effectiveUnion,
           recaptchaToken,
@@ -356,112 +360,104 @@ export default function JoinDriverPage() {
               {driverCategory === "UNION" && (
                 <div className="mt-3 space-y-2 rounded-xl bg-[#F6F8FA] border border-[#D0D7DE] p-3">
                   <label className="text-[11px] font-semibold text-[#1F2328] block">
-                    Select Your Taxi Union or Stand *
+                    Taxi Union or Syndicate Name *
                   </label>
-                  <select
-                    value={unionName}
-                    onChange={(e) => setUnionName(e.target.value)}
-                    className="w-full rounded-xl border border-[#D0D7DE] px-3 py-2 text-xs font-medium text-[#1F2328] bg-white focus:border-emerald-600 focus:outline-none"
-                  >
-                    {MOUNTAIN_UNIONS.map((u) => (
-                      <option key={u} value={u}>
-                        {u}
-                      </option>
-                    ))}
-                  </select>
-                  {unionName === "Other Local Syndicate / Stand" && (
-                    <input
-                      type="text"
-                      required
-                      value={customUnion}
-                      onChange={(e) => setCustomUnion(e.target.value)}
-                      placeholder="Enter Union / Stand Name"
-                      className="w-full rounded-xl border border-[#D0D7DE] px-3 py-2 text-xs font-medium text-[#1F2328] bg-white focus:border-emerald-600 focus:outline-none"
-                    />
-                  )}
+                  <input
+                    type="text"
+                    required
+                    value={unionNameInput}
+                    onChange={(e) => setUnionNameInput(e.target.value)}
+                    placeholder="e.g. Darjeeling Motor Syndicate / Clubside Stand"
+                    className="w-full rounded-xl border border-[#D0D7DE] px-3 py-2 text-xs font-semibold text-[#1F2328] bg-white focus:border-emerald-600 focus:outline-none"
+                  />
                   <p className="text-[10px] text-[#57606A]">
-                    Guests will see your syndicate badge for added confidence when assigned.
+                    As a taxi union / syndicate fleet owner, your affiliated drivers can take bookings across your stand without single-vehicle registration.
                   </p>
                 </div>
               )}
             </div>
 
-            {/* Vehicle Tier Selection */}
-            <div>
-              <label className="text-xs font-semibold text-[#57606A] block mb-1.5">
-                Vehicle Class *
-              </label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {VEHICLE_TIERS.map((tier) => {
-                  const selected = vehicleType === tier.value;
-                  return (
-                    <button
-                      key={tier.value}
-                      type="button"
-                      onClick={() => setVehicleType(tier.value)}
-                      className={`text-left p-3 rounded-xl border transition cursor-pointer ${
-                        selected
-                          ? "border-emerald-600 bg-emerald-50/60 ring-1 ring-emerald-600"
-                          : "border-[#D0D7DE] bg-white hover:bg-[#F6F8FA]"
-                      }`}
-                    >
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs font-bold text-[#1F2328]">{tier.label}</span>
-                        <span className="text-[10px] font-semibold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded">
-                          {tier.seats} seats
-                        </span>
-                      </div>
-                      <p className="mt-1 text-[10px] text-[#57606A]">{tier.desc}</p>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+            {/* Individual Driver Vehicle Details - hidden for Union Fleet */}
+            {driverCategory === "INDIVIDUAL" && (
+              <>
+                {/* Vehicle Tier Selection */}
+                <div>
+                  <label className="text-xs font-semibold text-[#57606A] block mb-1.5">
+                    Vehicle Class *
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {VEHICLE_TIERS.map((tier) => {
+                      const selected = vehicleType === tier.value;
+                      return (
+                        <button
+                          key={tier.value}
+                          type="button"
+                          onClick={() => setVehicleType(tier.value)}
+                          className={`text-left p-3 rounded-xl border transition cursor-pointer ${
+                            selected
+                              ? "border-emerald-600 bg-emerald-50/60 ring-1 ring-emerald-600"
+                              : "border-[#D0D7DE] bg-white hover:bg-[#F6F8FA]"
+                          }`}
+                        >
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs font-bold text-[#1F2328]">{tier.label}</span>
+                            <span className="text-[10px] font-semibold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded">
+                              {tier.seats} seats
+                            </span>
+                          </div>
+                          <p className="mt-1 text-[10px] text-[#57606A]">{tier.desc}</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
 
-            {/* Vehicle Plate & Model */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-semibold text-[#57606A] block mb-1">
-                  Registration Number Plate *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={vehicleNumber}
-                  onChange={(e) => setVehicleNumber(e.target.value.toUpperCase())}
-                  placeholder="e.g. WB 74 AB 1234"
-                  className="w-full rounded-xl border border-[#D0D7DE] px-3.5 py-2.5 text-xs font-bold font-mono text-[#1F2328] focus:border-emerald-600 focus:outline-none"
-                />
-              </div>
+                {/* Vehicle Plate & Model */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-semibold text-[#57606A] block mb-1">
+                      Registration Number Plate *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={vehicleNumber}
+                      onChange={(e) => setVehicleNumber(e.target.value.toUpperCase())}
+                      placeholder="e.g. WB 74 AB 1234"
+                      className="w-full rounded-xl border border-[#D0D7DE] px-3.5 py-2.5 text-xs font-bold font-mono text-[#1F2328] focus:border-emerald-600 focus:outline-none"
+                    />
+                  </div>
 
-              <div>
-                <label className="text-xs font-semibold text-[#57606A] block mb-1">
-                  Vehicle Model (Optional)
-                </label>
-                <input
-                  type="text"
-                  value={vehicleModel}
-                  onChange={(e) => setVehicleModel(e.target.value)}
-                  placeholder="e.g. Bolero 4WD, Innova"
-                  className="w-full rounded-xl border border-[#D0D7DE] px-3.5 py-2.5 text-xs font-medium text-[#1F2328] focus:border-emerald-600 focus:outline-none"
-                />
-              </div>
-            </div>
+                  <div>
+                    <label className="text-xs font-semibold text-[#57606A] block mb-1">
+                      Vehicle Model (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={vehicleModel}
+                      onChange={(e) => setVehicleModel(e.target.value)}
+                      placeholder="e.g. Bolero 4WD, Innova"
+                      className="w-full rounded-xl border border-[#D0D7DE] px-3.5 py-2.5 text-xs font-medium text-[#1F2328] focus:border-emerald-600 focus:outline-none"
+                    />
+                  </div>
+                </div>
 
-            {/* Driving License Number */}
-            <div>
-              <label className="text-xs font-semibold text-[#57606A] block mb-1">
-                Driving License Number (DL) *
-              </label>
-              <input
-                type="text"
-                required
-                value={drivingLicense}
-                onChange={(e) => setDrivingLicense(e.target.value.toUpperCase())}
-                placeholder="e.g. WB74 20180001234 or SK01 20200005678"
-                className="w-full rounded-xl border border-[#D0D7DE] px-3.5 py-2.5 text-xs font-bold font-mono text-[#1F2328] focus:border-emerald-600 focus:outline-none"
-              />
-            </div>
+                {/* Driving License Number */}
+                <div>
+                  <label className="text-xs font-semibold text-[#57606A] block mb-1">
+                    Driving License Number (DL) *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={drivingLicense}
+                    onChange={(e) => setDrivingLicense(e.target.value.toUpperCase())}
+                    placeholder="e.g. WB74 20180001234 or SK01 20200005678"
+                    className="w-full rounded-xl border border-[#D0D7DE] px-3.5 py-2.5 text-xs font-bold font-mono text-[#1F2328] focus:border-emerald-600 focus:outline-none"
+                  />
+                </div>
+              </>
+            )}
 
             {/* Terms Consent */}
             <div className="pt-2">

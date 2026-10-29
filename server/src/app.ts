@@ -9,7 +9,7 @@ import apiRouter from "./routes/index.js";
 import adminRoutes from "./routes/admin.routes.js";
 import stayrideV1Router from "./stayride/routes.js";
 import { errorHandler, notFoundHandler, httpError } from "./middlewares/error-handler.js";
-import { MongoRateLimitStore } from "./middlewares/rate-limit-store.js";
+import { MongoRateLimitStore, MemoryRateLimitStore } from "./middlewares/rate-limit-store.js";
 import { mongoSanitize } from "./middlewares/sanitize.js";
 import { telemetryMiddleware } from "./utils/logger.js";
 
@@ -63,7 +63,7 @@ const limiter = rateLimit({
   limit: 1000, // per IP per window
   standardHeaders: true,
   legacyHeaders: false,
-  store: new MongoRateLimitStore("g:"),
+  store: new MemoryRateLimitStore("g:"),
   passOnStoreError: true,
   message: { success: false, error: { message: "Too many requests from this IP, please try again after 15 minutes", code: "RATE_LIMITED" } },
 });

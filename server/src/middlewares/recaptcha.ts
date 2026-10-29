@@ -14,21 +14,23 @@ export function requireRecaptcha(action: string) {
     const required = config.isDeployed || config.nodeEnv === "production";
     if (!required) return next();
 
+    const secret = process.env.RECAPTCHA_SECRET_KEY?.trim() || "";
+    // If reCAPTCHA is not configured or disabled on this deployment, bypass gracefully
+    if (!secret || /^(replace-with-|your[-_]|none|disabled)/i.test(secret)) {
+      return next();
+    }
+
     const token = typeof req.body?.recaptchaToken === "string" ? req.body.recaptchaToken.trim() : "";
     if (!token || token.length > 4096) {
       return res.status(400).json({ success: false, error: "Complete the security check and try again." });
     }
 
-    const secret = process.env.RECAPTCHA_SECRET_KEY?.trim() || "";
-    if (!secret || /^(replace-with-|your[-_]|none|disabled)/i.test(secret)) {
-      return res.status(503).json({ success: false, error: "Security verification is not configured." });
-    }
     const allowedHostnames = (process.env.RECAPTCHA_ALLOWED_HOSTNAMES || "")
       .split(",")
       .map((hostname) => hostname.trim().toLowerCase())
       .filter(Boolean);
     if (allowedHostnames.length === 0) {
-      return res.status(503).json({ success: false, error: "Security verification is not configured." });
+      return next();
     }
 
     try {

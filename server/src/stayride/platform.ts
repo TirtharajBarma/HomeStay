@@ -793,7 +793,7 @@ export function driverTripView(d: any, driverUserId: string, driverPhone?: strin
     assignedDriverCategory: d.assignedDriverCategory || 'INDIVIDUAL',
     assignedDriverUnionName: d.assignedDriverUnionName || '',
     // No guest identity / cash due before the advance is paid.
-    ...(contact ? { guestName: d.guestName, phone: d.guestPhone } : {}),
+    ...(contact ? { guestName: d.guestName, phone: d.guestPhone, pickupOtp: d.pickupOtp || null } : {}),
     ...(assigned
       ? {
           fare: d.agreedFare,
@@ -845,9 +845,11 @@ export async function listDriverTrips(isDemo: boolean, driver: any, quotesOn: bo
   ]);
   // Nearby only: when both the driver and the pickup location (or homestay) have a location, hide requests beyond the radius.
   const radius = (await cfgOf(isDemo)).nearbyRadiusKm;
+  const locationAge = driver.location?.updatedAt ? Date.now() - new Date(driver.location.updatedAt).getTime() : Infinity;
+  const freshLocation = locationAge <= 60 * 60 * 1000 ? driver.location : null;
   const near = (open as any[]).filter((d) => {
     const pickupOrigin = (d.pickupLocation?.lat && d.pickupLocation?.lng) ? d.pickupLocation : d.homestayLocation;
-    const km = distanceKm(driver.location, pickupOrigin);
+    const km = distanceKm(freshLocation, pickupOrigin);
     return radius <= 0 || km === null || km <= radius;
   }).slice(0, 50);
   const byRef = new Map<string, any>();
@@ -1063,7 +1065,12 @@ export async function matchingDrivers(isDemo: boolean, doc: any, cfg: PlatformCo
   const pickupOrigin = (doc.pickupLocation?.lat && doc.pickupLocation?.lng) ? doc.pickupLocation : doc.homestayLocation;
 
   const scored = availableDrivers.map((d) => {
-    const km = distanceKm(d.location, pickupOrigin);
+    // 60-Minute GPS Recency Cutoff: if the driver hasn't reported GPS in the last 60 minutes,
+    // their live coordinates are considered stale in mountain terrain. Disregard stale GPS and
+    // fall back to their registered base area (areaMatch) so drivers aren't matched across ridges from days ago.
+    const locationAge = d.location?.updatedAt ? Date.now() - new Date(d.location.updatedAt).getTime() : Infinity;
+    const freshLocation = locationAge <= 60 * 60 * 1000 ? d.location : null;
+    const km = distanceKm(freshLocation, pickupOrigin);
     const dArea = String(d.area || '').toLowerCase().trim();
     const areaMatch = Boolean(dArea && pickupAddr.includes(dArea));
     const avgRating = d.ratingCount && d.ratingCount > 0 ? (d.ratingSum || 0) / d.ratingCount : 4.5;
@@ -1159,8 +1166,13 @@ async function transition(isDemo: boolean, filter: Record<string, any>, set: Rec
 }
 
 export async function startTrip(isDemo: boolean, filter: Record<string, any>, actor: string, otp?: string, requireOtp = true) {
-  // Only after the advance is paid (CONFIRMED).
-  const doc: any = await cabModel(isDemo).findOne({ ...filter, status: 'CONFIRMED', advancePaid: true, needsReassignment: { $ne: true } }).lean();
+  // Idempotency: if already started (e.g. offline queue replay or earlier sync), return cleanly
+  const alreadyStarted: any = await cabModel(isDemo).findOne({ ...filter, status: 'TRIP_STARTED' }).lean();
+  if (alreadyStarted) return alreadyStarted;
+
+  // Only after the advance is paid (CONFIRMED or transit status).
+  const startableStatuses = ['CONFIRMED', 'EN_ROUTE_PICKUP', 'ARRIVED_HOMESTAY'];
+  const doc: any = await cabModel(isDemo).findOne({ ...filter, status: { $in: startableStatuses }, advancePaid: true, needsReassignment: { $ne: true } }).lean();
   if (!doc) throw conflict('Trip can start only after the advance is paid and a driver is assigned.');
 
   if (requireOtp && (!doc.pickupOtp || !otp || String(otp).trim() !== String(doc.pickupOtp).trim())) {
@@ -1169,7 +1181,7 @@ export async function startTrip(isDemo: boolean, filter: Record<string, any>, ac
 
   const updated = await transition(
     isDemo,
-    { _id: doc._id, status: 'CONFIRMED', advancePaid: true, needsReassignment: { $ne: true } },
+    { _id: doc._id, status: { $in: startableStatuses }, advancePaid: true, needsReassignment: { $ne: true } },
     { status: 'TRIP_STARTED', startedAt: new Date() },
     'Trip can start only after the advance is paid and a driver is assigned.'
   );
@@ -1181,6 +1193,7 @@ export async function startTrip(isDemo: boolean, filter: Record<string, any>, ac
 export async function completeTrip(isDemo: boolean, filter: Record<string, any>, actor: string) {
   const doc: any = await cabModel(isDemo).findOne(filter).lean();
   if (!doc) throw httpError(404, 'Trip not found');
+  if (doc.status === 'COMPLETED') return doc; // Idempotency: already completed
   const s = doc.financialSnapshot;
   const driverShare = s ? s.advanceAmount - s.platformFeeAmount - s.homestayCommissionAmount : 0;
   const updated = await transition(

@@ -324,6 +324,7 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setDrivers(parsed.drivers || []);
     setNetworkDrivers(parsed.networkDrivers || []);
     setTrips(parsed.trips || []);
+    setDriverTrips(parsed.driverTrips || []);
     setCampaigns(parsed.campaigns || []);
     setHomestay(parsed.homestay || {});
     setNextIds(parsed.nextIds || { room: 10, guest: 20, booking: 100, driver: 20, trip: 20, campaign: 10 });
@@ -539,9 +540,9 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   // Auto-save on state change
   useEffect(() => {
     if (!loading) {
-      persist({ rooms, guests, bookings, drivers, networkDrivers, trips, campaigns, homestay, isDemoMode, nextIds, features, commissionRates, config });
+      persist({ rooms, guests, bookings, drivers, networkDrivers, trips, driverTrips, campaigns, homestay, isDemoMode, nextIds, features, commissionRates, config });
     }
-  }, [rooms, guests, bookings, drivers, networkDrivers, trips, campaigns, homestay, isDemoMode, nextIds, features, commissionRates, config, loading]);
+  }, [rooms, guests, bookings, drivers, networkDrivers, trips, driverTrips, campaigns, homestay, isDemoMode, nextIds, features, commissionRates, config, loading]);
 
   // Sync with real backend using high-speed /snapshot aggregator.
   // 1) flush the outbox so the server is at least as new as the local state, then
@@ -585,8 +586,23 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setAccountBlock(null);
       if (snap?.config) setConfig(setPlatformConfig(snap.config));
       if (snap?.driverProfile) {
-        // Driver snapshot: only the server's sanitized trip list and the live profile/approval status
-        setDriverTrips(Array.isArray(snap.trips) ? snap.trips : []);
+        // Driver snapshot: merge server truth while preserving any offline optimistic mutations until flushed
+        const serverTrips: DriverTrip[] = Array.isArray(snap.trips) ? snap.trips : [];
+        setDriverTrips((prev) => {
+          const pendingMap = new Map(prev.filter((t) => t._pendingStartOtp || t._pendingComplete).map((t) => [t.reference, t]));
+          if (pendingMap.size === 0) return serverTrips;
+          return serverTrips.map((st) => {
+            const pending = pendingMap.get(st.reference);
+            if (!pending) return st;
+            if (pending._pendingComplete && st.status !== 'COMPLETED') {
+              return { ...st, status: 'COMPLETED' as any, _pendingComplete: true };
+            }
+            if (pending._pendingStartOtp && st.status !== 'TRIP_STARTED' && st.status !== 'COMPLETED') {
+              return { ...st, status: 'TRIP_STARTED' as any, _pendingStartOtp: pending._pendingStartOtp };
+            }
+            return st;
+          });
+        });
         const cur = sessionRef.current;
         if (cur) {
           const next: UserSession = { ...cur, driver: snap.driverProfile };
@@ -1445,14 +1461,60 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     });
 
   const driverStartTrip = async (reference: string, otp?: string): Promise<ActionOutcome> => {
-    const outcome = await submit('POST', `/driver/trips/${encodeURIComponent(reference)}/start`, { otp });
-    if (outcome.synced) await refreshDriverTrips().catch(() => {});
+    const cleanOtp = String(otp || '').trim();
+    const currentTrip = driverTrips.find((t) => t.reference === reference);
+
+    const outcome = await submit('POST', `/driver/trips/${encodeURIComponent(reference)}/start`, { otp: cleanOtp });
+    if (outcome.ok) {
+      if (outcome.synced) await refreshDriverTrips().catch(() => {});
+      return outcome;
+    }
+
+    // Mountain Dead-Zone Offline Fallback:
+    // When offline in a deep river gorge / hill homestay, verify the 4-digit PIN against the locally cached trip.
+    if (!outcome.synced) {
+      if (currentTrip?.pickupOtp && cleanOtp === String(currentTrip.pickupOtp).trim()) {
+        // Correct PIN! Update local state optimistically and queue mutation for background replay
+        setDriverTrips((prev) =>
+          prev.map((t) =>
+            t.reference === reference
+              ? { ...t, status: 'TRIP_STARTED' as any, _pendingStartOtp: cleanOtp }
+              : t
+          )
+        );
+        await outbox.enqueue('POST', `/driver/trips/${encodeURIComponent(reference)}/start`, { otp: cleanOtp }).catch(() => {});
+        return { ok: true, synced: false };
+      }
+      if (currentTrip?.pickupOtp && cleanOtp !== String(currentTrip.pickupOtp).trim()) {
+        return { ok: false, synced: false, error: 'Invalid Boarding Verification PIN. Please ask the passenger for their 4-digit PIN.' };
+      }
+    }
+
     return outcome;
   };
 
   const driverCompleteTrip = async (reference: string): Promise<ActionOutcome> => {
+    const currentTrip = driverTrips.find((t) => t.reference === reference);
     const outcome = await submit('POST', `/driver/trips/${encodeURIComponent(reference)}/complete`, {});
-    if (outcome.synced) await refreshDriverTrips().catch(() => {});
+    if (outcome.ok) {
+      if (outcome.synced) await refreshDriverTrips().catch(() => {});
+      return outcome;
+    }
+
+    // Mountain Dead-Zone Offline Fallback:
+    // Allow driver to complete trip upon cash collection in low-signal dropoff zones, queuing the completion for server sync
+    if (!outcome.synced && currentTrip) {
+      setDriverTrips((prev) =>
+        prev.map((t) =>
+          t.reference === reference
+            ? { ...t, status: 'COMPLETED' as any, _pendingComplete: true }
+            : t
+        )
+      );
+      await outbox.enqueue('POST', `/driver/trips/${encodeURIComponent(reference)}/complete`, {}).catch(() => {});
+      return { ok: true, synced: false };
+    }
+
     return outcome;
   };
 
@@ -1751,6 +1813,7 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           setDrivers(parsed.drivers || []);
           setNetworkDrivers(parsed.networkDrivers || []);
           setTrips(parsed.trips || []);
+          setDriverTrips(parsed.driverTrips || []);
           setCampaigns(parsed.campaigns || []);
           setHomestay(parsed.homestay || {});
         } catch {}
@@ -1906,6 +1969,7 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             setDrivers(parsed.drivers || []);
             setNetworkDrivers(parsed.networkDrivers || []);
             setTrips(parsed.trips || []);
+            setDriverTrips(parsed.driverTrips || []);
             setCampaigns(parsed.campaigns || []);
             setHomestay(parsed.homestay || {});
           } catch {}

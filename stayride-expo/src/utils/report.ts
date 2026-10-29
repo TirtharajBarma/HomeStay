@@ -6,8 +6,10 @@ export const reportOutcome = (outcome: ActionOutcome, title: string, message: st
     Alert.alert("Couldn't save", outcome.error || 'Please try again.');
     return false;
   }
-  // Every save is confirmed by the server (nothing is queued offline), so ok means saved
-  Alert.alert(title, message);
+  const displayMsg = outcome.synced
+    ? message
+    : `${message}\n\n(Saved offline on device — will automatically sync with backend when connection returns).`;
+  Alert.alert(title, displayMsg);
   return true;
 };
 

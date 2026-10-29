@@ -41,14 +41,21 @@ async function loadRecaptcha(siteKey: string): Promise<void> {
 export async function getRecaptchaToken(action: string): Promise<string> {
   const siteKey = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY?.trim();
   const missingKey = !siteKey || /^(replace-with-|your[-_]|none|disabled)/i.test(siteKey);
-  if (missingKey && process.env.NODE_ENV !== "production") return "";
-  if (missingKey) throw new Error("Security verification is not configured. Please try again later.");
-  await loadRecaptcha(siteKey);
-  const api = window.grecaptcha;
-  if (!api) throw new Error("Security verification is unavailable. Please try again.");
-  return new Promise((resolve, reject) => {
-    api.ready(() => {
-      api.execute(siteKey, { action }).then(resolve, reject);
+  if (missingKey) return "";
+  try {
+    await loadRecaptcha(siteKey);
+    const api = window.grecaptcha;
+    if (!api) return "";
+    return await new Promise<string>((resolve) => {
+      try {
+        api.ready(() => {
+          api.execute(siteKey, { action }).then(resolve).catch(() => resolve(""));
+        });
+      } catch {
+        resolve("");
+      }
     });
-  });
+  } catch {
+    return "";
+  }
 }

@@ -866,11 +866,162 @@ function RecordEditor({ rec, title, readOnly, note, startOpen, onSave, onDelete,
 // ---------------------------------------------------------------------------
 // 4. Drivers
 // ---------------------------------------------------------------------------
+function AddDriverModal({ demo, onClose, onAdded }: { demo: boolean; onClose: () => void; onAdded: () => void }) {
+  useEditLock(true);
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [vehicleType, setVehicleType] = useState("SUV");
+  const [model, setModel] = useState("");
+  const [plate, setPlate] = useState("");
+  const [seats, setSeats] = useState("6");
+  const [area, setArea] = useState("Darjeeling");
+  const [driverCategory, setDriverCategory] = useState<"INDIVIDUAL" | "UNION">("INDIVIDUAL");
+  const [unionName, setUnionName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setErr("");
+    const cleanPhone = phone.replace(/\D/g, "").slice(-10);
+    if (!name.trim()) return setErr("Driver name is required.");
+    if (cleanPhone.length !== 10) return setErr("Valid 10-digit mobile number is required.");
+    if (driverCategory === "INDIVIDUAL" && !plate.trim()) return setErr("Vehicle registration plate is required.");
+    if (driverCategory === "UNION" && !unionName.trim()) return setErr("Union name is required.");
+
+    setBusy(true);
+    try {
+      await adminApi("/stayride/drivers", {
+        method: "POST",
+        body: {
+          name: name.trim(),
+          phone: cleanPhone,
+          email: email.trim() || undefined,
+          vehicleType: driverCategory === "UNION" ? "Fleet" : vehicleType,
+          model: (driverCategory === "UNION" ? unionName.trim() : model.trim()) || undefined,
+          plate: (driverCategory === "UNION" ? "UNION-FLEET" : plate.trim().toUpperCase()) || undefined,
+          seats: Number(seats) || undefined,
+          area: area.trim(),
+          driverCategory,
+          unionName: driverCategory === "UNION" ? unionName.trim() : undefined,
+        },
+        demo,
+      });
+      onAdded();
+      onClose();
+    } catch (e: any) {
+      setErr(e?.message || "Failed to add driver.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-xs">
+      <div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl text-xs space-y-4">
+        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+          <div>
+            <h3 className="text-base font-bold text-white">Add New Platform Driver</h3>
+            <p className="text-slate-400">Create an active driver account directly from the admin desk.</p>
+          </div>
+          <button type="button" className="text-slate-400 hover:text-white text-lg font-bold" onClick={onClose}>✕</button>
+        </div>
+
+        {err && <div className="rounded-lg bg-red-950/80 border border-red-800 p-2 text-red-300 font-semibold">{err}</div>}
+
+        <form onSubmit={submit} className="space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              className={`p-2 rounded-lg border text-left font-semibold ${driverCategory === "INDIVIDUAL" ? "border-emerald-500 bg-emerald-950/40 text-emerald-300" : "border-slate-800 bg-slate-950 text-slate-400"}`}
+              onClick={() => setDriverCategory("INDIVIDUAL")}
+            >
+              Independent Driver
+            </button>
+            <button
+              type="button"
+              className={`p-2 rounded-lg border text-left font-semibold ${driverCategory === "UNION" ? "border-emerald-500 bg-emerald-950/40 text-emerald-300" : "border-slate-800 bg-slate-950 text-slate-400"}`}
+              onClick={() => setDriverCategory("UNION")}
+            >
+              Taxi Union Fleet
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="text-slate-400 block mb-1 font-semibold">{driverCategory === "UNION" ? "Contact Person Name *" : "Driver Full Name *"}</label>
+              <input className={`${input} w-full`} required placeholder="e.g. Pemba Sherpa" value={name} onChange={(e) => setName(e.target.value)} />
+            </div>
+            <div>
+              <label className="text-slate-400 block mb-1 font-semibold">10-Digit WhatsApp Mobile *</label>
+              <input className={`${input} w-full`} required placeholder="e.g. 9876543210" value={phone} onChange={(e) => setPhone(e.target.value)} />
+            </div>
+          </div>
+
+          {driverCategory === "UNION" ? (
+            <div>
+              <label className="text-slate-400 block mb-1 font-semibold">Taxi Union / Stand Name *</label>
+              <input className={`${input} w-full`} required placeholder="e.g. Darjeeling Motor Syndicate" value={unionName} onChange={(e) => setUnionName(e.target.value)} />
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <div>
+                <label className="text-slate-400 block mb-1 font-semibold">Vehicle Class</label>
+                <select className={`${input} w-full`} value={vehicleType} onChange={(e) => setVehicleType(e.target.value)}>
+                  <option value="SUV">SUV (Standard)</option>
+                  <option value="Sedan">Sedan</option>
+                  <option value="7-seater">7-Seater Premium</option>
+                  <option value="9-seater">9-Seater Maxi</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-slate-400 block mb-1 font-semibold">Vehicle Model</label>
+                <input className={`${input} w-full`} placeholder="e.g. Bolero, Innova" value={model} onChange={(e) => setModel(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-slate-400 block mb-1 font-semibold">Plate Number *</label>
+                <input className={`${input} w-full`} required placeholder="e.g. WB 74 AB 1234" value={plate} onChange={(e) => setPlate(e.target.value.toUpperCase())} />
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="text-slate-400 block mb-1 font-semibold">Operating Base Area</label>
+              <select className={`${input} w-full`} value={area} onChange={(e) => setArea(e.target.value)}>
+                <option value="Darjeeling">Darjeeling</option>
+                <option value="Kalimpong">Kalimpong</option>
+                <option value="Kurseong">Kurseong</option>
+                <option value="Siliguri">Siliguri</option>
+                <option value="Gangtok">Gangtok</option>
+                <option value="Mirik">Mirik</option>
+                <option value="Pelling">Pelling</option>
+                <option value="Ravangla">Ravangla</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-slate-400 block mb-1 font-semibold">Email (Optional)</label>
+              <input className={`${input} w-full`} type="email" placeholder="driver@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
+            <button type="button" className={btn.ghost} onClick={onClose} disabled={busy}>Cancel</button>
+            <button type="submit" className={btn.primary} disabled={busy}>{busy ? "Adding..." : "Add Driver"}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export function DriversTab({ demo }: TabProps) {
   const [status, setStatus] = useState("");
   const [search, setSearch] = useState("");
   const [q, setQ] = useState("");
   const [page, setPage] = useState(0);
+  const [showAdd, setShowAdd] = useState(false);
   const { data, error, loading, reload, updatedAt } = useLoad(
     () => adminApi("/stayride/drivers", { demo, query: { status, q, search: q, ...pq(page) } }).then(toPage),
     [demo, status, q, page],
@@ -888,6 +1039,11 @@ export function DriversTab({ demo }: TabProps) {
     act(() => adminApi(`/stayride/drivers/${rid(d)}/status`, { method: "PATCH", body: { status: next, reason }, demo }), reload);
   }
 
+  function deleteDriver(d: Any) {
+    if (!window.confirm(`Permanently delete driver "${d.name}" (${d.phone || "No phone"})?\n\nThis will release any unstarted trips, reject pending quotes, and permanently remove the driver account. This cannot be undone.`)) return;
+    act(() => adminApi(`/stayride/drivers/${rid(d)}?hard=true`, { method: "DELETE", demo }), reload);
+  }
+
   return (
     <Panel
       title="Drivers"
@@ -898,6 +1054,13 @@ export function DriversTab({ demo }: TabProps) {
       updatedAt={updatedAt}
       right={
         <>
+          <button
+            type="button"
+            className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-500 flex items-center gap-1 shadow-sm shrink-0"
+            onClick={() => setShowAdd(true)}
+          >
+            + Add Driver
+          </button>
           <select className={input} value={status} onChange={(e) => { setStatus(e.target.value); setPage(0); }}>
             <option value="">All statuses</option>
             <option value="PENDING_APPROVAL">Pending approval</option>
@@ -911,6 +1074,8 @@ export function DriversTab({ demo }: TabProps) {
         </>
       }
     >
+      {showAdd && <AddDriverModal demo={demo} onClose={() => setShowAdd(false)} onAdded={reload} />}
+
       {data &&
         (items.length ? (
           <div className="overflow-x-auto">
@@ -961,6 +1126,14 @@ export function DriversTab({ demo }: TabProps) {
                           {d.accountStatus !== "ACTIVE" && <button className={btn.ok} onClick={() => setDriverStatus(d, "ACTIVE")}>Approve</button>}
                           {d.accountStatus !== "BLOCKED" && <button className={btn.danger} onClick={() => setDriverStatus(d, "BLOCKED")}>Block</button>}
                           {d.accountStatus !== "PENDING_APPROVAL" && <button className={btn.ghost} onClick={() => setDriverStatus(d, "PENDING_APPROVAL")}>Set pending</button>}
+                          <button
+                            type="button"
+                            className="rounded border border-red-800 bg-red-950/60 px-2 py-1 text-red-300 hover:bg-red-900/80 hover:text-white"
+                            onClick={() => deleteDriver(d)}
+                            title="Permanently delete driver from platform"
+                          >
+                            Delete
+                          </button>
                         </>
                       )}
                     </td>
@@ -1204,13 +1377,29 @@ function CabRequestCard({ c, demo, onChanged }: { c: Any; demo: boolean; onChang
       </div>
 
       {Array.isArray(c.quotes) && c.quotes.length > 0 && (
-        <div className="rounded-xl border border-slate-800 p-2">
-          <p className="mb-1 font-semibold text-slate-300">Quotes</p>
-          {c.quotes.map((q: Any, i: number) => (
-            <p key={i} className="text-slate-400">
-              {q.driverName} • {q.driverPhone || "—"} • <span className="font-mono text-slate-200">{inr(q.quotedFare)}</span> • {q.status}
-            </p>
-          ))}
+        <div className="rounded-xl border border-blue-900/40 bg-blue-950/20 p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="font-semibold text-blue-300">Driver Quotes Received ({c.quotes.length}) • Bidding Window</span>
+            {["FINDING_DRIVER", "QUOTE_RECEIVED", "PENDING_REVIEW"].includes(c.status) && (
+              <Badge tone="blue">Quotation Active</Badge>
+            )}
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            {c.quotes.map((q: Any, i: number) => (
+              <div key={i} className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/60 p-2 text-xs">
+                <div>
+                  <p className="font-semibold text-white">{q.driverName}</p>
+                  <p className="text-slate-400">{q.driverPhone || "—"}</p>
+                </div>
+                <div className="text-right flex items-center gap-2">
+                  <span className="font-mono font-bold text-emerald-400">{inr(q.quotedFare)}</span>
+                  <Badge tone={q.status === "ACCEPTED" ? "green" : q.status === "REJECTED" ? "red" : q.status === "EXPIRED" ? "slate" : "amber"}>
+                    {q.status}
+                  </Badge>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -1248,7 +1437,7 @@ function AssignForm({ c, demo, onDone }: { c: Any; demo: boolean; onDone: () => 
   const [previewFor, setPreviewFor] = useState("");
   const [busy, setBusy] = useState(false);
   const drivers = useLoad(
-    () => adminApi("/stayride/drivers", { demo, query: { status: "ACTIVE", q: driverQ, search: driverQ, page: 1, limit: LIMIT } }).then((r) => toPage(r).items),
+    () => adminApi("/stayride/drivers", { demo, query: { status: "ACTIVE", q: driverQ, search: driverQ, page: 1, limit: 100 } }).then((r) => toPage(r).items),
     [demo, driverQ]
   );
   const options = [...(picked && !(drivers.data || []).some((d) => rid(d) === rid(picked)) ? [picked] : []), ...(drivers.data || [])];
@@ -1284,7 +1473,10 @@ function AssignForm({ c, demo, onDone }: { c: Any; demo: boolean; onDone: () => 
   const searchDrivers = () => setDriverQ(driverSearch.trim());
 
   return (
-    <form onSubmit={submit} className="rounded-xl border border-blue-900/40 bg-blue-950/20 p-3 space-y-2">
+    <form onSubmit={submit} className="rounded-xl border border-blue-900/40 bg-blue-950/20 p-3 space-y-2.5">
+      <div className="rounded-lg bg-blue-950/60 border border-blue-800/50 p-2 text-[11px] text-blue-300 flex items-center gap-1.5">
+        <span className="font-bold">ℹ️ Assignment Rule:</span> Assigning a driver immediately ends quotation collection, accepts this driver's bid, rejects all competing quotes, and locks the fare.
+      </div>
       <div className="flex flex-wrap gap-2">
         <input
           className={`${input} flex-1`}
@@ -1314,15 +1506,16 @@ function AssignForm({ c, demo, onDone }: { c: Any; demo: boolean; onDone: () => 
         <input className={input} type="number" min="1" placeholder="Agreed fare ₹ *" required readOnly={locked} title={locked ? "Fare is locked (advance already paid)" : undefined} value={fare} onChange={(e) => setFare(e.target.value)} />
       </div>
       {!locked && c.quotes?.some((q: Any) => q.driverId) && (
-        <div className="flex flex-wrap gap-1">
+        <div className="flex flex-wrap items-center gap-1.5 p-2 bg-slate-900/80 rounded-lg border border-slate-800">
+          <span className="text-[11px] text-slate-400 font-semibold mr-1">Quick-Select Quote:</span>
           {c.quotes.filter((q: Any) => q.driverId).map((q: Any, i: number) => (
             <button
               type="button"
               key={i}
-              className={btn.ghost}
+              className="rounded border border-emerald-700/60 bg-emerald-950/40 px-2.5 py-1 text-emerald-300 hover:bg-emerald-900/60 font-medium text-xs flex items-center gap-1 transition"
               onClick={() => { setDriverUserId(String(q.driverId)); setPicked({ _id: String(q.driverId), name: q.driverName, phone: q.driverPhone }); setFare(String(q.quotedFare)); }}
             >
-              Use quote: {q.driverName} {inr(q.quotedFare)}
+              ✓ {q.driverName} ({inr(q.quotedFare)})
             </button>
           ))}
         </div>

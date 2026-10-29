@@ -83,6 +83,8 @@ const UserSchema = new Schema<IUser>(
 );
 
 UserSchema.index({ locationPoint: "2dsphere" });
+UserSchema.index({ role: 1, accountStatus: 1, createdAt: -1 });
+UserSchema.index({ role: 1, phone: 1 });
 
 // Hash password before saving & update IST timestamp
 UserSchema.pre("save", async function () {

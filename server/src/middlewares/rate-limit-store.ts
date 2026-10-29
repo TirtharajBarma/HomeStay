@@ -4,6 +4,55 @@ import { httpError } from "./error-handler.js";
 import { connectDB } from "../config/db.js";
 
 /**
+ * High-performance in-memory rate-limit store for serverless instances.
+ * Stores hits in local process memory with zero disk/database writes, completely eliminating
+ * MongoDB IOPS overhead and connection contention on high-frequency API routes.
+ */
+export class MemoryRateLimitStore implements Store {
+  localKeys = true;
+  private hits = new Map<string, { count: number; resetTime: number }>();
+  private windowMs = 15 * 60 * 1000;
+
+  constructor(readonly prefix: string = "") {}
+
+  init(options: Options) {
+    this.windowMs = options.windowMs;
+  }
+
+  async increment(key: string): Promise<ClientRateLimitInfo> {
+    const now = Date.now();
+    const fullKey = this.prefix + key;
+    const entry = this.hits.get(fullKey);
+
+    // Garbage collect if map grows too large
+    if (this.hits.size > 10_000) {
+      for (const [k, v] of this.hits.entries()) {
+        if (v.resetTime <= now) this.hits.delete(k);
+      }
+    }
+
+    if (!entry || entry.resetTime <= now) {
+      const resetTime = now + this.windowMs;
+      this.hits.set(fullKey, { count: 1, resetTime });
+      return { totalHits: 1, resetTime: new Date(resetTime) };
+    }
+
+    entry.count += 1;
+    return { totalHits: entry.count, resetTime: new Date(entry.resetTime) };
+  }
+
+  async decrement(key: string) {
+    const fullKey = this.prefix + key;
+    const entry = this.hits.get(fullKey);
+    if (entry && entry.count > 0) entry.count -= 1;
+  }
+
+  async resetKey(key: string) {
+    this.hits.delete(this.prefix + key);
+  }
+}
+
+/**
  * express-rate-limit Store shared by every serverless instance: one Mongo document per client key
  * in the live database (`ratelimits`). Each hit is a single atomic findOneAndUpdate (pipeline update)
  * that either increments the counter or starts a new window; a TTL index removes expired windows.

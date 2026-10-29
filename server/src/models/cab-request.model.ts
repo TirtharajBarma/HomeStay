@@ -346,6 +346,11 @@ CabRequestSchema.index({ propertyId: 1, status: 1 }, { name: "property_status" }
 CabRequestSchema.index({ status: 1, date: 1 }, { name: "status_date" });
 CabRequestSchema.index({ status: 1, advanceDueAt: 1 }, { name: "status_advance_due" });
 CabRequestSchema.index({ assignedDriverUserId: 1, status: 1 }, { name: "driver_status" });
+CabRequestSchema.index({ status: 1, createdAt: -1 }, { name: "status_created_at" });
+CabRequestSchema.index({ createdAt: -1 }, { name: "created_at_desc" });
+CabRequestSchema.index({ driverSettlementStatus: 1, createdAt: -1 }, { name: "driver_settlement_status" });
+CabRequestSchema.index({ refundStatus: 1, createdAt: -1 }, { name: "refund_status" });
+CabRequestSchema.index({ needsReassignment: 1 }, { name: "needs_reassignment", partialFilterExpression: { needsReassignment: true } });
 // Idempotency keys are per homestay (the old global unique "clientRequestId_1" is dropped by scripts/migrate-indexes.ts).
 CabRequestSchema.index(
   { propertyId: 1, clientRequestId: 1 },

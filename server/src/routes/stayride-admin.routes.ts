@@ -329,6 +329,50 @@ router.patch("/stayride/drivers/:id/status", async (req, res) => {
   ok(res, { ...updated, id: String(updated._id) }, `Driver ${status === "ACTIVE" ? "approved" : status === "BLOCKED" ? "blocked" : "set to pending"}.`);
 });
 
+router.delete("/stayride/drivers/:id", async (req, res) => {
+  const demo = isDemo(req);
+  const id = String(req.params.id);
+  if (!mongoose.Types.ObjectId.isValid(id)) throw httpError(404, "Driver not found.");
+
+  const target: any = await userModel(demo).findOne({ _id: id, role: "driver" }).lean();
+  if (!target) throw httpError(404, "Driver not found.");
+
+  // Check if driver has an active ongoing trip
+  const activeRide = await cabModel(demo).findOne({
+    assignedDriverUserId: id,
+    status: "TRIP_STARTED",
+  }).select("reference").lean();
+  if (activeRide) {
+    throw httpError(409, `Cannot delete driver ${target.name} while on active started trip #${activeRide.reference}. Complete or cancel the trip first.`);
+  }
+
+  // Release any assigned trips that have not started, re-opening them or flagging needsReassignment
+  await releaseDriverTrips(demo, id, actor(req));
+
+  // Reject any pending quotes submitted by this driver
+  await cabModel(demo).updateMany(
+    { "quotes.driverId": id, "quotes.status": "PENDING" },
+    { $set: { "quotes.$[q].status": "REJECTED" } },
+    { arrayFilters: [{ "q.driverId": id, "q.status": "PENDING" }] }
+  );
+
+  // Permanently delete user document from database
+  await userModel(demo).findByIdAndDelete(id);
+
+  const reason = String(req.body?.reason || req.query?.reason || "Permanently deleted by admin").slice(0, 300);
+  await audit(
+    actor(req),
+    "driver.hard_delete",
+    "User",
+    id,
+    { targetName: target.name, targetPhone: target.phone, targetEmail: target.email, reason },
+    demo,
+    { actorRole: "ADMIN", driverId: id }
+  );
+
+  ok(res, { id, name: target.name, phone: target.phone }, `Driver ${target.name} has been permanently deleted.`);
+});
+
 router.post("/stayride/drivers", async (req, res) => {
   const demo = isDemo(req);
   const name = String(req.body?.name || "").trim();

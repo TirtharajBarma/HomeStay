@@ -1,19 +1,45 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-function parseJwtPayload(token: string): any {
+async function verifyJwt(token: string, secret: string | undefined): Promise<any> {
   try {
     const parts = token.split(".");
     if (parts.length !== 3) return null;
-    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-    const json = atob(base64);
-    return JSON.parse(json);
+    const [headerB64, payloadB64, signatureB64] = parts;
+
+    // Decode payload
+    const json = atob(payloadB64.replace(/-/g, "+").replace(/_/g, "/"));
+    const payload = JSON.parse(json);
+
+    // Cryptographically verify HMAC-SHA256 signature using Web Crypto API
+    if (secret) {
+      const encoder = new TextEncoder();
+      const key = await crypto.subtle.importKey(
+        "raw",
+        encoder.encode(secret),
+        { name: "HMAC", hash: "SHA-256" },
+        false,
+        ["verify"]
+      );
+
+      const binarySig = atob(signatureB64.replace(/-/g, "+").replace(/_/g, "/"));
+      const sigBytes = new Uint8Array(binarySig.length);
+      for (let i = 0; i < binarySig.length; i++) {
+        sigBytes[i] = binarySig.charCodeAt(i);
+      }
+
+      const dataBytes = encoder.encode(`${headerB64}.${payloadB64}`);
+      const valid = await crypto.subtle.verify("HMAC", key, sigBytes, dataBytes);
+      if (!valid) return null;
+    }
+
+    return payload;
   } catch {
     return null;
   }
 }
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const token = request.cookies.get("platform_admin_token")?.value;
   const { pathname } = request.nextUrl;
 
@@ -21,7 +47,8 @@ export function middleware(request: NextRequest) {
 
   let isValid = false;
   if (token) {
-    const payload = parseJwtPayload(token);
+    const secret = process.env.JWT_SECRET;
+    const payload = await verifyJwt(token, secret);
     const nowSec = Math.floor(Date.now() / 1000);
     const notExpired = payload?.exp ? payload.exp > nowSec : false;
     const isAdmin = payload?.role === "admin";

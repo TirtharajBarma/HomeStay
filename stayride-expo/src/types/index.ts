@@ -187,6 +187,10 @@ export interface DriverTrip {
   // counterFare: the homestay's counter-offer on my quote, waiting for me to accept
   myQuote: { quotedFare: number; status: string; notes?: string; counterFare?: number | null } | null;
   assignedToMe: boolean;
+  pickupOtp?: string | null;
+  pickupOtpRequired?: boolean;
+  _pendingStartOtp?: string;
+  _pendingComplete?: boolean;
   // Server's view of this trip for me; lost trips stay listed for 7 days as CANCELLED/REASSIGNED
   driverView?: 'OPEN' | 'QUOTED' | 'ASSIGNED' | 'CANCELLED' | 'REASSIGNED' | 'EXPIRED';
   cancellationReason?: string | null;

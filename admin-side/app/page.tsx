@@ -252,57 +252,23 @@ export default function AdminDashboardPage() {
           ))}
         </div>
 
-        {visitedTabs.has("dashboard") && (
-          <div className={activeTab === "dashboard" ? "block" : "hidden"}>
-            <DashboardTab demo={demo} />
-          </div>
+        {activeTab === "dashboard" && <DashboardTab demo={demo} />}
+        {activeTab === "users" && <UsersTab demo={demo} />}
+        {activeTab === "homestays" && (
+          <HomestaysTab
+            demo={demo}
+            onOpenCabRequests={(tenantKey) => {
+              setCabTenant(tenantKey);
+              handleTabChange("cab-requests");
+            }}
+          />
         )}
-        {visitedTabs.has("users") && (
-          <div className={activeTab === "users" ? "block" : "hidden"}>
-            <UsersTab demo={demo} />
-          </div>
-        )}
-        {visitedTabs.has("homestays") && (
-          <div className={activeTab === "homestays" ? "block" : "hidden"}>
-            <HomestaysTab
-              demo={demo}
-              onOpenCabRequests={(tenantKey) => {
-                setCabTenant(tenantKey);
-                handleTabChange("cab-requests");
-              }}
-            />
-          </div>
-        )}
-        {visitedTabs.has("drivers") && (
-          <div className={activeTab === "drivers" ? "block" : "hidden"}>
-            <DriversTab demo={demo} />
-          </div>
-        )}
-        {visitedTabs.has("cab-requests") && (
-          <div className={activeTab === "cab-requests" ? "block" : "hidden"}>
-            <CabRequestsTab key={cabTenant} demo={demo} initialTenantKey={cabTenant || undefined} />
-          </div>
-        )}
-        {visitedTabs.has("payouts") && (
-          <div className={activeTab === "payouts" ? "block" : "hidden"}>
-            <PayoutsTab demo={demo} />
-          </div>
-        )}
-        {visitedTabs.has("settings") && (
-          <div className={activeTab === "settings" ? "block" : "hidden"}>
-            <SettingsTab demo={demo} />
-          </div>
-        )}
-        {visitedTabs.has("appeals") && (
-          <div className={activeTab === "appeals" ? "block" : "hidden"}>
-            <AppealsTab demo={demo} />
-          </div>
-        )}
-        {visitedTabs.has("audit") && (
-          <div className={activeTab === "audit" ? "block" : "hidden"}>
-            <AuditTab demo={demo} />
-          </div>
-        )}
+        {activeTab === "drivers" && <DriversTab demo={demo} />}
+        {activeTab === "cab-requests" && <CabRequestsTab key={cabTenant} demo={demo} initialTenantKey={cabTenant || undefined} />}
+        {activeTab === "payouts" && <PayoutsTab demo={demo} />}
+        {activeTab === "settings" && <SettingsTab demo={demo} />}
+        {activeTab === "appeals" && <AppealsTab demo={demo} />}
+        {activeTab === "audit" && <AuditTab demo={demo} />}
 
         {activeTab === "legacy" && (
           <>

@@ -300,6 +300,7 @@ function CabRequestFormContent() {
   const [guestName, setGuestName] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
   const [notes, setNotes] = useState("");
+  const [agreedToTerms, setAgreedToTerms] = useState(true);
 
   // Submission & Lifecycle
   const [clientRequestId] = useState(() =>
@@ -595,6 +596,12 @@ function CabRequestFormContent() {
     const cleanPhone = guestPhone.replace(/\D/g, "");
     if (!cleanPhone || cleanPhone.length < 10) {
       setErrorMessage("Please enter a valid 10-digit WhatsApp phone number.");
+      setCurrentStep(3);
+      return;
+    }
+
+    if (!agreedToTerms) {
+      setErrorMessage("Please agree to the Terms of Service and Privacy Policy to submit your request.");
       setCurrentStep(3);
       return;
     }
@@ -2050,6 +2057,28 @@ function CabRequestFormContent() {
                       Drivers will quote their competitive prices based on your exact route and passengers. You can choose the best quote.
                     </p>
                   </div>
+
+                  {/* DPDP Act 2023 Consent Notice */}
+                  <div className="flex items-start gap-2.5 pt-1 pb-0.5">
+                    <input
+                      type="checkbox"
+                      id="dpdp-consent"
+                      checked={agreedToTerms}
+                      onChange={(e) => setAgreedToTerms(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 rounded border-[#D0D7DE] text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                    />
+                    <label htmlFor="dpdp-consent" className="text-[11px] leading-relaxed text-[#57606A] cursor-pointer">
+                      I agree to the{" "}
+                      <Link href="/legal/terms" target="_blank" className="font-semibold text-emerald-700 underline hover:text-emerald-800">
+                        Terms of Service
+                      </Link>{" "}
+                      and{" "}
+                      <Link href="/legal/privacy" target="_blank" className="font-semibold text-emerald-700 underline hover:text-emerald-800">
+                        Privacy Policy
+                      </Link>
+                      . My contact info will be used solely for verified driver coordination.
+                    </label>
+                  </div>
                 </div>
 
                 {/* Submit Action */}
@@ -2063,7 +2092,7 @@ function CabRequestFormContent() {
                   </button>
                   <button
                     type="button"
-                    disabled={submitting}
+                    disabled={submitting || !agreedToTerms}
                     onClick={handleFormSubmit}
                     className="w-2/3 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 transition-all cursor-pointer disabled:opacity-50"
                   >

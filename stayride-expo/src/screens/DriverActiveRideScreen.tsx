@@ -8,6 +8,7 @@ import {
   Alert,
   Linking,
   Platform,
+  TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Shadows } from '../theme/colors';
@@ -21,6 +22,8 @@ export const DriverActiveRideScreen: React.FC = () => {
   const { driverTrips, driverCompleteTrip, driverStartTrip } = useStayRide();
   const [completing, setCompleting] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [pinInput, setPinInput] = useState('');
+  const [pinModalVisible, setPinModalVisible] = useState(false);
 
   // Active ride: TRIP_STARTED first, then the closest upcoming CONFIRMED ride by date
   const mine = driverTrips.filter((t) => t.assignedToMe);
@@ -34,11 +37,20 @@ export const DriverActiveRideScreen: React.FC = () => {
   const cashDue = typeof activeRide?.remainingCashAmount === 'number' ? formatINR(activeRide.remainingCashAmount) : '—';
   const fareText = activeRide?.fare ? formatINR(activeRide.fare) : '—';
 
-  const handleStartTrip = async () => {
+  const handleStartTrip = async (otp?: string) => {
     if (!activeRide || starting) return;
+    const pinToSubmit = otp || pinInput;
+    if (!pinToSubmit || pinToSubmit.trim().length < 4) {
+      setPinModalVisible(true);
+      return;
+    }
     setStarting(true);
     try {
-      const outcome = await driverStartTrip(activeRide.reference);
+      const outcome = await driverStartTrip(activeRide.reference, pinToSubmit.trim());
+      if (outcome.ok) {
+        setPinModalVisible(false);
+        setPinInput('');
+      }
       reportOutcome(outcome, 'Ride Started', 'Navigate safely to pickup.');
     } finally {
       setStarting(false);
@@ -47,13 +59,14 @@ export const DriverActiveRideScreen: React.FC = () => {
 
   const handleOpenGoogleMaps = () => {
     if (!activeRide) return;
-    // Exact pin when the homestay set one, else the pickup text
-    const origin =
-      typeof activeRide.pickupLat === 'number' && typeof activeRide.pickupLng === 'number'
+    const isStarted = activeRide.status === 'TRIP_STARTED';
+    const destination = isStarted
+      ? encodeURIComponent(activeRide.destination || activeRide.pickup)
+      : typeof activeRide.pickupLat === 'number' && typeof activeRide.pickupLng === 'number'
         ? `${activeRide.pickupLat},${activeRide.pickupLng}`
         : encodeURIComponent(activeRide.pickup);
-    const destination = encodeURIComponent(activeRide.destination);
-    const url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&travelmode=driving`;
+    // Omitting origin directs Google Maps to navigate from the driver's current device GPS location
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${destination}&travelmode=driving`;
     Linking.openURL(url).catch(() => {
       Alert.alert('Map Error', 'Could not open Google Maps navigation.');
     });
@@ -205,7 +218,9 @@ export const DriverActiveRideScreen: React.FC = () => {
             {/* Google Maps Button */}
             <TouchableOpacity style={styles.mapBtn} onPress={handleOpenGoogleMaps}>
               <Ionicons name="navigate" size={18} color="#FFFFFF" />
-              <Text style={styles.mapBtnText}>🗺️  Navigate to Pickup</Text>
+              <Text style={styles.mapBtnText}>
+                {activeRide.status === 'TRIP_STARTED' ? '🗺️  Navigate to Drop Destination' : '🗺️  Navigate to Pickup'}
+              </Text>
             </TouchableOpacity>
             {/* Fix 8: GPS warning if no pin set */}
             {!(typeof activeRide.pickupLat === 'number') && (
@@ -261,14 +276,43 @@ export const DriverActiveRideScreen: React.FC = () => {
             {/* Start Ride Button: when trip is CONFIRMED and waiting to start */}
             {activeRide.status === 'CONFIRMED' && (
               <>
-                <TouchableOpacity
-                  style={[styles.startBtn]}
-                  onPress={handleStartTrip}
-                  disabled={starting}
-                >
-                  <Ionicons name="play-circle" size={22} color="#16A34A" />
-                  <Text style={styles.startBtnText}>{starting ? 'Starting…' : '▶  Start Ride'}</Text>
-                </TouchableOpacity>
+                {!pinModalVisible ? (
+                  <TouchableOpacity
+                    style={[styles.startBtn]}
+                    onPress={() => setPinModalVisible(true)}
+                    disabled={starting}
+                  >
+                    <Ionicons name="play-circle" size={22} color="#16A34A" />
+                    <Text style={styles.startBtnText}>{starting ? 'Starting…' : '▶  Start Ride (Enter PIN)'}</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <View style={styles.pinModalBox}>
+                    <Text style={styles.pinModalTitle}>Enter Passenger Boarding PIN</Text>
+                    <Text style={styles.pinModalSub}>Ask passenger for the 4-digit PIN on their booking screen:</Text>
+                    <View style={styles.pinInputRow}>
+                      <TextInput
+                        style={styles.pinTextInput}
+                        value={pinInput}
+                        onChangeText={(text) => setPinInput(text.replace(/\D/g, '').slice(0, 4))}
+                        placeholder="PIN"
+                        placeholderTextColor="#9CA3AF"
+                        keyboardType="number-pad"
+                        maxLength={4}
+                        autoFocus
+                      />
+                      <TouchableOpacity
+                        style={[styles.pinConfirmBtn, pinInput.length < 4 && { opacity: 0.5 }]}
+                        disabled={pinInput.length < 4 || starting}
+                        onPress={() => handleStartTrip(pinInput)}
+                      >
+                        <Text style={styles.pinConfirmText}>{starting ? 'Verifying…' : 'Start Ride'}</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.pinCancelBtn} onPress={() => setPinModalVisible(false)}>
+                        <Text style={styles.pinCancelText}>Cancel</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
 
                 <TouchableOpacity
                   style={styles.waitingBtn}
@@ -633,5 +677,63 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#64748B',
     textDecorationLine: 'underline',
+  },
+  pinModalBox: {
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1.5,
+    borderColor: '#10B981',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 12,
+  },
+  pinModalTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#065F46',
+  },
+  pinModalSub: {
+    fontSize: 12,
+    color: '#047857',
+    marginTop: 2,
+    marginBottom: 12,
+  },
+  pinInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  pinTextInput: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#059669',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: 6,
+    color: '#111827',
+    width: 105,
+    textAlign: 'center',
+  },
+  pinConfirmBtn: {
+    backgroundColor: '#059669',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  pinConfirmText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 13,
+  },
+  pinCancelBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 12,
+  },
+  pinCancelText: {
+    color: '#64748B',
+    fontWeight: '700',
+    fontSize: 13,
   },
 });
