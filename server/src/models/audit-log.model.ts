@@ -41,7 +41,14 @@ const AuditLogSchema = new Schema(
   { timestamps: { createdAt: true, updatedAt: false } }
 );
 
-// No TTL: this holds payment, refund, payout and settlement history and must not expire.
+// No TTL on money / admin entries: payment, refund, payout and settlement history must never expire.
+// Only WhatsApp delivery noise expires (90 days; Axiom keeps the full record). Partial indexes can't use a
+// regex, so the actions are listed: add any new whatsapp.* action here.
+export const WHATSAPP_AUDIT_ACTIONS = ["whatsapp.failed", "whatsapp.reply"];
+AuditLogSchema.index(
+  { createdAt: 1 },
+  { name: "whatsapp_ttl", expireAfterSeconds: 90 * 86400, partialFilterExpression: { action: { $in: WHATSAPP_AUDIT_ACTIONS } } }
+);
 // Filtering indexes for the admin / owner audit views:
 AuditLogSchema.index({ tenantId: 1, createdAt: -1 });
 AuditLogSchema.index({ driverId: 1, createdAt: -1 });
@@ -122,6 +129,17 @@ export async function audit(
 
     const safeDetails = cleanAuditDetails(details);
 
+    // Axiom gets every audit entry first (full record even if Mongo is pruned or the write below fails).
+    logger.info(`[AUDIT] ${action} on ${targetType}:${targetId}`, {
+      action: `audit.${action}`,
+      tenantId: String(tenantId || ""),
+      driverId: String(driverId || ""),
+      userId: actor,
+      userRole: actorRole,
+      ip,
+      metadata: { actorName, targetType, targetId: String(targetId || ""), isDemo, details: safeDetails },
+    });
+
     await getAuditLogModel(isDemo).create({
       actor,
       actorRole,
@@ -134,16 +152,8 @@ export async function audit(
       driverId: String(driverId || ""),
       details: safeDetails,
     });
-
-    logger.info(`[AUDIT] ${action} on ${targetType}:${targetId}`, {
-      tenantId: String(tenantId || ""),
-      driverId: String(driverId || ""),
-      userId: actor,
-      userRole: actorRole,
-      metadata: safeDetails,
-    });
   } catch (err) {
     // Non-blocking: log the error to console without breaking user response
-    console.error("[AuditLog Error]", err);
+    logger.error(`[AuditLog Error] ${action} not saved to Mongo`, err, { action: "audit.write_failed", metadata: { targetType, targetId: String(targetId || "") } });
   }
 }

@@ -3,7 +3,9 @@
  * 
  * Features:
  * 1. Zero MongoDB Impact: Streams HTTP & error telemetry out of band (to Axiom / Better Stack).
- * 2. Non-Blocking: Asynchronously batches and flushes logs using a background worker (0 ms added to API requests).
+ * 2. Batched: logs are queued and sent in batches. On Vercel the function can freeze right after the
+ *    response, so telemetryMiddleware holds res.end until the queue is flushed (one Axiom POST, capped
+ *    at FLUSH_TIMEOUT_MS). Elsewhere a background timer flushes (0 ms added to API requests).
  * 3. Multi-Tenant Tracking: Automatically captures tenantId (owner), driverId, userId, and latency.
  * 4. Graceful Fallback: Outputs clean, readable console logs if external cloud tokens are not set.
  */
@@ -34,9 +36,13 @@ interface LogPayload {
   metadata?: Record<string, any>;
 }
 
+// Upper bound on what one flush can add to a Vercel response (a healthy Axiom ingest is ~50-150 ms).
+const FLUSH_TIMEOUT_MS = 1500;
+
 class TelemetryLogger {
   private queue: LogPayload[] = [];
   private flushTimer: NodeJS.Timeout | null = null;
+  private flushing: Promise<void> | null = null;
   private readonly batchSize = 30;
   private readonly flushIntervalMs = 2500;
   private readonly axiomToken = process.env.AXIOM_TOKEN || "";
@@ -78,17 +84,28 @@ class TelemetryLogger {
         this.queue.splice(0, 50); // drop oldest to preserve latest critical events
       }
       this.queue.push(payload);
-      if (this.queue.length >= this.batchSize || process.env.VERCEL) {
+      if (this.queue.length >= this.batchSize) {
         this.flush();
       }
     }
   }
 
-  public async flush(): Promise<void> {
-    if (this.queue.length === 0) return;
-    const batch = this.queue.splice(0, this.batchSize);
+  /** Sends everything queued. Concurrent callers share one drain, so awaiting it always means "delivered". */
+  public flush(): Promise<void> {
+    this.flushing ??= this.drain().finally(() => {
+      this.flushing = null;
+    });
+    return this.flushing;
+  }
 
+  private async drain(): Promise<void> {
+    // whole queue per POST (capped at 500 entries); loops for anything logged while a POST was in flight
+    while (this.queue.length) await this.send(this.queue.splice(0));
+  }
+
+  private async send(batch: LogPayload[]): Promise<void> {
     try {
+      const signal = AbortSignal.timeout(FLUSH_TIMEOUT_MS);
       if (this.isLiveToken(this.axiomToken)) {
         // Stream to Axiom (500 GB free tier)
         await fetch(`https://api.axiom.co/v1/datasets/${this.axiomDataset}/ingest`, {
@@ -98,6 +115,7 @@ class TelemetryLogger {
             "Content-Type": "application/json",
           },
           body: JSON.stringify(batch),
+          signal,
         }).catch(() => {});
       } else if (this.isLiveToken(this.logtailToken)) {
         // Stream to Better Stack / Logtail (1 GB free tier)
@@ -108,6 +126,7 @@ class TelemetryLogger {
             "Content-Type": "application/json",
           },
           body: JSON.stringify(batch),
+          signal,
         }).catch(() => {});
       }
     } catch {
@@ -164,8 +183,11 @@ export const logger = new TelemetryLogger();
  */
 export function telemetryMiddleware(req: Request, res: Response, next: NextFunction) {
   const start = Date.now();
+  let logged = false;
 
-  res.on("finish", () => {
+  const logRequest = () => {
+    if (logged) return;
+    logged = true;
     const durationMs = Date.now() - start;
     const url = String(req.originalUrl || req.url).replace(/\?.*$/, "");
     
@@ -204,7 +226,21 @@ export function telemetryMiddleware(req: Request, res: Response, next: NextFunct
       userRole: userRole ? String(userRole) : undefined,
       ip: req.ip || (req.headers["x-forwarded-for"] as string) || "",
     });
-  });
+  };
+
+  if (process.env.VERCEL) {
+    // Vercel may freeze the function as soon as the response ends, dropping anything still queued (cron and
+    // webhook logs included). Log the request and deliver the queue first, then end. Costs one Axiom POST per
+    // request (capped at FLUSH_TIMEOUT_MS); without a live token flush() returns at once.
+    const end = res.end.bind(res) as (...a: any[]) => Response;
+    (res as any).end = (...args: any[]) => {
+      logRequest();
+      logger.flush().finally(() => end(...args));
+      return res;
+    };
+  } else {
+    res.on("finish", logRequest);
+  }
 
   next();
 }

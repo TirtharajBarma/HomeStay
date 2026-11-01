@@ -310,7 +310,7 @@ export class AuthService {
     if (isDev) {
       console.log(`\n📲 [OTP DISPATCH] -> Phone: ${cleanPhone} | Verification Code: ${otp}\n`);
     } else {
-      console.log(`📲 [OTP DISPATCH] -> Phone: ${cleanPhone} (code withheld in production)`);
+      console.log('📲 [OTP DISPATCH] sent (phone and code withheld in production)');
     }
 
     return {

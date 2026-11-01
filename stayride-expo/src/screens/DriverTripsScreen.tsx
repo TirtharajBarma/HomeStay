@@ -60,7 +60,7 @@ export const DriverTripsScreen: React.FC = () => {
   // The server decides what this driver sees: open requests (no guest details) and trips assigned to them
   // driverView (when the server sends it) is authoritative; lost trips (CANCELLED/REASSIGNED/EXPIRED) go to history.
   const isLost = (t: DriverTrip) =>
-    t.driverView === 'CANCELLED' || t.driverView === 'REASSIGNED' || t.driverView === 'EXPIRED' ||
+    t.driverView === 'CANCELLED' || t.driverView === 'REASSIGNED' || t.driverView === 'EXPIRED' || t.driverView === 'TAKEN' ||
     (!t.driverView && (t.status === 'CANCELLED' || t.status === 'EXPIRED'));
   const incomingRequests = driverTrips.filter(
     (t) =>
@@ -610,6 +610,8 @@ export const DriverTripsScreen: React.FC = () => {
                       <Text style={[styles.completedTag, { color: '#B91C1C' }]}>
                         {t.driverView === 'REASSIGNED'
                           ? 'REASSIGNED TO ANOTHER DRIVER'
+                          : t.driverView === 'TAKEN'
+                          ? 'TAKEN BY ANOTHER DRIVER'
                           : t.driverView === 'EXPIRED' || t.status === 'EXPIRED'
                           ? 'EXPIRED'
                           : 'CANCELLED'}

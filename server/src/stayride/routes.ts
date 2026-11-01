@@ -6,16 +6,16 @@ import { beginIdempotent } from './idempotency.js';
 import {
   OPEN_STATUSES, cabModel, payoutModel, userModel, parseFare, overlayTrips, ownerConfirmQuote, cancelRequest, expireStaleRequests,
   driverTripView, listDriverTrips, driverSubmitQuote, startTrip, completeTrip, payoutSummary, requestPayout,
-  driverPayoutSummary, requestDriverPayout,
-  istDateTime, notifyNewRequest, rateDriver, rateDriverByGuest, ownerPayoutView, parseTime12, hashToken, readDriverQuoteToken, ownerCounterOffer, driverAcceptCounter, ownerCompleteTrip, onDriverStatusChange, issueGuestLink, sendAskCab, dispatchRequest, assignOwnFleet, recordGatewayPayment, pushOwner, whatsapp, scope,
+  driverPayoutSummary, requestDriverPayout, maskPhone, linkDriverFilter,
+  istDateTime, notifyNewRequest, dispatchFields, retryMissingPaymentLinks, rateDriver, rateDriverByGuest, ownerPayoutView, parseTime12, hashToken, readDriverQuoteToken, ownerCounterOffer, driverAcceptCounter, ownerCompleteTrip, onDriverStatusChange, issueGuestLink, sendAskCab, dispatchRequest, assignOwnFleet, recordGatewayPayment, pushOwner, whatsapp, scope, submitPaymentClaim,
 } from './platform.js';
 import { CommissionService } from '../services/commission.service.js';
-import { sendWhatsApp, getWhatsAppNativeLink } from '../services/whatsapp.service.js';
+import { getWhatsAppNativeLink, verifyHandshake, verifyMetaSignature, recordWhatsAppWebhook } from '../services/whatsapp.service.js';
 import { PropertyService } from '../services/property.service.js';
 import * as messages from './messages.js';
 const { driverWelcomeMessage } = messages;
 import { publicConfig, PlatformConfig } from '../services/platform-config.js';
-import { verifyWebhookSignature } from '../services/payment-gateway.service.js';
+import { verifyWebhookSignature, gatewayEnabled } from '../services/payment-gateway.service.js';
 import { buildIcs, feedFor, setImports, syncRoom, syncAll, storeForExportToken } from './ical.js';
 import { LEGAL_VERSION, LEGAL_DOCS, LegalDoc, legalDocument } from './legal.js';
 import { audit } from '../models/audit-log.model.js';
@@ -449,14 +449,14 @@ stayrideV1Router.post('/auth/signup', async (req: Request, res: Response) => {
         tv: (userDoc as any).tokenVersion || 0,
       });
 
-      logger.info(`[SIGNUP] Driver account registered: ${cleanName} (${cleanEmail}, Phone: ${cleanPhone}, Vehicle: ${vehicleNumber})`, {
+      logger.info(`[SIGNUP] Driver account registered: ${cleanName} (${cleanEmail}, Phone: ${maskPhone(cleanPhone)}, Vehicle: ${vehicleNumber})`, {
         action: "driver_registered",
         driverId: userDoc._id.toString(),
         userId: cleanEmail,
         userRole: "driver",
         metadata: {
           name: cleanName,
-          phone: cleanPhone,
+          phone: maskPhone(cleanPhone),
           vehicleType,
           vehicleNumber,
           area,
@@ -973,6 +973,9 @@ async function createPlatformTrip(
       : prop?.coordinates?.latitude && prop?.coordinates?.longitude
       ? { lat: Number(prop.coordinates.latitude), lng: Number(prop.coordinates.longitude) }
       : null;
+  // held (guest inquiry, own-fleet booking, network dispatch off): the owner decides; else it goes out now
+  const sendOut = source !== 'GUEST_WEB_LINK' && extra.dispatched !== false;
+  const dispatch = sendOut ? await dispatchFields(tenantKey, isDemo, trip.date, trip.time) : { dispatched: false };
   let doc: any;
   try {
     const fields = {
@@ -995,18 +998,10 @@ async function createPlatformTrip(
       vehicleType: VEHICLE_TYPES.includes(trip.vehicleType) ? trip.vehicleType : 'SUV',
       requestSource: source,
       homestayLocation,
+      // the homestay's town, derived like Property.town at signup: drivers without GPS must be based there
+      homestayArea: String(pinned?.location || '').split(',')[0].trim(),
       status: 'FINDING_DRIVER',
-      // A guest's inquiry waits for the owner (nearby drivers or own fleet); the owner's own bookings go straight out.
-      dispatched: source !== 'GUEST_WEB_LINK',
-      biddingClosesAt:
-        source !== 'GUEST_WEB_LINK'
-          ? (() => {
-              const tripPickupAt = istDateTime(trip.date, trip.time) ?? Number(trip.date);
-              const leadTimeMin = Math.max(0, Math.floor((tripPickupAt - Date.now()) / 60000));
-              const windowMin = leadTimeMin > 0 && leadTimeMin < 270 ? Math.max(10, leadTimeMin - 30) : 240;
-              return new Date(Date.now() + windowMin * 60000);
-            })()
-          : null,
+      ...dispatch,
       ...extra,
     };
     const upsert = () => Cab.findOneAndUpdate({ propertyId: tenantKey, clientRequestId: crid }, { $setOnInsert: fields }, { upsert: true, returnDocument: 'after', runValidators: true }).lean();
@@ -1028,6 +1023,15 @@ async function createPlatformTrip(
     await removeTrip().catch(() => {}); // a retry with the same clientRequestId already created it
     return { trip: null, doc };
   }
+  logger.info(`[Cab] ${reference} created (${source})`, {
+    action: 'cab.created',
+    tenantId: tenantKey,
+    metadata: {
+      ref: reference, isDemo, source, tripId: trip.id, guestPhone: maskPhone(doc.guestPhone), vehicleType: doc.vehicleType, passengers: doc.passengers,
+      date: doc.date, time: doc.time, pickup: doc.pickupLocation?.address, destinations: (doc.destinations || []).map((d: any) => d.address),
+      dispatched: doc.dispatched !== false, biddingClosesAt: doc.biddingClosesAt || null, nearbyNotifyAt: doc.nearbyNotifyAt || null, extra,
+    },
+  });
   if (doc.dispatched !== false) await notifyNewRequest(isDemo, doc);
   return { trip, doc };
 }
@@ -1078,8 +1082,14 @@ async function activeGuestLink(token: unknown) {
   if (!link) return null;
   const account = await CommissionService.getAccountState(link.tenantKey, isDemoKey(link.tenantKey));
   if (account.blocked || !account.features.guestCabLinks) return null;
-  return link;
+  return { ...link, features: account.features };
 }
+
+const last10 = (p: unknown) => String(p ?? '').replace(/\D/g, '').slice(-10);
+/** A guest link unlocks only its own trips: the one it created, or one booked for the same guest phone. */
+const linkOwnsTrip = (link: any, doc: any) =>
+  Boolean(link && doc && String(link.tenantKey) === String(doc.propertyId) &&
+    (String(link._id) === String(doc.guestLinkId || '') || (last10(link.guestPhone).length === 10 && last10(link.guestPhone) === last10(doc.guestPhone))));
 
 const invalidLink = (res: Response) => res.status(404).json({ error: { message: 'This link is invalid or has expired.' } });
 
@@ -1136,19 +1146,22 @@ stayrideV1Router.post('/public/guest-links/:token/cab-requests', requireRecaptch
     (store) => withEstimate(cfg, store.createTrip({ ...input, guestId: link.guestId ?? undefined, pickup: input.pickup || store.homestay.location || store.homestay.name }, 'GUEST_WEB_LINK')),
     'GUEST_WEB_LINK',
     clientRequestId,
-    { guestNotes: str(req.body.notes, 500), guestBudget: req.body.guestBudget ? Number(req.body.guestBudget) : null }
+    { guestNotes: str(req.body.notes, 500), guestBudget: req.body.guestBudget ? Number(req.body.guestBudget) : null, guestLinkId: String(link._id) }
   );
-  pushOwner(isDemo, tenantKey, {
+  await pushOwner(isDemo, tenantKey, {
     title: 'New Guest Cab Inquiry',
     body: `${input.guestName} requested a cab for ${input.pickup || 'homestay'}.`,
     data: { type: 'NEW_REQUEST', reference: doc.reference, tripId: doc.tripId },
   }).catch(() => {});
 
-  // Instant zero-touch dispatch to priority and nearby drivers
-  try {
-    await dispatchRequest(tenantKey, isDemo, doc.reference);
-  } catch (dispErr: any) {
-    console.warn(`[Auto-Dispatch] Notice for ${doc.reference}:`, dispErr?.message);
+  // Zero-touch dispatch (own drivers first, then nearby) only where the owner sends requests to the network;
+  // otherwise the inquiry waits for the owner (own driver, or the owner sends it out), like their own bookings.
+  if (link.features.platformDispatch) {
+    try {
+      await dispatchRequest(tenantKey, isDemo, doc.reference);
+    } catch (dispErr: any) {
+      console.warn(`[Auto-Dispatch] Notice for ${doc.reference}:`, dispErr?.message);
+    }
   }
 
   return res.status(201).json({ reference: doc.reference, status: doc.status });
@@ -1191,32 +1204,32 @@ stayrideV1Router.post('/public/properties/:slug/cab-requests', requireRecaptcha(
     return res.status(429).json({ error: { message: 'Too many open requests. Please contact your homestay.' } });
   }
 
+  // Sent out at once (own drivers first, then nearby) only where the owner sends requests to the network;
+  // otherwise it is held for the owner, like a guest-link inquiry.
+  const { features } = await CommissionService.getAccountState(tenantKey, isDemo);
   const { doc } = await createPlatformTrip(
     tenantKey,
     isDemo,
     (store) => withEstimate(cfg, store.createTrip({ ...input, pickup: input.pickup || store.homestay.location || store.homestay.name }, 'HOMESTAY_WEB_PORTAL')),
     'HOMESTAY_WEB_PORTAL',
     clientRequestId,
-    { guestNotes: str(req.body.notes, 500), guestBudget: req.body.guestBudget ? Number(req.body.guestBudget) : null }
+    { guestNotes: str(req.body.notes, 500), guestBudget: req.body.guestBudget ? Number(req.body.guestBudget) : null, ...(features.platformDispatch ? {} : { dispatched: false }) }
   );
 
-  pushOwner(isDemo, tenantKey, {
+  await pushOwner(isDemo, tenantKey, {
     title: 'New Guest Cab Request',
     body: `${input.guestName} requested a cab transfer from your homestay portal.`,
     data: { type: 'NEW_REQUEST', reference: doc.reference, tripId: doc.tripId },
   }).catch(() => {});
 
-  // Instant zero-touch dispatch to priority and nearby drivers
-  try {
-    await dispatchRequest(tenantKey, isDemo, doc.reference);
-  } catch (dispErr: any) {
-    console.warn(`[Auto-Dispatch] Notice for ${doc.reference}:`, dispErr?.message);
-  }
-
   return res.status(201).json({ reference: doc.reference, status: doc.status });
 });
 
-stayrideV1Router.get('/public/cab-requests/:reference', async (req: Request, res: Response) => {
+/**
+ * The guest status page's trip: by reference, in the guest link's homestay when a link is given. `isVerifiedGuest`
+ * = the link owns the trip, or the guest typed the trip's phone (`phone` in the query or body).
+ */
+async function findGuestTrip(req: Request): Promise<{ doc: any; isDemo: boolean; isVerifiedGuest: boolean } | null> {
   let link = await findGuestLink(req.query.t);
   let doc: any = null;
   let isDemo = false;
@@ -1236,13 +1249,20 @@ stayrideV1Router.get('/public/cab-requests/:reference', async (req: Request, res
       }
     }
   }
-  if (!doc) return res.status(404).json({ error: { message: 'Cab request not found.' } });
+  if (!doc) return null;
 
-  const phoneParam = String(req.query.phone || '').replace(/\D/g, '');
+  const phoneParam = String(req.query.phone || req.body?.phone || '').replace(/\D/g, '');
   const guestPhoneDigits = String(doc.guestPhone || '').replace(/\D/g, '');
   const isVerifiedGuest = Boolean(
-    link || (phoneParam.length >= 10 && guestPhoneDigits.length >= 10 && guestPhoneDigits.slice(-10) === phoneParam.slice(-10))
+    linkOwnsTrip(link, doc) || (phoneParam.length >= 10 && guestPhoneDigits.length >= 10 && guestPhoneDigits.slice(-10) === phoneParam.slice(-10))
   );
+  return { doc, isDemo, isVerifiedGuest };
+}
+
+stayrideV1Router.get('/public/cab-requests/:reference', async (req: Request, res: Response) => {
+  const found = await findGuestTrip(req);
+  if (!found) return res.status(404).json({ error: { message: 'Cab request not found.' } });
+  const { doc, isDemo, isVerifiedGuest } = found;
   const showContact = isVerifiedGuest && ['CONFIRMED', 'EN_ROUTE_PICKUP', 'ARRIVED_HOMESTAY', 'TRIP_STARTED', 'COMPLETED'].includes(doc.status);
 
   return res.json({
@@ -1254,11 +1274,16 @@ stayrideV1Router.get('/public/cab-requests/:reference', async (req: Request, res
     advancePaid: doc.advancePaid,
     advanceDueAt: doc.advanceDueAt || null,
     remainingCashAmount: doc.remainingCashAmount,
-    paymentLinkUrl: doc.paymentLinkUrl || null,
+    // gateway off (or a test key in production): no checkout link is shown, the guest pays by UPI
+    paymentLinkUrl: gatewayEnabled() ? doc.paymentLinkUrl || null : null,
+    // the guest's own UTR only to the verified guest; status and rejection reason drive the page
+    paymentClaim: doc.paymentClaim
+      ? { status: doc.paymentClaim.status, submittedAt: doc.paymentClaim.submittedAt, reason: doc.paymentClaim.reason || '', utr: isVerifiedGuest ? doc.paymentClaim.utr : undefined }
+      : null,
     driverName: doc.assignedDriverName || '',
     driverPhone: showContact
       ? (doc.assignedDriverPhone || '')
-      : (doc.assignedDriverPhone ? String(doc.assignedDriverPhone).replace(/(\d{2})\d{4}(\d{4})/, '$1****$2') : ''),
+      : maskPhone(doc.assignedDriverPhone),
     vehicle: [doc.vehicleDetails?.model, doc.vehicleDetails?.plate].filter(Boolean).join(' '),
     pickup: doc.pickup || '',
     destinations: doc.destinations || [],
@@ -1267,7 +1292,7 @@ stayrideV1Router.get('/public/cab-requests/:reference', async (req: Request, res
     passengers: doc.passengers,
     vehicleType: doc.vehicleType,
     refundStatus: doc.refundStatus,
-    cancellationReason: doc.status === 'CANCELLED' ? doc.cancellationReason || '' : '',
+    cancellationReason: ['CANCELLED', 'EXPIRED'].includes(doc.status) ? doc.cancellationReason || '' : '',
     guestRating: doc.guestRating || null,
     pickupOtp: (isVerifiedGuest && doc.advancePaid) ? (doc.pickupOtp || null) : null,
     guestBudget: doc.guestBudget || null,
@@ -1276,6 +1301,16 @@ stayrideV1Router.get('/public/cab-requests/:reference', async (req: Request, res
     biddingFallback: Boolean(doc.biddingFallbackAlertSentAt),
     config: publicConfig(await CommissionService.getPlatformConfig(isDemo)),
   });
+});
+
+// Guest paid the advance by UPI and sends the UTR for StayRide to verify. Same access as the status page's PIN:
+// the guest link that owns the trip, or the trip's phone number.
+stayrideV1Router.post('/public/cab-requests/:reference/payment-claim', async (req: Request, res: Response) => {
+  const found = await findGuestTrip(req);
+  if (!found) return res.status(404).json({ error: { message: 'Cab request not found.' } });
+  if (!found.isVerifiedGuest) return res.status(403).json({ error: { message: 'Open the payment link we sent you on WhatsApp to submit your payment.' } });
+  const updated = await submitPaymentClaim(found.isDemo, found.doc, req.body?.utr);
+  return res.json({ success: true, advanceDueAt: updated.advanceDueAt || null, paymentClaim: { status: updated.paymentClaim.status, submittedAt: updated.paymentClaim.submittedAt, reason: '', utr: updated.paymentClaim.utr } });
 });
 
 stayrideV1Router.post('/public/cab-requests/:reference/rate', async (req: Request, res: Response) => {
@@ -1398,6 +1433,13 @@ async function quoteLinkDriver(token: unknown, res: Response) {
   return { ...link, driver };
 }
 
+/** Drivers belong to no homestay: their payouts follow the admin's global 'payouts' switch (as quotes follow driverQuotes). */
+async function driverPayoutsOn(isDemo: boolean, res: Response) {
+  if (CommissionService.globalFeatures(await CommissionService.getSettings(isDemo)).payouts.enabled) return true;
+  res.status(403).json({ error: { message: 'Payouts are currently disabled.', code: 'FEATURE_DISABLED', feature: 'payouts' } });
+  return false;
+}
+
 const quotePageView = async (isDemo: boolean, reference: string, driver: any) => {
   const settings = await CommissionService.getSettings(isDemo);
   const quotesOn = CommissionService.globalFeatures(settings).driverQuotes.enabled;
@@ -1408,7 +1450,8 @@ const quotePageView = async (isDemo: boolean, reference: string, driver: any) =>
   return {
     ...view,
     driverName: driver.name,
-    canQuote: quotesOn && view.driverView !== 'ASSIGNED' && OPEN_STATUSES.includes(doc.status) && doc.dispatched !== false,
+    canQuote: quotesOn && view.driverView !== 'ASSIGNED' && OPEN_STATUSES.includes(doc.status) && doc.dispatched !== false &&
+      (!doc.nearbyNotifyAt || Boolean(driver.isOwnDriver) || String(driver._id).startsWith('own-')), // own drivers first
     commissionConfig: {
       totalCommissionPercent: rates.totalCommissionPercent,
       defaultAdvancePercent: rates.advancePercent,
@@ -1450,14 +1493,14 @@ stayrideV1Router.post('/public/driver-quote/accept-counter', async (req: Request
 stayrideV1Router.post('/public/driver-quote/start', async (req: Request, res: Response) => {
   const ctx = await quoteLinkDriver(req.body?.t, res);
   if (!ctx) return;
-  await startTrip(ctx.isDemo, { reference: ctx.reference, assignedDriverUserId: String(ctx.driver._id) }, `driver-web:${ctx.driver.name}`, req.body?.otp);
+  await startTrip(ctx.isDemo, { reference: ctx.reference, ...linkDriverFilter(String(ctx.driver._id)) }, `driver-web:${ctx.driver.name}`, req.body?.otp);
   return res.json(await quotePageView(ctx.isDemo, ctx.reference, ctx.driver));
 });
 
 stayrideV1Router.post('/public/driver-quote/complete', async (req: Request, res: Response) => {
   const ctx = await quoteLinkDriver(req.body?.t, res);
   if (!ctx) return;
-  await completeTrip(ctx.isDemo, { reference: ctx.reference, assignedDriverUserId: String(ctx.driver._id) }, `driver-web:${ctx.driver.name}`);
+  await completeTrip(ctx.isDemo, { reference: ctx.reference, ...linkDriverFilter(String(ctx.driver._id)) }, `driver-web:${ctx.driver.name}`);
   return res.json(await quotePageView(ctx.isDemo, ctx.reference, ctx.driver));
 });
 
@@ -1472,12 +1515,14 @@ stayrideV1Router.get('/public/driver-quote/wallet', async (req: Request, res: Re
 stayrideV1Router.post('/public/driver-quote/payouts/request', async (req: Request, res: Response) => {
   const ctx = await quoteLinkDriver(req.body?.t, res);
   if (!ctx) return;
+  if (!(await driverPayoutsOn(ctx.isDemo, res))) return;
   const payout = await requestDriverPayout(
     String(ctx.driver._id),
     { name: ctx.driver.name, phone: ctx.driver.phone },
     ctx.isDemo,
     req.body,
-    `driver-web:${ctx.driver.name}`
+    `driver-web:${ctx.driver.name}`,
+    true // a quote link can be forwarded: pay only to the driver's saved UPI / bank, never one typed here
   );
   return res.status(201).json({ success: true, message: `Payout request of ₹${(payout as any).amount.toLocaleString('en-IN')} submitted.`, payout });
 });
@@ -1515,28 +1560,27 @@ stayrideV1Router.post('/public/driver-quote/update-vehicle', async (req: Request
     return res.status(400).json({ error: { message: 'Valid vehicle registration number plate is required.' } });
   }
   const cleanModel = str(req.body?.vehicleModel, 50);
-  const Cab = cabModel(ctx.isDemo);
-  const trip: any = await Cab.findOne({ reference: ctx.reference, assignedDriverUserId: String(ctx.driver._id) });
-  if (!trip) return res.status(404).json({ error: { message: 'Trip not found or not assigned to you.' } });
-  if (['COMPLETED', 'CANCELLED', 'EXPIRED'].includes(trip.status)) {
-    return res.status(400).json({ error: { message: 'Cannot update vehicle for a completed or cancelled trip.' } });
+  const mine = { reference: ctx.reference, ...linkDriverFilter(String(ctx.driver._id)) };
+  const trip: any = await cabModel(ctx.isDemo).findOneAndUpdate(
+    { ...mine, status: { $nin: ['COMPLETED', 'CANCELLED', 'EXPIRED'] } },
+    { $set: { 'vehicleDetails.plate': cleanPlate, ...(cleanModel ? { 'vehicleDetails.model': cleanModel } : {}) } },
+    { returnDocument: 'after' }
+  ).lean();
+  if (!trip) {
+    return (await cabModel(ctx.isDemo).exists(mine))
+      ? res.status(400).json({ error: { message: 'Cannot update vehicle for a completed or cancelled trip.' } })
+      : res.status(404).json({ error: { message: 'Trip not found or not assigned to you.' } });
   }
-
-  trip.vehicleDetails = {
-    ...trip.vehicleDetails,
-    plate: cleanPlate,
-    ...(cleanModel ? { model: cleanModel } : {}),
-  };
-  await trip.save();
 
   // Alert guest on WhatsApp immediately with updated standby plate!
   if (trip.guestPhone) {
-    whatsapp(ctx.isDemo, trip.guestPhone, messages.vehicleUpdatedGuestMessage(trip.guestName, trip.reference, cleanPlate, trip.assignedDriverName, trip.pickupOtp)).catch(() => {});
+    await whatsapp(ctx.isDemo, trip.guestPhone, messages.vehicleUpdatedGuestMessage(trip.guestName, trip.reference, cleanPlate, trip.assignedDriverName, trip.pickupOtp), scope(trip)).catch(() => {});
   }
 
   await audit(`driver-web:${ctx.driver.name}`, 'cab.vehicle_updated', 'CabRequest', String(trip._id), { plate: cleanPlate, model: cleanModel }, ctx.isDemo, scope(trip));
 
-  return res.json({ success: true, message: `Vehicle plate updated to ${cleanPlate}. Guest has been notified via WhatsApp.`, trip });
+  // only what the driver changed: the trip holds guest contact, PIN and payment data
+  return res.json({ success: true, message: `Vehicle plate updated to ${cleanPlate}. Guest has been notified via WhatsApp.`, vehicleDetails: trip.vehicleDetails });
 });
 
 // ==========================================
@@ -1624,12 +1668,7 @@ stayrideV1Router.post('/public/driver-signup', requireRecaptcha('driver_signup')
 
     // Automated WhatsApp welcome alert using dedicated DRIVER_WELCOME template
     const welcome = driverWelcomeMessage(cleanName, cleanCategory === 'UNION' ? cleanUnion : cleanPlate);
-    sendWhatsApp(false, {
-      event: welcome.event as any,
-      to: cleanPhone,
-      params: welcome.params,
-      text: welcome.text,
-    }).catch(() => {});
+    await whatsapp(false, cleanPhone, welcome, { driverId: String(user._id) }).catch(() => {}); // admin's template / language apply
 
     return res.status(201).json({
       success: true,
@@ -1673,6 +1712,7 @@ stayrideV1Router.get('/cron/ical-sync', async (req: Request, res: Response) => {
   }
   try {
     const result = await syncAll(false);
+    logger.info('[Cron] ical-sync done', { action: 'cron.ical_sync', metadata: result as any });
     return res.json({ ok: true, ...result });
   } catch (syncErr: any) {
     console.warn('[CRON /ical-sync] Sync execution warning:', syncErr?.message || syncErr);
@@ -1689,8 +1729,11 @@ stayrideV1Router.get('/cron/cab-cycle', async (req: Request, res: Response) => {
   if (!secret || given.length !== secret.length || !crypto.timingSafeEqual(Buffer.from(given), Buffer.from(secret))) {
     return res.status(401).json({ error: { message: 'Unauthorized' } });
   }
+  const started = Date.now();
   const [productionExpired, demoExpired] = await Promise.all([expireStaleRequests(false), expireStaleRequests(true)]);
-  return res.json({ ok: true, productionExpired, demoExpired });
+  const paymentLinksRetried = await retryMissingPaymentLinks();
+  logger.info('[Cron] cab-cycle done', { action: 'cron.cab_cycle', durationMs: Date.now() - started, metadata: { productionExpired, demoExpired, paymentLinksRetried } });
+  return res.json({ ok: true, productionExpired, demoExpired, paymentLinksRetried });
 });
 
 // Razorpay payment-link webhook (raw body; signature checked before anything is read).
@@ -1705,11 +1748,38 @@ stayrideV1Router.post('/webhooks/razorpay', async (req: Request, res: Response) 
   } catch {
     return res.status(400).json({ error: { message: 'Invalid payload.' } });
   }
-  if (event?.event !== 'payment_link.paid') return res.json({ ok: true, ignored: true });
   const link = event.payload?.payment_link?.entity;
   const payment = event.payload?.payment?.entity;
+  const info = { event: event?.event, linkId: link?.id, paymentId: payment?.id, amount: Number(payment?.amount) / 100, method: payment?.method, ref: link?.notes?.reference };
+  if (event?.event !== 'payment_link.paid') {
+    logger.info(`[Payments] Razorpay webhook ${event?.event} ignored`, { action: 'payment.webhook', metadata: { ...info, result: 'IGNORED' } });
+    return res.json({ ok: true, ignored: true });
+  }
   const result = await recordGatewayPayment(String(link?.id || ''), String(payment?.id || ''), Number(payment?.amount) / 100);
+  logger.info(`[Payments] Razorpay webhook ${event.event}: ${result}`, { action: 'payment.webhook', metadata: { ...info, result } });
   return res.json({ ok: true, result });
+});
+
+// WhatsApp (Meta Cloud API) webhook. GET: Meta's subscribe handshake. POST: delivery statuses and replies
+// (raw body; X-Hub-Signature-256 checked before anything is read). Production data only.
+stayrideV1Router.get('/webhooks/whatsapp', (req: Request, res: Response) => {
+  // read from the URL itself: hub.* keys contain dots, which the sanitizer strips from req.query
+  const challenge = verifyHandshake(Object.fromEntries(new URL(req.originalUrl, 'http://x').searchParams));
+  return challenge === null ? res.sendStatus(403) : res.type('text/plain').send(challenge);
+});
+
+stayrideV1Router.post('/webhooks/whatsapp', async (req: Request, res: Response) => {
+  const raw = Buffer.isBuffer(req.body) ? req.body : Buffer.from('');
+  if (!verifyMetaSignature(raw, req.get('X-Hub-Signature-256'))) {
+    logger.warn('[WhatsApp Webhook] rejected: missing or invalid signature', { action: 'whatsapp.webhook_rejected' });
+    return res.status(401).json({ error: { message: 'Invalid signature.' } });
+  }
+  try {
+    await recordWhatsAppWebhook(JSON.parse(raw.toString('utf8')));
+  } catch (err) {
+    logger.error('[WhatsApp Webhook] processing failed', err, { action: 'whatsapp.webhook_error' });
+  }
+  return res.sendStatus(200); // always 200 once signed: Meta retries anything else for days
 });
 
 stayrideV1Router.post('/auth/clerk-webhook', async (req: Request, res: Response) => {
@@ -1962,6 +2032,7 @@ stayrideV1Router.get('/driver/wallet', driverGate, async (req: Request, res: Res
 
 stayrideV1Router.post('/driver/payouts/request', driverGate, async (req: Request, res: Response) => {
   const isDemo = isDemoKey(authOf(req).tenantKey);
+  if (!(await driverPayoutsOn(isDemo, res))) return;
   const driver = (req as any).driver;
   const driverId = String(driver._id);
   const payout = await requestDriverPayout(
@@ -2284,11 +2355,10 @@ stayrideV1Router.get('/bookings', async (req: Request, res: Response) => {
 stayrideV1Router.post('/bookings', async (req: Request, res: Response) => {
   const { tenantKey, isDemo } = tenantOf(req);
   const created = await mutateReq(req, (s) => s.createBooking(req.body));
-  res.status(201).json(created);
 
-  // Automated Ask-for-Cab WhatsApp on booking creation
+  // Automated Ask-for-Cab WhatsApp on booking creation (before replying: a frozen function would lose it)
   if (created?.phone) {
-    loadReqStore(req)
+    await loadReqStore(req)
       .then((store) =>
         sendAskCab(tenantKey, isDemo, store.homestay.name, {
           guestId: created.guestId ?? created.id,
@@ -2301,6 +2371,7 @@ stayrideV1Router.post('/bookings', async (req: Request, res: Response) => {
         console.warn(`[Auto-AskCab] Booking notice for ${created.guestName}:`, err?.message);
       });
   }
+  res.status(201).json(created);
 });
 
 const bookingAction = (fn: (s: StayRideMemoryStore, id: number, body: any) => any) => async (req: Request, res: Response) => {
@@ -2311,11 +2382,10 @@ stayrideV1Router.post('/bookings/:id/check-in', async (req: Request, res: Respon
   const { tenantKey, isDemo } = tenantOf(req);
   const b = await mutateReq(req, (s) => s.checkInBooking(Number(req.params.id)));
   if (!b) return notFound(res, 'Booking');
-  res.json(b);
 
   // Automated Ask-for-Cab WhatsApp on check-in (cooldown safely suppresses if already sent recently)
   if (b?.phone) {
-    loadReqStore(req)
+    await loadReqStore(req)
       .then((store) =>
         sendAskCab(tenantKey, isDemo, store.homestay.name, {
           guestId: b.guestId ?? b.id,
@@ -2328,6 +2398,7 @@ stayrideV1Router.post('/bookings/:id/check-in', async (req: Request, res: Respon
         console.warn(`[Auto-AskCab] Check-in notice for ${b.guestName}:`, err?.message);
       });
   }
+  res.json(b);
 });
 stayrideV1Router.post('/bookings/:id/check-out', bookingAction((s, id) => s.checkOutBooking(id)));
 stayrideV1Router.post('/bookings/:id/cancel', bookingAction((s, id) => s.cancelBooking(id)));

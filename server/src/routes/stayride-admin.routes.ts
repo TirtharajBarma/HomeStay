@@ -10,8 +10,8 @@ import { getAuditLogModel, audit } from "../models/audit-log.model.js";
 import { getStayRideTenantModel, tenantManager, normKey, isDemoKey, clean, FIELDS, TENANT_COLLECTIONS, TenantCollection } from "../stayride/store.js";
 import {
   OPEN_STATUSES, cabModel, payoutModel, userModel, parseFare, cancelRequest, startTrip, completeTrip,
-  adminAssignDriver, adminRecordPayment, adminVoidPayment, adminMarkRefunded, adminSettleDriver,
-  settlePayout, rejectPayout, expireStaleRequests, overlayTrips, onDriverStatusChange, releaseDriverTrips, adminRefundUnmatched,
+  adminAssignDriver, adminRecordPayment, adminRejectPaymentClaim, adminVoidPayment, adminMarkRefunded, adminSettleDriver,
+  settlePayout, rejectPayout, expireStaleRequests, overlayTrips, onDriverStatusChange, releaseDriverTrips, adminRefundUnmatched, maskPhone,
 } from "../stayride/platform.js";
 import { httpError } from "../middlewares/error-handler.js";
 import { config } from "../config/env.js";
@@ -365,7 +365,7 @@ router.delete("/stayride/drivers/:id", async (req, res) => {
     "driver.hard_delete",
     "User",
     id,
-    { targetName: target.name, targetPhone: target.phone, targetEmail: target.email, reason },
+    { targetName: target.name, targetPhone: maskPhone(target.phone), targetEmail: target.email, reason },
     demo,
     { actorRole: "ADMIN", driverId: id }
   );
@@ -397,7 +397,7 @@ router.post("/stayride/drivers", async (req, res) => {
     existing.accountStatus = "ACTIVE";
     existing.vehicle = { type: vehicleType, model, plate, seats, area };
     await existing.save();
-    await audit(actor(req), "driver.update", "User", String(existing._id), { targetName: name, targetPhone: cleanPhone, vehicle: existing.vehicle }, demo, { actorRole: "ADMIN", driverId: String(existing._id) });
+    await audit(actor(req), "driver.update", "User", String(existing._id), { targetName: name, targetPhone: maskPhone(cleanPhone), vehicle: existing.vehicle }, demo, { actorRole: "ADMIN", driverId: String(existing._id) });
     return ok(res, { id: String(existing._id), name: existing.name, phone: existing.phone, vehicle: existing.vehicle, accountStatus: existing.accountStatus }, "Driver updated and active.");
   }
 
@@ -413,7 +413,7 @@ router.post("/stayride/drivers", async (req, res) => {
     vehicle: { type: vehicleType, model, plate, seats, area },
   });
 
-  await audit(actor(req), "driver.create", "User", String(created._id), { targetName: name, targetPhone: cleanPhone, vehicle: created.vehicle }, demo, { actorRole: "ADMIN", driverId: String(created._id) });
+  await audit(actor(req), "driver.create", "User", String(created._id), { targetName: name, targetPhone: maskPhone(cleanPhone), vehicle: created.vehicle }, demo, { actorRole: "ADMIN", driverId: String(created._id) });
   return ok(res, { id: String(created._id), name: created.name, phone: created.phone, vehicle: created.vehicle, accountStatus: created.accountStatus }, "Driver registered and active.");
 });
 
@@ -445,6 +445,7 @@ router.get("/cab-requests", async (req, res) => {
   if (req.query.driverSettlementStatus) filter.driverSettlementStatus = String(req.query.driverSettlementStatus);
   if (req.query.needsReassignment === "true") filter.needsReassignment = true;
   if (req.query.unmatched === "true") filter.unmatchedPayments = { $elemMatch: { refundedAt: null } };
+  if (req.query.claim === "pending") filter["paymentClaim.status"] = "PENDING";
   const q = search(req);
   if (q) {
     const regex = new RegExp(escapeRegex(q), "i");
@@ -460,6 +461,7 @@ const cabAction = (fn: (demo: boolean, id: string, req: Request) => Promise<any>
 
 router.post("/cab-requests/:id/assign-driver", cabAction((d, id, req) => adminAssignDriver(d, id, req.body, actor(req)), "Driver assigned and fare locked."));
 router.post("/cab-requests/:id/record-payment", cabAction((d, id, req) => adminRecordPayment(d, id, req.body, actor(req)), "Advance payment recorded."));
+router.post("/cab-requests/:id/reject-claim", cabAction((d, id, req) => adminRejectPaymentClaim(d, id, req.body.reason, actor(req)), "Payment claim rejected."));
 router.post("/cab-requests/:id/void-payment", cabAction((d, id, req) => adminVoidPayment(d, id, req.body.reason, actor(req)), "Payment voided."));
 router.post("/cab-requests/:id/cancel", cabAction((d, id, req) => cancelRequest({ _id: id }, d, actor(req), String(req.body.reason || "Cancelled by platform admin"), true), "Request cancelled."));
 router.post("/cab-requests/:id/refund", cabAction((d, id, req) => adminMarkRefunded(d, id, req.body.reference, actor(req)), "Refund recorded."));

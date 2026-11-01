@@ -32,11 +32,11 @@ const parseDateObj = (v: unknown): Date | null => {
 };
 const dt = (v: unknown) => {
   const d = parseDateObj(v);
-  return d ? d.toLocaleString("en-IN") : "—";
+  return d ? d.toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : "—";
 };
 const formatDate = (v: unknown) => {
   const d = parseDateObj(v);
-  return d ? d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : String(v || "—");
+  return d ? d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" }) : String(v || "—");
 };
 /** Id of a server record: new API objects use `id`, older ones `_id`. */
 const rid = (r: Any | null | undefined) => String(r?.id ?? r?._id ?? "");
@@ -1157,6 +1157,7 @@ const CAB_FILTERS: Record<string, { label: string; query?: Any; pending?: boolea
   open: { label: "Pending (open + awaiting payment)", pending: true },
   needs: { label: "Needs driver", query: { needsReassignment: "true" }, keep: (c) => !!c.needsReassignment },
   awaiting: { label: "Awaiting payment", query: { status: "AWAITING_ADVANCE_PAYMENT" } },
+  claims: { label: "Guest says paid", query: { claim: "pending" } },
   confirmed: { label: "Confirmed", query: { status: "CONFIRMED" } },
   started: { label: "In progress", query: { status: "TRIP_STARTED" } },
   completed: { label: "Completed", query: { status: "COMPLETED" } },
@@ -1241,6 +1242,8 @@ function CabRequestCard({ c, demo, onChanged }: { c: Any; demo: boolean; onChang
   const open = OPEN_STATUSES.includes(c.status);
   const canAssign = ((open || c.status === "AWAITING_ADVANCE_PAYMENT") && !c.advancePaid) || !!c.needsReassignment;
   const canPay = c.status === "AWAITING_ADVANCE_PAYMENT" && !c.advancePaid;
+  const claim = canPay && c.paymentClaim?.status === "PENDING" ? c.paymentClaim : null;
+  const [busy, setBusy] = useState(false);
   const canVoid = c.status === "CONFIRMED" && c.advancePaid && !c.hostPayoutId;
   const canCancel = !["COMPLETED", "CANCELLED"].includes(c.status) && !c.hostPayoutId;
   const canRefund = c.status === "CANCELLED" && c.refundStatus === "PENDING";
@@ -1251,6 +1254,13 @@ function CabRequestCard({ c, demo, onChanged }: { c: Any; demo: boolean; onChang
   function voidPayment() {
     const reason = ask(`Reason for voiding payment ${c.advancePaymentId} (${inr(c.advanceAmount)}) on #${c.reference}:`);
     if (reason && window.confirm(`Void the recorded payment of ${inr(c.advanceAmount)}? The request goes back to awaiting payment.`)) post("void-payment", { reason });
+  }
+  async function rejectClaim() {
+    const reason = window.prompt(`Reject the guest's payment claim (UTR ${claim.utr}) on #${c.reference}? Reason shown to the guest (optional):`);
+    if (reason === null) return;
+    setBusy(true);
+    await act(() => adminApi(path("reject-claim"), { method: "POST", body: { reason: reason.trim() }, demo }), onChanged);
+    setBusy(false);
   }
   function cancel() {
     const reason = ask(`Reason for cancelling #${c.reference}:`);
@@ -1281,6 +1291,7 @@ function CabRequestCard({ c, demo, onChanged }: { c: Any; demo: boolean; onChang
           <p className="text-sm font-bold text-white">
             #{c.reference} <Badge tone={statusTone(c.status)}>{c.status}</Badge>{" "}
             {c.needsReassignment && <Badge tone="red">Needs driver</Badge>}{" "}
+            {claim && <Badge tone="blue">Guest says paid</Badge>}{" "}
             {c.ownFleet && <Badge tone="blue">Own fleet</Badge>}{" "}
             {c.dispatched === false && ["PENDING_REVIEW", "FINDING_DRIVER", "QUOTE_RECEIVED"].includes(c.status) && <Badge tone="slate">Held for owner</Badge>}{" "}
             {c.refundStatus && c.refundStatus !== "NONE" && <Badge tone={c.refundStatus === "PENDING" ? "amber" : "green"}>Refund {c.refundStatus}</Badge>}{" "}
@@ -1314,6 +1325,14 @@ function CabRequestCard({ c, demo, onChanged }: { c: Any; demo: boolean; onChang
           {c.assignedDriverName && <p className="text-slate-300">Driver: {c.assignedDriverName} • {c.assignedDriverPhone || "—"}{c.assignedDriverUserId ? " (platform)" : " (manual)"}</p>}
           {c.cancellationReason && <p className="text-red-400">Cancelled: {c.cancellationReason}</p>}
           {c.advanceDueAt && !c.advancePaid && <p className="text-amber-300">Advance due by {dt(c.advanceDueAt)}</p>}
+          {claim && (
+            <p className="text-blue-300">
+              Guest says paid · UTR <span className="font-mono text-white">{claim.utr}</span> · {inr(claim.amount)} · {dt(claim.submittedAt)}. Check your UPI account, then Record payment or Reject claim.
+            </p>
+          )}
+          {canPay && c.paymentClaim?.status === "REJECTED" && (
+            <p className="text-slate-400">Claim rejected (UTR {c.paymentClaim.utr}){c.paymentClaim.reason ? `: ${c.paymentClaim.reason}` : ""}</p>
+          )}
           {c.paymentLinkUrl && <p className="text-slate-400">Payment link: <a className="text-blue-400 underline" href={c.paymentLinkUrl} target="_blank" rel="noreferrer">{c.paymentLinkUrl}</a></p>}
           {Array.isArray(c.unmatchedPayments) && c.unmatchedPayments.length > 0 && (
             <div className="mt-2 rounded-xl border border-red-800/60 bg-red-950/40 p-2.5 space-y-1.5">
@@ -1406,6 +1425,7 @@ function CabRequestCard({ c, demo, onChanged }: { c: Any; demo: boolean; onChang
       <div className="flex flex-wrap gap-2">
         {canAssign && <button className={btn.primary} onClick={() => setPanel(panel === "assign" ? "" : "assign")}>{c.needsReassignment ? "Assign new driver" : c.assignedDriverName ? "Re-assign / re-price" : "Assign driver"}</button>}
         {canPay && <button className={btn.ok} onClick={() => setPanel(panel === "payment" ? "" : "payment")}>Record payment</button>}
+        {claim && <button className={btn.danger} disabled={busy} onClick={rejectClaim}>{busy ? "Working..." : "Reject claim"}</button>}
         {canVoid && <button className={btn.danger} onClick={voidPayment}>Void payment</button>}
         {canStart && <button className={btn.primary} onClick={() => window.confirm(`Start trip #${c.reference}?`) && post("start")}>Start trip</button>}
         {canComplete && <button className={btn.ok} onClick={() => window.confirm(`Complete trip #${c.reference}? Driver collects ${inr(c.remainingCashAmount)} in cash.`) && post("complete")}>Complete trip</button>}
@@ -1539,8 +1559,10 @@ function AssignForm({ c, demo, onDone }: { c: Any; demo: boolean; onDone: () => 
 
 function PaymentForm({ c, demo, onDone }: { c: Any; demo: boolean; onDone: () => void }) {
   useEditLock(true);
-  const [txn, setTxn] = useState("");
-  const [amount, setAmount] = useState("");
+  // a guest's pending UPI claim pre-fills the form; recording it confirms the trip and clears the claim
+  const claim = c.paymentClaim?.status === "PENDING" ? c.paymentClaim : null;
+  const [txn, setTxn] = useState(claim?.utr || "");
+  const [amount, setAmount] = useState(claim ? String(claim.amount) : "");
   const [method, setMethod] = useState("UPI");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1606,6 +1628,12 @@ export function PayoutsTab({ demo }: TabProps) {
     true
   );
   const items = data?.items || [];
+  const [busyId, setBusyId] = useState("");
+  const run = async (id: string, fn: () => Promise<any>) => {
+    setBusyId(id);
+    await act(fn, reload);
+    setBusyId("");
+  };
 
   function settle(p: Any) {
     const dest = payoutDest(p);
@@ -1615,7 +1643,7 @@ export function PayoutsTab({ demo }: TabProps) {
     const notes = window.prompt("Notes (optional):") || "";
     if (window.confirm(`Mark ${inr(p.amount)} to ${recipient} as settled with UTR ${utrNumber}?`)) {
       const settleEndpoint = target === "HOMESTAY" ? `/host-payouts/${rid(p)}/settle` : `/driver-payouts/${rid(p)}/settle`;
-      act(() => adminApi(settleEndpoint, { method: "POST", body: { utrNumber, notes }, demo }), reload);
+      run(rid(p), () => adminApi(settleEndpoint, { method: "POST", body: { utrNumber, notes }, demo }));
     }
   }
 
@@ -1624,7 +1652,7 @@ export function PayoutsTab({ demo }: TabProps) {
     const reason = ask(`Reason for rejecting ${inr(p.amount)} payout to ${recipient}:`);
     if (reason && window.confirm(`Reject this payout? Its trips can be requested again.`)) {
       const rejectEndpoint = target === "HOMESTAY" ? `/host-payouts/${rid(p)}/reject` : `/driver-payouts/${rid(p)}/reject`;
-      act(() => adminApi(rejectEndpoint, { method: "POST", body: { reason }, demo }), reload);
+      run(rid(p), () => adminApi(rejectEndpoint, { method: "POST", body: { reason }, demo }));
     }
   }
 
@@ -1716,8 +1744,8 @@ export function PayoutsTab({ demo }: TabProps) {
                       <td className="p-3 text-right space-x-1 whitespace-nowrap">
                         {p.status === "PENDING" && (
                           <>
-                            <button className={btn.ok} onClick={() => settle(p)}>Settle</button>
-                            <button className={btn.danger} onClick={() => reject(p)}>Reject</button>
+                            <button className={btn.ok} disabled={!!busyId} onClick={() => settle(p)}>{busyId === rid(p) ? "Working…" : "Settle"}</button>
+                            <button className={btn.danger} disabled={!!busyId} onClick={() => reject(p)}>Reject</button>
                           </>
                         )}
                       </td>
@@ -1741,15 +1769,24 @@ export function PayoutsTab({ demo }: TabProps) {
 /** Mirrors the server's CommissionService.split so unsaved values can be previewed. */
 function localSplit(fare: number, totalComm: number, adminPct: number, homePct: number, adv: number, min: number) {
   const f = Math.round(fare);
-  const totalCommAmt = Math.round((f * totalComm) / 100);
-  const pfA = Math.round((totalCommAmt * adminPct) / 100);
-  const hcA = totalCommAmt - pfA;
+  // Same percents the save sends, then the server's rounding (each part rounded on the fare)
+  const pfA = Math.min(f, Math.round((f * roundPct((totalComm * adminPct) / 100)) / 100));
+  const hcA = Math.min(f - pfA, Math.round((f * roundPct((totalComm * homePct) / 100)) / 100));
+  const totalCommAmt = pfA + hcA;
   const advance = Math.min(f, Math.max(min, Math.round((f * adv) / 100), totalCommAmt));
   const driverExcess = Math.max(0, advance - totalCommAmt);
   const cash = f - advance;
   const driverTotal = cash + driverExcess;
   return { f, totalCommAmt, pfA, hcA, driver: driverTotal, advance, cash, driverShare: driverExcess };
 }
+
+/** Effective operational values (platform.* is the one source of truth), as form strings. */
+const savedOps = (data: Any | null) => ({
+  quoteWindow: String(data?.platform?.quoteWindowHours ?? 4),
+  minThreshold: String(data?.platform?.minDriverPayoutThreshold ?? 100),
+  ownFleetComm: String(data?.platform?.ownFleetFeePercent ?? 5),
+  ownFleetMin: String(data?.platform?.ownFleetMinFee ?? 100),
+});
 
 export function SettingsTab({ demo }: TabProps) {
   const { data, error, loading, reload, updatedAt } = useLoad(() => adminApi("/commission/settings", { demo }).then((r) => r.data as Any), [demo], true);
@@ -1774,10 +1811,11 @@ export function SettingsTab({ demo }: TabProps) {
     setHomeShare(String(data.homestaySharePercentOfCommission ?? 50));
     setAdv(String(data.defaultAdvancePercent ?? 15));
     setMin(String(data.minAdvanceAmount ?? 500));
-    setQuoteWindow(String(data.quoteWindowHours ?? 4));
-    setMinThreshold(String(data.minDriverPayoutThreshold ?? 100));
-    setOwnFleetComm(String(data.ownFleetCommissionPercent ?? 0));
-    setOwnFleetMin(String(data.ownFleetMinFee ?? 0));
+    const ops = savedOps(data);
+    setQuoteWindow(ops.quoteWindow);
+    setMinThreshold(ops.minThreshold);
+    setOwnFleetComm(ops.ownFleetComm);
+    setOwnFleetMin(ops.ownFleetMin);
     setFeatures(data.features || {});
   }, [data]);
 
@@ -1789,10 +1827,10 @@ export function SettingsTab({ demo }: TabProps) {
       homeShare !== String(data.homestaySharePercentOfCommission ?? 50) ||
       adv !== String(data.defaultAdvancePercent ?? 15) ||
       min !== String(data.minAdvanceAmount ?? 500) ||
-      quoteWindow !== String(data.quoteWindowHours ?? 4) ||
-      minThreshold !== String(data.minDriverPayoutThreshold ?? 100) ||
-      ownFleetComm !== String(data.ownFleetCommissionPercent ?? 0) ||
-      ownFleetMin !== String(data.ownFleetMinFee ?? 0) ||
+      quoteWindow !== savedOps(data).quoteWindow ||
+      minThreshold !== savedOps(data).minThreshold ||
+      ownFleetComm !== savedOps(data).ownFleetComm ||
+      ownFleetMin !== savedOps(data).ownFleetMin ||
       JSON.stringify(features) !== JSON.stringify(data.features || {}));
   useEditLock(dirty);
 
@@ -1807,6 +1845,8 @@ export function SettingsTab({ demo }: TabProps) {
     const hp = Number(homeShare);
     if (ap + hp !== 100) return alert("Platform Share % and Homestay Share % of the commission must total exactly 100%.");
     if (!window.confirm(`Apply to the ${which}: Total commission ${totalComm}%, Platform split ${adminShare}%, Homestay split ${homeShare}%, advance ${adv}%, min advance ₹${min}, own fleet ${ownFleetComm}% with ₹${ownFleetMin} minimum fee?`)) return;
+    // Operational values live in platform.* (also edited on the Operations tab): send only what changed here.
+    const ops = savedOps(data);
     setSaving(true);
     await act(
       () => adminApi("/commission/settings", {
@@ -1820,10 +1860,10 @@ export function SettingsTab({ demo }: TabProps) {
           globalHomestayCommissionPercent: Math.round((tc * (hp / 100)) * 10) / 10,
           defaultAdvancePercent: Number(adv),
           minAdvanceAmount: Number(min),
-          quoteWindowHours: Number(quoteWindow),
-          minDriverPayoutThreshold: Number(minThreshold),
-          ownFleetCommissionPercent: Number(ownFleetComm || 0),
-          ownFleetMinFee: Number(ownFleetMin || 0),
+          quoteWindowHours: quoteWindow !== ops.quoteWindow ? Number(quoteWindow) : undefined,
+          minDriverPayoutThreshold: minThreshold !== ops.minThreshold ? Number(minThreshold) : undefined,
+          ownFleetCommissionPercent: ownFleetComm !== ops.ownFleetComm ? Number(ownFleetComm || 0) : undefined,
+          ownFleetMinFee: ownFleetMin !== ops.ownFleetMin ? Number(ownFleetMin || 0) : undefined,
           features,
           changeReason: reason.trim(),
         },
@@ -1914,11 +1954,11 @@ export function SettingsTab({ demo }: TabProps) {
               </span>
               <div className="grid grid-cols-2 gap-3">
                 <label className="text-slate-300">
-                  Own Fleet Commission % (Default 0%)
-                  <input className={`${input} mt-1 w-full`} type="number" step="0.5" min="0" max="30" value={ownFleetComm} onChange={(e) => setOwnFleetComm(e.target.value)} />
+                  Own Fleet Commission % (0-50)
+                  <input className={`${input} mt-1 w-full`} type="number" step="0.5" min="0" max="50" value={ownFleetComm} onChange={(e) => setOwnFleetComm(e.target.value)} />
                 </label>
                 <label className="text-slate-300">
-                  Own Fleet Minimum Fee ₹ (Default ₹0)
+                  Own Fleet Minimum Fee ₹
                   <input className={`${input} mt-1 w-full`} type="number" min="0" max="5000" value={ownFleetMin} onChange={(e) => setOwnFleetMin(e.target.value)} />
                 </label>
               </div>
@@ -2036,7 +2076,6 @@ const NUM_FIELDS: { key: string; label: string; hint: string }[] = [
   { key: "askCabCooldownHours", label: "Ask-for-Cab cooldown (hours)", hint: "Minimum gap between two messages to the same guest." },
   { key: "pickupStepMin", label: "Pickup time step (minutes)", hint: "" },
   { key: "bookingHorizonDays", label: "Booking window (days ahead)", hint: "" },
-  { key: "requestExpiryHours", label: "Request expiry (hours after pickup)", hint: "" },
   { key: "guestLinkDays", label: "Guest link validity (days)", hint: "" },
   { key: "maxOpenRequestsPerPhone", label: "Open requests per guest phone", hint: "Abuse limit on the public guest page." },
   { key: "maxFare", label: "Maximum fare ₹", hint: "Sanity cap on any quote or assignment." },
@@ -2067,6 +2106,7 @@ const WHATSAPP_EVENTS: { key: string; label: string }[] = [
   { key: "QUOTE_ACCEPTED_DRIVER", label: "Driver: your quote was accepted" },
   { key: "QUOTE_ACCEPTED_GUEST", label: "Guest: pay the advance" },
   { key: "ADVANCE_PAID_GUEST", label: "Guest: trip confirmed + driver details" },
+  { key: "BOARDING_PIN_GUEST", label: "Guest: boarding PIN (authentication template)" },
   { key: "ADVANCE_PAID_DRIVER", label: "Driver: trip confirmed + guest details" },
   { key: "ADVANCE_EXPIRED_GUEST", label: "Guest: hold expired (advance not paid)" },
   { key: "TRIP_ASSIGNED_DRIVER", label: "Own driver: trip assigned" },
@@ -2075,6 +2115,9 @@ const WHATSAPP_EVENTS: { key: string; label: string }[] = [
   { key: "COMPLETION_REMINDER_DRIVER", label: "Driver: trip completion & cash confirmation reminder" },
   { key: "BIDDING_TIMEOUT_OWNER", label: "Owner: bidding window closed without driver quotes" },
   { key: "DRIVER_WELCOME", label: "Driver: public signup welcome alert" },
+  { key: "PAYOUT_SETTLED_DRIVER", label: "Driver: payout sent" },
+  { key: "PAYOUT_REJECTED_DRIVER", label: "Driver: payout declined" },
+  { key: "VEHICLE_UPDATED_GUEST", label: "Guest: vehicle plate changed" },
 ];
 
 function OperationsSettings({ demo }: TabProps) {

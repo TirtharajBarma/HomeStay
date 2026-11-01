@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -42,6 +42,19 @@ export const CampaignScreen: React.FC = () => {
   );
 
   const consentCount = guests.filter((g) => g.marketingConsent).length;
+  const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false); // blocks a second tap before the busy state re-renders
+  const guarded = async (fn: () => Promise<void>) => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    try {
+      await fn();
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  };
 
   const countForAudience = (aud: string) => {
     switch (aud) {
@@ -50,7 +63,7 @@ export const CampaignScreen: React.FC = () => {
       case 'Recent guests':
         return guests.filter((g) => g.marketingConsent && g.visits === 1).length;
       case 'Inactive guests':
-        return Math.max(1, Math.floor(consentCount / 3));
+        return guests.filter((g) => g.marketingConsent && g.lastVisit > 0 && Date.now() - g.lastVisit > 90 * 86400000).length;
       default:
         return consentCount;
     }
@@ -65,14 +78,15 @@ export const CampaignScreen: React.FC = () => {
           { text: 'Not now', style: 'cancel' },
           {
             text: 'Mark as sent',
-            onPress: async () => {
-              const outcome = await sendCampaign(c.id);
-              if (!outcome.ok) {
-                Alert.alert('Not saved', outcome.error || 'Please try again.');
-                return;
-              }
-              Alert.alert('Campaign Updated', 'Campaign marked as sent. Automatic WhatsApp delivery is not connected yet.');
-            },
+            onPress: () =>
+              guarded(async () => {
+                const outcome = await sendCampaign(c.id);
+                if (!outcome.ok) {
+                  Alert.alert('Not saved', outcome.error || 'Please try again.');
+                  return;
+                }
+                Alert.alert('Campaign Updated', 'Campaign marked as sent. Automatic WhatsApp delivery is not connected yet.');
+              }),
           },
         ]
       );
@@ -87,7 +101,7 @@ export const CampaignScreen: React.FC = () => {
     }
   };
 
-  const handleCreate = async () => {
+  const handleCreate = () => guarded(async () => {
     const trimmedTitle = title.trim();
     const trimmedMsg = message.trim();
 
@@ -114,7 +128,7 @@ export const CampaignScreen: React.FC = () => {
 
     setCreateModalVisible(false);
     Alert.alert('Campaign Created', 'Tap it to start sending');
-  };
+  });
 
   if (features?.campaigns === false) {
     return (
@@ -236,8 +250,8 @@ export const CampaignScreen: React.FC = () => {
               onChangeText={setMessage}
             />
 
-            <TouchableOpacity style={styles.saveBtn} onPress={handleCreate}>
-              <Text style={styles.saveBtnText}>Create Campaign</Text>
+            <TouchableOpacity style={[styles.saveBtn, busy && { opacity: 0.5 }]} disabled={busy} onPress={handleCreate}>
+              <Text style={styles.saveBtnText}>{busy ? 'Saving…' : 'Create Campaign'}</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>

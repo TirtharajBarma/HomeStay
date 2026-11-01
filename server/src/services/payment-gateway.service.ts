@@ -1,8 +1,10 @@
 // Razorpay Payment Links for the guest advance (no SDK). Off unless PAYMENT_GATEWAY_MODE=razorpay and
 // the key id/secret are set; then a link is created when a trip starts waiting for its advance and the
 // signed webhook (payment_link.paid) records the payment, so nobody has to type it in by hand.
-// Never logs keys, phones or amounts per guest.
+// Never logs keys or phones. Link id / amount / trip reference go to Axiom only.
 import crypto from 'node:crypto';
+import { logger } from '../utils/logger.js';
+import { config } from '../config/env.js';
 
 const API = 'https://api.razorpay.com/v1/payment_links';
 const TIMEOUT_MS = 8000;
@@ -12,12 +14,24 @@ const configured = (value: string | undefined) => {
   return Boolean(normalized && !/^(none|disabled|replace-with-|your[-_])/i.test(normalized));
 };
 
+// A test key on the production deployment would show guests a test checkout that takes no real money: off instead.
+let testKeyWarned = false;
+const testKeyInProduction = () => {
+  if (!config.isDeployed || config.isPreview || !/^rzp_test_/.test(process.env.RAZORPAY_KEY_ID?.trim() || '')) return false;
+  if (!testKeyWarned) {
+    testKeyWarned = true;
+    logger.warn('[payments] RAZORPAY_KEY_ID is a test key on the production deployment: payment links are off', { action: 'payment.test_key_in_production' });
+  }
+  return true;
+};
+
 export const gatewayEnabled = () =>
   process.env.NODE_ENV !== 'test' &&
   process.env.PAYMENT_GATEWAY_MODE === 'razorpay' &&
   configured(process.env.RAZORPAY_KEY_ID) &&
   configured(process.env.RAZORPAY_KEY_SECRET) &&
-  configured(process.env.RAZORPAY_WEBHOOK_SECRET);
+  configured(process.env.RAZORPAY_WEBHOOK_SECRET) &&
+  !testKeyInProduction();
 
 export interface PaymentLinkInput {
   amountRupees: number;
@@ -59,13 +73,33 @@ export async function createPaymentLink(input: PaymentLinkInput): Promise<{ id: 
     });
     const json: any = await res.json().catch(() => null);
     if (!res.ok || !json?.id || !json?.short_url) {
-      console.warn(`[payments] payment link failed (HTTP ${res.status})`);
+      logger.warn(`[payments] payment link failed for ${input.reference} (HTTP ${res.status})`, { action: 'payment.link_failed', metadata: { ref: input.reference, amount: input.amountRupees, httpStatus: res.status, error: json?.error } });
       return null;
     }
+    logger.info(`[payments] payment link created for ${input.reference}`, { action: 'payment.link_created', metadata: { ref: input.reference, amount: input.amountRupees, linkId: json.id, expireBy: body.expire_by ?? null } });
     return { id: String(json.id), url: String(json.short_url) };
-  } catch {
-    console.warn('[payments] payment link failed (network)');
+  } catch (err: any) {
+    logger.warn(`[payments] payment link failed for ${input.reference} (network)`, { action: 'payment.link_failed', metadata: { ref: input.reference, amount: input.amountRupees, error: err?.message } });
     return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Cancels a link so a stale amount can't be paid (re-priced / cancelled trip). Never throws; false when not cancelled. */
+export async function cancelPaymentLink(id: string): Promise<boolean> {
+  if (!gatewayEnabled() || !id) return false;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const auth = Buffer.from(`${process.env.RAZORPAY_KEY_ID}:${process.env.RAZORPAY_KEY_SECRET}`).toString('base64');
+    const res = await fetch(`${API}/${encodeURIComponent(id)}/cancel`, { method: 'POST', headers: { Authorization: `Basic ${auth}` }, signal: controller.signal });
+    // already paid / cancelled / expired links answer 400: nothing left to cancel
+    logger[res.ok || res.status === 400 ? 'info' : 'warn'](`[payments] payment link ${id} cancel: HTTP ${res.status}`, { action: 'payment.link_cancelled', metadata: { linkId: id, httpStatus: res.status, cancelled: res.ok } });
+    return res.ok;
+  } catch (err: any) {
+    logger.warn(`[payments] payment link ${id} cancel failed (network)`, { action: 'payment.link_cancelled', metadata: { linkId: id, cancelled: false, error: err?.message } });
+    return false;
   } finally {
     clearTimeout(timer);
   }

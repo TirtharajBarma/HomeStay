@@ -6,6 +6,7 @@ import { Stars } from "@/components/stars";
 import { StayGallery } from "@/components/stay-gallery";
 import { getLiveStay, getPlatformConfig } from "@/lib/stays";
 import { siteConfig } from "@/lib/site-config";
+import { waNumber } from "@/lib/whatsapp";
 
 export async function generateMetadata({
   params,
@@ -36,7 +37,7 @@ export default async function DedicatedHomestayPage({
   // If absent, fallback to Admin platform support phone, then env var.
   const hasHostDirectPhone = Boolean(stay.phone && stay.phone.trim());
   const effectivePhone = stay.phone?.trim() || platformConfig?.supportPhone?.trim() || process.env.NEXT_PUBLIC_SUPPORT_PHONE?.trim() || "";
-  const cleanPhone = effectivePhone.replace(/\D/g, "");
+  const cleanPhone = waNumber(effectivePhone);
   const contactEmail = stay.email?.trim() || siteConfig.supportEmail || "";
 
   const query = await searchParams;
@@ -197,12 +198,16 @@ export default async function DedicatedHomestayPage({
                       </p>
                     ) : null}
 
-                    <div className="mt-4 flex items-baseline gap-1">
-                      <span className="font-serif text-2xl font-bold text-primary">
-                        ₹{room.price ? room.price.toLocaleString("en-IN") : "2,000"}
-                      </span>
-                      <span className="text-xs text-on-surface-variant">/ night</span>
-                    </div>
+                    {room.price ? (
+                      <div className="mt-4 flex items-baseline gap-1">
+                        <span className="font-serif text-2xl font-bold text-primary">
+                          ₹{room.price.toLocaleString("en-IN")}
+                        </span>
+                        <span className="text-xs text-on-surface-variant">/ night</span>
+                      </div>
+                    ) : (
+                      <p className="mt-4 text-sm font-semibold text-on-surface-variant">Price on request</p>
+                    )}
                   </div>
 
                   <div className="mt-6 flex flex-col gap-2 pt-4 border-t border-outline-variant/30">

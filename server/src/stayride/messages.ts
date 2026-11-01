@@ -9,6 +9,13 @@ import { config } from '../config/env.js';
 
 type Built = Omit<WhatsAppMessage, 'to'>;
 
+/** Log / webhook context of a message about a trip (see WhatsAppContext). */
+const ctxOf = (doc: any) => ({
+  ref: doc.reference || undefined,
+  tenantId: doc.propertyId ? String(doc.propertyId) : undefined,
+  driverId: doc.assignedDriverUserId ? String(doc.assignedDriverUserId) : doc.ownFleet && doc.ownDriverId != null ? `own-${doc.ownDriverId}` : undefined,
+});
+
 const rupees = (n: unknown) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
 const whenText = (doc: any) =>
   `${new Date(doc.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' })} at ${doc.time}`;
@@ -53,14 +60,15 @@ export const welcomeSightseeingMessage = (guestName: string, homestayName: strin
 /** quoteLink: the driver's own page to quote without opening the app (WhatsApp-only drivers). */
 export const newRequestMessage = (doc: any, quoteLink: string): Built => {
   const budgetInfo = doc.guestBudget ? `\nGuest Target Budget: ₹${Number(doc.guestBudget).toLocaleString('en-IN')}` : '';
-  const params = [doc.homestayName || 'a homestay', routeText(doc), whenText(doc), quoteLink];
+  const params = [doc.homestayName || 'a homestay', routeText(doc), whenText(doc), doc.vehicleType || 'Cab', quoteLink];
   return {
     event: 'NEW_REQUEST',
+    context: ctxOf(doc),
     params,
     text:
       `New trip request from ${params[0]}\n` +
-      `Route: ${params[1]}\nPickup: ${params[2]}\nVehicle: ${doc.vehicleType}${budgetInfo}\n\n` +
-      `Submit your total trip fare quote here:\n${params[3]}\n` +
+      `Route: ${params[1]}\nPickup: ${params[2]}\nVehicle: ${params[3]}${budgetInfo}\n\n` +
+      `Submit your total trip fare quote here:\n${params[4]}\n` +
       `(Guest pays 15% advance online, you collect remaining in cash at drop-off + wallet credit)`,
   };
 };
@@ -69,6 +77,7 @@ export const quoteCounterMessage = (driverName: string, reference: string, count
   const params = [driverName, reference, rupees(counterFare), quoteLink];
   return {
     event: 'QUOTE_COUNTER',
+    context: { ref: reference },
     params,
     text: `Hello ${params[0]}, the homestay has made a counter-offer of ${params[2]} for trip ${params[1]}. You can accept this offer or keep your original fare here:\n${params[3]}`,
   };
@@ -79,6 +88,7 @@ export const advanceExpiredGuestMessage = (doc: any): Built => {
   const params = [doc.guestName, doc.homestayName || 'your homestay'];
   return {
     event: 'ADVANCE_EXPIRED_GUEST',
+    context: ctxOf(doc),
     params,
     text: `Hello ${params[0]}, the temporary hold on your cab booking has expired. Please contact ${params[1]} if you would like to request a new cab.`,
   };
@@ -86,6 +96,7 @@ export const advanceExpiredGuestMessage = (doc: any): Built => {
 
 export const quoteAcceptedDriverMessage = (driverName: string, reference: string): Built => ({
   event: 'QUOTE_ACCEPTED_DRIVER',
+  context: { ref: reference },
   params: [driverName, reference],
   text: `Hello ${driverName}, your fare quote for trip ${reference} has been accepted. The booking will be confirmed once the guest completes the advance payment. Passenger contact details will be shared then.`,
 });
@@ -96,6 +107,7 @@ export const quoteAcceptedGuestMessage = (doc: any, link: string, windowMin: num
   const params = [doc.guestName, doc.assignedDriverName || 'Your driver', vehicleText(doc), rupees(doc.agreedFare), rupees(doc.advanceAmount), link, windowMin > 0 ? `within ${windowMin} minutes` : 'soon'];
   return {
     event: 'QUOTE_ACCEPTED_GUEST',
+    context: ctxOf(doc),
     params,
     text:
       `Namaste ${params[0]}, a verified driver is reserved for your trip.\n` +
@@ -113,6 +125,7 @@ export const advancePaidGuestMessage = (doc: any): Built => {
   const params = [doc.guestName, doc.assignedDriverName || 'Your driver', doc.assignedDriverPhone || '', vehicleText(doc), routeText(doc), whenText(doc), rupees(doc.remainingCashAmount)];
   return {
     event: 'ADVANCE_PAID_GUEST',
+    context: ctxOf(doc),
     params,
     text:
       `Namaste ${params[0]}, your cab booking is confirmed.\n` +
@@ -124,17 +137,25 @@ export const advancePaidGuestMessage = (doc: any): Built => {
   };
 };
 
+/** Boarding PIN on its own: Meta only allows a code in an AUTHENTICATION template ("{{1}} is your verification code"). */
+export const boardingPinGuestMessage = (pin: string): Built => ({
+  event: 'BOARDING_PIN_GUEST',
+  params: [pin],
+  text: `${pin} is your boarding PIN. Share it with your driver at pickup.`,
+});
+
 /** After the advance: the driver gets the guest's phone and the plan. */
 export const advancePaidDriverMessage = (doc: any, driverLink?: string): Built => {
-  const params = [doc.assignedDriverName || 'Driver', doc.guestName, doc.guestPhone || '', routeText(doc), whenText(doc), rupees(doc.remainingCashAmount)];
-  const linkText = driverLink ? `\n\nManage trip & enter passenger PIN to start:\n${driverLink}` : '';
+  const params = [doc.assignedDriverName || 'Driver', doc.reference || '', doc.guestName, doc.guestPhone || '', routeText(doc), whenText(doc), rupees(doc.remainingCashAmount), driverLink || ''];
+  const linkText = driverLink ? `\n\nOpen the trip details here:\n${driverLink}` : '';
   return {
     event: 'ADVANCE_PAID_DRIVER',
+    context: ctxOf(doc),
     params,
     text:
-      `Hello ${params[0]}, the online booking fee is received and trip ${doc.reference || ''} is confirmed.\n` +
-      `Passenger: ${params[1]} (${params[2]})\nRoute: ${params[3]}\nPickup: ${params[4]}\n\n` +
-      `Collect your cash fare of ${params[5]} directly from the passenger at drop-off.${linkText}`,
+      `Hello ${params[0]}, the online booking fee is received and trip ${params[1]} is confirmed.\n` +
+      `Passenger: ${params[2]} (${params[3]})\nRoute: ${params[4]}\nPickup: ${params[5]}\n\n` +
+      `Collect your cash fare of ${params[6]} directly from the passenger at drop-off.${linkText}`,
   };
 };
 
@@ -143,6 +164,7 @@ export const tripCancelledGuestMessage = (doc: any): Built => {
   const params = [doc.guestName, doc.reference, whenText(doc), doc.advancePaid ? `Your advance of ${rupees(doc.advanceAmount)} will be refunded.` : 'No charge was made.'];
   return {
     event: 'TRIP_CANCELLED_GUEST',
+    context: ctxOf(doc),
     params,
     text: `Hello ${params[0]}, your cab request ${params[1]} for ${params[2]} has been cancelled. ${params[3]}`,
   };
@@ -153,6 +175,7 @@ export const refundGuestMessage = (doc: any, reference: string): Built => {
   const params = [doc.guestName, rupees(doc.advanceAmount), doc.reference, reference];
   return {
     event: 'REFUND_GUEST',
+    context: ctxOf(doc),
     params,
     text: `Hi ${params[0]}, ${config.appName} has refunded your advance of ${params[1]} for trip ${params[2]} (reference ${params[3]}). Your bank may take a few days to show it.`,
   };
@@ -176,6 +199,7 @@ export const completionReminderDriverMessage = (doc: any, driverLink: string): B
   const params = [doc.assignedDriverName || 'Driver', doc.guestName, rupees(doc.remainingCashAmount), doc.reference, driverLink];
   return {
     event: 'COMPLETION_REMINDER_DRIVER',
+    context: ctxOf(doc),
     params,
     text:
       `Hello ${params[0]},\n` +
@@ -189,6 +213,7 @@ export const biddingTimeoutOwnerMessage = (doc: any, homestayName: string, owner
   const params = [homestayName, doc.guestName, doc.reference, routeText(doc), ownerUrl];
   return {
     event: 'BIDDING_TIMEOUT_OWNER',
+    context: ctxOf(doc),
     params,
     text:
       `Namaste ${params[0]},\n` +
@@ -239,6 +264,7 @@ export const vehicleUpdatedGuestMessage = (guestName: string, reference: string,
   const params = [guestName, reference, newPlate];
   return {
     event: 'VEHICLE_UPDATED_GUEST',
+    context: { ref: reference },
     params,
     text:
       `Notice for trip ${params[1]}:\n` +
@@ -247,16 +273,3 @@ export const vehicleUpdatedGuestMessage = (guestName: string, reference: string,
   };
 };
 
-/** Trip completion and cash collection reminder to driver */
-export const tripCompletionReminderMessage = (driverName: string, reference: string, cashAmount: number, driverLink?: string): Built => {
-  const linkText = driverLink ? `\n\nTap here to confirm ride completion:\n${driverLink}` : '';
-  const params = [driverName || 'Driver', reference, rupees(cashAmount)];
-  return {
-    event: 'COMPLETION_REMINDER_DRIVER',
-    params,
-    text:
-      `Hello ${params[0]},\n` +
-      `Trip ${params[1]} was scheduled earlier today.\n` +
-      `If you have completed the drop-off and collected your cash fare of ${params[2]}, please mark the ride complete so your earnings and wallet settle.${linkText}`,
-  };
-};

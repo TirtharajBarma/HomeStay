@@ -142,6 +142,9 @@ export function WebLocationPicker({
             zoom: 16,
             disableDefaultUI: true,
             zoomControl: true,
+            zoomControlOptions: {
+              position: (window as any).google?.maps?.ControlPosition?.RIGHT_CENTER || 8,
+            },
             gestureHandling: "greedy",
             clickableIcons: false,
           });

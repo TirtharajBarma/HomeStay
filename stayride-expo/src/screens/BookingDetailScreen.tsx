@@ -81,6 +81,7 @@ export const BookingDetailScreen: React.FC = () => {
       day: 'numeric',
       month: 'short',
       year: 'numeric',
+      timeZone: 'Asia/Kolkata',
     });
 
   const getStatusNote = () => {

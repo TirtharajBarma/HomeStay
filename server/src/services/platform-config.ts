@@ -89,6 +89,7 @@ export const WHATSAPP_EVENTS = [
   'QUOTE_ACCEPTED_DRIVER',
   'QUOTE_ACCEPTED_GUEST',
   'ADVANCE_PAID_GUEST',
+  'BOARDING_PIN_GUEST',
   'ADVANCE_PAID_DRIVER',
   'ADVANCE_EXPIRED_GUEST',
   'TRIP_ASSIGNED_DRIVER',
@@ -97,6 +98,9 @@ export const WHATSAPP_EVENTS = [
   'COMPLETION_REMINDER_DRIVER',
   'BIDDING_TIMEOUT_OWNER',
   'DRIVER_WELCOME',
+  'PAYOUT_SETTLED_DRIVER',
+  'PAYOUT_REJECTED_DRIVER',
+  'VEHICLE_UPDATED_GUEST',
 ] as const;
 
 export const DEFAULT_ROUTE_PRESETS: RoutePreset[] = [
@@ -151,7 +155,7 @@ export const DEFAULT_ROUTE_PRESETS: RoutePreset[] = [
 ];
 
 export const DEFAULT_PLATFORM_CONFIG: PlatformConfig = {
-  advanceWindowMin: 0,
+  advanceWindowMin: 30, // 0 would leave unpaid holds on a driver forever
   ownFleetFeePercent: 5,
   ownFleetMinFee: 100,
   minDriverPayoutThreshold: 100,
@@ -311,6 +315,7 @@ export function publicConfig(cfg: PlatformConfig) {
     advanceWindowMin: cfg.advanceWindowMin,
     ownFleetFeePercent: cfg.ownFleetFeePercent,
     ownFleetMinFee: cfg.ownFleetMinFee,
+    businessName: cfg.business?.name || '', // UPI payee name on the guest page
     upiId: cfg.business?.upiId || '',
     supportPhone: cfg.business?.phone || '',
     supportEmail: cfg.business?.email || '',

@@ -53,6 +53,8 @@ export const API_ENDPOINTS = {
       `${API_BASE_URL}/stayride/public/cab-requests/${encodeURIComponent(reference)}${token ? `?t=${encodeURIComponent(token)}` : ""}`,
     rate: (reference: string, token?: string) =>
       `${API_BASE_URL}/stayride/public/cab-requests/${encodeURIComponent(reference)}/rate${token ? `?t=${encodeURIComponent(token)}` : ""}`,
+    paymentClaim: (reference: string, token?: string) =>
+      `${API_BASE_URL}/stayride/public/cab-requests/${encodeURIComponent(reference)}/payment-claim${token ? `?t=${encodeURIComponent(token)}` : ""}`,
   },
   platform: {
     publicConfig: () => `${API_BASE_URL}/stayride/public/config`,
@@ -96,9 +98,12 @@ export async function apiFetch<T>(
   if (!res.ok) {
     const errorBody = await res.json().catch(() => ({}));
     const err = errorBody.error;
-    throw new Error(
-      (typeof err === "string" ? err : err?.message) ||
-        `API request failed with status ${res.status}`
+    throw Object.assign(
+      new Error(
+        (typeof err === "string" ? err : err?.message) ||
+          `API request failed with status ${res.status}`
+      ),
+      { status: res.status }
     );
   }
 

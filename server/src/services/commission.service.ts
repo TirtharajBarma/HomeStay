@@ -103,26 +103,31 @@ export class CommissionService {
       if (!Number.isFinite(hsp) || hsp < 0 || hsp > 100) throw new Error("Homestay share percent must be between 0 and 100.");
       settings.homestaySharePercentOfCommission = hsp;
     }
+    // These four used to be stored top-level and silently overrode platform.*. They now write into
+    // platform.* (one source of truth) and the stale top-level copies are cleared.
+    const legacy: Record<string, number> = {};
     if (params.quoteWindowHours !== undefined) {
       const qwh = pct(params.quoteWindowHours);
       if (!Number.isFinite(qwh) || qwh < 0.1 || qwh > 72) throw new Error("Quote window hours must be between 0.1 and 72.");
-      settings.quoteWindowHours = qwh;
+      legacy.quoteWindowHours = qwh;
+      legacy.quoteBiddingWindowMin = Math.round(qwh * 60);
     }
     if (params.minDriverPayoutThreshold !== undefined) {
       const mdpt = pct(params.minDriverPayoutThreshold);
       if (!Number.isFinite(mdpt) || mdpt < 0) throw new Error("Minimum driver payout threshold must be 0 or more.");
-      settings.minDriverPayoutThreshold = mdpt;
+      legacy.minDriverPayoutThreshold = mdpt;
     }
     if (params.ownFleetCommissionPercent !== undefined) {
       const ofcp = pct(params.ownFleetCommissionPercent);
-      if (!Number.isFinite(ofcp) || ofcp < 0 || ofcp > 100) throw new Error("Own fleet commission percent must be between 0 and 100.");
-      (settings as any).ownFleetCommissionPercent = ofcp;
+      if (!Number.isFinite(ofcp) || ofcp < 0 || ofcp > 50) throw new Error("Own fleet commission percent must be between 0 and 50.");
+      legacy.ownFleetFeePercent = ofcp;
     }
     if (params.ownFleetMinFee !== undefined) {
       const minFee = pct(params.ownFleetMinFee);
       if (!Number.isFinite(minFee) || minFee < 0 || minFee > 5000) throw new Error("Own fleet minimum fee must be between 0 and 5000.");
-      settings.ownFleetMinFee = minFee;
+      legacy.ownFleetMinFee = minFee;
     }
+    if (Object.keys(legacy).length) params = { ...params, platform: { ...legacy, ...(params.platform || {}) } };
 
     // Omitted values keep what is saved, so saving one settings form never reverts another's changes
     const pf = params.globalPlatformFeePercent === undefined ? settings.globalPlatformFeePercent : pct(params.globalPlatformFeePercent);
@@ -153,12 +158,21 @@ export class CommissionService {
     if (params.platform && typeof params.platform === "object") {
       // Partial edits merge onto what is saved; the result is validated/clamped before it is stored.
       const current = this.platformConfig(settings);
+      const patch = { ...params.platform };
+      // Keep the two quote-window fields in step: whichever one changed drives the other, and minutes
+      // (what the dispatcher reads) wins if both changed.
+      if (patch.quoteBiddingWindowMin !== undefined && Number(patch.quoteBiddingWindowMin) !== current.quoteBiddingWindowMin) {
+        patch.quoteWindowHours = Math.max(0.1, Number((Number(patch.quoteBiddingWindowMin) / 60).toFixed(2)));
+      } else if (patch.quoteWindowHours !== undefined && Number(patch.quoteWindowHours) !== current.quoteWindowHours) {
+        patch.quoteBiddingWindowMin = Math.round(Number(patch.quoteWindowHours) * 60);
+      }
       settings.platform = resolvePlatformConfig({
         ...current,
-        ...params.platform,
+        ...patch,
         vehicles: { ...current.vehicles, ...(params.platform.vehicles || {}) },
       }) as any;
       settings.markModified("platform");
+      for (const k of ["quoteWindowHours", "minDriverPayoutThreshold", "ownFleetCommissionPercent", "ownFleetMinFee"]) settings.set(k, undefined);
     }
     settings.updatedBy = params.updatedBy;
     settings.changeReason = params.changeReason || "Admin updated platform settings";
@@ -171,18 +185,17 @@ export class CommissionService {
   /** The admin's operational settings, complete and valid (defaults fill anything unsaved). */
   static platformConfig(settings: ICommissionSettings): PlatformConfig {
     const s: any = settings;
-    const overrides: Record<string, unknown> = {};
-    if (s.quoteWindowHours !== undefined) {
-      overrides.quoteWindowHours = s.quoteWindowHours;
-      overrides.quoteBiddingWindowMin = Math.round(Number(s.quoteWindowHours) * 60);
+    const p: any = s.platform || {};
+    // Legacy top-level fields (pre-platform docs) only fill gaps; a saved platform.* value always wins.
+    const legacy: Record<string, unknown> = {};
+    if (s.quoteWindowHours !== undefined && p.quoteBiddingWindowMin === undefined && p.quoteWindowHours === undefined) {
+      legacy.quoteWindowHours = s.quoteWindowHours;
+      legacy.quoteBiddingWindowMin = Math.round(Number(s.quoteWindowHours) * 60);
     }
-    if (s.minDriverPayoutThreshold !== undefined) overrides.minDriverPayoutThreshold = s.minDriverPayoutThreshold;
-    if (s.ownFleetCommissionPercent !== undefined) overrides.ownFleetFeePercent = s.ownFleetCommissionPercent;
-    if (s.ownFleetMinFee !== undefined) overrides.ownFleetMinFee = s.ownFleetMinFee;
-    return resolvePlatformConfig({
-      ...s.platform,
-      ...overrides,
-    });
+    if (s.minDriverPayoutThreshold !== undefined && p.minDriverPayoutThreshold === undefined) legacy.minDriverPayoutThreshold = s.minDriverPayoutThreshold;
+    if (s.ownFleetCommissionPercent !== undefined && p.ownFleetFeePercent === undefined) legacy.ownFleetFeePercent = s.ownFleetCommissionPercent;
+    if (s.ownFleetMinFee !== undefined && p.ownFleetMinFee === undefined) legacy.ownFleetMinFee = s.ownFleetMinFee;
+    return resolvePlatformConfig({ ...legacy, ...p });
   }
 
   // Read on hot paths (every list, every message), so cached briefly; a save clears it at once on this
@@ -268,6 +281,8 @@ export class CommissionService {
         metadata: {
           isDemo,
           isOwnDriver,
+          fareInput: fare,
+          inputs: { pfPercent, hcPercent, advancePercent, minAdvanceAmount, minFee },
           agreedFare: split.agreedFare,
           platformFeeAmount: split.platformFeeAmount,
           platformFeePercent: split.platformFeePercent,

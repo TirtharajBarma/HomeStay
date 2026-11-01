@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { siteConfig } from "@/lib/site-config";
+import { waNumber } from "@/lib/whatsapp";
 
 import { Icon } from "./icon";
 import { NewsletterForm } from "./newsletter-form";
@@ -9,7 +10,7 @@ const linkClass =
   "inline-flex min-h-11 items-center text-body-sm text-on-surface-variant transition-colors duration-150 hover:text-primary";
 
 const supportPhone = siteConfig.supportPhone || process.env.NEXT_PUBLIC_SUPPORT_PHONE?.trim() || "";
-const cleanPhone = supportPhone.replace(/[^0-9]/g, "");
+const cleanPhone = waNumber(supportPhone);
 const supportEmail = siteConfig.supportEmail;
 
 const supportLinks = [

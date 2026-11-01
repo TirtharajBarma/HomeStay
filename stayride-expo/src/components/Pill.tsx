@@ -55,6 +55,7 @@ export const Pill: React.FC<PillProps> = ({ label, value, color, bgColor, border
     case 'SENDING':
     case 'UNPAID':
     case 'PENDING':
+    case 'AWAITING_ADVANCE':
       textColor = normalized === 'RESERVED' ? '#92400E' : Colors.statusOrange;
       bg = normalized === 'RESERVED' ? '#FEF3C7' : Colors.statusOrangeBg;
       border = normalized === 'RESERVED' ? '#FCD34D' : undefined;
@@ -77,6 +78,7 @@ export const Pill: React.FC<PillProps> = ({ label, value, color, bgColor, border
 
     case 'FINDING_DRIVER':
     case 'FINDING DRIVER':
+    case 'QUOTE_RECEIVED':
     case 'REPEAT':
       textColor = Colors.statusPurple;
       bg = Colors.statusPurpleBg;

@@ -16,7 +16,7 @@ export const PAYMENT_METHODS: { value: PaymentMethod; label: string }[] = [
 export const methodLabel = (m: string) => PAYMENT_METHODS.find((x) => x.value === m)?.label || m;
 
 const inr = (n: number) => `₹${n.toLocaleString('en-IN')}`;
-const day = (ms: number) => new Date(ms).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+const day = (ms: number) => new Date(ms).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
 
 /** Plain-text receipt the owner can share (WhatsApp, SMS…) from their own phone. */
 export function receiptText(b: Booking, homestay: Homestay): string {

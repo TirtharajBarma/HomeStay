@@ -9,6 +9,7 @@ import { useSearchParams } from "next/navigation";
 import { Icon } from "@/components/icon";
 import { API_ENDPOINTS, apiFetch } from "@/lib/api-config";
 import { siteConfig } from "@/lib/site-config";
+import { waNumber } from "@/lib/whatsapp";
 
 type QuoteView = {
   reference: string;
@@ -28,7 +29,7 @@ type QuoteView = {
   returnDate?: number;
   returnTime?: string;
   status: string;
-  driverView?: string;
+  driverView?: "OPEN" | "QUOTED" | "ASSIGNED" | "REASSIGNED" | "TAKEN" | "EXPIRED" | "CANCELLED";
   canQuote: boolean;
   assignedToMe?: boolean;
   guestName?: string;
@@ -65,6 +66,10 @@ type WalletData = {
     rejectionReason?: string;
   }>;
 };
+
+const TERMINAL_STATUSES = ["COMPLETED", "CANCELLED", "EXPIRED"];
+const TERMINAL_DRIVER_VIEWS = ["TAKEN", "REASSIGNED", "EXPIRED", "CANCELLED"];
+const ACTIVE_TRIP_STATUSES = ["CONFIRMED", "EN_ROUTE_PICKUP", "ARRIVED_HOMESTAY", "TRIP_STARTED"];
 
 const inr = (n: number) => `₹${n.toLocaleString("en-IN")}`;
 
@@ -103,7 +108,7 @@ function DriverQuoteContent() {
     }
     if (digit && index === 3) {
       const fullOtp = next.join("");
-      if (fullOtp.length === 4) {
+      if (fullOtp.length === 4 && !busy) {
         handleTripAction("start", fullOtp);
       }
     }
@@ -159,6 +164,31 @@ function DriverQuoteContent() {
     };
   }, [token]);
 
+  // Keep the view fresh while the trip can still change (every 30s and when the driver returns to the tab).
+  const viewIsLive = Boolean(
+    view && !TERMINAL_STATUSES.includes(view.status) && !TERMINAL_DRIVER_VIEWS.includes(view.driverView || "")
+  );
+  useEffect(() => {
+    if (!token || !viewIsLive) return;
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      apiFetch<QuoteView>(API_ENDPOINTS.driverQuote.view(token))
+        .then(setView)
+        .catch(() => {});
+    };
+    document.addEventListener("visibilitychange", refresh);
+    window.addEventListener("focus", refresh);
+    const interval = setInterval(refresh, 30000);
+    return () => {
+      document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("focus", refresh);
+      clearInterval(interval);
+    };
+  }, [token, viewIsLive]);
+
+  // Share GPS only while this driver is running the trip, never for open, lost or finished trips.
+  const gpsActive = Boolean(view?.assignedToMe && ACTIVE_TRIP_STATUSES.includes(view.status));
+
   const [gpsStatus, setGpsStatus] = useState<string>("");
 
   const sendLocationPing = useCallback(() => {
@@ -183,7 +213,7 @@ function DriverQuoteContent() {
 
   // Continuous mid-ride & visibility location tracking
   useEffect(() => {
-    if (!token) return;
+    if (!token || !gpsActive) return;
 
     if (typeof navigator !== "undefined" && "permissions" in navigator) {
       navigator.permissions
@@ -216,7 +246,7 @@ function DriverQuoteContent() {
       window.removeEventListener("focus", sendLocationPing);
       clearInterval(interval);
     };
-  }, [token, sendLocationPing]);
+  }, [token, gpsActive, sendLocationPing]);
 
   const [standbyPlate, setStandbyPlate] = useState("");
   const [showPlateModal, setShowPlateModal] = useState(false);
@@ -678,7 +708,11 @@ function DriverQuoteContent() {
             </div>
 
             {/* State Handlers */}
-            {view.status === "CANCELLED" || view.driverView === "CANCELLED" ? (
+            {view.driverView === "TAKEN" && view.status !== "CANCELLED" ? (
+              <div className="rounded-xl border border-[#D0D7DE] bg-[#F6F8FA] p-4 text-xs text-[#57606A] font-medium">
+                This trip went to another driver.
+              </div>
+            ) : view.status === "CANCELLED" || view.driverView === "CANCELLED" ? (
               <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-xs text-red-800 font-medium">
                 This trip request was cancelled by the homestay.
               </div>
@@ -710,7 +744,7 @@ function DriverQuoteContent() {
                           <Icon name="phone" className="text-xs" /> Call Passenger
                         </a>
                         <a
-                          href={`https://wa.me/${view.phone.replace(/\D/g, "")}`}
+                          href={`https://wa.me/${waNumber(view.phone)}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#25D366] py-2.5 text-xs font-bold text-white shadow-xs hover:opacity-90"
@@ -1018,7 +1052,7 @@ function DriverQuoteContent() {
                     Total Ride Fare (₹) *
                   </label>
                   <span className="text-[10px] text-[#57606A] block mb-1.5">
-                    Enter the total price. Guest pays 15% (min ₹500) online advance, remaining 85% in cash directly to you.
+                    Enter the total price. Guest pays {advPct}% (min {inr(minAdv)}) online advance, the rest in cash directly to you.
                   </span>
                   <div className="flex gap-2">
                     <span className="flex items-center rounded-xl bg-[#F6F8FA] border border-[#D0D7DE] px-3 text-xs font-bold text-[#57606A]">

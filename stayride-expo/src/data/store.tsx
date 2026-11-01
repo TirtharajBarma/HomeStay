@@ -1460,36 +1460,11 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       },
     });
 
+  // The pickup PIN is only ever checked by the server (drivers never receive it), so there is no
+  // offline start: submit() already tells the driver nothing was saved when there is no signal.
   const driverStartTrip = async (reference: string, otp?: string): Promise<ActionOutcome> => {
-    const cleanOtp = String(otp || '').trim();
-    const currentTrip = driverTrips.find((t) => t.reference === reference);
-
-    const outcome = await submit('POST', `/driver/trips/${encodeURIComponent(reference)}/start`, { otp: cleanOtp });
-    if (outcome.ok) {
-      if (outcome.synced) await refreshDriverTrips().catch(() => {});
-      return outcome;
-    }
-
-    // Mountain Dead-Zone Offline Fallback:
-    // When offline in a deep river gorge / hill homestay, verify the 4-digit PIN against the locally cached trip.
-    if (!outcome.synced) {
-      if (currentTrip?.pickupOtp && cleanOtp === String(currentTrip.pickupOtp).trim()) {
-        // Correct PIN! Update local state optimistically and queue mutation for background replay
-        setDriverTrips((prev) =>
-          prev.map((t) =>
-            t.reference === reference
-              ? { ...t, status: 'TRIP_STARTED' as any, _pendingStartOtp: cleanOtp }
-              : t
-          )
-        );
-        await outbox.enqueue('POST', `/driver/trips/${encodeURIComponent(reference)}/start`, { otp: cleanOtp }).catch(() => {});
-        return { ok: true, synced: false };
-      }
-      if (currentTrip?.pickupOtp && cleanOtp !== String(currentTrip.pickupOtp).trim()) {
-        return { ok: false, synced: false, error: 'Invalid Boarding Verification PIN. Please ask the passenger for their 4-digit PIN.' };
-      }
-    }
-
+    const outcome = await submit('POST', `/driver/trips/${encodeURIComponent(reference)}/start`, { otp: String(otp || '').trim() });
+    if (outcome.synced) await refreshDriverTrips().catch(() => {});
     return outcome;
   };
 

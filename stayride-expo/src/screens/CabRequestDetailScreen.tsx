@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -91,8 +91,10 @@ export const CabRequestDetailScreen: React.FC = () => {
       case 'NEW_REQUEST':
         return 1;
       case 'FINDING_DRIVER':
+      case 'QUOTE_RECEIVED':
         return 2;
       case 'DRIVER_ASSIGNED':
+      case 'AWAITING_ADVANCE':
         return 3;
       case 'CONFIRMED':
         return 4;
@@ -111,8 +113,12 @@ export const CabRequestDetailScreen: React.FC = () => {
       ? 'New request'
       : status === 'FINDING_DRIVER'
       ? 'Finding driver'
+      : status === 'QUOTE_RECEIVED'
+      ? 'Quotes received'
       : status === 'DRIVER_ASSIGNED'
       ? 'Driver assigned'
+      : status === 'AWAITING_ADVANCE'
+      ? "Waiting for guest's advance"
       : status === 'CONFIRMED'
       ? 'Trip confirmed'
       : status === 'TRIP_STARTED'
@@ -121,7 +127,9 @@ export const CabRequestDetailScreen: React.FC = () => {
       ? 'Trip completed'
       : status === 'EXPIRED'
       ? 'Expired'
-      : 'Cancelled';
+      : status === 'CANCELLED'
+      ? 'Cancelled'
+      : String(status || 'Unknown');
 
   const fmtLong = (ms: number) =>
     new Date(ms).toLocaleDateString('en-IN', {
@@ -129,6 +137,7 @@ export const CabRequestDetailScreen: React.FC = () => {
       day: 'numeric',
       month: 'short',
       year: 'numeric',
+      timeZone: 'Asia/Kolkata',
     });
 
   const ownMatches = () => {
@@ -152,8 +161,11 @@ export const CabRequestDetailScreen: React.FC = () => {
   };
 
   // Every server write below awaits the response and reports failures
+  // A ref, not the busy state, so two taps in the same frame can't both get through
+  const busyRef = useRef(false);
   const run = async (fn: () => Promise<ActionOutcome | void>) => {
-    if (busy) return;
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     try {
       const outcome = await fn();
@@ -163,6 +175,7 @@ export const CabRequestDetailScreen: React.FC = () => {
     } catch (e: any) {
       Alert.alert('Not saved', e?.message || 'Please try again.');
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   };
@@ -178,6 +191,9 @@ export const CabRequestDetailScreen: React.FC = () => {
   const handleAssignDriver = (driver: Driver, own: boolean) =>
     run(async () => {
       if (!(fareNum > 0)) return { ok: false, synced: false, error: 'Enter the fare agreed with the driver first.' };
+      if (ownFee >= fareNum) {
+        return { ok: false, synced: false, error: `The fare must be more than the ₹${ownFee.toLocaleString('en-IN')} platform fee, or the driver gets no cash. Check the fare.` };
+      }
       const outcome = await assignTripDriver(trip.id, driver.id, fareNum);
       if (!outcome.ok) return outcome;
       setOverrideStatus(null);
@@ -505,6 +521,8 @@ export const CabRequestDetailScreen: React.FC = () => {
                 ? 'Request sent to network drivers. Driver quotes will appear here.'
                 : status === 'QUOTE_RECEIVED'
                 ? 'Quotes received from mountain drivers. Choose a driver below.'
+                : status === 'AWAITING_ADVANCE' && trip.paymentClaimPending
+                ? `Guest says paid, ${process.env.EXPO_PUBLIC_APP_NAME || 'StayCabs'} is confirming.`
                 : status === 'AWAITING_ADVANCE'
                 ? `${trip.ownerDriver ? `Your driver ${trip.driverName || ''} · w` : 'W'}aiting for the guest's ${formatINR(trip.advanceAmount || 0)} advance deposit${
                     trip.advanceDueAt
@@ -704,6 +722,7 @@ export const CabRequestDetailScreen: React.FC = () => {
                     </View>
                     <TouchableOpacity
                       style={styles.assignBtn}
+                      disabled={busy}
                       onPress={() => handleAssignDriver(d, true)}
                     >
                       <Text style={styles.assignBtnText}>Assign</Text>
@@ -737,6 +756,7 @@ export const CabRequestDetailScreen: React.FC = () => {
                     </View>
                     <TouchableOpacity
                       style={styles.assignBtn}
+                      disabled={busy}
                       onPress={() => handleAssignDriver(d, false)}
                     >
                       <Text style={styles.assignBtnText}>Assign</Text>

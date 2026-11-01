@@ -58,6 +58,8 @@ app.use(
 //   would fail on its own; blocking all traffic on a limiter error only adds an outage.
 // - Strict limiter (login/signup/public guest writes) fails CLOSED with a 503: those are the
 //   brute-force / spam targets, and they cannot succeed without Mongo either, so nothing is lost.
+// ponytail: in-memory store, so the 1000/15 min ceiling is per warm Vercel instance, not per IP overall (N instances = N x 1000).
+// The strict limiter below is the shared (Mongo) one; move this one to MongoRateLimitStore if a global cap is ever needed.
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   limit: 1000, // per IP per window
@@ -94,7 +96,21 @@ app.use(
   ],
   strictLimiter
 );
-app.post(["/v1/public/*path", "/api/v1/stayride/public/*path"], strictLimiter);
+// Driver location pings (every few minutes from a WhatsApp link page) get their own looser limit: on the
+// strict 30/15 min one a driver's pings ran out the limit he also needs to quote.
+const locationLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  store: new MongoRateLimitStore("loc:"),
+  passOnStoreError: true, // a location ping is harmless; never block it on a limiter error
+  message: { error: { message: "Too many location updates, please try again later", code: "RATE_LIMITED" } },
+});
+const DRIVER_LOCATION = /\/public\/driver-quote\/location$/;
+app.post(["/v1/public/*path", "/api/v1/stayride/public/*path"], (req, res, next) =>
+  DRIVER_LOCATION.test(req.path) ? locationLimiter(req, res, next) : strictLimiter(req, res, next)
+);
 // Public booking creation is unauthenticated and writes records — keep it on the strict limiter.
 app.post(["/api/v1/bookings", "/api/v1/reservations"], strictLimiter);
 app.post(["/api/v1/drivers/bookings", "/api/v1/cabs/bookings"], strictLimiter);
@@ -102,6 +118,7 @@ app.post(["/api/v1/drivers/bookings", "/api/v1/cabs/bookings"], strictLimiter);
 // 6. Body Parsing (Clerk webhook needs the raw body for signature verification)
 app.use(["/v1/auth/clerk-webhook", "/api/v1/stayride/auth/clerk-webhook"], express.raw({ type: "application/json" }));
 app.use(["/v1/webhooks/razorpay", "/api/v1/stayride/webhooks/razorpay"], express.raw({ type: "application/json" }));
+app.use(["/v1/webhooks/whatsapp", "/api/v1/stayride/webhooks/whatsapp"], express.raw({ type: "application/json" }));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 // Express 5 leaves req.body undefined when there is no body; handlers destructure it.

@@ -7,6 +7,9 @@ import { Icon } from "@/components/icon";
 import { API_ENDPOINTS, apiFetch } from "@/lib/api-config";
 import { siteConfig } from "@/lib/site-config";
 import { getRecaptchaToken } from "@/lib/recaptcha";
+import { waNumber } from "@/lib/whatsapp";
+import { upiPayUrl, isUtr, cleanUtr } from "@/lib/upi";
+import { toDataURL } from "qrcode";
 import { WebLocationPicker, PickedLocation } from "@/components/web-location-picker";
 
 export interface RoutePreset {
@@ -160,9 +163,12 @@ type PublicConfig = {
   routePresets?: RoutePreset[];
   vehicles?: { value: string; label: string; seats: number; estFare?: number }[];
   upiId?: string;
+  businessName?: string;
   supportPhone?: string;
   supportEmail?: string;
 };
+
+type PaymentClaim = { status: "PENDING" | "REJECTED"; submittedAt: string; reason?: string; utr?: string };
 
 type GuestLink = {
   homestayName: string;
@@ -196,8 +202,10 @@ type CabRequestStatus = {
   quotesCount?: number | null;
   biddingClosesAt?: string | number | null;
   refundStatus?: "NONE" | "PENDING" | "REFUNDED" | null;
+  cancellationReason?: string | null;
   guestRating?: { stars: number; comment?: string; ratedAt: string } | null;
   biddingFallback?: boolean;
+  paymentClaim?: PaymentClaim | null;
   config?: PublicConfig;
 };
 
@@ -206,7 +214,7 @@ const REFUND_LABELS: Record<string, string> = { PENDING: "Refund in progress", R
 const STATUS_FRIENDLY_LABELS: Record<string, string> = {
   FINDING_DRIVER: "Finding Nearby Drivers",
   QUOTE_RECEIVED: "Reviewing Driver Quotes",
-  PENDING_REVIEW: "Pending Confirmation",
+  PENDING_REVIEW: "Request Received",
   AWAITING_ADVANCE_PAYMENT: "Awaiting Advance Payment",
   CONFIRMED: "Cab Confirmed!",
   EN_ROUTE_PICKUP: "Driver En Route to Pickup",
@@ -242,6 +250,11 @@ const toTime12 = (t24: string) => {
   const h12 = h % 12 === 0 ? 12 : h % 12;
   return `${String(h12).padStart(2, "0")}:${m} ${ampm}`;
 };
+
+const isNotFound = (e: unknown) => (e as { status?: number } | null)?.status === 404;
+
+const formatIstDateTime = (v: number | string) =>
+  new Date(v).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
 
 const formatInr = (n: number | null | undefined) =>
   typeof n === "number" ? `₹${n.toLocaleString("en-IN")}` : "—";
@@ -313,14 +326,20 @@ function CabRequestFormContent() {
 
   // Confirmed trip & live tracking
   const [confirmedTrip, setConfirmedTrip] = useState<{ reference: string; status: string } | null>(
-    refParam ? { reference: refParam, status: "AWAITING_ADVANCE_PAYMENT" } : null
+    refParam ? { reference: refParam, status: "" } : null
   );
+  const [bookingNotFound, setBookingNotFound] = useState(false);
   const [tripStatus, setTripStatus] = useState<CabRequestStatus | null>(null);
   const [statusLoading, setStatusLoading] = useState(false);
 
   // Payment states
   const [showQr, setShowQr] = useState(false);
   const [copiedUpi, setCopiedUpi] = useState(false);
+  const [qr, setQr] = useState({ url: "", data: "" });
+  const [utrInput, setUtrInput] = useState("");
+  const [editingClaim, setEditingClaim] = useState(false);
+  const [claimBusy, setClaimBusy] = useState(false);
+  const [claimError, setClaimError] = useState("");
 
   // Rating states
   const [selectedRating, setSelectedRating] = useState<number>(5);
@@ -406,8 +425,9 @@ function CabRequestFormContent() {
     try {
       const data = await apiFetch<CabRequestStatus>(API_ENDPOINTS.cabRequests.status(reference, token));
       setTripStatus(data);
-    } catch {
-      // Ignored: network retry will refresh
+    } catch (e) {
+      if (isNotFound(e)) setBookingNotFound(true);
+      // Otherwise ignored: network retry will refresh
     } finally {
       setStatusLoading(false);
     }
@@ -425,8 +445,10 @@ function CabRequestFormContent() {
               setLinkState("valid");
             }
           })
-          .catch(() => {
-            if (!cancelled) setLinkState("valid");
+          .catch((e) => {
+            if (cancelled) return;
+            if (isNotFound(e)) setBookingNotFound(true);
+            setLinkState("valid");
           });
         return () => {
           cancelled = true;
@@ -520,7 +542,7 @@ function CabRequestFormContent() {
   // Status polling every 10 seconds while active
   useEffect(() => {
     const activeRef = confirmedTrip?.reference || refParam;
-    if (!activeRef) return;
+    if (!activeRef || bookingNotFound) return;
     const finalStatuses = ["COMPLETED", "CANCELLED", "EXPIRED"];
     if (tripStatus?.status && finalStatuses.includes(tripStatus.status)) return;
 
@@ -529,17 +551,43 @@ function CabRequestFormContent() {
         .then((data) => {
           if (data?.status) setTripStatus(data);
         })
-        .catch(() => {});
+        .catch((e) => {
+          if (isNotFound(e)) setBookingNotFound(true);
+        });
     }, 10000);
 
     return () => clearInterval(interval);
-  }, [confirmedTrip?.reference, refParam, token, tripStatus?.status]);
+  }, [confirmedTrip?.reference, refParam, token, tripStatus?.status, bookingNotFound]);
 
   const handleCopyUpi = (upiString: string) => {
     if (typeof navigator !== "undefined" && navigator.clipboard) {
       navigator.clipboard.writeText(upiString);
       setCopiedUpi(true);
       setTimeout(() => setCopiedUpi(false), 2500);
+    }
+  };
+
+  const handleSubmitClaim = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (claimBusy || !tripStatus) return;
+    if (!isUtr(utrInput)) {
+      setClaimError("Enter the 12-digit UTR number from your UPI app.");
+      return;
+    }
+    setClaimBusy(true);
+    setClaimError("");
+    try {
+      const res = await apiFetch<{ advanceDueAt?: string | null; paymentClaim: PaymentClaim }>(
+        API_ENDPOINTS.cabRequests.paymentClaim(tripStatus.reference, token),
+        { method: "POST", body: JSON.stringify({ utr: cleanUtr(utrInput), phone: guestPhone || link?.guestPhone || "" }) }
+      );
+      setTripStatus((prev) => (prev ? { ...prev, paymentClaim: res.paymentClaim, advanceDueAt: res.advanceDueAt ?? prev.advanceDueAt } : prev));
+      setUtrInput("");
+      setEditingClaim(false);
+    } catch (err: unknown) {
+      setClaimError(err instanceof Error ? err.message : "Could not submit. Please try again.");
+    } finally {
+      setClaimBusy(false);
     }
   };
 
@@ -657,8 +705,27 @@ function CabRequestFormContent() {
   };
 
   const activeUpiId = tripStatus?.config?.upiId || link?.config?.upiId || siteConfig.upiId || process.env.NEXT_PUBLIC_UPI_ID || "";
-  const activeSupportPhone = (tripStatus?.config?.supportPhone || link?.config?.supportPhone || siteConfig.supportPhone || process.env.NEXT_PUBLIC_SUPPORT_PHONE || "").replace(/\D/g, "");
+  const activeSupportPhone = waNumber(tripStatus?.config?.supportPhone || link?.config?.supportPhone || siteConfig.supportPhone || process.env.NEXT_PUBLIC_SUPPORT_PHONE || "");
   const activeSupportEmail = tripStatus?.config?.supportEmail || link?.config?.supportEmail || siteConfig.supportEmail || process.env.NEXT_PUBLIC_SUPPORT_EMAIL || "";
+  const payeeName = tripStatus?.config?.businessName || link?.config?.businessName || siteConfig.appName;
+  // "" when no UPI ID is configured or the trip is not waiting for its advance: the UPI section is not shown
+  const advanceUpiUrl =
+    tripStatus?.status === "AWAITING_ADVANCE_PAYMENT" && !tripStatus.advancePaid && activeUpiId
+      ? upiPayUrl({ upiId: activeUpiId, payee: payeeName, amount: Number(tripStatus.advanceAmount), reference: tripStatus.reference })
+      : "";
+  const claimPending = tripStatus?.paymentClaim?.status === "PENDING";
+
+  // QR made in the browser: the payment details never go to a third-party QR service
+  useEffect(() => {
+    if (!advanceUpiUrl) return;
+    let live = true;
+    toDataURL(advanceUpiUrl, { margin: 1, width: 220 })
+      .then((data) => live && setQr({ url: advanceUpiUrl, data }))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [advanceUpiUrl]);
 
   if (linkState === "loading") {
     return (
@@ -748,6 +815,28 @@ function CabRequestFormContent() {
     );
   }
 
+  if (bookingNotFound) {
+    return (
+      <div className="min-h-screen bg-[#F8F9FA] flex items-center justify-center p-6">
+        <div className="max-w-md w-full rounded-2xl border border-[#D0D7DE] bg-white p-8 text-center space-y-4 shadow-sm">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-red-50 text-red-600">
+            <Icon name="search_off" className="text-2xl" />
+          </div>
+          <h1 className="text-base font-bold text-[#1F2328]">Booking Not Found</h1>
+          <p className="text-xs text-[#57606A]">
+            We could not find a cab booking for this reference. Please check the link in your WhatsApp message or contact your homestay host.
+          </p>
+          <Link
+            href="/"
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#1F2328] px-5 py-2.5 text-xs font-semibold text-white shadow-sm hover:opacity-95"
+          >
+            Go to Home
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#F8F9FA] text-[#1F2328] antialiased">
       {/* Top Navigation Bar */}
@@ -812,12 +901,12 @@ function CabRequestFormContent() {
                         ? "bg-emerald-100 text-emerald-900 border border-emerald-300"
                         : (tripStatus?.status || confirmedTrip.status) === "CONFIRMED"
                         ? "bg-blue-100 text-blue-900 border border-blue-300"
-                        : (tripStatus?.status || confirmedTrip.status) === "CANCELLED"
+                        : ["CANCELLED", "EXPIRED"].includes(tripStatus?.status || confirmedTrip.status)
                         ? "bg-red-100 text-red-900 border border-red-300"
                         : "bg-amber-100 text-amber-900 border border-amber-300"
                     }`}
                   >
-                    {STATUS_FRIENDLY_LABELS[tripStatus?.status || confirmedTrip.status] || tripStatus?.status || confirmedTrip.status}
+                    {STATUS_FRIENDLY_LABELS[tripStatus?.status || confirmedTrip.status] || tripStatus?.status || confirmedTrip.status || "Loading…"}
                   </span>
                   <button
                     type="button"
@@ -841,11 +930,11 @@ function CabRequestFormContent() {
                   <div className="space-y-1">
                     <div
                       className={`h-1.5 w-full rounded-full ${
-                        ["QUOTE_RECEIVED", "AWAITING_ADVANCE_PAYMENT", "CONFIRMED", "TRIP_STARTED", "COMPLETED"].includes(
+                        ["QUOTE_RECEIVED", "AWAITING_ADVANCE_PAYMENT", "CONFIRMED", "EN_ROUTE_PICKUP", "ARRIVED_HOMESTAY", "TRIP_STARTED", "COMPLETED"].includes(
                           tripStatus?.status || ""
                         )
                           ? "bg-emerald-600"
-                          : (tripStatus?.status || confirmedTrip.status) === "FINDING_DRIVER"
+                          : ["PENDING_REVIEW", "FINDING_DRIVER"].includes(tripStatus?.status || confirmedTrip.status)
                           ? "bg-blue-500 animate-pulse"
                           : "bg-[#E1E4E8]"
                       }`}
@@ -855,7 +944,7 @@ function CabRequestFormContent() {
                   <div className="space-y-1">
                     <div
                       className={`h-1.5 w-full rounded-full ${
-                        ["CONFIRMED", "TRIP_STARTED", "COMPLETED"].includes(tripStatus?.status || "")
+                        ["CONFIRMED", "EN_ROUTE_PICKUP", "ARRIVED_HOMESTAY", "TRIP_STARTED", "COMPLETED"].includes(tripStatus?.status || "")
                           ? "bg-emerald-600"
                           : tripStatus?.status === "AWAITING_ADVANCE_PAYMENT"
                           ? "bg-amber-500 animate-pulse"
@@ -869,7 +958,7 @@ function CabRequestFormContent() {
                       className={`h-1.5 w-full rounded-full ${
                         ["TRIP_STARTED", "COMPLETED"].includes(tripStatus?.status || "")
                           ? "bg-emerald-600"
-                          : tripStatus?.status === "CONFIRMED"
+                          : ["CONFIRMED", "EN_ROUTE_PICKUP", "ARRIVED_HOMESTAY"].includes(tripStatus?.status || "")
                           ? "bg-blue-400"
                           : "bg-[#E1E4E8]"
                       }`}
@@ -888,7 +977,7 @@ function CabRequestFormContent() {
               </div>
 
               {/* Bidding Radar / Active Searching Banner */}
-              {(tripStatus?.status || confirmedTrip.status) === "FINDING_DRIVER" && (
+              {["PENDING_REVIEW", "FINDING_DRIVER"].includes(tripStatus?.status || confirmedTrip.status) && (
                 <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-4 space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -897,7 +986,9 @@ function CabRequestFormContent() {
                         <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-blue-600" />
                       </div>
                       <span className="text-xs font-bold text-blue-900 uppercase tracking-wide">
-                        Finding your driver in this valley…
+                        {(tripStatus?.status || confirmedTrip.status) === "PENDING_REVIEW"
+                          ? "Request received — finding drivers…"
+                          : "Finding your driver in this valley…"}
                       </span>
                     </div>
                     <span className="text-[10px] text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full font-semibold">
@@ -930,6 +1021,9 @@ function CabRequestFormContent() {
                     <div className="text-right">
                       <span className="text-xs text-[#57606A]">Advance Due</span>
                       <p className="text-xl font-extrabold text-emerald-800">{formatInr(tripStatus.advanceAmount)}</p>
+                      {tripStatus.advanceDueAt && !claimPending && (
+                        <p className="text-[11px] font-semibold text-amber-900">Pay by {formatIstDateTime(tripStatus.advanceDueAt)} IST</p>
+                      )}
                     </div>
                   </div>
 
@@ -961,53 +1055,119 @@ function CabRequestFormContent() {
                     </p>
                   </div>
 
-                  {/* 1-Tap UPI Intent Button (Opens PhonePe / GPay on Android) */}
-                  <div>
-                    <a
-                      href={`upi://pay?pa=${encodeURIComponent(activeUpiId)}&pn=${encodeURIComponent(siteConfig.appName)}&am=${tripStatus.advanceAmount}&cu=INR&tn=${encodeURIComponent(`Advance for ${tripStatus.reference}`)}`}
-                      className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white shadow hover:bg-emerald-700 transition-all cursor-pointer"
-                    >
-                      <Icon name="account_balance_wallet" className="text-base" /> Pay {formatInr(tripStatus.advanceAmount)} via UPI App
-                    </a>
-                  </div>
+                  {tripStatus.paymentClaim?.status === "REJECTED" && (
+                    <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-900">
+                      <p className="font-bold">Your payment could not be verified{tripStatus.paymentClaim.reason ? `: ${tripStatus.paymentClaim.reason}` : "."}</p>
+                      <p className="mt-0.5">Please check the UTR in your UPI app and submit it again, or pay below.</p>
+                    </div>
+                  )}
 
-                  {/* Manual UPI ID & Dynamic QR Code Box */}
-                  <div className="rounded-xl border border-[#D0D7DE] bg-white p-3.5 text-xs space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[#57606A] font-medium">Platform UPI ID:</span>
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono font-bold text-[#1F2328]">{activeUpiId}</span>
-                        <button
-                          type="button"
-                          onClick={() => handleCopyUpi(activeUpiId)}
-                          className="rounded px-2 py-0.5 font-bold bg-[#F6F8FA] border border-[#D0D7DE] text-xs hover:bg-[#E1E4E8] cursor-pointer"
-                        >
-                          {copiedUpi ? "Copied" : "Copy"}
+                  {claimPending && (
+                    <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-3 text-xs text-emerald-900 space-y-1">
+                      <p className="flex items-center gap-1.5 font-bold text-emerald-950">
+                        <Icon name="check_circle" className="text-sm" /> Payment submitted
+                      </p>
+                      <p>
+                        UTR <span className="font-mono font-bold">{tripStatus.paymentClaim?.utr || "received"}</span>. Waiting for {payeeName} to confirm (usually within a few hours). Your driver stays reserved meanwhile.
+                      </p>
+                      {!editingClaim && (
+                        <button type="button" onClick={() => { setEditingClaim(true); setUtrInput(tripStatus.paymentClaim?.utr || ""); }} className="font-semibold text-emerald-700 hover:underline cursor-pointer">
+                          Wrong UTR? Correct it
                         </button>
-                      </div>
+                      )}
                     </div>
+                  )}
 
-                    <div className="flex items-center justify-between pt-1 border-t border-[#E1E4E8]">
-                      <button
-                        type="button"
-                        onClick={() => setShowQr(!showQr)}
-                        className="font-semibold text-emerald-700 hover:underline cursor-pointer"
+                  <div className="space-y-2">
+                    {tripStatus.paymentLinkUrl && !claimPending && (
+                      <a
+                        href={tripStatus.paymentLinkUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-800 px-4 py-3 text-sm font-bold text-white shadow hover:bg-emerald-900 transition-all cursor-pointer"
                       >
-                        {showQr ? "Hide QR Code" : "Show QR Code to Scan"}
-                      </button>
-                    </div>
-
-                    {showQr && (
-                      <div className="flex flex-col items-center justify-center pt-2">
-                        <img
-                          src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`upi://pay?pa=${activeUpiId}&pn=${encodeURIComponent(siteConfig.appName)}&am=${tripStatus.advanceAmount}&cu=INR&tn=${encodeURIComponent(`Advance for ${tripStatus.reference}`)}`)}`}
-                          alt="UPI Payment QR Code"
-                          className="h-44 w-44 rounded-lg border border-[#D0D7DE] p-1 bg-white"
-                        />
-                        <span className="mt-1 text-[11px] text-[#57606A]">Scan with GPay, PhonePe, or Paytm</span>
-                      </div>
+                        <Icon name="payments" className="text-base" /> Pay {formatInr(tripStatus.advanceAmount)} Online
+                      </a>
                     )}
                   </div>
+
+                  {/* Manual UPI: pay, then send the UTR for us to verify */}
+                  {advanceUpiUrl && !claimPending && (
+                    <div className="rounded-xl border border-[#D0D7DE] bg-white p-3.5 text-xs space-y-3">
+                      <ol className="list-decimal pl-4 space-y-0.5 text-[#24292F]">
+                        <li>Pay <strong>{formatInr(tripStatus.advanceAmount)}</strong> to the UPI ID below.</li>
+                        <li>Enter the 12-digit UTR number from your UPI app below.</li>
+                      </ol>
+
+                      {/* upi:// opens the UPI app on Android; iPhones may not open it, so the ID and QR are shown too */}
+                      <a
+                        href={advanceUpiUrl}
+                        className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white shadow hover:bg-emerald-700 transition-all cursor-pointer"
+                      >
+                        <Icon name="account_balance_wallet" className="text-base" /> Pay {formatInr(tripStatus.advanceAmount)} with UPI app
+                      </a>
+
+                      <div className="space-y-1.5 rounded-lg bg-[#F6F8FA] p-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[#57606A]">UPI ID</span>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="font-mono font-bold text-[#1F2328] break-all">{activeUpiId}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyUpi(activeUpiId)}
+                              className="rounded px-2 py-0.5 font-bold bg-white border border-[#D0D7DE] text-xs hover:bg-[#E1E4E8] cursor-pointer"
+                            >
+                              {copiedUpi ? "Copied" : "Copy"}
+                            </button>
+                          </div>
+                        </div>
+                        <div className="flex justify-between gap-2">
+                          <span className="text-[#57606A]">Amount</span>
+                          <span className="font-mono font-bold text-[#1F2328]">{formatInr(tripStatus.advanceAmount)}</span>
+                        </div>
+                        <div className="flex justify-between gap-2">
+                          <span className="text-[#57606A]">Note / remark</span>
+                          <span className="font-mono font-bold text-[#1F2328]">{tripStatus.reference}</span>
+                        </div>
+                      </div>
+
+                      {/* QR open on wide screens; behind a button on phones (they pay from the same device) */}
+                      <button type="button" onClick={() => setShowQr(!showQr)} className="md:hidden font-semibold text-emerald-700 hover:underline cursor-pointer">
+                        {showQr ? "Hide QR" : "Show QR"}
+                      </button>
+                      {qr.url === advanceUpiUrl && (
+                        <div className={`${showQr ? "flex" : "hidden md:flex"} flex-col items-center justify-center`}>
+                          <img src={qr.data} alt="UPI payment QR code" className="h-44 w-44 rounded-lg border border-[#D0D7DE] p-1 bg-white" />
+                          <span className="mt-1 text-[11px] text-[#57606A]">Scan with any UPI app</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {advanceUpiUrl && (!claimPending || editingClaim) && (
+                    <form onSubmit={handleSubmitClaim} className="rounded-xl border border-[#D0D7DE] bg-white p-3.5 text-xs space-y-2">
+                      <label htmlFor="utr" className="block font-semibold text-[#1F2328]">
+                        UPI reference / UTR number (12 digits)
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          id="utr"
+                          inputMode="numeric"
+                          autoComplete="off"
+                          maxLength={20}
+                          placeholder="e.g. 412345678901"
+                          value={utrInput}
+                          onChange={(e) => setUtrInput(e.target.value)}
+                          className="min-w-0 flex-1 rounded-lg border border-[#D0D7DE] px-3 py-2 font-mono text-sm text-[#1F2328] focus:border-emerald-600 focus:outline-none"
+                        />
+                        <button type="submit" disabled={claimBusy} className="rounded-lg bg-[#1F2328] px-4 py-2 text-xs font-bold text-white hover:bg-black disabled:opacity-60 cursor-pointer">
+                          {claimBusy ? "Submitting..." : "Submit"}
+                        </button>
+                      </div>
+                      <p className="text-[11px] text-[#57606A]">Find it in your UPI app under the payment details (also called UPI Ref No. or Transaction ID).</p>
+                      {claimError && <p className="text-[11px] font-semibold text-red-700">{claimError}</p>}
+                    </form>
+                  )}
 
                   {/* Verification & Help */}
                   <div className="pt-1 text-center space-y-2">
@@ -1044,6 +1204,19 @@ function CabRequestFormContent() {
                 </div>
               )}
 
+              {/* Cancelled / Expired Details */}
+              {["CANCELLED", "EXPIRED"].includes(tripStatus?.status || "") && (
+                <div className="rounded-xl border border-red-200 bg-red-50 p-4 space-y-1.5 text-xs text-red-900">
+                  <p className="font-bold">
+                    {tripStatus?.status === "EXPIRED" ? "This cab request has expired." : "This cab request was cancelled."}
+                  </p>
+                  {tripStatus?.cancellationReason && <p>Reason: {tripStatus.cancellationReason}</p>}
+                  {tripStatus?.refundStatus && REFUND_LABELS[tripStatus.refundStatus] && (
+                    <p className="font-semibold">Advance: {REFUND_LABELS[tripStatus.refundStatus]}</p>
+                  )}
+                </div>
+              )}
+
               {/* Confirmed Driver Details Card */}
               {["CONFIRMED", "EN_ROUTE_PICKUP", "ARRIVED_HOMESTAY", "TRIP_STARTED", "COMPLETED"].includes(tripStatus?.status || "") && (
                 <div className="rounded-2xl border border-emerald-300 bg-emerald-50/40 p-5 space-y-4">
@@ -1063,7 +1236,12 @@ function CabRequestFormContent() {
                       </div>
                     </div>
 
-                    {tripStatus?.driverPhone && (
+                    {tripStatus?.driverPhone?.includes("*") ? (
+                      <div className="text-right max-w-[50%]">
+                        <p className="font-mono text-xs font-bold text-[#1F2328]">{tripStatus.driverPhone}</p>
+                        <p className="text-[10px] text-[#57606A]">Driver contact appears after your advance is confirmed.</p>
+                      </div>
+                    ) : tripStatus?.driverPhone && (
                       <div className="flex items-center gap-1.5">
                         <a
                           href={`tel:${tripStatus.driverPhone}`}
@@ -1073,7 +1251,7 @@ function CabRequestFormContent() {
                           <Icon name="phone" className="text-sm text-emerald-700" />
                         </a>
                         <a
-                          href={`https://wa.me/${tripStatus.driverPhone.replace(/\D/g, "")}`}
+                          href={`https://wa.me/${waNumber(tripStatus.driverPhone)}`}
                           target="_blank"
                           rel="noreferrer"
                           className="flex h-9 w-9 items-center justify-center rounded-full bg-[#25D366] text-white shadow-xs hover:opacity-90"

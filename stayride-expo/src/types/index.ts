@@ -127,6 +127,8 @@ export interface CabTrip {
   dispatched?: boolean;
   // epoch ms: the guest must pay the advance by then or the driver is released
   advanceDueAt?: number;
+  // the guest sent a UPI reference; StayRide is checking it (the hold is extended meanwhile)
+  paymentClaimPending?: boolean;
   refundStatus?: 'NONE' | 'PENDING' | 'REFUNDED';
   quotes?: Array<{
     driverId: number | string;
@@ -192,7 +194,7 @@ export interface DriverTrip {
   _pendingStartOtp?: string;
   _pendingComplete?: boolean;
   // Server's view of this trip for me; lost trips stay listed for 7 days as CANCELLED/REASSIGNED
-  driverView?: 'OPEN' | 'QUOTED' | 'ASSIGNED' | 'CANCELLED' | 'REASSIGNED' | 'EXPIRED';
+  driverView?: 'OPEN' | 'QUOTED' | 'ASSIGNED' | 'CANCELLED' | 'REASSIGNED' | 'EXPIRED' | 'TAKEN';
   cancellationReason?: string | null;
   // Money split, all null until a fare is agreed
   platformFeeAmount?: number | null;

@@ -232,7 +232,7 @@ Please arrive 10 minutes prior to pickup time.
 
     console.log(`\n🚖 [EMAIL DISPATCH TO GUEST] -> ${data.guestEmail}`);
     console.log(`   Subject: ${guestSubject}`);
-    console.log(`   Driver: ${data.driverName} (${data.driverPhone}) | Fare: ₹${data.fareAmount}`);
+    console.log(`   Driver: ${data.driverName} | Fare: ₹${data.fareAmount}`);
     console.log(`🚖 [ALERT DISPATCH TO DRIVER] -> ${driverEmail}`);
     console.log(`   Subject: ${driverSubject}`);
     console.log(`   Passenger: ${data.guestName} | Route: ${data.pickup} -> ${data.dropoff}\n`);

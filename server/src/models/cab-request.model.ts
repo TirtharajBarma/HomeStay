@@ -29,6 +29,8 @@ export interface IDriverQuote {
   // Owner's counter-offer on this quote; the driver accepts it (trip confirmed) or keeps his fare
   counterFare?: number | null;
   counterAt?: Date | null;
+  // REJECTED only because another driver was confirmed: revived if that driver's hold is released
+  outbid?: boolean;
 }
 
 export interface IFinancialSnapshot {
@@ -108,6 +110,8 @@ export interface ICabRequest extends Document {
   paymentRecordedBy?: string;
   paymentRecordedAt?: Date;
   paymentNote?: string;
+  // Guest says they paid by UPI (UTR typed on the status page); admin records the payment or rejects it
+  paymentClaim?: { utr: string; amount: number; submittedAt: Date; status: "PENDING" | "REJECTED"; reason?: string; decidedAt?: Date | null } | null;
   assignedDriverUserId?: string | null;
   assignedDriverCategory?: "INDIVIDUAL" | "UNION";
   assignedDriverUnionName?: string;
@@ -124,6 +128,7 @@ export interface ICabRequest extends Document {
   completedAt?: Date | null;
   cancelledBy?: string;
   pickupOtp?: string | null; // 4-digit boarding verification PIN
+  pickupOtpAttempts?: number; // PIN guesses at start; locked after 5
   guestBudget?: number | null; // Optional guest target budget
   remainingCashAmount: number; // Cash collected directly by driver during journey
   financialSnapshot?: IFinancialSnapshot;
@@ -144,6 +149,12 @@ export interface ICabRequest extends Document {
   unmatchedPayments?: Array<{ paymentId: string; amount: number; status: string; at: Date; refundedAt?: Date | null; refundReference?: string }>;
   // Homestay coordinates at request time: "nearby" is measured from here
   homestayLocation?: { lat: number; lng: number } | null;
+  // Homestay's town (first part of its location, like Property.town): no-GPS drivers must be based there
+  homestayArea?: string;
+  // Own drivers hear first; nearby drivers are told (and can see / quote it) once this passes. null = open to nearby
+  nearbyNotifyAt?: Date | null;
+  // Guest link that created the request: only that link unlocks the driver's phone / PIN
+  guestLinkId?: string;
   createdAtIST?: string;
   updatedAtIST?: string;
   createdAt: Date;
@@ -184,6 +195,7 @@ const DriverQuoteSchema = new Schema<IDriverQuote>(
     createdAt: { type: Date, default: Date.now },
     counterFare: { type: Number, default: null },
     counterAt: { type: Date, default: null },
+    outbid: { type: Boolean, default: false },
   },
   { _id: false }
 );
@@ -259,6 +271,9 @@ const CabRequestSchema = new Schema<ICabRequest>(
       default: [],
     },
     homestayLocation: { type: { lat: Number, lng: Number, _id: false }, default: null },
+    homestayArea: { type: String, default: "" },
+    nearbyNotifyAt: { type: Date, default: null },
+    guestLinkId: { type: String, default: "" },
     broadcastExpiresAt: { type: Date, default: null },
     status: {
       type: String,
@@ -299,6 +314,13 @@ const CabRequestSchema = new Schema<ICabRequest>(
     paymentRecordedBy: { type: String, default: "" },
     paymentRecordedAt: { type: Date, default: null },
     paymentNote: { type: String, default: "" },
+    paymentClaim: {
+      type: new Schema(
+        { utr: String, amount: Number, submittedAt: Date, status: { type: String, enum: ["PENDING", "REJECTED"] }, reason: String, decidedAt: Date },
+        { _id: false }
+      ),
+      default: null,
+    },
     assignedDriverUserId: { type: String, default: null, index: true },
     assignedDriverCategory: { type: String, enum: ["INDIVIDUAL", "UNION"], default: "INDIVIDUAL" },
     assignedDriverUnionName: { type: String, default: "" },
@@ -322,6 +344,7 @@ const CabRequestSchema = new Schema<ICabRequest>(
     startedAt: { type: Date, default: null },
     completedAt: { type: Date, default: null },
     pickupOtp: { type: String, default: null },
+    pickupOtpAttempts: { type: Number, default: 0 },
     guestBudget: { type: Number, default: null },
     biddingClosesAt: { type: Date, default: null },
     autoAccepted: { type: Boolean, default: false },
@@ -342,6 +365,8 @@ CabRequestSchema.index(
   { advancePaymentId: 1 },
   { name: "unique_advance_payment_id", unique: true, partialFilterExpression: { advancePaymentId: { $type: "string", $gt: "" } } }
 );
+// A guest's claimed UTR is checked against other trips' pending claims.
+CabRequestSchema.index({ "paymentClaim.utr": 1 }, { name: "payment_claim_utr", sparse: true });
 CabRequestSchema.index({ propertyId: 1, status: 1 }, { name: "property_status" });
 CabRequestSchema.index({ status: 1, date: 1 }, { name: "status_date" });
 CabRequestSchema.index({ status: 1, advanceDueAt: 1 }, { name: "status_advance_due" });
