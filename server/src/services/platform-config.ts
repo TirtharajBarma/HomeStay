@@ -25,7 +25,7 @@ export interface RoutePreset {
 }
 
 export interface PlatformConfig {
-  /** Minutes the guest has to pay the advance; 0 = no deadline (keep 0 while payments are recorded by hand) */
+  /** Minutes the guest has to pay the advance; never below 15 (an unpaid hold with no deadline would block the driver forever) */
   advanceWindowMin: number;
   /** StayRide fee on trips done by the owner's own drivers: percent of the fare, never below the minimum */
   ownFleetFeePercent: number;
@@ -155,7 +155,7 @@ export const DEFAULT_ROUTE_PRESETS: RoutePreset[] = [
 ];
 
 export const DEFAULT_PLATFORM_CONFIG: PlatformConfig = {
-  advanceWindowMin: 30, // 0 would leave unpaid holds on a driver forever
+  advanceWindowMin: 120, // manual UPI: the guest pays and the admin verifies by hand, so 30 min was too tight
   ownFleetFeePercent: 5,
   ownFleetMinFee: 100,
   minDriverPayoutThreshold: 100,
@@ -246,7 +246,8 @@ export function resolvePlatformConfig(saved: any): PlatformConfig {
     : d.routePresets;
   const lang = typeof s.whatsappLanguage === 'string' && /^[a-z]{2}(_[A-Z]{2})?$/.test(s.whatsappLanguage) ? s.whatsappLanguage : d.whatsappLanguage;
   const cfg: PlatformConfig = {
-    advanceWindowMin: num(s.advanceWindowMin, d.advanceWindowMin, 0, 24 * 60),
+    // min 15: a saved 0 (old "no deadline") would leave unpaid holds stuck on a driver forever
+    advanceWindowMin: num(s.advanceWindowMin, d.advanceWindowMin, 15, 24 * 60),
     ownFleetFeePercent: num(s.ownFleetFeePercent, d.ownFleetFeePercent, 0, 50),
     ownFleetMinFee: num(s.ownFleetMinFee, d.ownFleetMinFee, 0, 5000),
     minDriverPayoutThreshold: num(s.minDriverPayoutThreshold, d.minDriverPayoutThreshold, 0, 1000000),
@@ -279,8 +280,6 @@ export function resolvePlatformConfig(saved: any): PlatformConfig {
       ? [...new Set(s.icalAllowedHosts.map((h: unknown) => String(h ?? '').trim().toLowerCase()).filter((h: string) => /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(h)))].slice(0, 40) as string[]
       : d.icalAllowedHosts,
   };
-  // An advance window shorter than 5 minutes is unusable; 0 still means "off".
-  if (cfg.advanceWindowMin > 0 && cfg.advanceWindowMin < 5) cfg.advanceWindowMin = 5;
   if ((parseTime12(cfg.pickupEnd) ?? 0) <= (parseTime12(cfg.pickupStart) ?? 0)) {
     cfg.pickupStart = d.pickupStart;
     cfg.pickupEnd = d.pickupEnd;

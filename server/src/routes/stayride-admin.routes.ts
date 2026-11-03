@@ -12,7 +12,10 @@ import {
   OPEN_STATUSES, cabModel, payoutModel, userModel, parseFare, cancelRequest, startTrip, completeTrip,
   adminAssignDriver, adminRecordPayment, adminRejectPaymentClaim, adminVoidPayment, adminMarkRefunded, adminSettleDriver,
   settlePayout, rejectPayout, expireStaleRequests, overlayTrips, onDriverStatusChange, releaseDriverTrips, adminRefundUnmatched, maskPhone,
+  sendAskCab, askCabConfirmText, askCabLine, stayOrder, last10,
 } from "../stayride/platform.js";
+import { getGuestLinkModel } from "../models/guest-link.model.js";
+import { toWhatsAppNumber } from "../services/whatsapp.service.js";
 import { httpError } from "../middlewares/error-handler.js";
 import { config } from "../config/env.js";
 
@@ -792,6 +795,155 @@ router.delete("/stayride/tenants/:tenantKey/:collection/:id", async (req, res) =
   if (!removed) throw httpError(404, "Record not found.");
   await audit(actor(req), "tenant.data.delete", "Tenant", key, { collection, id, removed }, demo, { tenantId: key });
   ok(res, removed, "Record deleted.");
+});
+
+// ---------------------------------------------------------------------------
+// Guests staying (all homestays): ask for cab, call, last contacted
+// ---------------------------------------------------------------------------
+const adminName = (req: Request) => String((req as any).user?.name || (req as any).user?.email || "Admin");
+const LIVE_BOOKINGS = ["CONFIRMED", "CHECKED_IN"];
+
+router.get("/stayride/guests-staying", async (req, res) => {
+  const demo = isDemo(req);
+  const now = Date.now();
+  // One aggregation over every homestay, returning only the live bookings' few fields (no per-homestay queries).
+  // ponytail: filter / search / sort run in memory over all live bookings; move them into the pipeline ($facet) past a few thousand.
+  const tenants = await getStayRideTenantModel(demo).aggregate([
+    { $match: { "data.bookings.status": { $in: LIVE_BOOKINGS } } },
+    {
+      $project: {
+        _id: 0,
+        tenantId: 1,
+        homestayName: 1,
+        bookings: {
+          $map: {
+            // calendar imports (external) have no guest to contact
+            input: { $filter: { input: "$data.bookings", as: "b", cond: { $and: [{ $in: ["$$b.status", LIVE_BOOKINGS] }, { $not: ["$$b.external"] }] } } },
+            as: "b",
+            in: { id: "$$b.id", guestName: "$$b.guestName", phone: "$$b.phone", checkIn: "$$b.checkIn", checkOut: "$$b.checkOut", status: "$$b.status", roomNumber: "$$b.roomNumber", askCab: "$$b.askCab" },
+          },
+        },
+      },
+    },
+  ]);
+  const status = LIVE_BOOKINGS.includes(String(req.query.status)) ? String(req.query.status) : "";
+  const q = search(req).toLowerCase();
+  const qDigits = q.replace(/\D/g, "");
+  const rows = tenants
+    .flatMap((t: any) => t.bookings.map((b: any) => ({ ...b, tenantKey: t.tenantId, homestayName: t.homestayName || "" })))
+    // a booking never checked in whose stay has ended is not staying (same rule as the owner's live bookings)
+    .filter((b: any) => b.status === "CHECKED_IN" || b.checkOut > now)
+    .filter((b: any) => !status || b.status === status)
+    .filter((b: any) => !q || [b.guestName, b.homestayName].some((v) => String(v || "").toLowerCase().includes(q)) || (qDigits.length >= 3 && String(b.phone || "").replace(/\D/g, "").includes(qDigits)))
+    .sort(stayOrder(now));
+  const { page, limit, skip } = paging(req);
+  const pageRows = rows.slice(skip, skip + limit);
+
+  // Last contacted, for this page only: the booking's ask-cab history (delivery status while its link exists; bookings
+  // from before the history fall back to the latest sent link per guest phone), latest "call started" audit per booking
+  const keys = [...new Set(pageRows.map((b: any) => b.tenantKey))];
+  const linkIds = pageRows.flatMap((b: any) => (b.askCab || []).map((e: any) => e.linkId)).filter((id: any) => mongoose.Types.ObjectId.isValid(String(id)));
+  const [links, sentLinks, calls] = await Promise.all([
+    keys.length ? getGuestLinkModel(demo).find({ tenantKey: { $in: keys }, sentAt: { $ne: null } }).select("tenantKey guestPhone sentAt by status").sort({ sentAt: -1 }).limit(2000).lean() : [],
+    linkIds.length ? getGuestLinkModel(demo).find({ _id: { $in: linkIds } }).select("status").lean() : [],
+    pageRows.length ? getAuditLogModel(demo).find({ action: "guest.call", targetId: { $in: pageRows.map((b: any) => `${b.tenantKey}:${b.id}`) } }).select("targetId actor actorName createdAt").sort({ createdAt: -1 }).limit(1000).lean() : [],
+  ]);
+  const statusOf = new Map((sentLinks as any[]).map((l) => [String(l._id), l.status as string]));
+  const linkBy = new Map<string, any>();
+  for (const l of links as any[]) if (!linkBy.has(`${l.tenantKey}|${last10(l.guestPhone)}`)) linkBy.set(`${l.tenantKey}|${last10(l.guestPhone)}`, l);
+  const callBy = new Map<string, any>();
+  for (const c of calls as any[]) if (!callBy.has(c.targetId)) callBy.set(c.targetId, c);
+
+  const items = pageRows.map(({ askCab, ...b }: any) => {
+    const l = linkBy.get(`${b.tenantKey}|${last10(b.phone)}`);
+    const history = askCab?.length
+      ? [...askCab].reverse().map((e: any) => askCabLine({ ...e, status: statusOf.get(String(e.linkId)) }))
+      : l ? [askCabLine({ at: new Date(l.sentAt).getTime(), by: l.by, status: l.status })] : [];
+    const c = callBy.get(`${b.tenantKey}:${b.id}`);
+    const wa = toWhatsAppNumber(b.phone);
+    return {
+      ...b,
+      tel: wa ? `+${wa}` : "",
+      askCab: history, // newest first
+      lastCall: c ? { at: new Date(c.createdAt).getTime(), by: c.actorName || c.actor } : null,
+    };
+  });
+  res.json({ success: true, items, total: rows.length, page, limit });
+});
+
+// Same send as the owner's and the automatic one (guest link + ASK_CAB from the company number). Once the
+// booking was asked, the admin gets status ALREADY_SENT with its history as a confirm; sending again needs `force: true`.
+router.post("/stayride/tenants/:tenantKey/bookings/:id/ask-cab", async (req, res) => {
+  const { key, demo } = await existingTenant(req);
+  const store = await tenantManager.load(key);
+  const b = store.booking(Number(req.params.id));
+  // Only a current guest of this homestay, on the phone saved with the booking
+  if (!b || !LIVE_BOOKINGS.includes(b.status) || !b.phone) throw httpError(404, "No current booking with a phone number.");
+  const force = req.body?.force === true;
+  let sent;
+  try {
+    sent = await sendAskCab(key, demo, store.homestay.name, { guestId: b.guestId, guestName: b.guestName || "Guest", guestPhone: b.phone, checkInDate: b.checkIn }, { by: `admin:${adminName(req)}`, force, booking: b });
+  } catch (err: any) {
+    if (err?.code !== "ASK_CAB_SENT" || !err.lines) throw err;
+    return ok(res, { status: "ALREADY_SENT", confirm: askCabConfirmText(err.lines) });
+  }
+  await audit(actor(req), "guest.ask_cab", "Booking", `${key}:${b.id}`, { guestName: b.guestName, result: sent.result, force }, demo, { tenantId: key, actorName: adminName(req) });
+  const message = sent.result === "SENT" ? "Ask-for-cab WhatsApp sent." : sent.result === "SKIPPED" ? "WhatsApp is off (or demo data): nothing was sent." : "WhatsApp delivery failed. See the audit log.";
+  ok(res, { status: sent.result }, message);
+});
+
+// Records that the admin started a call (it can't be known whether it connected).
+router.post("/stayride/tenants/:tenantKey/bookings/:id/call", async (req, res) => {
+  const { key, demo } = await existingTenant(req);
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) throw httpError(404, "Booking not found.");
+  await audit(actor(req), "guest.call", "Booking", `${key}:${id}`, {}, demo, { tenantId: key, actorName: adminName(req) });
+  ok(res, { at: Date.now(), by: adminName(req) });
+});
+
+// ---------------------------------------------------------------------------
+// Notification bell: derived from existing records (no notifications collection). Read state is per
+// browser (the admin panel keeps "last seen at"); `since` = that time.
+// ---------------------------------------------------------------------------
+const BELL_ACTIONS = ["booking.create", "booking.check_in", "payment.claim"];
+const SOURCE_LABELS: Record<string, string> = { GUEST_WEB_LINK: "guest link", MANUAL_OWNER: "owner", HOMESTAY_WEB_PORTAL: "portal", ADMIN_DISPATCH: "admin" };
+
+router.get("/stayride/notifications", async (req, res) => {
+  const demo = isDemo(req);
+  const since = new Date(Number(req.query.since) || 0);
+  const Audit = getAuditLogModel(demo);
+  const Cab = cabModel(demo);
+  const [audits, cabs, auditCount, cabCount] = await Promise.all([
+    Audit.find({ action: { $in: BELL_ACTIONS } }).sort({ createdAt: -1 }).limit(20).select("action targetId tenantId details createdAt").lean(),
+    Cab.find({}).sort({ createdAt: -1 }).limit(20).select("reference guestName homestayName propertyId requestSource createdAt").lean(),
+    Audit.countDocuments({ action: { $in: BELL_ACTIONS }, createdAt: { $gt: since } }),
+    Cab.countDocuments({ createdAt: { $gt: since } }),
+  ]);
+  const tenantKeys = [...new Set((audits as any[]).map((a) => a.tenantId).filter(Boolean))];
+  const names = new Map<string, string>(
+    tenantKeys.length ? (await getStayRideTenantModel(demo).find({ tenantId: { $in: tenantKeys } }).select("tenantId homestayName").lean()).map((t: any) => [t.tenantId, t.homestayName || t.tenantId]) : []
+  );
+  const items = [
+    ...(audits as any[]).map((a) => {
+      const homestay = names.get(a.tenantId) || a.tenantId || "";
+      const d = a.details || {};
+      const base = { id: String(a._id), at: new Date(a.createdAt).getTime(), tenantKey: a.tenantId || "", guestName: d.guestName || "" };
+      if (a.action === "payment.claim") return { ...base, kind: "claim", title: `Guest says paid: ${d.ref || "trip"}`, sub: [typeof d.amount === "number" ? `₹${d.amount.toLocaleString("en-IN")}` : "", homestay].filter(Boolean).join(" • ") };
+      return { ...base, kind: a.action === "booking.create" ? "booking" : "check_in", title: `${a.action === "booking.create" ? "New booking" : "Checked in"}: ${d.guestName || "Guest"}`, sub: homestay };
+    }),
+    ...(cabs as any[]).map((c) => ({
+      id: String(c._id),
+      at: new Date(c.createdAt).getTime(),
+      tenantKey: c.propertyId || "",
+      guestName: c.guestName || "",
+      kind: "cab",
+      title: `Cab requested: ${c.guestName || "Guest"}`,
+      sub: [c.homestayName, SOURCE_LABELS[c.requestSource] || ""].filter(Boolean).join(" • "),
+    })),
+  ]
+    .sort((a, b) => b.at - a.at)
+    .slice(0, 20);
+  ok(res, { unread: auditCount + cabCount, items });
 });
 
 export default router;

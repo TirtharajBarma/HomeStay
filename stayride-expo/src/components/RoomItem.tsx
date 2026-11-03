@@ -18,7 +18,7 @@ export const RoomItem: React.FC<RoomItemProps> = ({ room, onPress }) => {
         <Pill label={room.status} />
       </View>
       <Text style={styles.meta}>
-        {room.type} • {room.floor}
+        {room.floor}
       </Text>
       {room.nextArrival ? (
         <Text style={styles.note}>

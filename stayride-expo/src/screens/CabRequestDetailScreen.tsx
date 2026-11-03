@@ -46,6 +46,7 @@ export const CabRequestDetailScreen: React.FC = () => {
     dispatchTrip,
     rateTrip,
     config,
+    features,
   } = useStayRide();
 
   const trip = trips.find((t) => t.id === tripId);
@@ -526,7 +527,7 @@ export const CabRequestDetailScreen: React.FC = () => {
                 : status === 'AWAITING_ADVANCE'
                 ? `${trip.ownerDriver ? `Your driver ${trip.driverName || ''} · w` : 'W'}aiting for the guest's ${formatINR(trip.advanceAmount || 0)} advance deposit${
                     trip.advanceDueAt
-                      ? ` · due by ${new Date(trip.advanceDueAt).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}, otherwise the driver is released`
+                      ? ` · due by ${new Date(trip.advanceDueAt).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' })}, otherwise the driver is released`
                       : ''
                   }`
                 : status === 'CONFIRMED'
@@ -544,11 +545,16 @@ export const CabRequestDetailScreen: React.FC = () => {
               <View style={[styles.card, { marginTop: 12, backgroundColor: '#F8FAFC' }]}>
                 <Text style={styles.assignName}>How do you want to find a driver?</Text>
                 <Text style={[styles.assignMeta, { marginBottom: 12 }]}>
-                  Nearby drivers send you quotes and you earn commission on the trip. Your own driver is assigned directly.
+                  {features?.platformDispatch !== false
+                    ? 'Nearby drivers send you quotes and you earn commission on the trip. Your own driver is assigned directly.'
+                    : 'Assign a driver from your own fleet.'}
                 </Text>
-                <TouchableOpacity style={styles.solidBtn} disabled={busy} onPress={handleDispatch}>
-                  <Text style={styles.solidBtnText}>{busy ? 'Sending…' : 'Send to nearby drivers'}</Text>
-                </TouchableOpacity>
+                {/* Same gate as FindDriverScreen: only where the owner can send requests to the network */}
+                {features?.platformDispatch !== false && (
+                  <TouchableOpacity style={styles.solidBtn} disabled={busy} onPress={handleDispatch}>
+                    <Text style={styles.solidBtnText}>{busy ? 'Sending…' : 'Send to nearby drivers'}</Text>
+                  </TouchableOpacity>
+                )}
                 <TouchableOpacity style={styles.outlineBtn} disabled={busy} onPress={() => setShowOwnPicker((v) => !v)}>
                   <Text style={styles.outlineBtnText}>{showOwnPicker ? 'Hide my drivers' : 'Assign my own driver'}</Text>
                 </TouchableOpacity>
@@ -592,7 +598,7 @@ export const CabRequestDetailScreen: React.FC = () => {
               </View>
             )}
             {(status === 'FINDING_DRIVER' || status === 'QUOTE_RECEIVED') &&
-              (trip.quotes || []).map((q: any) => {
+              (trip.quotes || []).map((q) => {
                 const isBestMatch = lowestFare !== null && q.quotedFare === lowestFare && validQuotes.length > 1;
                 return (
                   <View key={String(q.driverId)} style={[styles.quoteCard, (isBestMatch || q.isOwnDriver) && styles.quoteCardBestMatch]}>

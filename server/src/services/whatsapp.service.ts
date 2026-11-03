@@ -11,6 +11,7 @@
 import crypto from 'node:crypto';
 import { logger } from '../utils/logger.js';
 import { audit } from '../models/audit-log.model.js';
+import { getGuestLinkModel } from '../models/guest-link.model.js';
 
 const TIMEOUT_MS = 4000;
 const API_VERSION = process.env.WHATSAPP_API_VERSION || 'v26.0';
@@ -47,7 +48,7 @@ export interface WhatsAppMessage {
 }
 
 export interface WhatsAppContext {
-  ref?: string; // cab request reference
+  ref?: string; // cab request reference (ASK_CAB: the guest link id)
   tenantId?: string;
   driverId?: string;
 }
@@ -89,6 +90,13 @@ export function verifyMetaSignature(rawBody: Buffer | string, header: unknown, s
 }
 
 export type WhatsAppResult = 'SENT' | 'SKIPPED' | 'FAILED';
+
+/** Ask-cab delivery status only moves forward (sent → delivered → read); failed is terminal. The statuses `next` may replace. */
+export const askCabStatusFrom = (next: unknown): string[] =>
+  next === 'delivered' ? ['sent'] : next === 'read' ? ['sent', 'delivered'] : next === 'failed' ? ['sent', 'delivered'] : [];
+
+/** Audit target of a WhatsApp send: ASK_CAB refs are guest links, everything else cab requests. */
+const targetOf = (event: unknown) => (event === 'ASK_CAB' ? 'guest_link' : 'cab_request');
 
 const configured = (value: string | undefined) => {
   const normalized = value?.trim() || '';
@@ -170,7 +178,7 @@ export async function sendWhatsApp(isDemo: boolean, msg: WhatsAppMessage, langua
       metadata: { ...base, template, status: 'FAILED', ...detail },
     });
     // compact Mongo record (90-day TTL); Axiom above has the full error
-    await audit('system', 'whatsapp.failed', 'cab_request', ctx.ref || '', { event: msg.event, to: base.to, code: detail.code ?? detail.httpStatus ?? 'NETWORK', title: detail.title || '' }, false, { tenantId: ctx.tenantId, driverId: ctx.driverId, actorRole: 'SYSTEM' });
+    await audit('system', 'whatsapp.failed', targetOf(msg.event), ctx.ref || '', { event: msg.event, to: base.to, code: detail.code ?? detail.httpStatus ?? 'NETWORK', title: detail.title || '' }, false, { tenantId: ctx.tenantId, driverId: ctx.driverId, actorRole: 'SYSTEM' });
     return 'FAILED' as const;
   };
 
@@ -225,8 +233,16 @@ export async function recordWhatsAppWebhook(body: any): Promise<void> {
             pricingCategory: st.pricing?.category, billable: st.pricing?.billable, errors: st.errors,
           },
         });
+        // Ask-for-cab "Last contacted" status on its guest link: one conditional update, forward only
+        if (ctx.event === 'ASK_CAB' && /^[a-f0-9]{24}$/.test(String(ctx.ref)) && askCabStatusFrom(st.status).length) {
+          try {
+            await getGuestLinkModel(false).updateOne({ _id: ctx.ref, status: { $in: askCabStatusFrom(st.status) } }, { $set: { status: st.status } });
+          } catch (e: any) {
+            logger.warn('[WhatsApp Status] ask-cab status not saved', { action: 'whatsapp.status_save_failed', metadata: { ref: ctx.ref, error: e?.message } });
+          }
+        }
         if (failed) {
-          await audit('meta', 'whatsapp.failed', 'cab_request', ctx.ref || '', { event: ctx.event || '', to, code: err?.code, title: err?.title || '', reason: String(err?.error_data?.details || err?.message || '').slice(0, 300) }, false, { tenantId: ctx.tenantId, driverId: ctx.driverId, actorRole: 'SYSTEM' });
+          await audit('meta', 'whatsapp.failed', targetOf(ctx.event), ctx.ref || '', { event: ctx.event || '', to, code: err?.code, title: err?.title || '', reason: String(err?.error_data?.details || err?.message || '').slice(0, 300) }, false, { tenantId: ctx.tenantId, driverId: ctx.driverId, actorRole: 'SYSTEM' });
         }
       }
       for (const m of v.messages || []) {
@@ -234,7 +250,8 @@ export async function recordWhatsAppWebhook(body: any): Promise<void> {
         const text = String(m.text?.body ?? m.button?.text ?? m.interactive?.button_reply?.title ?? m.interactive?.list_reply?.title ?? m.reaction?.emoji ?? '');
         logger.info(`[WhatsApp Reply] ${m.type} from ${from}`, {
           action: 'whatsapp.reply',
-          metadata: { ...m, from, replyTo: m.context?.id, text },
+          // whitelist, never the raw message: "contacts" / "location" messages carry other people's phones and places
+          metadata: { id: m.id, type: m.type, timestamp: m.timestamp, from, replyTo: m.context?.id, text, contacts: m.contacts?.length, errors: m.errors },
         });
         await audit(`whatsapp:${from}`, 'whatsapp.reply', 'whatsapp_sender', from, { from, type: m.type, text: text.slice(0, 300), replyTo: m.context?.id || '' }, false);
       }

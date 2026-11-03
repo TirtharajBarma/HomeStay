@@ -21,7 +21,7 @@ import { PaymentMethod, Room } from '../types';
 import { reportOutcome } from '../utils/report';
 import { bookingClash, canCheckInNow, isPast, checkoutDueAt } from '../utils/rooms';
 import { paidOf, balanceOf, PAYMENT_METHODS, methodLabel, receiptText } from '../utils/payments';
-import { askGuestForCab as askForCab } from '../utils/askCab';
+import { askGuestForCab as askForCab, cabSentText } from '../utils/askCab';
 import { RangeCalendar } from '../components/RangeCalendar';
 import { KeyboardAwareOverlay } from '../components/KeyboardAwareOverlay';
 
@@ -114,12 +114,16 @@ export const BookingDetailScreen: React.FC = () => {
           onPress: async () => {
             const outcome = await checkInBooking(booking.id);
             if (!outcome.ok) return reportOutcome(outcome, '', '');
+            // The server's booking: check-in may have just auto-sent the cab link (askCab)
+            const checkedIn = outcome.booking || booking;
             // Right moment to offer a cab: the guest just arrived and will need rides (StayRide earns on cabs)
             const guest = guests.find((g) => g.id === booking.guestId || (Boolean(g.phone) && g.phone === booking.phone));
             const phone = guest?.phone || booking.phone;
             const targetGuest = guest || (phone ? ({ id: booking.guestId || 0, name: booking.guestName, phone } as any) : null);
-            if (!phone || features?.guestCabLinks === false) {
-              return Alert.alert('Checked in', `${booking.guestName} checked in to room ${booking.roomNumber}`);
+            // Already asked for this booking: the server would refuse a second send
+            const sentText = cabSentText(checkedIn);
+            if (!phone || features?.guestCabLinks === false || sentText) {
+              return Alert.alert('Checked in', `${booking.guestName} checked in to room ${booking.roomNumber}${sentText ? `\n${sentText}` : ''}`);
             }
             Alert.alert('Checked in', `${booking.guestName} is in room ${booking.roomNumber}. Ask if they need a cab during their stay?`, [
               { text: 'Not now', style: 'cancel' },
@@ -320,6 +324,7 @@ export const BookingDetailScreen: React.FC = () => {
           </View>
 
           <Text style={styles.sourceText}>Source: {booking.source}</Text>
+          {cabSentText(booking) && <Text style={styles.sourceText}>{cabSentText(booking)}</Text>}
         </View>
 
         {/* Status Note */}
@@ -526,7 +531,7 @@ export const BookingDetailScreen: React.FC = () => {
                         isCurrent && styles.roomChoiceTextActive,
                       ]}
                     >
-                      Room {r.number} · {r.type} · ₹{r.price.toLocaleString()}
+                      Room {r.number} · ₹{r.price.toLocaleString()}
                       {isCurrent ? ' · current' : r.status === 'MAINTENANCE' ? ' · maintenance' : clash ? ` · booked by ${clash.guestName}` : ' · free'}
                     </Text>
                   </TouchableOpacity>

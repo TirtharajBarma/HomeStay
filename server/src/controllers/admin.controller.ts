@@ -9,6 +9,7 @@ import { User } from "../models/user.model.js";
 import { AnalyticsService } from "../services/analytics.service.js";
 import { CommissionService } from "../services/commission.service.js";
 import { getTenantControlModel } from "../models/tenant-control.model.js";
+import { audit } from "../models/audit-log.model.js";
 
 const PROPERTY_STATUSES = ["active", "pending", "paused", "suspended"];
 
@@ -178,6 +179,10 @@ export class AdminController {
         const exists = await CabTrip.exists({ _id: id });
         return res.status(exists ? 409 : 404).json({ success: false, error: exists ? "Payout is already settled." : "Trip not found." });
       }
+      const u: any = (req as any).user;
+      // "Name (email)" like the StayRide admin routes, so audit() recognises an admin actor
+      const actor = u?.email ? `${u.name || "Admin"} (${u.email})` : `admin:${u?.name || u?.id || "unknown"}`;
+      await audit(actor, "legacy.trip_payout_settle", "CabTrip", id, { settlementReference });
       res.json({ success: true, message: "Payout marked as settled.", data: trip });
     } catch (err: any) {
       res.status(500).json({ success: false, error: "Failed to settle payout." });

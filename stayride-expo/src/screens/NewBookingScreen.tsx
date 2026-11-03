@@ -202,7 +202,7 @@ export const NewBookingScreen: React.FC = () => {
                     const inStr = new Date(checkIn).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
                     const outStr = new Date(checkOut).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
                     const homestayName = homestay?.name || 'Our Homestay';
-                    const message = `Namaste ${trimmedName}! 🙏\n\nYour booking at *${homestayName}* is confirmed:\n🏨 Room: ${pickedRoom.number} (${pickedRoom.type})\n📅 Check-in: ${inStr}\n📅 Check-out: ${outStr} (${nights} night${nights > 1 ? 's' : ''})\n👥 Guests: ${parsedCount}\n💰 Total: ₹${parsedAmount.toLocaleString('en-IN')}${receivedNum > 0 ? ` (Advance paid: ₹${receivedNum.toLocaleString('en-IN')})` : ''}\n\nWe look forward to hosting you in the hills! Let us know if you need airport or station cab pickup.`;
+                    const message = `Namaste ${trimmedName}! 🙏\n\nYour booking at *${homestayName}* is confirmed:\n🏨 Room: ${pickedRoom.number}\n📅 Check-in: ${inStr}\n📅 Check-out: ${outStr} (${nights} night${nights > 1 ? 's' : ''})\n👥 Guests: ${parsedCount}\n💰 Total: ₹${parsedAmount.toLocaleString('en-IN')}${receivedNum > 0 ? ` (Advance paid: ₹${receivedNum.toLocaleString('en-IN')})` : ''}\n\nWe look forward to hosting you in the hills! Let us know if you need airport or station cab pickup.`;
                     const cleanPhone = phoneToSend.replace(/\D/g, '');
                     const targetPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
                     Linking.openURL(`whatsapp://send?phone=${targetPhone}&text=${encodeURIComponent(message)}`).catch(() => {
@@ -289,7 +289,7 @@ export const NewBookingScreen: React.FC = () => {
           label="Room"
           value={pickedRoom ? String(pickedRoom.id) : ''}
           options={freeRooms.map((r) => ({
-            label: `Room ${r.number} · ${r.type}`,
+            label: `Room ${r.number}`,
             value: String(r.id),
             icon: 'bed-outline' as const,
             subLabel: `₹${r.price.toLocaleString()}/night · ${r.floor}`,
@@ -329,23 +329,6 @@ export const NewBookingScreen: React.FC = () => {
           options={GUEST_COUNT_OPTIONS}
           onSelect={setGuestsCount}
         />
-        {(() => {
-          const roomToCheck = selectedRoom || (freeRooms.length > 0 ? freeRooms[0] : null);
-          if (!roomToCheck) return null;
-          const typeLower = (roomToCheck.type || '').toLowerCase();
-          const maxCapacity = typeLower.includes('dorm') ? 8 : typeLower.includes('family') ? 4 : typeLower.includes('suite') ? 3 : 2;
-          if (parseInt(guestsCount, 10) > maxCapacity) {
-            return (
-              <View style={styles.capacityWarning}>
-                <Ionicons name="warning-outline" size={15} color="#B45309" />
-                <Text style={styles.capacityWarningText}>
-                  Room {roomToCheck.number} ({roomToCheck.type}) typically accommodates up to {maxCapacity} guests. Ensure extra bedding is arranged.
-                </Text>
-              </View>
-            );
-          }
-          return null;
-        })()}
 
         {/* Amount */}
         <Text style={styles.label}>Total Amount (₹)</Text>
@@ -639,22 +622,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.textSecondary,
     marginTop: 2,
-  },
-  capacityWarning: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#FEF3C7',
-    borderWidth: 1,
-    borderColor: '#FDE68A',
-    borderRadius: 8,
-    padding: 8,
-    marginTop: 6,
-  },
-  capacityWarningText: {
-    flex: 1,
-    fontSize: 12,
-    color: '#92400E',
-    lineHeight: 16,
   },
 });

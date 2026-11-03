@@ -32,6 +32,10 @@ export class RoomController {
     if (!room) {
       return res.status(404).json({ success: false, error: `Room '${codeOrSlug}' not found` });
     }
+    // no nightly price = "Price on request": never quote it as ₹0
+    if (!(Number(room.nightly) > 0)) {
+      return res.status(409).json({ success: false, error: "This room's price is on request. Please contact the homestay." });
+    }
     const { checkIn, checkOut } = req.body;
     const quote = RoomService.calculateQuote(room.nightly, checkIn, checkOut);
     res.json({ success: true, data: quote });

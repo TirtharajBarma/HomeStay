@@ -4,17 +4,18 @@ import { useEffect, useState } from "react";
 import { useAdminAuth } from "@/components/auth-context";
 import { API_ENDPOINTS, apiFetch, readApiError } from "@/lib/api-config";
 import {
-  AppealsTab, AuditTab, inr, CabRequestsTab, DashboardTab, DriversTab, HomestaysTab, PayoutsTab, SettingsTab, UsersTab,
+  AppealsTab, AuditTab, inr, CabRequestsTab, DashboardTab, DriversTab, GuestsTab, HomestaysTab, NotificationBell, PayoutsTab, SettingsTab, UsersTab,
 } from "@/components/stayride-admin";
 
 // The old Hill Hospitality portal: its data is not used by the StayRide app, so its "Suspend" and
 // "Settle UPI" do nothing there. Hidden unless NEXT_PUBLIC_SHOW_LEGACY_PORTAL=true.
 const SHOW_LEGACY = process.env.NEXT_PUBLIC_SHOW_LEGACY_PORTAL === "true";
-type Tab = "dashboard" | "users" | "homestays" | "drivers" | "cab-requests" | "payouts" | "settings" | "appeals" | "audit" | "legacy";
+type Tab = "dashboard" | "users" | "homestays" | "guests" | "drivers" | "cab-requests" | "payouts" | "settings" | "appeals" | "audit" | "legacy";
 const TABS: Array<[Tab, string, string]> = [
   ["dashboard", "monitoring", "Overview"],
   ["users", "group", "Users"],
   ["homestays", "villa", "Homestays"],
+  ["guests", "hotel", "Guests staying"],
   ["drivers", "badge", "Drivers"],
   ["cab-requests", "local_taxi", "Cab requests"],
   ["payouts", "account_balance_wallet", "Payouts"],
@@ -72,11 +73,19 @@ export default function AdminDashboardPage() {
   const [demo, setDemo] = useState(false);
   // Homestay key handed from the Homestays data viewer to the Cab requests desk.
   const [cabTenant, setCabTenant] = useState("");
+  // Filter handed from the notification bell ("claims" for a guest-says-paid item).
+  const [cabFilter, setCabFilter] = useState("");
+  // Guest name handed from the notification bell to the Guests staying desk.
+  const [guestSearch, setGuestSearch] = useState("");
 
   const handleTabChange = (tab: Tab) => {
     setActiveTab(tab);
     setVisitedTabs((prev) => new Set([...prev, tab]));
-    if (tab === "cab-requests") setCabTenant("");
+    if (tab === "cab-requests") {
+      setCabTenant("");
+      setCabFilter("");
+    }
+    if (tab === "guests") setGuestSearch("");
   };
 
   const handleDemoToggle = (isDemo: boolean) => {
@@ -209,6 +218,23 @@ export default function AdminDashboardPage() {
                 <span>Demo dataset</span>
               </label>
             )}
+            {activeTab !== "legacy" && (
+              <NotificationBell
+                key={String(demo)}
+                demo={demo}
+                onOpen={(n) => {
+                  // tab change first: it clears the hand-off values
+                  if (n.kind === "cab" || n.kind === "claim") {
+                    handleTabChange("cab-requests");
+                    setCabTenant(n.tenantKey || "");
+                    if (n.kind === "claim") setCabFilter("claims");
+                  } else {
+                    handleTabChange("guests");
+                    setGuestSearch(n.guestName || "");
+                  }
+                }}
+              />
+            )}
             {activeTab === "legacy" && <button
               onClick={fetchOverview}
               className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-3.5 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-700"
@@ -258,13 +284,14 @@ export default function AdminDashboardPage() {
           <HomestaysTab
             demo={demo}
             onOpenCabRequests={(tenantKey) => {
+              handleTabChange("cab-requests"); // first: it clears the filter
               setCabTenant(tenantKey);
-              handleTabChange("cab-requests");
             }}
           />
         )}
+        {activeTab === "guests" && <GuestsTab key={guestSearch} demo={demo} initialSearch={guestSearch || undefined} />}
         {activeTab === "drivers" && <DriversTab demo={demo} />}
-        {activeTab === "cab-requests" && <CabRequestsTab key={cabTenant} demo={demo} initialTenantKey={cabTenant || undefined} />}
+        {activeTab === "cab-requests" && <CabRequestsTab key={`${cabTenant}|${cabFilter}`} demo={demo} initialTenantKey={cabTenant || undefined} initialFilter={cabFilter || undefined} />}
         {activeTab === "payouts" && <PayoutsTab demo={demo} />}
         {activeTab === "settings" && <SettingsTab demo={demo} />}
         {activeTab === "appeals" && <AppealsTab demo={demo} />}

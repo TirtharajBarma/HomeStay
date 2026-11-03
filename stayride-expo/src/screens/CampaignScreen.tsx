@@ -61,9 +61,10 @@ export const CampaignScreen: React.FC = () => {
       case 'Repeat guests':
         return guests.filter((g) => g.marketingConsent && g.visits > 1).length;
       case 'Recent guests':
-        return guests.filter((g) => g.marketingConsent && g.visits === 1).length;
+        // Same rules as the server's createCampaign (store.ts)
+        return guests.filter((g) => g.marketingConsent && g.lastVisit >= Date.now() - 60 * 86400000).length;
       case 'Inactive guests':
-        return guests.filter((g) => g.marketingConsent && g.lastVisit > 0 && Date.now() - g.lastVisit > 90 * 86400000).length;
+        return guests.filter((g) => g.marketingConsent && g.lastVisit < Date.now() - 90 * 86400000).length;
       default:
         return consentCount;
     }
@@ -185,7 +186,7 @@ export const CampaignScreen: React.FC = () => {
                 </Text>
                 <Text style={styles.metaText}>
                   {c.status === 'COMPLETED'
-                    ? `${c.sent} delivered`
+                    ? `Marked as sent · ${c.sent} recipients`
                     : `${c.recipients} recipients`}
                 </Text>
               </View>

@@ -43,6 +43,8 @@ export interface StayRideBooking {
   payments?: BookingPayment[];
   // Imported from an OTA calendar (Airbnb, Booking.com...): no guest record, dates only
   external?: { source: string; uid: string; feedId: string; conflict?: boolean };
+  // Set by the server: successful Ask-for-cab sends (last 5); one per booking unless an admin sends again
+  askCab?: Array<{ at: number; by: string; linkId?: string }>;
 }
 
 export interface BookingPayment {

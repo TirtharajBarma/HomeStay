@@ -42,6 +42,8 @@ export interface ActionOutcome {
   synced: boolean;
   queued?: boolean;
   error?: string;
+  // offline / 5xx (the server never refused it); a 4xx refusal leaves this unset
+  retryable?: boolean;
 }
 
 // Union two row lists by id with LOCAL precedence: server rows are the base, local rows (which may
@@ -109,7 +111,7 @@ interface StayRideContextType {
   // Actions
   sync: () => Promise<void>;
   createBooking: (data: Omit<Booking, 'id' | 'status'> & { paid?: boolean; advance?: number; advanceMethod?: PaymentMethod }) => Promise<Booking>;
-  checkInBooking: (id: number) => Promise<ActionOutcome>;
+  checkInBooking: (id: number) => Promise<ActionOutcome & { booking?: Booking }>;
   checkOutBooking: (id: number) => Promise<ActionOutcome>;
   cancelBooking: (id: number) => Promise<ActionOutcome>;
   setBookingPaid: (id: number, paid: boolean) => Promise<ActionOutcome>;
@@ -191,7 +193,7 @@ interface StayRideContextType {
   sendCampaign: (id: number) => Promise<ActionOutcome>;
   createGuestLink: (data: { guestId?: number; guestName: string; guestPhone: string }) => Promise<{ url: string; expiresAt: number }>;
   /** StayRide sends the cab-request link to the guest from the company WhatsApp number. */
-  askGuestForCab: (data: { guestId?: number; guestName: string; guestPhone: string }) => Promise<{ sent: boolean; status: 'SENT' | 'SKIPPED'; nativeLink?: string; url?: string }>;
+  askGuestForCab: (data: { guestId?: number; guestName: string; guestPhone: string }) => Promise<{ sent: boolean; status: 'SENT' | 'SKIPPED' | 'FAILED' | 'ALREADY_SENT'; nativeLink?: string; url?: string; message?: string }>;
 
   updateHomestay: (data: Partial<Homestay>) => Promise<ActionOutcome>;
   /** Pin the homestay on the map (nearby drivers are matched from here). */
@@ -588,13 +590,16 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (snap?.driverProfile) {
         // Driver snapshot: merge server truth while preserving any offline optimistic mutations until flushed
         const serverTrips: DriverTrip[] = Array.isArray(snap.trips) ? snap.trips : [];
+        // A queued completion the server later refused is no longer in the outbox: stop showing it as done
+        const queuedPaths = new Set((await outbox.list()).map((e) => e.path));
+        if (gen !== genRef.current) return;
         setDriverTrips((prev) => {
           const pendingMap = new Map(prev.filter((t) => t._pendingStartOtp || t._pendingComplete).map((t) => [t.reference, t]));
           if (pendingMap.size === 0) return serverTrips;
           return serverTrips.map((st) => {
             const pending = pendingMap.get(st.reference);
             if (!pending) return st;
-            if (pending._pendingComplete && st.status !== 'COMPLETED') {
+            if (pending._pendingComplete && st.status !== 'COMPLETED' && queuedPaths.has(`/driver/trips/${encodeURIComponent(st.reference)}/complete`)) {
               return { ...st, status: 'COMPLETED' as any, _pendingComplete: true };
             }
             if (pending._pendingStartOtp && st.status !== 'TRIP_STARTED' && st.status !== 'COMPLETED') {
@@ -692,7 +697,7 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     await outbox.remove(entry.id);
     opts?.rollback?.();
     sync().catch(() => {}); // the request may have reached the server; adopt whatever it holds
-    return { ok: false, synced: false, error: result?.error && !/network|abort/i.test(result.error) ? result.error : 'No connection to server. Nothing was saved, please try again.' };
+    return { ok: false, synced: false, retryable: true, error: result?.error && !/network|abort/i.test(result.error) ? result.error : 'No connection to server. Nothing was saved, please try again.' };
   };
 
   // ------------------------- Computed Metrics -------------------------
@@ -938,17 +943,22 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   // Room statuses follow from the booking (see roomsView); only the booking changes here.
-  const checkInBooking = async (id: number): Promise<ActionOutcome> => {
+  // Returns the server's booking: it carries `askCab` when check-in auto-sent the cab link
+  const checkInBooking = async (id: number): Promise<ActionOutcome & { booking?: Booking }> => {
     const prevBooking = bookings.find((b) => b.id === id);
+    let booking: Booking | undefined;
     setBookings((prev) => prev.map((b) => (b.id === id ? { ...b, status: 'CHECKED_IN' } : b)));
-    return submit('POST', `/bookings/${id}/check-in`, undefined, {
+    const outcome = await submit('POST', `/bookings/${id}/check-in`, undefined, {
       applyServer: (entity) => {
-        if (entity?.id) setBookings((prev) => prev.map((b) => (b.id === id ? entity : b)));
+        if (!entity?.id) return;
+        booking = entity;
+        setBookings((prev) => prev.map((b) => (b.id === id ? entity : b)));
       },
       rollback: () => {
         if (prevBooking) setBookings((prev) => prev.map((b) => (b.id === id ? prevBooking : b)));
       },
     });
+    return { ...outcome, booking };
   };
 
   // Guest visits/spending are counted by the server (once, paid stays only); pull them after checkout.
@@ -1477,8 +1487,9 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
 
     // Mountain Dead-Zone Offline Fallback:
-    // Allow driver to complete trip upon cash collection in low-signal dropoff zones, queuing the completion for server sync
-    if (!outcome.synced && currentTrip) {
+    // Allow driver to complete trip upon cash collection in low-signal dropoff zones, queuing the completion for server sync.
+    // Only when the server could not be reached (offline / 5xx): a 4xx is a refusal, so show its message and queue nothing.
+    if (outcome.retryable && currentTrip) {
       setDriverTrips((prev) =>
         prev.map((t) =>
           t.reference === reference
@@ -1490,6 +1501,8 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       return { ok: true, synced: false };
     }
 
+    // Refused: take the server's view of the trip (drops any earlier _pendingComplete)
+    await refreshDriverTrips().catch(() => {});
     return outcome;
   };
 
@@ -1652,7 +1665,7 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const askGuestForCab = async (data: { guestId?: number; guestName: string; guestPhone: string }) => {
     const res = await api.post('/guest-links/send', data);
     if (!res?.status) throw new Error('Server did not confirm the message.');
-    return res as { sent: boolean; status: 'SENT' | 'SKIPPED'; nativeLink?: string; url?: string };
+    return res as { sent: boolean; status: 'SENT' | 'SKIPPED' | 'FAILED' | 'ALREADY_SENT'; nativeLink?: string; url?: string; message?: string };
   };
 
   // ------------------------- Profile & Auth Actions -------------------------

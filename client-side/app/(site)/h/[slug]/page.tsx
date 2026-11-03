@@ -157,19 +157,20 @@ export default async function DedicatedHomestayPage({
           </div>
 
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {stay.rooms.map((room) => {
+            {stay.rooms.map((room, i) => {
+              const roomLabel = room.number ? `Room ${room.number}` : "Room";
               const waUrl = cleanPhone
                 ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(
-                    `Hello! I would like to inquire about booking ${room.type || "Room"} ${room.number} at ${stay.name}.`
+                    `Hello! I would like to inquire about booking ${roomLabel} at ${stay.name}.`
                   )}`
                 : `mailto:${contactEmail}?subject=${encodeURIComponent(
-                    `Room Booking Inquiry: ${room.type || "Room"} ${room.number} at ${stay.name}`
+                    `Room Booking Inquiry: ${roomLabel} at ${stay.name}`
                   )}`;
               const isAvailable = room.status !== "MAINTENANCE" && room.status !== "Maintenance";
 
               return (
                 <div
-                  key={room.id || room.number}
+                  key={room.id || room.number || i}
                   className="flex flex-col justify-between overflow-hidden rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-5 shadow-sm transition hover:shadow-md"
                 >
                   <div>
@@ -190,7 +191,7 @@ export default async function DedicatedHomestayPage({
                     </div>
 
                     <h3 className="mt-3 font-serif text-xl font-bold text-primary">
-                      {room.type || "Standard"} • Room {room.number}
+                      {roomLabel}
                     </h3>
                     {room.note ? (
                       <p className="mt-1 text-xs text-on-surface-variant line-clamp-2">

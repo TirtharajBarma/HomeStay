@@ -2,6 +2,7 @@ import { Property, type IProperty, type IEstateLocation } from "../models/proper
 import { Room } from "../models/room.model.js";
 import { initialProperty } from "../data/seeds/profile.seed.js";
 import { getStayRideTenantModel } from "../stayride/store.js";
+import { tenantRoomView } from "./room.service.js";
 
 export class PropertyService {
   static async getProfile(ownerId?: string): Promise<IProperty> {
@@ -69,28 +70,7 @@ export class PropertyService {
                 photos = [...tenantHomestay.photos, ...photos];
               }
               if ((!rooms || rooms.length === 0) && tenantRooms.length > 0) {
-                rooms = tenantRooms.map((tr: any) => ({
-                  _id: `tr_${tr.id}`,
-                  code: `${(prop as any).slug || "stay"}-${tr.number || tr.id}`,
-                  slug: `${(prop as any).slug || "stay"}-${tr.number || tr.id}`,
-                  name: `${tr.type || "Room"} ${tr.number}`,
-                  number: tr.number,
-                  floor: tr.floor,
-                  note: tr.note,
-                  propertyId: (prop as any)._id,
-                  homestayName: prop.name,
-                  location: prop.address || prop.town || "Darjeeling",
-                  category: tr.type || "Standard",
-                  kind: "cottage",
-                  kindLabel: tr.type || "Standard Room",
-                  status: tr.status === "MAINTENANCE" ? "Maintenance" : "Active",
-                  petFriendly: true,
-                  maxGuests: tr.type === "Family" ? 4 : tr.type === "Suite" ? 3 : 2,
-                  occupancy: tr.type === "Family" ? "4 Guests" : "2 Guests",
-                  nightly: Number(tr.price) || 2000,
-                  price: Number(tr.price) || 2000,
-                  amenities: ["Mountain View", "Verified Host", "Door-to-door Cab Transfer", "Hot Water Geyser"],
-                }));
+                rooms = tenantRooms.map((tr: any) => tenantRoomView(prop, tr, photos));
               }
             }
           } catch {}
@@ -141,28 +121,7 @@ export class PropertyService {
             photos = [...tenantHomestay.photos, ...photos];
           }
           if ((!rooms || rooms.length === 0) && tenantRooms.length > 0) {
-            rooms = tenantRooms.map((tr: any) => ({
-              _id: `tr_${tr.id}`,
-              code: `${(prop as any).slug || "stay"}-${tr.number || tr.id}`,
-              slug: `${(prop as any).slug || "stay"}-${tr.number || tr.id}`,
-              name: `${tr.type || "Room"} ${tr.number}`,
-              number: tr.number,
-              floor: tr.floor,
-              note: tr.note,
-              propertyId: (prop as any)._id,
-              homestayName: prop.name,
-              location: prop.address || prop.town || "Darjeeling",
-              category: tr.type || "Standard",
-              kind: "cottage",
-              kindLabel: tr.type || "Standard Room",
-              status: tr.status === "MAINTENANCE" ? "Maintenance" : "Active",
-              petFriendly: true,
-              maxGuests: tr.type === "Family" ? 4 : tr.type === "Suite" ? 3 : 2,
-              occupancy: tr.type === "Family" ? "4 Guests" : "2 Guests",
-              nightly: Number(tr.price) || 2000,
-              price: Number(tr.price) || 2000,
-              amenities: ["Mountain View", "Verified Host", "Door-to-door Cab Transfer", "Hot Water Geyser"],
-            }));
+            rooms = tenantRooms.map((tr: any) => tenantRoomView(prop, tr, photos));
           }
         }
       } catch {}

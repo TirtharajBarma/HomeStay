@@ -31,6 +31,7 @@ type QuoteView = {
   status: string;
   driverView?: "OPEN" | "QUOTED" | "ASSIGNED" | "REASSIGNED" | "TAKEN" | "EXPIRED" | "CANCELLED";
   canQuote: boolean;
+  cancellationReason?: string | null;
   assignedToMe?: boolean;
   guestName?: string;
   phone?: string;
@@ -72,6 +73,7 @@ const TERMINAL_DRIVER_VIEWS = ["TAKEN", "REASSIGNED", "EXPIRED", "CANCELLED"];
 const ACTIVE_TRIP_STATUSES = ["CONFIRMED", "EN_ROUTE_PICKUP", "ARRIVED_HOMESTAY", "TRIP_STARTED"];
 
 const inr = (n: number) => `₹${n.toLocaleString("en-IN")}`;
+const istDate = (v: string | number | Date) => new Date(v).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" });
 
 function DriverQuoteContent() {
   const token = useSearchParams().get("t") || "";
@@ -91,11 +93,11 @@ function DriverQuoteContent() {
   // Driver Wallet & Payouts State
   const [wallet, setWallet] = useState<WalletData | null>(null);
   const [walletLoading, setWalletLoading] = useState(false);
-  const [upiId, setUpiId] = useState("");
   const [payoutBusy, setPayoutBusy] = useState(false);
   const [payoutMessage, setPayoutMessage] = useState("");
 
   const otp = otpDigits.join("");
+  const noSavedMethodText = `Add your UPI in the ${siteConfig.appName} driver app, or contact ${siteConfig.appName} support.`;
 
   const handleOtpDigitChange = (index: number, val: string) => {
     const digit = val.replace(/\D/g, "").slice(-1);
@@ -301,7 +303,12 @@ function DriverQuoteContent() {
       setView(v);
       setMessage(kind === "quote" ? "Your fare quote was submitted successfully." : "Offer accepted. Trip is confirmed once advance payment is recorded.");
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Could not send. Please try again.");
+      const msg = e instanceof Error ? e.message : "";
+      setMessage(
+        /not open to nearby drivers/i.test(msg)
+          ? "Open to nearby drivers soon. Check again in a few minutes."
+          : msg || "Could not send. Please try again."
+      );
     } finally {
       setBusy(false);
     }
@@ -320,24 +327,6 @@ function DriverQuoteContent() {
       setShowOtpModal(false);
       setMessage(action === "start" ? "Trip started." : "Trip completed. Excess advance credited to your wallet!");
       fetchWallet();
-
-      // Upon trip completion, update driver GPS coordinates at the drop-off location
-      if (action === "complete" && typeof navigator !== "undefined" && navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          (pos) => {
-            apiFetch(API_ENDPOINTS.driverQuote.location(), {
-              method: "POST",
-              body: JSON.stringify({
-                t: token,
-                lat: pos.coords.latitude,
-                lng: pos.coords.longitude,
-              }),
-            }).catch(() => {});
-          },
-          () => {},
-          { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 }
-        );
-      }
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "Action failed. Please try again.");
     } finally {
@@ -346,19 +335,22 @@ function DriverQuoteContent() {
   };
 
   const requestPayout = async () => {
-    if (!token || !upiId.trim()) return;
+    if (!token) return;
     setPayoutBusy(true);
     setPayoutMessage("");
     try {
+      // The server pays only to the driver's saved UPI / bank (a quote link can be forwarded)
       const res = await apiFetch<{ success?: boolean; message?: string }>(API_ENDPOINTS.driverQuote.requestPayout(), {
         method: "POST",
-        body: JSON.stringify({ t: token, method: "UPI", upiId: upiId.trim() }),
+        body: JSON.stringify({ t: token }),
       });
-      setPayoutMessage(res.message || "Payout request submitted! Admin will transfer funds via UPI.");
-      setUpiId("");
+      setPayoutMessage(res.message || "Payout request submitted! Admin will transfer funds to your saved UPI.");
       await fetchWallet();
     } catch (e) {
-      setPayoutMessage(e instanceof Error ? e.message : "Payout request failed. Please check your UPI ID.");
+      const msg = e instanceof Error ? e.message : "";
+      setPayoutMessage(
+        /add your upi/i.test(msg) ? noSavedMethodText : msg || "Payout request failed. Please try again."
+      );
     } finally {
       setPayoutBusy(false);
     }
@@ -393,12 +385,46 @@ function DriverQuoteContent() {
   const counter = q?.status === "PENDING" && q.counterFare ? q.counterFare : null;
   const when = `${new Date(Number(view.date)).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", weekday: "short", day: "numeric", month: "short" })}${view.time ? ` at ${view.time}` : ""}`;
 
+  // Counter-offer: the server accepts it even while quoting is off
+  const counterOffer = counter ? (
+                  <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">Homestay Counter-Offer</span>
+                      <span className="text-[10px] bg-emerald-200 text-emerald-900 font-bold px-2 py-0.5 rounded-full">New Rate</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 bg-white rounded-lg p-2.5 border border-emerald-200 text-center">
+                      <div>
+                        <span className="text-[10px] text-[#57606A] block">Your Quote</span>
+                        <span className="text-xs font-bold line-through text-[#57606A]">{q ? inr(q.quotedFare) : "—"}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-emerald-700 font-semibold block">Counter-Offer</span>
+                        <span className="text-sm font-extrabold text-emerald-700">{inr(counter)}</span>
+                      </div>
+                    </div>
+                    <p className="text-xs text-[#1F2328]">
+                      The homestay offers <strong className="text-emerald-900 font-extrabold">{inr(counter)}</strong>. Accepting confirms this trip immediately.
+                    </p>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => send("accept")}
+                      className="w-full rounded-xl bg-emerald-600 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 cursor-pointer disabled:opacity-50"
+                    >
+                      {busy ? "Accepting…" : `Accept ${inr(counter)} & Confirm Trip`}
+                    </button>
+                  </div>
+  ) : null;
+
   // Live Calculations (Zero hardcoding - driven by admin settings)
   const enteredFare = Number(fare) || 0;
   const commPct = view.commissionConfig?.totalCommissionPercent ?? 10;
   const advPct = view.commissionConfig?.defaultAdvancePercent ?? 15;
   const minAdv = view.commissionConfig?.minAdvanceAmount ?? 500;
   const minThreshold = view.commissionConfig?.minDriverPayoutThreshold ?? 100;
+  // Same rule as the server: pay to the UPI / bank of the last settled payout
+  const savedPayout = wallet?.history?.find((p) => p.status === "SETTLED");
+  const hasSavedMethod = Boolean(savedPayout && (savedPayout.method !== "UPI" || savedPayout.upiId));
 
   const calculatedAdvance = Math.max(minAdv, Math.round(enteredFare * (advPct / 100)));
   const calculatedCommission = Math.round(enteredFare * (commPct / 100));
@@ -515,27 +541,22 @@ function DriverQuoteContent() {
                   </p>
                 </div>
               ) : (
-                /* Instant UPI Withdrawal Request Form */
+                /* Withdrawal: paid only to the driver's saved UPI / bank */
                 <div className="space-y-2.5 pt-1 border-t border-emerald-200">
                   <label className="text-xs font-bold text-[#1F2328] block">
-                    Instant UPI Withdrawal
+                    Withdraw to Saved UPI
                   </label>
+                  {!hasSavedMethod ? (
+                    <p className="text-[11px] text-[#57606A]">{noSavedMethodText}</p>
+                  ) : (
+                  <>
                   <p className="text-[11px] text-[#57606A]">
-                    Enter your GPay / PhonePe / Paytm UPI ID. Funds are transferred manually by {siteConfig.appName} Admin.
+                    Paid to {savedPayout?.upiId ? `your UPI ${savedPayout.upiId}` : "your saved bank account"}. Funds are transferred manually by {siteConfig.appName} Admin.
                   </p>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={upiId}
-                      onChange={(e) => setUpiId(e.target.value.trim())}
-                      placeholder="e.g. 9832012345@paytm or name@oksbi"
-                      className="flex-1 rounded-xl border border-[#D0D7DE] px-3.5 py-2.5 text-xs font-medium text-[#1F2328] bg-white focus:border-emerald-600 focus:outline-none"
-                    />
-                  </div>
 
                   <button
                     type="button"
-                    disabled={payoutBusy || !upiId.trim() || (wallet?.available ?? 0) < minThreshold}
+                    disabled={payoutBusy || (wallet?.available ?? 0) < minThreshold}
                     onClick={requestPayout}
                     className="w-full rounded-xl bg-emerald-600 py-3 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
                   >
@@ -545,9 +566,11 @@ function DriverQuoteContent() {
                         ? "Submitting Request…"
                         : (wallet?.available ?? 0) < minThreshold
                         ? `Min Balance ${inr(minThreshold)} Required`
-                        : `Withdraw ${inr(wallet?.available ?? 0)} via UPI`}
+                        : `Withdraw ${inr(wallet?.available ?? 0)}`}
                     </span>
                   </button>
+                  </>
+                  )}
                 </div>
               )}
 
@@ -588,7 +611,7 @@ function DriverQuoteContent() {
                       <div className="text-[11px] text-[#57606A] flex justify-between">
                         <span>UPI: {item.upiId || "Bank"}</span>
                         <span>
-                          {item.requestedAt ? new Date(item.requestedAt).toLocaleDateString("en-IN") : ""}
+                          {item.requestedAt ? istDate(item.requestedAt) : ""}
                         </span>
                       </div>
                       {item.settlementReference && (
@@ -624,7 +647,7 @@ function DriverQuoteContent() {
                       <div>
                         <span className="font-bold text-[#1F2328]">Trip #{t.reference}</span>
                         <span className="text-[10px] text-[#57606A] block">
-                          {new Date(Number(t.date)).toLocaleDateString("en-IN")}
+                          {istDate(Number(t.date))}
                         </span>
                       </div>
                       <span className="font-extrabold text-emerald-700">+{inr(t.amount)}</span>
@@ -712,9 +735,17 @@ function DriverQuoteContent() {
               <div className="rounded-xl border border-[#D0D7DE] bg-[#F6F8FA] p-4 text-xs text-[#57606A] font-medium">
                 This trip went to another driver.
               </div>
+            ) : view.driverView === "REASSIGNED" ? (
+              <div className="rounded-xl border border-[#D0D7DE] bg-[#F6F8FA] p-4 text-xs text-[#57606A] font-medium">
+                This trip was given to another driver.
+              </div>
+            ) : view.driverView === "EXPIRED" || view.status === "EXPIRED" ? (
+              <div className="rounded-xl border border-[#D0D7DE] bg-[#F6F8FA] p-4 text-xs text-[#57606A] font-medium">
+                Pickup time passed.
+              </div>
             ) : view.status === "CANCELLED" || view.driverView === "CANCELLED" ? (
               <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-xs text-red-800 font-medium">
-                This trip request was cancelled by the homestay.
+                {view.cancellationReason ? `This trip was cancelled: ${view.cancellationReason}` : "This trip request was cancelled."}
               </div>
             ) : view.assignedToMe && view.advancePaid ? (
               /* CONFIRMED TRIP MANAGEMENT CONSOLE */
@@ -961,9 +992,11 @@ function DriverQuoteContent() {
                 <p>Waiting for guest advance payment. Passenger contact and cash collection will unlock here immediately upon payment.</p>
               </div>
             ) : !view.canQuote ? (
-              <div className="rounded-2xl border border-[#D0D7DE] bg-white p-5 text-center text-xs text-[#57606A]">
-                This trip request is no longer taking quotes.
-              </div>
+              counterOffer || (
+                <div className="rounded-2xl border border-[#D0D7DE] bg-white p-5 text-center text-xs text-[#57606A]">
+                  This trip request is no longer taking quotes.
+                </div>
+              )
             ) : (
               /* FARE QUOTATION FORM WITH ALL-INCLUSIVE MATHEMATICAL BREAKDOWN */
               <div className="rounded-2xl border border-[#D0D7DE] bg-white p-5 shadow-xs space-y-4">
@@ -979,36 +1012,7 @@ function DriverQuoteContent() {
                   </div>
                 )}
 
-                {/* Counter-Offer Notification */}
-                {counter && (
-                  <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">Homestay Counter-Offer</span>
-                      <span className="text-[10px] bg-emerald-200 text-emerald-900 font-bold px-2 py-0.5 rounded-full">New Rate</span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 bg-white rounded-lg p-2.5 border border-emerald-200 text-center">
-                      <div>
-                        <span className="text-[10px] text-[#57606A] block">Your Quote</span>
-                        <span className="text-xs font-bold line-through text-[#57606A]">{q ? inr(q.quotedFare) : "—"}</span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-emerald-700 font-semibold block">Counter-Offer</span>
-                        <span className="text-sm font-extrabold text-emerald-700">{inr(counter)}</span>
-                      </div>
-                    </div>
-                    <p className="text-xs text-[#1F2328]">
-                      The homestay offers <strong className="text-emerald-900 font-extrabold">{inr(counter)}</strong>. Accepting confirms this trip immediately.
-                    </p>
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => send("accept")}
-                      className="w-full rounded-xl bg-emerald-600 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 cursor-pointer disabled:opacity-50"
-                    >
-                      {busy ? "Accepting…" : `Accept ${inr(counter)} & Confirm Trip`}
-                    </button>
-                  </div>
-                )}
+                {counterOffer}
 
                 {q && !counter && (
                   <div className="rounded-xl bg-[#F6F8FA] border border-[#D0D7DE] p-3 text-xs text-[#57606A] space-y-1.5">

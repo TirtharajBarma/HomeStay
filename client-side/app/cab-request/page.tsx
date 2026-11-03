@@ -205,6 +205,7 @@ type CabRequestStatus = {
   cancellationReason?: string | null;
   guestRating?: { stars: number; comment?: string; ratedAt: string } | null;
   biddingFallback?: boolean;
+  awaitingOwner?: boolean;
   paymentClaim?: PaymentClaim | null;
   config?: PublicConfig;
 };
@@ -250,6 +251,15 @@ const toTime12 = (t24: string) => {
   const h12 = h % 12 === 0 ? 12 : h % 12;
   return `${String(h12).padStart(2, "0")}:${m} ${ampm}`;
 };
+
+// Minutes after midnight for "hh:mm AM"
+const minutesOf = (t12: string) => {
+  const [h, m] = toTime24(t12).split(":").map(Number);
+  return h * 60 + m;
+};
+
+// The instant of a "YYYY-MM-DD" day and "hh:mm AM" time in IST, as the server reads it
+const istInstant = (ymd: string, t12: string) => Date.parse(`${ymd}T${toTime24(t12)}:00+05:30`);
 
 const isNotFound = (e: unknown) => (e as { status?: number } | null)?.status === 404;
 
@@ -307,6 +317,8 @@ function CabRequestFormContent() {
   const tomorrowYmd = toLocalYmd(tomorrow);
   const [date, setDate] = useState(tomorrowYmd);
   const [time, setTime] = useState("09:00 AM");
+  const [returnDate, setReturnDate] = useState(tomorrowYmd);
+  const [returnTime, setReturnTime] = useState("06:00 PM");
   const [passengers, setPassengers] = useState(2);
 
   // Guest Details
@@ -420,6 +432,24 @@ function CabRequestFormContent() {
     return customDestinations.map((d) => d.trim()).filter(Boolean);
   };
 
+  // Same checks the server runs on a round trip's return
+  const getReturnError = (): string => {
+    if (!isRoundTrip) return "";
+    if (!returnDate || !returnTime) return "Round trips need a return date and time.";
+    const returnAt = istInstant(returnDate, returnTime);
+    if (!(returnAt > istInstant(date, time))) return "Return must be after the pickup date and time.";
+    const horizonDays = link?.config?.bookingHorizonDays || 30;
+    if (returnAt > Date.now() + (horizonDays + 1) * 86400000) return `Return date must be within the next ${horizonDays} days.`;
+    const times = link?.config?.pickupTimes || [];
+    if (times.length) {
+      const start = times[0];
+      const end = times[times.length - 1];
+      const t = minutesOf(returnTime);
+      if (t < minutesOf(start) || t > minutesOf(end)) return `Return time must be between ${start} and ${end}.`;
+    }
+    return "";
+  };
+
   const fetchStatus = async (reference: string) => {
     setStatusLoading(true);
     try {
@@ -530,8 +560,22 @@ function CabRequestFormContent() {
           fetchStatus(refParam);
         }
       })
-      .catch(() => {
-        if (!cancelled) setLinkState("invalid");
+      .catch((e) => {
+        if (cancelled) return;
+        // Link expired or used up: a guest with a trip reference can still see the status and pay
+        if (!refParam || !isNotFound(e)) {
+          setLinkState("invalid");
+          return;
+        }
+        apiFetch<CabRequestStatus>(API_ENDPOINTS.cabRequests.status(refParam, token))
+          .then((data) => {
+            if (cancelled) return;
+            setTripStatus(data);
+            setLinkState("valid");
+          })
+          .catch(() => {
+            if (!cancelled) setLinkState("invalid");
+          });
       });
 
     return () => {
@@ -601,7 +645,7 @@ function CabRequestFormContent() {
       await apiFetch(API_ENDPOINTS.cabRequests.rate(activeRef, token), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stars: selectedRating, comment: ratingComment }),
+        body: JSON.stringify({ stars: selectedRating, comment: ratingComment, phone: guestPhone || link?.guestPhone || "" }),
       });
       setRatingSuccess(true);
       if (tripStatus) {
@@ -654,8 +698,16 @@ function CabRequestFormContent() {
       return;
     }
 
-    // Auto-map vehicle size for backend compatibility based on passengers
-    const autoVehicleType = passengers > 4 ? (passengers > 7 ? "9-seater" : "7-seater") : "SUV";
+    const returnError = getReturnError();
+    if (returnError) {
+      setErrorMessage(returnError);
+      setCurrentStep(2);
+      return;
+    }
+
+    // Smallest enabled vehicle with enough seats (the largest one when none is big enough)
+    const enabledVehicles = [...(link?.config?.vehicles?.length ? link.config.vehicles : FALLBACK_VEHICLES)].sort((a, b) => a.seats - b.seats);
+    const autoVehicleType = (enabledVehicles.find((v) => v.seats >= passengers) || enabledVehicles[enabledVehicles.length - 1])?.value || "SUV";
 
     setSubmitting(true);
     try {
@@ -672,6 +724,8 @@ function CabRequestFormContent() {
         passengers,
         vehicleType: autoVehicleType,
         isRoundTrip,
+        returnDate: isRoundTrip ? new Date(`${returnDate}T12:00:00Z`).getTime() : undefined,
+        returnTime: isRoundTrip ? returnTime : undefined,
         guestName: guestName.trim(),
         phone: cleanPhone,
         notes: notes.trim(),
@@ -986,7 +1040,9 @@ function CabRequestFormContent() {
                         <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-blue-600" />
                       </div>
                       <span className="text-xs font-bold text-blue-900 uppercase tracking-wide">
-                        {(tripStatus?.status || confirmedTrip.status) === "PENDING_REVIEW"
+                        {tripStatus?.awaitingOwner
+                          ? "Request received"
+                          : (tripStatus?.status || confirmedTrip.status) === "PENDING_REVIEW"
                           ? "Request received — finding drivers…"
                           : "Finding your driver in this valley…"}
                       </span>
@@ -996,7 +1052,9 @@ function CabRequestFormContent() {
                     </span>
                   </div>
                   <p className="text-xs text-blue-800 leading-relaxed">
-                    {tripStatus?.quotesCount && tripStatus.quotesCount > 0
+                    {tripStatus?.awaitingOwner
+                      ? "Received. The homestay will arrange your cab shortly."
+                      : tripStatus?.quotesCount && tripStatus.quotesCount > 0
                       ? `${tripStatus.quotesCount} local driver quote(s) received. Best rate is being matched.`
                       : "Dispatched to verified local hill drivers. Connecting with available cabs near your homestay."}
                   </p>
@@ -2006,6 +2064,49 @@ function CabRequestFormContent() {
                   </div>
                 </div>
 
+                {/* Round trip: return date and time (same controls as the pickup) */}
+                {isRoundTrip && (
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-[#1F2328] block">Return Date</label>
+                      <input
+                        type="date"
+                        value={returnDate}
+                        min={date || toLocalYmd(new Date())}
+                        onChange={(e) => setReturnDate(e.target.value)}
+                        className="w-full rounded-xl border border-[#D0D7DE] px-3.5 py-2.5 text-xs text-[#1F2328] focus:border-emerald-600 focus:outline-none bg-white shadow-2xs"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-[#1F2328] block">Return Time</label>
+                        <span className="text-[11px] text-emerald-800 font-bold bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                          <Icon name="schedule" className="text-xs text-emerald-700" />
+                          <span>{returnTime}</span>
+                        </span>
+                      </div>
+                      <div className="relative flex items-center">
+                        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-emerald-700">
+                          <Icon name="alarm" className="text-base" />
+                        </div>
+                        <input
+                          type="time"
+                          value={toTime24(returnTime)}
+                          onChange={(e) => {
+                            if (e.target.value) {
+                              setReturnTime(toTime12(e.target.value));
+                            }
+                          }}
+                          className="w-full rounded-xl border border-[#D0D7DE] bg-white py-2.5 pl-10 pr-24 text-sm font-bold text-[#1F2328] focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600 shadow-2xs cursor-pointer"
+                        />
+                        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-[11px] text-[#57606A] font-medium">
+                          Tap for clock
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Requirement 7: Passenger Count Only (No Vehicle Class Selection) */}
                 <div className="space-y-2 pt-1">
                   <label className="text-xs font-bold text-[#1F2328] block">Number of Passengers</label>
@@ -2069,6 +2170,11 @@ function CabRequestFormContent() {
                       }
                       if (!passengers || passengers < 1) {
                         setErrorMessage("Please specify at least 1 passenger.");
+                        return;
+                      }
+                      const returnError = getReturnError();
+                      if (returnError) {
+                        setErrorMessage(returnError);
                         return;
                       }
                       setErrorMessage("");
@@ -2201,6 +2307,13 @@ function CabRequestFormContent() {
                       <span className="text-[#57606A] shrink-0 font-medium">Schedule:</span>
                       <span className="font-semibold text-[#1F2328]">{date} at {time}</span>
                     </div>
+
+                    {isRoundTrip && (
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="text-[#57606A] shrink-0 font-medium">Return:</span>
+                        <span className="font-semibold text-[#1F2328]">{returnDate} at {returnTime}</span>
+                      </div>
+                    )}
 
                     <div className="flex items-start justify-between gap-2">
                       <span className="text-[#57606A] shrink-0 font-medium">Passengers:</span>

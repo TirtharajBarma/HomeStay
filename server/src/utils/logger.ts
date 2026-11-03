@@ -4,8 +4,8 @@
  * Features:
  * 1. Zero MongoDB Impact: Streams HTTP & error telemetry out of band (to Axiom / Better Stack).
  * 2. Batched: logs are queued and sent in batches. On Vercel the function can freeze right after the
- *    response, so telemetryMiddleware holds res.end until the queue is flushed (one Axiom POST, capped
- *    at FLUSH_TIMEOUT_MS). Elsewhere a background timer flushes (0 ms added to API requests).
+ *    response, so telemetryMiddleware holds res.end until the queue is flushed (the whole flush, retry
+ *    included, capped at FLUSH_TIMEOUT_MS). Elsewhere a background timer flushes (0 ms added to API requests).
  * 3. Multi-Tenant Tracking: Automatically captures tenantId (owner), driverId, userId, and latency.
  * 4. Graceful Fallback: Outputs clean, readable console logs if external cloud tokens are not set.
  */
@@ -99,39 +99,37 @@ class TelemetryLogger {
   }
 
   private async drain(): Promise<void> {
-    // whole queue per POST (capped at 500 entries); loops for anything logged while a POST was in flight
-    while (this.queue.length) await this.send(this.queue.splice(0));
+    // whole queue per POST (capped at 500 entries); loops for anything logged while a POST was in flight, but the whole
+    // drain shares one FLUSH_TIMEOUT_MS so a busy instance can't hold a response for several cycles (the rest goes next flush)
+    const deadline = Date.now() + FLUSH_TIMEOUT_MS;
+    while (this.queue.length && Date.now() < deadline) await this.send(this.queue.splice(0), deadline);
   }
 
-  private async send(batch: LogPayload[]): Promise<void> {
-    try {
-      const signal = AbortSignal.timeout(FLUSH_TIMEOUT_MS);
-      if (this.isLiveToken(this.axiomToken)) {
-        // Stream to Axiom (500 GB free tier)
-        await fetch(`https://api.axiom.co/v1/datasets/${this.axiomDataset}/ingest`, {
+  /** One POST, retried once within the deadline. A batch that still fails is dropped with a one-line console.error trace. */
+  private async send(batch: LogPayload[], deadline: number): Promise<void> {
+    const axiom = this.isLiveToken(this.axiomToken);
+    const token = axiom ? this.axiomToken : this.logtailToken;
+    if (!this.isLiveToken(token)) return;
+    // Axiom (500 GB free tier), else Better Stack / Logtail (1 GB free tier)
+    const url = axiom ? `https://api.axiom.co/v1/datasets/${this.axiomDataset}/ingest` : "https://in.logtail.com";
+    let failure = "flush time used up";
+    for (let attempt = 0; attempt < 2 && Date.now() < deadline; attempt++) {
+      try {
+        const res = await fetch(url, {
           method: "POST",
-          headers: {
-            Authorization: `Bearer ${this.axiomToken}`,
-            "Content-Type": "application/json",
-          },
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
           body: JSON.stringify(batch),
-          signal,
-        }).catch(() => {});
-      } else if (this.isLiveToken(this.logtailToken)) {
-        // Stream to Better Stack / Logtail (1 GB free tier)
-        await fetch("https://in.logtail.com", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${this.logtailToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(batch),
-          signal,
-        }).catch(() => {});
+          signal: AbortSignal.timeout(Math.max(1, deadline - Date.now())),
+        });
+        if (res.ok) return;
+        failure = `HTTP ${res.status}`;
+      } catch (err: any) {
+        failure = err?.name || String(err);
       }
-    } catch {
-      // Never crash the application on telemetry network failures
     }
+    // Never crash on telemetry failures, but leave a trace in the platform's own logs (Vercel keeps stderr)
+    const actions = [...new Set(batch.map((p) => p.action || p.route || "-"))].slice(0, 5).join(",");
+    console.error(`[Telemetry] dropped ${batch.length} log(s) for ${axiom ? "Axiom" : "Logtail"}: ${failure}; first actions: ${actions}`);
   }
 
   public info(message: string, meta?: Partial<LogPayload>) {
@@ -233,7 +231,10 @@ export function telemetryMiddleware(req: Request, res: Response, next: NextFunct
     // webhook logs included). Log the request and deliver the queue first, then end. Costs one Axiom POST per
     // request (capped at FLUSH_TIMEOUT_MS); without a live token flush() returns at once.
     const end = res.end.bind(res) as (...a: any[]) => Response;
+    let ending = false;
     (res as any).end = (...args: any[]) => {
+      if (ending) return res; // a second end() while the first waits on the flush would end twice (write after end)
+      ending = true;
       logRequest();
       logger.flush().finally(() => end(...args));
       return res;

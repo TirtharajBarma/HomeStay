@@ -270,6 +270,9 @@ export class CommissionService {
       pfPercent = cfg.ownFleetFeePercent;
       minFee = cfg.ownFleetMinFee;
       hcPercent = 0.0; // Homestay owns vehicle/driver; 100% of driver take-home belongs to homestay
+      // Same price as assignOwnFleet (ownFleetFee): the fee is the whole advance, so no surplus lands in an own driver's wallet
+      advancePercent = 0;
+      minAdvanceAmount = 0;
     }
 
     const split = this.split(fare, pfPercent, hcPercent, advancePercent, minAdvanceAmount, minFee);

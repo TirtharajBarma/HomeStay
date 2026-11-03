@@ -6,8 +6,8 @@ import { beginIdempotent } from './idempotency.js';
 import {
   OPEN_STATUSES, cabModel, payoutModel, userModel, parseFare, overlayTrips, ownerConfirmQuote, cancelRequest, expireStaleRequests,
   driverTripView, listDriverTrips, driverSubmitQuote, startTrip, completeTrip, payoutSummary, requestPayout,
-  driverPayoutSummary, requestDriverPayout, maskPhone, linkDriverFilter,
-  istDateTime, notifyNewRequest, dispatchFields, retryMissingPaymentLinks, rateDriver, rateDriverByGuest, ownerPayoutView, parseTime12, hashToken, readDriverQuoteToken, ownerCounterOffer, driverAcceptCounter, ownerCompleteTrip, onDriverStatusChange, issueGuestLink, sendAskCab, dispatchRequest, assignOwnFleet, recordGatewayPayment, pushOwner, whatsapp, scope, submitPaymentClaim,
+  driverPayoutSummary, requestDriverPayout, maskPhone, linkDriverFilter, driverKey,
+  istDateTime, notifyNewRequest, dispatchFields, retryMissingPaymentLinks, rateDriver, rateDriverByGuest, ownerPayoutView, parseTime12, hashToken, readDriverQuoteToken, ownerCounterOffer, driverAcceptCounter, ownerCompleteTrip, onDriverStatusChange, issueGuestLink, sendAskCab, currentBookingOf, dispatchRequest, assignOwnFleet, recordGatewayPayment, pushOwner, whatsapp, scope, submitPaymentClaim,
 } from './platform.js';
 import { CommissionService } from '../services/commission.service.js';
 import { getWhatsAppNativeLink, verifyHandshake, verifyMetaSignature, recordWhatsAppWebhook } from '../services/whatsapp.service.js';
@@ -1183,6 +1183,9 @@ stayrideV1Router.post('/public/properties/:slug/cab-requests', requireRecaptcha(
     tenantKey = prop.email || String(prop._id);
     isDemo = isDemoKey(tenantKey);
   }
+  // same rule as guest links (activeGuestLink): a blocked homestay takes no requests
+  const account = await CommissionService.getAccountState(tenantKey, isDemo);
+  if (account.blocked) return res.status(404).json({ error: { message: 'Homestay not found for this slug.' } });
 
   const input = tripInput(req.body);
   const clientRequestId = str(req.body.clientRequestId, 64);
@@ -1206,7 +1209,7 @@ stayrideV1Router.post('/public/properties/:slug/cab-requests', requireRecaptcha(
 
   // Sent out at once (own drivers first, then nearby) only where the owner sends requests to the network;
   // otherwise it is held for the owner, like a guest-link inquiry.
-  const { features } = await CommissionService.getAccountState(tenantKey, isDemo);
+  const { features } = account;
   const { doc } = await createPlatformTrip(
     tenantKey,
     isDemo,
@@ -1299,6 +1302,8 @@ stayrideV1Router.get('/public/cab-requests/:reference', async (req: Request, res
     quotesCount: doc.quotes ? doc.quotes.filter((q: any) => q.status === 'PENDING').length : 0,
     biddingClosesAt: doc.biddingClosesAt || null,
     biddingFallback: Boolean(doc.biddingFallbackAlertSentAt),
+    // held for the homestay (owner's NEW_REQUEST): not sent to drivers yet
+    awaitingOwner: doc.dispatched === false && OPEN_STATUSES.includes(doc.status),
     config: publicConfig(await CommissionService.getPlatformConfig(isDemo)),
   });
 });
@@ -1313,20 +1318,12 @@ stayrideV1Router.post('/public/cab-requests/:reference/payment-claim', async (re
   return res.json({ success: true, advanceDueAt: updated.advanceDueAt || null, paymentClaim: { status: updated.paymentClaim.status, submittedAt: updated.paymentClaim.submittedAt, reason: '', utr: updated.paymentClaim.utr } });
 });
 
+// Only the trip's guest rates it: same proof as the status page's PIN (the guest link that owns the trip, or its phone).
 stayrideV1Router.post('/public/cab-requests/:reference/rate', async (req: Request, res: Response) => {
-  const reference = String(req.params.reference);
-  let isDemo = false;
-  const link = await findGuestLink(req.query.t);
-  if (link) {
-    isDemo = isDemoKey(link.tenantKey);
-  } else {
-    const prodDoc = await cabModel(false).findOne({ reference }).select('_id').lean();
-    if (!prodDoc && config.demoEnabled) {
-      const demoDoc = await cabModel(true).findOne({ reference }).select('_id').lean();
-      if (demoDoc) isDemo = true;
-    }
-  }
-  const updated = await rateDriverByGuest(isDemo, reference, req.body);
+  const found = await findGuestTrip(req);
+  if (!found) return res.status(404).json({ error: { message: 'Cab request not found.' } });
+  if (!found.isVerifiedGuest) return res.status(403).json({ error: { message: 'Open the trip link we sent you on WhatsApp to rate this trip.' } });
+  const updated = await rateDriverByGuest(found.isDemo, found.doc.reference, req.body);
   return res.json({ success: true, guestRating: updated.guestRating });
 });
 
@@ -1352,11 +1349,15 @@ async function quoteLinkDriver(token: unknown, res: Response) {
 
   if (link.isDemo && driverIdStr === 'demo-driver-1') {
     driver = { _id: 'demo-driver-1', name: 'Demo Driver', phone: '+919876543210', accountStatus: 'ACTIVE', role: 'driver' };
+  } else if (driverIdStr.startsWith('tel-')) {
+    // Assigned by the admin by name and phone (no driver account): the link works while he is this trip's driver.
+    const doc: any = await cabModel(link.isDemo).findOne({ reference: link.reference, ...linkDriverFilter(driverIdStr) }).select('assignedDriverName assignedDriverPhone').lean();
+    if (doc) driver = { _id: driverIdStr, name: doc.assignedDriverName, phone: doc.assignedDriverPhone, accountStatus: 'ACTIVE', role: 'driver' };
   } else if (driverIdStr.startsWith('own-')) {
     const ownId = driverIdStr.replace(/^own-/, '');
+    const doc: any = await cabModel(link.isDemo).findOne({ reference: link.reference }).select('propertyId').lean();
     // 1. Try resolving from homestay tenant memory store
     try {
-      const doc: any = await cabModel(link.isDemo).findOne({ reference: link.reference }).select('propertyId').lean();
       if (doc?.propertyId) {
         const store = await tenantManager.load(String(doc.propertyId));
         const d: any = (store.drivers || []).find((x: any) => String(x.id) === ownId);
@@ -1392,6 +1393,8 @@ async function quoteLinkDriver(token: unknown, res: Response) {
         }
       } catch {}
     }
+    // `own-<id>` repeats across homestays: his wallet is scoped to the homestay of the trip he was sent
+    if (driver) driver.walletId = driverKey(driverIdStr, doc?.propertyId ?? '');
   } else if (mongoose.Types.ObjectId.isValid(driverIdStr)) {
     driver = await getUserModel(link.isDemo).findOne({ _id: driverIdStr, role: 'driver' }).lean();
     if (!driver) {
@@ -1508,7 +1511,7 @@ stayrideV1Router.post('/public/driver-quote/complete', async (req: Request, res:
 stayrideV1Router.get('/public/driver-quote/wallet', async (req: Request, res: Response) => {
   const ctx = await quoteLinkDriver(req.query.t, res);
   if (!ctx) return;
-  const summary = await driverPayoutSummary(String(ctx.driver._id), ctx.isDemo);
+  const summary = await driverPayoutSummary(ctx.driver.walletId || String(ctx.driver._id), ctx.isDemo);
   return res.json(summary);
 });
 
@@ -1517,7 +1520,7 @@ stayrideV1Router.post('/public/driver-quote/payouts/request', async (req: Reques
   if (!ctx) return;
   if (!(await driverPayoutsOn(ctx.isDemo, res))) return;
   const payout = await requestDriverPayout(
-    String(ctx.driver._id),
+    ctx.driver.walletId || String(ctx.driver._id),
     { name: ctx.driver.name, phone: ctx.driver.phone },
     ctx.isDemo,
     req.body,
@@ -1753,6 +1756,11 @@ stayrideV1Router.post('/webhooks/razorpay', async (req: Request, res: Response) 
   const info = { event: event?.event, linkId: link?.id, paymentId: payment?.id, amount: Number(payment?.amount) / 100, method: payment?.method, ref: link?.notes?.reference };
   if (event?.event !== 'payment_link.paid') {
     logger.info(`[Payments] Razorpay webhook ${event?.event} ignored`, { action: 'payment.webhook', metadata: { ...info, result: 'IGNORED' } });
+    return res.json({ ok: true, ignored: true });
+  }
+  // gateway off (or a test key in production): a signed event is not real money, never record it
+  if (!gatewayEnabled()) {
+    logger.warn(`[Payments] Razorpay webhook ${event.event} ignored: gateway disabled`, { action: 'payment.webhook', metadata: { ...info, result: 'GATEWAY_DISABLED' } });
     return res.json({ ok: true, ignored: true });
   }
   const result = await recordGatewayPayment(String(link?.id || ''), String(payment?.id || ''), Number(payment?.amount) / 100);
@@ -2353,8 +2361,10 @@ stayrideV1Router.get('/bookings', async (req: Request, res: Response) => {
 });
 
 stayrideV1Router.post('/bookings', async (req: Request, res: Response) => {
-  const { tenantKey, isDemo } = tenantOf(req);
+  const { tenantKey, isDemo, actor } = tenantOf(req);
   const created = await mutateReq(req, (s) => s.createBooking(req.body));
+  // Compact entry: also feeds the admin's notification bell (no phone stored here)
+  await audit(actor || tenantKey, 'booking.create', 'Booking', `${tenantKey}:${created.id}`, { guestName: created.guestName, roomNumber: created.roomNumber, checkIn: created.checkIn, checkOut: created.checkOut }, isDemo, { tenantId: tenantKey, actorRole: 'OWNER' });
 
   // Automated Ask-for-Cab WhatsApp on booking creation (before replying: a frozen function would lose it)
   if (created?.phone) {
@@ -2365,8 +2375,9 @@ stayrideV1Router.post('/bookings', async (req: Request, res: Response) => {
           guestName: created.guestName || 'Guest',
           guestPhone: created.phone,
           checkInDate: created.checkIn || req.body?.checkIn,
-        })
+        }, { by: 'auto', booking: created })
       )
+      .then((r) => { if (r.askCab) created.askCab = r.askCab; })
       .catch((err) => {
         console.warn(`[Auto-AskCab] Booking notice for ${created.guestName}:`, err?.message);
       });
@@ -2379,11 +2390,12 @@ const bookingAction = (fn: (s: StayRideMemoryStore, id: number, body: any) => an
   return b ? res.json(b) : notFound(res, 'Booking');
 };
 stayrideV1Router.post('/bookings/:id/check-in', async (req: Request, res: Response) => {
-  const { tenantKey, isDemo } = tenantOf(req);
+  const { tenantKey, isDemo, actor } = tenantOf(req);
   const b = await mutateReq(req, (s) => s.checkInBooking(Number(req.params.id)));
   if (!b) return notFound(res, 'Booking');
+  await audit(actor || tenantKey, 'booking.check_in', 'Booking', `${tenantKey}:${b.id}`, { guestName: b.guestName, roomNumber: b.roomNumber }, isDemo, { tenantId: tenantKey, actorRole: 'OWNER' });
 
-  // Automated Ask-for-Cab WhatsApp on check-in (cooldown safely suppresses if already sent recently)
+  // Automated Ask-for-Cab WhatsApp on check-in: skipped quietly if this booking was already asked
   if (b?.phone) {
     await loadReqStore(req)
       .then((store) =>
@@ -2392,10 +2404,11 @@ stayrideV1Router.post('/bookings/:id/check-in', async (req: Request, res: Respon
           guestName: b.guestName || 'Guest',
           guestPhone: b.phone,
           checkInDate: b.checkIn || new Date(),
-        })
+        }, { by: 'auto', booking: b })
       )
+      .then((r) => { if (r.askCab) b.askCab = r.askCab; })
       .catch((err) => {
-        console.warn(`[Auto-AskCab] Check-in notice for ${b.guestName}:`, err?.message);
+        if (err?.code !== 'ASK_CAB_SENT') console.warn(`[Auto-AskCab] Check-in notice for ${b.guestName}:`, err?.message);
       });
   }
   res.json(b);
@@ -2694,12 +2707,14 @@ stayrideV1Router.post('/guest-links/send', requireFeature('guestCabLinks'), asyn
   if (!guest && !hasBooking) {
     return res.status(400).json({ error: { message: 'Ask-for-Cab is only for guests registered with this homestay or with a booking.', code: 'GUEST_NOT_FOUND' } });
   }
+  // Once per current booking (the nearest stay); a guest with no current booking keeps the per-phone cooldown
+  const booking = currentBookingOf(store.bookings, guest?.id, guest?.phone || guestPhone, Date.now());
   try {
     const { result, expiresAt, url } = await sendAskCab(tenantKey, isDemo, store.homestay.name, {
       guestId: guest?.id ?? (Number.isFinite(guestId) ? guestId : undefined),
       guestName: guest?.name || guestName,
       guestPhone: guest?.phone || guestPhone,
-    });
+    }, { by: 'owner', booking });
     const nativeLink = getWhatsAppNativeLink(
       guest?.phone || guestPhone,
       `Namaste ${guest?.name || guestName}! Plan your cab transfers and sightseeing directly with verified mountain drivers for your stay at ${store.homestay.name}:\n\n${url}`
@@ -2709,7 +2724,7 @@ stayrideV1Router.post('/guest-links/send', requireFeature('guestCabLinks'), asyn
     }
     return res.status(201).json({ sent: result === 'SENT', status: result, expiresAt, url, nativeLink });
   } catch (err: any) {
-    if (err?.code === 'ASK_CAB_COOLDOWN' || err?.status === 429) {
+    if (err?.code === 'ASK_CAB_SENT' || err?.code === 'ASK_CAB_COOLDOWN' || err?.status === 429) {
       return res.status(200).json({ sent: false, status: 'ALREADY_SENT', alreadySent: true, message: err.message });
     }
     throw err;

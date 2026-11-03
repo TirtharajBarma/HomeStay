@@ -1,11 +1,22 @@
 import { Alert, Linking } from 'react-native';
-import { Guest } from '../types';
+import { Booking, Guest } from '../types';
+
+/** "Cab link sent · automatic · 1 Nov 10:05 AM" for the booking's latest send, or null if never asked. */
+export function cabSentText(b: Booking): string | null {
+  const last = b.askCab?.[b.askCab.length - 1];
+  if (!last) return null;
+  const who = last.by === 'auto' ? 'automatic' : last.by === 'owner' ? 'by you' : 'by Staycabs';
+  const d = new Date(last.at);
+  const when = `${d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' })} ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' })}`;
+  return `Cab link sent · ${who} · ${when}`;
+}
 
 type Ask = (data: { guestId?: number; guestName: string; guestPhone: string }) => Promise<{
   sent: boolean;
   status: string;
   nativeLink?: string;
   url?: string;
+  message?: string;
 }>;
 
 // StayRide's server sends the WhatsApp message from the company number; we only confirm to the owner.
@@ -16,6 +27,11 @@ export async function askGuestForCab(ask: Ask, guest: Guest): Promise<boolean> {
     if (res.sent) {
       Alert.alert('Request sent', `We sent ${guest.name} a WhatsApp message with a link to request a cab. Their request will appear in Guest Inquiries.`);
       return true;
+    }
+    // Once per booking: "Cab link already sent to Asha (automatic, 1 Nov 10:05 AM)."
+    if (res.status === 'ALREADY_SENT') {
+      Alert.alert('Already sent', res.message || `${guest.name} was already sent a cab link.`);
+      return false;
     }
     if (res.nativeLink) {
       Alert.alert(

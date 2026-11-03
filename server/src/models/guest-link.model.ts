@@ -11,6 +11,10 @@ const GuestLinkSchema = new Schema(
     guestPhone: { type: String, default: "" },
     // Set when StayRide WhatsApped this link to the guest (Ask-for-Cab); drives the per-guest cooldown
     sentAt: { type: Date, default: null },
+    // Ask-for-Cab sends only (admin "Last contacted"): who sent it ("auto" | "owner" | "admin:<name>") and its
+    // WhatsApp delivery status, moved forward by the status webhook. Unset on links that were never sent.
+    by: { type: String },
+    status: { type: String },
     expiresAt: { type: Date, required: true, index: { expires: 0 } }, // Mongo TTL cleans up expired links
   },
   { timestamps: true }

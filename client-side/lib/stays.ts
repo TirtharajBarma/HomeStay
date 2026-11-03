@@ -20,7 +20,6 @@ export type Review = {
 export type StayRoom = {
   id?: string | number;
   number: string;
-  type: string;
   floor?: string;
   price: number;
   status?: string;
@@ -131,10 +130,9 @@ function propertyToStay(p: Raw): Stay {
 
   const mappedRooms: StayRoom[] = rawRooms.map((r: Raw) => ({
     id: r.id || r._id,
-    number: str(r.number) || "101",
-    type: str(r.type) || "Standard Room",
+    number: str(r.number),
     floor: str(r.floor) || "Main Cottage",
-    price: num(r.price) || num(r.nightly) || 2000,
+    price: num(r.price) || num(r.nightly), // 0 = "Price on request"
     status: str(r.status) || "Available",
     note: str(r.note) || "",
     amenities: Array.isArray(r.amenities) ? r.amenities : ["Mountain View", "Geyser", "Verified Host"],

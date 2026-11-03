@@ -110,7 +110,7 @@ export const RoomCalendarSync: React.FC<{ roomId: number }> = ({ roomId }) => {
                 {imp.lastError
                   ? imp.lastError
                   : imp.lastSyncAt
-                  ? `synced ${new Date(imp.lastSyncAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })} · ${imp.eventCount} booking(s)`
+                  ? `synced ${new Date(imp.lastSyncAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' })} · ${imp.eventCount} booking(s)`
                   : 'not synced yet'}
               </Text>
             )}

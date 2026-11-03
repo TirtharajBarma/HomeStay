@@ -3,7 +3,7 @@ export type RoomStatus = 'AVAILABLE' | 'OCCUPIED' | 'RESERVED' | 'MAINTENANCE';
 export interface Room {
   id: number;
   number: string;
-  type: string; // Standard, Deluxe, Suite, Family, Dorm
+  type?: string; // legacy: no longer set; older rooms may still carry one
   floor: string;
   price: number;
   status: RoomStatus; // derived from bookings (MAINTENANCE is the only manual value)
@@ -43,6 +43,7 @@ export interface Booking {
   actualCheckOut?: number; // server: when the guest actually left
   payments?: BookingPayment[]; // money received (advance, balance…); paid = received >= amount
   external?: { source: string; uid: string; feedId: string; conflict?: boolean }; // imported from an OTA calendar
+  askCab?: Array<{ at: number; by: string; linkId?: string }>; // server: Ask-for-cab sends (once per booking)
 }
 
 export type PaymentMethod = 'CASH' | 'UPI' | 'CARD' | 'BANK' | 'OTA' | 'OTHER';
@@ -144,6 +145,7 @@ export interface CabTrip {
     // Average stars (1 decimal); null when the driver has no ratings yet
     driverRating?: number | null;
     driverRatingCount?: number;
+    isOwnDriver?: boolean; // the homestay's own driver (priority)
   }>;
   financialSnapshot?: any;
   source?: 'MANUAL_OWNER' | 'NEARBY_BROADCAST' | 'GUEST_WEB_LINK' | 'ADMIN_DISPATCH';
@@ -189,7 +191,6 @@ export interface DriverTrip {
   // counterFare: the homestay's counter-offer on my quote, waiting for me to accept
   myQuote: { quotedFare: number; status: string; notes?: string; counterFare?: number | null } | null;
   assignedToMe: boolean;
-  pickupOtp?: string | null;
   pickupOtpRequired?: boolean;
   _pendingStartOtp?: string;
   _pendingComplete?: boolean;

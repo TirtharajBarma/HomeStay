@@ -1,5 +1,6 @@
 // Run: npx tsx scripts/check-whatsapp.ts
 // Checks phone normalisation, that nothing sends while WhatsApp is off, and the phone-privacy rule.
+import './no-telemetry.js'; // must stay the first import
 import assert from 'node:assert/strict';
 import { toWhatsAppNumber, sendWhatsApp, verifyMetaSignature, verifyHandshake, opaqueData, readOpaqueData, recordWhatsAppWebhook } from '../src/services/whatsapp.service.js';
 import * as messages from '../src/stayride/messages.js';

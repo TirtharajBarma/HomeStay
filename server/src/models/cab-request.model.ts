@@ -139,6 +139,8 @@ export interface ICabRequest extends Document {
   biddingClosesAt?: Date | null;
   autoAccepted?: boolean;
   autoCompleted?: boolean;
+  // auto-completed while still CONFIRMED (boarding PIN never entered): for the admin to review
+  completedWithoutPin?: boolean;
   // advance must be paid by then or the confirmed driver is released (lazy, see releaseUnpaidAdvances)
   advanceDueAt?: Date | null;
   // Razorpay link for the current advance (replaced if the trip is released and confirmed again)
@@ -349,6 +351,7 @@ const CabRequestSchema = new Schema<ICabRequest>(
     biddingClosesAt: { type: Date, default: null },
     autoAccepted: { type: Boolean, default: false },
     autoCompleted: { type: Boolean, default: false },
+    completedWithoutPin: { type: Boolean, default: false },
     cancelledBy: { type: String, default: "" },
     remainingCashAmount: { type: Number, default: 0 },
     financialSnapshot: { type: FinancialSnapshotSchema, default: null },

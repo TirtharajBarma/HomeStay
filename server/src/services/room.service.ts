@@ -3,6 +3,39 @@ import { Booking } from "../models/booking.model.js";
 import { Property } from "../models/property.model.js";
 import { getStayRideTenantModel } from "../stayride/store.js";
 
+/**
+ * A room the host added in the app (StayRide tenant data) as a public room. Nothing invented: no price is
+ * price/nightly null ("Price on request", not bookable online), no number is number null. The legacy `type` is not read.
+ */
+export function tenantRoomView(lp: any, tr: any, photos: string[] = []) {
+  const price = Number(tr.price) > 0 ? Number(tr.price) : null;
+  const number = tr.number ? String(tr.number) : null;
+  const code = `${lp.slug || "stay"}-${number || tr.id}`;
+  return {
+    _id: `tr_${tr.id}`,
+    code,
+    slug: code,
+    name: number ? `Room ${number}` : "Room",
+    number,
+    floor: tr.floor || "",
+    note: tr.note || "",
+    propertyId: lp._id,
+    homestayName: lp.name,
+    location: lp.address || lp.town || "Darjeeling",
+    category: "Standard",
+    kind: "cottage",
+    kindLabel: "Standard Room",
+    status: tr.status === "MAINTENANCE" ? "Maintenance" : "Active",
+    petFriendly: true,
+    maxGuests: 2,
+    occupancy: "2 Guests",
+    nightly: price,
+    price,
+    image: photos[0] || "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1200&q=80",
+    amenities: ["Mountain View", "Verified Host", "Door-to-door Cab Transfer"],
+  };
+}
+
 export interface RoomFilters {
   category?: string;
   kind?: string;
@@ -67,28 +100,9 @@ export class RoomService {
           const trs = tenantDoc?.data?.rooms || [];
           const photos = tenantDoc?.data?.homestay?.photos || [];
           for (const tr of trs) {
-            const code = `${lp.slug || "stay"}-${tr.number || tr.id}`;
-            if (!rooms.some((r) => r.code === code || r.slug === code)) {
-              rooms.push({
-                _id: `tr_${tr.id}`,
-                code,
-                slug: code,
-                name: `${tr.type || "Room"} ${tr.number}`,
-                homestayName: lp.name,
-                location: lp.address || lp.town || "Darjeeling",
-                category: tr.type || "Standard",
-                kind: "cottage",
-                kindLabel: tr.type || "Standard Room",
-                status: tr.status === "MAINTENANCE" ? "Maintenance" : "Active",
-                petFriendly: true,
-                maxGuests: tr.type === "Family" ? 4 : tr.type === "Suite" ? 3 : 2,
-                occupancy: tr.type === "Family" ? "4 Guests" : "2 Guests",
-                nightly: Number(tr.price) || 2000,
-                price: Number(tr.price) || 2000,
-                propertyId: (lp as any)._id,
-                image: photos[0] || "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1200&q=80",
-                amenities: ["Mountain View", "Verified Host", "Door-to-door Cab Transfer"],
-              });
+            const room = tenantRoomView(lp, tr, photos);
+            if (!rooms.some((r) => r.code === room.code || r.slug === room.code)) {
+              rooms.push(room as any);
             }
           }
         }
@@ -119,28 +133,9 @@ export class RoomService {
         const trs = tenantDoc?.data?.rooms || [];
         const photos = tenantDoc?.data?.homestay?.photos || [];
         for (const tr of trs) {
-          const code = `${lp.slug || "stay"}-${tr.number || tr.id}`.toLowerCase();
-          if (code === clean || String(tr.number).toLowerCase() === clean) {
-            return {
-              _id: `tr_${tr.id}`,
-              code,
-              slug: code,
-              name: `${tr.type || "Room"} ${tr.number}`,
-              homestayName: lp.name,
-              location: lp.address || lp.town || "Darjeeling",
-              category: tr.type || "Standard",
-              kind: "cottage",
-              kindLabel: tr.type || "Standard Room",
-              status: tr.status === "MAINTENANCE" ? "Maintenance" : "Active",
-              petFriendly: true,
-              maxGuests: tr.type === "Family" ? 4 : tr.type === "Suite" ? 3 : 2,
-              occupancy: tr.type === "Family" ? "4 Guests" : "2 Guests",
-              nightly: Number(tr.price) || 2000,
-              price: Number(tr.price) || 2000,
-              propertyId: (lp as any)._id,
-              image: photos[0] || "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1200&q=80",
-              amenities: ["Mountain View", "Verified Host", "Door-to-door Cab Transfer"],
-            };
+          const room = tenantRoomView(lp, tr, photos);
+          if (room.code.toLowerCase() === clean || (room.number && room.number.toLowerCase() === clean)) {
+            return { ...room, code: room.code.toLowerCase(), slug: room.code.toLowerCase() };
           }
         }
       }

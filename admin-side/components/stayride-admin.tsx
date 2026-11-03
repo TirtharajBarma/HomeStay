@@ -711,7 +711,7 @@ function TenantDataViewer({ t, demo, onClose, onOpenCabRequests }: { t: Any; dem
                   <RecordEditor
                     key={id || i}
                     rec={r}
-                    title={String(r.name || r.guestName || r.title || r.reference || r.roomNumber || id || `#${i + 1}`)}
+                    title={String(r.name || r.guestName || r.title || r.reference || r.number || id || `#${i + 1}`)}
                     readOnly={platform || !id}
                     note={
                       platform ? (
@@ -1172,8 +1172,8 @@ const CAB_FILTERS: Record<string, { label: string; query?: Any; pending?: boolea
 const statusTone = (s: string) =>
   s === "COMPLETED" || s === "CONFIRMED" ? "green" : s === "CANCELLED" ? "red" : s === "TRIP_STARTED" ? "blue" : s === "EXPIRED" ? "slate" : "amber";
 
-export function CabRequestsTab({ demo, initialTenantKey }: TabProps & { initialTenantKey?: string }) {
-  const [filter, setFilter] = useState(initialTenantKey ? "all" : "open");
+export function CabRequestsTab({ demo, initialTenantKey, initialFilter }: TabProps & { initialTenantKey?: string; initialFilter?: string }) {
+  const [filter, setFilter] = useState(initialFilter && CAB_FILTERS[initialFilter] ? initialFilter : initialTenantKey ? "all" : "open");
   const [tenantKey, setTenantKey] = useState(initialTenantKey || "");
   const [tenantQuery, setTenantQuery] = useState(initialTenantKey || "");
   const [page, setPage] = useState(0);
@@ -1340,7 +1340,7 @@ function CabRequestCard({ c, demo, onChanged }: { c: Any; demo: boolean; onChang
               {c.unmatchedPayments.map((u: Any, idx: number) => (
                 <div key={idx} className="flex flex-wrap items-center justify-between gap-2 text-slate-300">
                   <span>
-                    <span className="font-mono text-white">{u.paymentId}</span> • {inr(u.amount)} • state was {u.status} • {dt(u.at)}
+                    <span className="font-mono text-white">{u.paymentId}</span> • {inr(u.amount)} • {u.status === "UNVERIFIED_GUEST_CLAIM" ? "unverified guest UPI claim (check your bank)" : `state was ${u.status}`} • {dt(u.at)}
                     {u.refundedAt ? (
                       <span className="ml-2 font-semibold text-emerald-400">✓ Refunded (UTR: {u.refundReference || "—"})</span>
                     ) : (
@@ -1770,8 +1770,9 @@ export function PayoutsTab({ demo }: TabProps) {
 function localSplit(fare: number, totalComm: number, adminPct: number, homePct: number, adv: number, min: number) {
   const f = Math.round(fare);
   // Same percents the save sends, then the server's rounding (each part rounded on the fare)
-  const pfA = Math.min(f, Math.round((f * roundPct((totalComm * adminPct) / 100)) / 100));
-  const hcA = Math.min(f - pfA, Math.round((f * roundPct((totalComm * homePct) / 100)) / 100));
+  const platformPct = roundPct((totalComm * adminPct) / 100);
+  const pfA = Math.min(f, Math.round((f * platformPct) / 100));
+  const hcA = Math.min(f - pfA, Math.round((f * roundPct(totalComm - platformPct)) / 100));
   const totalCommAmt = pfA + hcA;
   const advance = Math.min(f, Math.max(min, Math.round((f * adv) / 100), totalCommAmt));
   const driverExcess = Math.max(0, advance - totalCommAmt);
@@ -1847,6 +1848,8 @@ export function SettingsTab({ demo }: TabProps) {
     if (!window.confirm(`Apply to the ${which}: Total commission ${totalComm}%, Platform split ${adminShare}%, Homestay split ${homeShare}%, advance ${adv}%, min advance ₹${min}, own fleet ${ownFleetComm}% with ₹${ownFleetMin} minimum fee?`)) return;
     // Operational values live in platform.* (also edited on the Operations tab): send only what changed here.
     const ops = savedOps(data);
+    // Homestay share = total minus the rounded platform share, so the two always add up to the total
+    const platformPct = roundPct(tc * (ap / 100));
     setSaving(true);
     await act(
       () => adminApi("/commission/settings", {
@@ -1856,8 +1859,8 @@ export function SettingsTab({ demo }: TabProps) {
           totalCommissionPercent: tc,
           adminSharePercentOfCommission: ap,
           homestaySharePercentOfCommission: hp,
-          globalPlatformFeePercent: Math.round((tc * (ap / 100)) * 10) / 10,
-          globalHomestayCommissionPercent: Math.round((tc * (hp / 100)) * 10) / 10,
+          globalPlatformFeePercent: platformPct,
+          globalHomestayCommissionPercent: roundPct(tc - platformPct),
           defaultAdvancePercent: Number(adv),
           minAdvanceAmount: Number(min),
           quoteWindowHours: quoteWindow !== ops.quoteWindow ? Number(quoteWindow) : undefined,
@@ -2068,7 +2071,7 @@ export function SettingsTab({ demo }: TabProps) {
 // value, and the apps and the guest page read them from the server, so nothing here is hard-coded there.
 const VEHICLE_KEYS = ["Sedan", "SUV", "7-seater", "9-seater"] as const;
 const NUM_FIELDS: { key: string; label: string; hint: string }[] = [
-  { key: "advanceWindowMin", label: "Advance payment window (minutes)", hint: "0 = no deadline. Keep 0 while payments are recorded by hand; set e.g. 30 once Razorpay is on." },
+  { key: "advanceWindowMin", label: "Advance payment window (minutes)", hint: "Minutes the guest has to pay the advance (min 15). With manual UPI confirmation keep it around 120." },
   { key: "ownFleetFeePercent", label: "Own-fleet fee %", hint: "Platform fee when the owner uses their own driver (paid by the guest as the advance)." },
   { key: "ownFleetMinFee", label: "Own-fleet minimum fee ₹", hint: "Floor, so an under-reported fare still pays." },
   { key: "nearbyRadiusKm", label: "Nearby radius (km)", hint: "Drivers further than this from the homestay are not notified. 0 = everyone." },
@@ -2546,5 +2549,235 @@ export function AuditTab({ demo }: TabProps) {
         ))}
       <Pager page={page} setPage={setPage} total={data?.total ?? null} count={items.length} />
     </Panel>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 10. Guests staying (all homestays): ask for cab, call, last contacted
+// ---------------------------------------------------------------------------
+const GUEST_FILTERS: Record<string, { label: string; status?: string }> = {
+  all: { label: "All" },
+  booked: { label: "Booked", status: "CONFIRMED" },
+  in: { label: "Checked in", status: "CHECKED_IN" },
+};
+
+export function GuestsTab({ demo, initialSearch }: TabProps & { initialSearch?: string }) {
+  const [filter, setFilter] = useState("all");
+  const [text, setText] = useState(initialSearch || "");
+  const [q, setQ] = useState(initialSearch || "");
+  const [page, setPage] = useState(0);
+  const { data, error, loading, reload, updatedAt } = useLoad(
+    () => adminApi("/stayride/guests-staying", { demo, query: { status: GUEST_FILTERS[filter].status, q, ...pq(page) } }).then(toPage),
+    [demo, filter, q, page],
+    true
+  );
+  const items = data?.items || [];
+  return (
+    <Panel
+      title="Guests staying"
+      subtitle="Booked and checked-in guests across every homestay, current stays first. Times in IST."
+      onRefresh={reload}
+      error={error}
+      loading={loading}
+      updatedAt={updatedAt}
+      right={
+        <form onSubmit={(e) => { e.preventDefault(); setPage(0); setQ(text.trim()); }} className="flex gap-2">
+          <input className={input} placeholder="Name, phone or homestay" value={text} onChange={(e) => setText(e.target.value)} />
+          <button className={btn.primary}>Search</button>
+        </form>
+      }
+    >
+      <div className="flex flex-wrap gap-2">
+        {Object.entries(GUEST_FILTERS).map(([key, v]) => (
+          <button key={key} onClick={() => { setFilter(key); setPage(0); }} className={chip(filter === key)}>{v.label}</button>
+        ))}
+      </div>
+      {data &&
+        (items.length ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="border-b border-slate-800 bg-slate-900/60 text-slate-400 font-semibold uppercase tracking-wider">
+                <tr>
+                  <th className="p-3">Guest</th><th className="p-3">Phone</th><th className="p-3">Homestay</th><th className="p-3">Status</th>
+                  <th className="p-3">Stay</th><th className="p-3">Actions</th><th className="p-3">Last contacted</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60">
+                {items.map((g) => <GuestRow key={`${g.tenantKey}:${g.id}`} g={g} demo={demo} onChanged={reload} />)}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <Empty>No guests staying for this filter.</Empty>
+        ))}
+      <Pager page={page} setPage={setPage} total={data?.total ?? null} count={items.length} />
+    </Panel>
+  );
+}
+
+function GuestRow({ g, demo, onChanged }: { g: Any; demo: boolean; onChanged: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const path = `/stayride/tenants/${encodeURIComponent(g.tenantKey)}/bookings/${g.id}`;
+
+  // Once the booking was asked the server answers ALREADY_SENT with its history; the admin confirms to send anyway.
+  async function askCab(force = false): Promise<void> {
+    setBusy(true);
+    try {
+      const r = await adminApi(`${path}/ask-cab`, { method: "POST", body: { force }, demo });
+      if (r?.data?.status === "ALREADY_SENT") {
+        if (window.confirm(r.data.confirm)) await askCab(true);
+        return;
+      }
+      alert(r?.message || "Done.");
+      onChanged();
+    } catch (e: any) {
+      alert(e?.message || "Action failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  // The tel: link opens the phone app; this only records that a call was started.
+  const recordCall = () => adminApi(`${path}/call`, { method: "POST", body: {}, demo }).then(onChanged).catch((e) => alert(e?.message || "Call not recorded."));
+  const copy = () => navigator.clipboard?.writeText(g.tel || g.phone).then(() => alert("Number copied."), () => alert(g.tel || g.phone));
+
+  return (
+    <tr className="align-top">
+      <td className="p-3 font-semibold text-slate-100">{g.guestName || "Guest"}<div className="text-[10px] font-normal text-slate-500">Room {g.roomNumber || "—"}</div></td>
+      <td className="p-3 whitespace-nowrap font-mono text-slate-200">{g.tel || g.phone || "—"}</td>
+      <td className="p-3 text-slate-300">{g.homestayName || g.tenantKey}</td>
+      <td className="p-3"><Badge tone={g.status === "CHECKED_IN" ? "green" : "blue"}>{g.status === "CHECKED_IN" ? "Checked in" : "Booked"}</Badge></td>
+      <td className="p-3 whitespace-nowrap text-slate-400">{formatDate(g.checkIn)} → {formatDate(g.checkOut)}</td>
+      <td className="p-3">
+        <div className="flex flex-wrap gap-2">
+          <button className={btn.primary} disabled={busy} onClick={() => askCab()}>{busy ? "Sending..." : "Ask for cab"}</button>
+          {g.tel && <a className={btn.ok} href={`tel:${g.tel}`} onClick={recordCall}>Call</a>}
+          {(g.tel || g.phone) && <button className={btn.ghost} onClick={copy}>Copy</button>}
+        </div>
+      </td>
+      <td className="p-3 text-[11px] text-slate-400 space-y-1">
+        {(g.askCab || []).map((line: string, i: number) => <div key={i} className="whitespace-nowrap">Ask for cab: {line}</div>)}
+        {g.lastCall && <div>Call started {dt(g.lastCall.at)} • {g.lastCall.by}</div>}
+        {!g.askCab?.length && !g.lastCall && "—"}
+      </td>
+    </tr>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Notification bell: new bookings, check-ins, cab requests and "guest says paid" claims
+// ---------------------------------------------------------------------------
+type Seen = { at: number; ids: string[] };
+// ponytail: read state is per browser (localStorage), not per admin account; move "last seen" onto the admin user record if it must follow the admin across devices.
+const seenKey = (demo: boolean) => `staycabs_admin_seen_${demo ? "demo" : "live"}`;
+function readSeen(demo: boolean): Seen {
+  try {
+    const v = JSON.parse(window.localStorage.getItem(seenKey(demo)) || "null");
+    if (typeof v?.at === "number") return { at: v.at, ids: Array.isArray(v.ids) ? v.ids : [] };
+  } catch {}
+  return { at: Date.now() - 86400000, ids: [] }; // a new browser starts with the last 24h unread
+}
+let audio: AudioContext | null = null; // created on a bell click: browsers only play sound after a user gesture
+function beep() {
+  try {
+    if (!audio) return;
+    const o = audio.createOscillator();
+    const gain = audio.createGain();
+    o.frequency.value = 880;
+    gain.gain.value = 0.08;
+    o.connect(gain).connect(audio.destination);
+    o.start();
+    o.stop(audio.currentTime + 0.15);
+  } catch {}
+}
+
+export function NotificationBell({ demo, onOpen }: TabProps & { onOpen: (n: Any) => void }) {
+  const [seen, setSeenState] = useState<Seen>(() => readSeen(demo));
+  const [feed, setFeed] = useState<{ unread: number; items: Any[] } | null>(null);
+  const [open, setOpen] = useState(false);
+  const newest = useRef<number | null>(null);
+  const setSeen = (s: Seen) => {
+    setSeenState(s);
+    try {
+      window.localStorage.setItem(seenKey(demo), JSON.stringify(s));
+    } catch {}
+  };
+
+  // Polls even while the browser tab is in the background, so pop-ups still arrive.
+  useEffect(() => {
+    let alive = true;
+    const load = () => adminApi("/stayride/notifications", { demo, query: { since: seen.at } }).then((r) => alive && setFeed(r.data)).catch(() => {});
+    load();
+    const id = window.setInterval(load, AUTO_REFRESH_MS);
+    return () => {
+      alive = false;
+      window.clearInterval(id);
+    };
+  }, [demo, seen.at]);
+
+  // Pop-up and sound only for items that arrived after the first load
+  useEffect(() => {
+    const items = feed?.items || [];
+    if (!items.length) return;
+    const top = Math.max(...items.map((i) => i.at));
+    if (newest.current !== null) {
+      const fresh = items.filter((i) => i.at > newest.current!);
+      if (fresh.length) {
+        if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+          for (const i of fresh.slice(0, 3)) new Notification(i.title, { body: i.sub, tag: i.id });
+        }
+        beep();
+      }
+    }
+    newest.current = Math.max(newest.current ?? 0, top);
+  }, [feed]);
+
+  const items = feed?.items || [];
+  const isUnread = (i: Any) => i.at > seen.at && !seen.ids.includes(i.id);
+  const unread = Math.max(0, (feed?.unread ?? 0) - items.filter((i) => i.at > seen.at && seen.ids.includes(i.id)).length);
+
+  function toggle() {
+    if (!audio && typeof AudioContext !== "undefined") audio = new AudioContext();
+    if (typeof Notification !== "undefined" && Notification.permission === "default") Notification.requestPermission().catch(() => {});
+    setOpen(!open);
+  }
+  function openItem(i: Any) {
+    if (isUnread(i)) setSeen({ at: seen.at, ids: [i.id, ...seen.ids].slice(0, 50) });
+    setOpen(false);
+    onOpen(i);
+  }
+  // Server time of the newest item, so a skewed browser clock can't hide anything
+  const markAll = () => setSeen({ at: Math.max(seen.at, ...items.map((i) => i.at)), ids: [] });
+
+  return (
+    <div className="relative">
+      <button onClick={toggle} className="relative flex items-center rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-slate-200 hover:bg-slate-700" aria-label={`Notifications, ${unread} unread`}>
+        <span className="material-symbols-outlined text-lg">notifications</span>
+        {unread > 0 && (
+          <span className="absolute -right-1.5 -top-1.5 rounded-full bg-red-600 px-1.5 text-[10px] font-bold text-white">{unread > 99 ? "99+" : unread}</span>
+        )}
+      </button>
+      {open && (
+        <div className="absolute right-0 z-30 mt-2 w-80 rounded-2xl border border-slate-800 bg-slate-950 p-3 text-xs shadow-2xl">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="font-bold text-white">Notifications</span>
+            <button className={btn.ghost} onClick={markAll} disabled={!unread}>Mark all read</button>
+          </div>
+          {items.length ? (
+            <ul className="max-h-96 divide-y divide-slate-800/60 overflow-y-auto">
+              {items.map((i) => (
+                <li key={`${i.kind}:${i.id}`}>
+                  <button onClick={() => openItem(i)} className="w-full p-2 text-left hover:bg-slate-900">
+                    <div className={isUnread(i) ? "font-bold text-white" : "text-slate-400"}>{i.title}</div>
+                    <div className="text-[10px] text-slate-500">{[i.sub, dt(i.at)].filter(Boolean).join(" • ")}</div>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <Empty>Nothing yet.</Empty>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

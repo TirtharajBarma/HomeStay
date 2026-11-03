@@ -24,15 +24,6 @@ import { PlatformSelect } from '../components/PlatformSelect';
 import { Header } from '../components/Header';
 import { Booking, Room, RoomStatus } from '../types';
 
-const ROOM_TYPE_OPTIONS = [
-  { label: 'Standard Room', value: 'Standard', icon: 'bed-outline' as const },
-  { label: 'Deluxe Valley View', value: 'Deluxe Valley View', icon: 'sparkles-outline' as const },
-  { label: 'Family Suite', value: 'Family Suite', icon: 'people-outline' as const },
-  { label: 'Attic Cottage Room', value: 'Attic Cottage Room', icon: 'home-outline' as const },
-  { label: 'Budget Twin Room', value: 'Budget Twin Room', icon: 'cash-outline' as const },
-  { label: 'Executive Suite', value: 'Executive Suite', icon: 'star-outline' as const },
-];
-
 const FLOOR_OPTIONS = [
   { label: 'Ground Floor', value: 'Ground Floor', icon: 'layers-outline' as const },
   { label: '1st Floor', value: '1st Floor', icon: 'layers-outline' as const },
@@ -63,7 +54,6 @@ export const RoomsScreen: React.FC = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
   const [editNumber, setEditNumber] = useState('');
-  const [editType, setEditType] = useState('Standard');
   const [editFloor, setEditFloor] = useState('1st Floor');
   const [editPrice, setEditPrice] = useState('1800');
   const [editStatus, setEditStatus] = useState<RoomStatus>('AVAILABLE');
@@ -73,7 +63,6 @@ export const RoomsScreen: React.FC = () => {
     if (room) {
       setSelectedRoom(room);
       setEditNumber(room.number);
-      setEditType(room.type);
       setEditFloor(room.floor);
       setEditPrice(String(room.price));
       setEditStatus(room.status === 'MAINTENANCE' ? 'MAINTENANCE' : 'AVAILABLE');
@@ -81,7 +70,6 @@ export const RoomsScreen: React.FC = () => {
     } else {
       setSelectedRoom(null);
       setEditNumber('');
-      setEditType('Standard');
       setEditFloor('1st Floor');
       setEditPrice('1800');
       setEditStatus('AVAILABLE');
@@ -104,7 +92,6 @@ export const RoomsScreen: React.FC = () => {
     if (selectedRoom) {
       const outcome = await updateRoom(selectedRoom.id, {
         number: editNumber.trim(),
-        type: editType,
         floor: editFloor.trim(),
         price: priceNum,
         status: editStatus,
@@ -118,7 +105,6 @@ export const RoomsScreen: React.FC = () => {
       try {
         await createRoom({
           number: editNumber.trim(),
-          type: editType,
           floor: editFloor.trim(),
           price: priceNum,
           status: editStatus,
@@ -341,13 +327,6 @@ export const RoomsScreen: React.FC = () => {
                 placeholder="101"
                 value={editNumber}
                 onChangeText={setEditNumber}
-              />
-
-              <PlatformSelect
-                label="Room Type"
-                value={editType}
-                options={ROOM_TYPE_OPTIONS}
-                onSelect={setEditType}
               />
 
               <PlatformSelect
