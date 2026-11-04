@@ -18,6 +18,7 @@ const base = (over: Record<string, any> = {}) => ({
   reference: `REQ-T${++n}`,
   propertyId: 'owner@x.in',
   homestayName: 'Hill View',
+  homestayArea: 'Hill View, Darjeeling',
   guestName: 'Asha',
   guestPhone: '9111111111',
   pickupLocation: { address: 'Hill View' },
@@ -29,7 +30,7 @@ const base = (over: Record<string, any> = {}) => ({
   ...over,
 });
 const quote = (id: string, status: string, fare = 3000) => ({ driverId: id, driverName: id, driverPhone: '9222222222', driverVehicle: 'Innova', quotedFare: fare, status });
-const driver = (id: string, type?: string) => ({ _id: id, name: id, phone: '9222222222', vehicle: type ? { type } : {} });
+const driver = (id: string, type?: string) => ({ _id: id, name: id, phone: '9222222222', vehicle: { type, area: 'Hill View' } });
 
 // --- contact info in notes ---
 assert.equal(containsContactInfo('Innova, AC, 2 bags ok'), false);
@@ -49,7 +50,7 @@ const awaiting = (over: Record<string, any>) =>
     ...over,
   }));
 
-const overdue = await awaiting({ quotes: [quote('d1', 'ACCEPTED'), quote('d2', 'REJECTED', 3200)] });
+const overdue = await awaiting({ quotes: [quote('d1', 'ACCEPTED'), { ...quote('d2', 'REJECTED', 3200), outbid: true }] });
 const alone = await awaiting({ quotes: [quote('d1', 'ACCEPTED')] });
 const notYet = await awaiting({ advanceDueAt: future, quotes: [quote('d1', 'ACCEPTED')] });
 const paid = await awaiting({ advancePaid: true, status: 'CONFIRMED', quotes: [quote('d1', 'ACCEPTED')] });
@@ -108,11 +109,11 @@ const crypto = await import('node:crypto');
 
 // settings: validation and clamping
 const cfgBad = resolvePlatformConfig({ advanceWindowMin: 2, ownFleetFeePercent: 90, pickupStart: '11:00 PM', pickupEnd: '01:00 AM', vehicles: { Sedan: { enabled: false }, SUV: { enabled: false }, '7-seater': { enabled: false }, '9-seater': { enabled: false } } });
-assert.equal(cfgBad.advanceWindowMin, 5); // below 5 (but not 0) is raised to 5
+assert.equal(cfgBad.advanceWindowMin, 15); // below 15 (but not 0) is raised to 15
 assert.equal(cfgBad.ownFleetFeePercent, 50); // clamped
 assert.equal(cfgBad.pickupStart, DEFAULT_PLATFORM_CONFIG.pickupStart); // end before start → defaults
 assert.equal(cfgBad.vehicles.SUV.enabled, true); // never zero bookable vehicle classes
-assert.equal(resolvePlatformConfig({}).advanceWindowMin, 0); // payment deadline is OFF by default
+assert.equal(resolvePlatformConfig({}).advanceWindowMin, 120);
 const times = pickupTimes(resolvePlatformConfig({}));
 assert.equal(times[0], '03:30 AM'); // Tiger Hill sunrise departures are bookable
 assert.ok(times.includes('04:00 AM') && times.at(-1) === '10:00 PM');
@@ -177,15 +178,16 @@ assert.equal(await recordGatewayPayment('plink_nope', 'pay_9', 450), 'UNKNOWN');
 
 // nearby: radius from the homestay, nearest first, unknown-location drivers last
 const Users = userModel(false);
+const now = new Date();
 await Users.collection.insertMany([
-  { role: 'driver', accountStatus: 'ACTIVE', isAvailable: true, name: 'near', email: 'near@d.in', phone: '9000000001', vehicle: { type: 'SUV' }, location: { lat: 27.05, lng: 88.27 } },
-  { role: 'driver', accountStatus: 'ACTIVE', isAvailable: true, name: 'nearer', email: 'nearer@d.in', phone: '9000000002', vehicle: { type: 'SUV' }, location: { lat: 27.041, lng: 88.266 } },
-  { role: 'driver', accountStatus: 'ACTIVE', isAvailable: true, name: 'far', email: 'far@d.in', phone: '9000000003', vehicle: { type: 'SUV' }, location: { lat: 26.70, lng: 88.43 } }, // Siliguri ~45km
-  { role: 'driver', accountStatus: 'ACTIVE', isAvailable: true, name: 'unknown', email: 'unknown@d.in', phone: '9000000004', vehicle: { type: 'SUV' } },
-  { role: 'driver', accountStatus: 'ACTIVE', isAvailable: true, name: 'sedan', email: 'sedan@d.in', phone: '9000000005', vehicle: { type: 'Sedan' }, location: { lat: 27.041, lng: 88.266 } },
-  { role: 'driver', accountStatus: 'ACTIVE', isAvailable: false, name: 'offline', email: 'offline@d.in', phone: '9000000006', vehicle: { type: 'SUV' }, location: { lat: 27.041, lng: 88.266 } },
+  { role: 'driver', accountStatus: 'ACTIVE', isAvailable: true, name: 'near', email: 'near@d.in', phone: '9000000001', vehicle: { type: 'SUV' }, location: { lat: 27.05, lng: 88.27, updatedAt: now } },
+  { role: 'driver', accountStatus: 'ACTIVE', isAvailable: true, name: 'nearer', email: 'nearer@d.in', phone: '9000000002', vehicle: { type: 'SUV' }, location: { lat: 27.041, lng: 88.266, updatedAt: now } },
+  { role: 'driver', accountStatus: 'ACTIVE', isAvailable: true, name: 'far', email: 'far@d.in', phone: '9000000003', vehicle: { type: 'SUV' }, location: { lat: 26.70, lng: 88.43, updatedAt: now } }, // Siliguri ~45km
+  { role: 'driver', accountStatus: 'ACTIVE', isAvailable: true, name: 'unknown', email: 'unknown@d.in', phone: '9000000004', vehicle: { type: 'SUV', area: 'Hill View' } },
+  { role: 'driver', accountStatus: 'ACTIVE', isAvailable: true, name: 'sedan', email: 'sedan@d.in', phone: '9000000005', vehicle: { type: 'Sedan' }, location: { lat: 27.041, lng: 88.266, updatedAt: now } },
+  { role: 'driver', accountStatus: 'ACTIVE', isAvailable: false, name: 'offline', email: 'offline@d.in', phone: '9000000006', vehicle: { type: 'SUV' }, location: { lat: 27.041, lng: 88.266, updatedAt: now } },
 ]);
-const names = (await matchingDrivers(false, { vehicleType: 'SUV', homestayLocation: { lat: 27.0410, lng: 88.2663 } }, live)).map((d: any) => d.phone);
+const names = (await matchingDrivers(false, { vehicleType: 'SUV', homestayArea: 'Hill View', homestayLocation: { lat: 27.0410, lng: 88.2663 } }, live)).map((d: any) => d.phone);
 assert.deepEqual(names, ['9000000002', '9000000001', '9000000004']); // nearest first, far/sedan/offline excluded
 
 // ask-cab cooldown (a link sent 1h ago blocks a new one; the cooldown is 12h)
@@ -194,8 +196,8 @@ await assert.rejects(sendAskCab('owner@x.in', false, 'Hill View', { guestName: '
 const other = await sendAskCab('owner@x.in', false, 'Hill View', { guestName: 'Ravi', guestPhone: '9555555555' });
 assert.equal(other.result, 'SKIPPED'); // WhatsApp off in tests: nothing sent, and no cooldown recorded
 
-// expiry hours come from settings
-await CommissionService.updateSettings({ globalPlatformFeePercent: 5, globalHomestayCommissionPercent: 10, platform: { requestExpiryHours: 1 }, updatedBy: 'test', isDemo: false });
+// a request whose pickup has passed expires
+await CommissionService.updateSettings({ globalPlatformFeePercent: 5, globalHomestayCommissionPercent: 10, updatedBy: 'test', isDemo: false });
 const stale: any = await Cab.create(base({ date: Date.now() - 3 * 3600000, time: '12:00 AM' }));
 await expireStaleRequests(false, { reference: stale.reference });
 assert.equal(((await Cab.findById(stale._id).lean()) as any).status, 'EXPIRED');

@@ -9,6 +9,9 @@ import { CommissionService } from '../services/commission.service.js';
 import { tenantManager, StayRideMemoryStore, StayRideBooking, bookingClash, istDayStart } from './store.js';
 import { httpError } from '../middlewares/error-handler.js';
 import { config } from '../config/env.js';
+import { audit } from '../models/audit-log.model.js';
+import { logger } from '../utils/logger.js';
+import { pushOwner } from './platform.js';
 
 const IST_OFFSET = 330 * 60000;
 const MAX_BYTES = 2 * 1024 * 1024;
@@ -63,9 +66,23 @@ export function parseIcs(text: string): IcalEvent[] {
   return events;
 }
 
+/**
+ * An owner-blocked event, not a reservation: Airbnb "Airbnb (Not available)", Vrbo "Blocked", Booking.com
+ * "CLOSED - Not available", our own export "Not available". Booking.com uses that one summary for its real
+ * reservations too, so these are kept as date blocks (room protection), never as stays; the owner turns one
+ * into a stay by adding the guest's details.
+ */
+export const isOwnerBlock = (summary: string) => /not available|unavailable|closed|blocked/i.test(summary);
+
+/** A whole calendar: a cut-off download must never cancel the stays it is missing. */
+export const isCompleteIcs = (text: string) => /BEGIN:VCALENDAR/.test(text) && /END:VCALENDAR/.test(text);
+
 const ymd = (ms: number) => new Date(ms + IST_OFFSET).toISOString().slice(0, 10).replace(/-/g, '');
 
-/** Busy dates of one room, as an iCal feed other sites can read. No guest names or phones. */
+/**
+ * Busy dates of one room, as an iCal feed other sites can read. No guest names or phones. Only stays made here:
+ * an imported stay already blocks its own site, and sending it back out makes the sites echo each other.
+ */
 export function buildIcs(store: StayRideMemoryStore, roomId: number): string {
   const room = store.room(roomId);
   const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
@@ -74,7 +91,7 @@ export function buildIcs(store: StayRideMemoryStore, roomId: number): string {
     out.push(`X-WR-CALNAME:${(store.homestay.name || 'Homestay').replace(/[,;\n]/g, ' ')} - Room ${room.number}`);
     const from = istDayStart(Date.now()) - 86400000;
     for (const b of store.bookings) {
-      if (b.roomNumber !== room.number || b.checkOut <= from) continue;
+      if (b.roomNumber !== room.number || b.checkOut <= from || b.external) continue;
       if (b.status !== 'CONFIRMED' && b.status !== 'CHECKED_IN') continue;
       out.push('BEGIN:VEVENT', `UID:stayride-${roomId}-${b.id}@stayride`, `DTSTAMP:${stamp}`, `DTSTART;VALUE=DATE:${ymd(b.checkIn)}`, `DTEND;VALUE=DATE:${ymd(b.checkOut)}`, 'SUMMARY:Not available', 'END:VEVENT');
     }
@@ -137,7 +154,7 @@ export async function fetchIcs(raw: string, allowed: string[]): Promise<string> 
       }
       if (!res.ok) throw new Error(`The calendar site answered ${res.status}.`);
       const reader = res.body?.getReader();
-      if (!reader) return '';
+      if (!reader) throw new Error('The calendar site sent an empty answer.');
       const chunks: Uint8Array[] = [];
       let size = 0;
       for (;;) {
@@ -152,6 +169,7 @@ export async function fetchIcs(raw: string, allowed: string[]): Promise<string> 
       }
       const text = Buffer.concat(chunks.map((c) => Buffer.from(c))).toString('utf8');
       if (!text.includes('BEGIN:VCALENDAR')) throw new Error('That link did not return a calendar.');
+      if (!isCompleteIcs(text)) throw new Error('The calendar was cut off; nothing was changed.');
       return text;
     } catch (err: any) {
       if (err?.name === 'AbortError') throw new Error('The calendar site took too long to answer.');
@@ -168,7 +186,9 @@ export async function fetchIcs(raw: string, allowed: string[]): Promise<string> 
 // ---------------------------------------------------------------------------
 /**
  * Make the room's imported blocks from one feed match the feed. Returns what changed. Only future
- * stays are touched: past imported stays stay as history.
+ * stays are touched: past imported stays stay as history. Only call it with a feed that downloaded whole
+ * (fetchIcs throws otherwise): every future stay missing from `events` is cancelled. The guest's name and
+ * phone (added by the owner) are never touched, and a stay the owner cancelled stays cancelled.
  */
 export function applyFeed(store: StayRideMemoryStore, roomNumber: string, feedId: string, source: string, events: IcalEvent[], now = Date.now()) {
   const today = istDayStart(now);
@@ -176,26 +196,30 @@ export function applyFeed(store: StayRideMemoryStore, roomNumber: string, feedId
   const byUid = new Map(mine.map((b) => [b.external!.uid, b]));
   const seen = new Set<string>();
   let added = 0, updated = 0, cancelled = 0;
+  const created: StayRideBooking[] = []; // new stays only, not date blocks (the admin bell gets one entry each)
   for (const ev of events) {
     if (ev.end <= today) continue;
     seen.add(ev.uid);
+    const block = isOwnerBlock(ev.summary);
     const existing = byUid.get(ev.uid);
     if (existing) {
+      // older imports of a "Not available" event become blocks (until the owner adds a guest)
+      if (block && !existing.phone && !existing.external!.block) existing.external!.block = true;
       if (existing.status === 'CONFIRMED' && (existing.checkIn !== ev.start || existing.checkOut !== ev.end)) {
         existing.checkIn = ev.start;
         existing.checkOut = ev.end;
         updated++;
       }
-      if (existing.status === 'CANCELLED') {
+      if (existing.status === 'CANCELLED' && !existing.external!.ownerCancelled) {
         existing.status = 'CONFIRMED'; // back on the OTA calendar
         updated++;
       }
       continue;
     }
-    store.bookings.unshift({
+    const booking = {
       id: store.nextBookingIdForImport(),
       guestId: 0,
-      guestName: `${source} booking`,
+      guestName: block ? `${source} (not available)` : `${source} booking`,
       phone: '',
       checkIn: ev.start,
       checkOut: ev.end,
@@ -205,25 +229,32 @@ export function applyFeed(store: StayRideMemoryStore, roomNumber: string, feedId
       paid: false,
       amount: 0,
       source,
-      external: { source, uid: ev.uid, feedId },
-    } as StayRideBooking);
-    added++;
+      external: { source, uid: ev.uid, feedId, ...(block ? { block: true } : {}) },
+    } as StayRideBooking;
+    store.bookings.unshift(booking);
+    if (!block) {
+      created.push(booking);
+      added++;
+    }
   }
   for (const b of mine) {
     if (!seen.has(b.external!.uid) && b.status === 'CONFIRMED' && b.checkOut > today) {
       b.status = 'CANCELLED'; // gone from the OTA calendar: cancelled there
-      cancelled++;
+      if (!b.external!.block) cancelled++;
     }
   }
-  // Flag overlaps between imported blocks and any other booking in this room (possible double booking)
-  let conflicts = 0;
+  // Flag overlaps between imported stays and any other stay in this room (possible double booking). Date blocks
+  // are never flagged nor counted: they are often the other sites' copy of a booking made here.
+  let conflicts = 0, newConflicts = 0;
+  const stays = store.bookings.filter((o) => !o.external?.block);
   for (const b of store.bookings) {
     if (b.external?.feedId !== feedId || b.roomNumber !== roomNumber) continue;
-    const clash = b.status === 'CONFIRMED' ? bookingClash(store.bookings, roomNumber, b.checkIn, b.checkOut, b.id, now) : undefined;
+    const clash = b.status === 'CONFIRMED' && !b.external.block ? bookingClash(stays, roomNumber, b.checkIn, b.checkOut, b.id, now) : undefined;
+    if (clash && !b.external.conflict) newConflicts++;
     b.external.conflict = Boolean(clash);
     if (clash) conflicts++;
   }
-  return { added, updated, cancelled, conflicts };
+  return { added, updated, cancelled, conflicts, newConflicts, created };
 }
 
 // ---------------------------------------------------------------------------
@@ -266,8 +297,24 @@ export async function setImports(tenantKey: string, isDemo: boolean, roomId: num
   return { ...feed, imports };
 }
 
-/** Pull every import link of one room and apply it. Errors are stored per link, never thrown. */
-export async function syncRoom(tenantKey: string, isDemo: boolean, roomId: number) {
+/** Owner push text for one room's sync run, or null when nothing worth telling happened. */
+export function syncSummary(roomNumber: string, results: Array<{ ok: boolean; source?: string; added?: number; cancelled?: number; newConflicts?: number }>) {
+  const sum = (k: 'added' | 'cancelled' | 'newConflicts') => results.reduce((n, r) => n + (r.ok ? r[k] || 0 : 0), 0);
+  const added = sum('added'), cancelled = sum('cancelled'), conflicts = sum('newConflicts');
+  if (!added && !cancelled && !conflicts) return null;
+  const parts = [
+    added ? `${added} new booking${added > 1 ? 's' : ''} (add the guest's phone to offer a cab)` : '',
+    cancelled ? `${cancelled} cancelled` : '',
+    conflicts ? `${conflicts} possible double booking${conflicts > 1 ? 's' : ''}: check now` : '',
+  ].filter(Boolean);
+  return { title: `Room ${roomNumber}: calendar updated`, body: parts.join(' · ') };
+}
+
+/**
+ * Pull every import link of one room and apply it. Errors are stored per link, never thrown, and a link that
+ * failed changes nothing. `notifyOwner`: one push per room per run summarising new / cancelled / conflicting stays.
+ */
+export async function syncRoom(tenantKey: string, isDemo: boolean, roomId: number, notifyOwner = false) {
   const feed = await feedFor(tenantKey, isDemo, roomId, false);
   if (!feed?.imports?.length) return { feed, results: [] as any[] };
   const room = (await tenantManager.load(tenantKey)).room(roomId);
@@ -278,7 +325,11 @@ export async function syncRoom(tenantKey: string, isDemo: boolean, roomId: numbe
   for (const imp of feed.imports) {
     try {
       const events = parseIcs(await fetchIcs(imp.url, cfg.icalAllowedHosts));
-      const r = await tenantManager.mutate(tenantKey, (s) => applyFeed(s, room.number, imp.id, imp.source, events));
+      const { created, ...r } = await tenantManager.mutate(tenantKey, (s) => applyFeed(s, room.number, imp.id, imp.source, events));
+      // One compact entry per NEW imported booking (feeds the admin bell); nothing on a sync that adds none.
+      for (const b of created) {
+        await audit('system', 'booking.import', 'Booking', `${tenantKey}:${b.id}`, { tenantKey, bookingId: b.id, source: imp.source, checkIn: b.checkIn, checkOut: b.checkOut }, isDemo, { tenantId: tenantKey, actorRole: 'SYSTEM' });
+      }
       imports.push({ ...imp, lastSyncAt: new Date(), lastError: '', eventCount: events.length });
       results.push({ source: imp.source, ok: true, ...r });
     } catch (err: any) {
@@ -287,18 +338,32 @@ export async function syncRoom(tenantKey: string, isDemo: boolean, roomId: numbe
     }
   }
   await getIcalFeedModel(isDemo).updateOne({ _id: feed._id }, { $set: { imports } });
+  const summary = notifyOwner ? syncSummary(room.number, results) : null;
+  if (summary) await pushOwner(isDemo, tenantKey, { ...summary, data: { type: 'ICAL_SYNC' } }).catch(() => {});
   return { feed: { ...feed, imports }, results };
 }
 
-/** Scheduled sync of every room that imports calendars (oldest first, bounded per run). */
-export async function syncAll(isDemo: boolean, limit = 25) {
-  const feeds: any[] = await getIcalFeedModel(isDemo).find({ 'imports.0': { $exists: true } }).sort({ updatedAt: 1 }).limit(limit).lean();
-  let rooms = 0;
-  for (const f of feeds) {
-    await syncRoom(f.tenantKey, isDemo, f.roomId);
-    rooms++;
-  }
-  return { rooms };
+/**
+ * Scheduled sync of every room that imports calendars: least recently synced first, 4 rooms at a time, and no
+ * new room starts after `budgetMs` (the cron's function has a time limit). The rest go first on the next run.
+ */
+export async function syncAll(isDemo: boolean, budgetMs = 40000) {
+  const until = Date.now() + budgetMs;
+  const feeds: any[] = await getIcalFeedModel(isDemo).find({ 'imports.0': { $exists: true } }).sort({ 'imports.lastSyncAt': 1 }).limit(500).select('tenantKey roomId').lean();
+  let rooms = 0, next = 0;
+  const worker = async () => {
+    while (next < feeds.length && Date.now() < until) {
+      const f = feeds[next++];
+      try {
+        await syncRoom(f.tenantKey, isDemo, f.roomId, true);
+      } catch (err: any) {
+        logger.warn(`[iCal] room sync failed: ${err?.message}`, { action: 'ical.sync_failed', tenantId: f.tenantKey, metadata: { roomId: f.roomId } });
+      }
+      rooms++;
+    }
+  };
+  await Promise.all([worker(), worker(), worker(), worker()]);
+  return { rooms, due: feeds.length };
 }
 
 export async function storeForExportToken(token: string) {

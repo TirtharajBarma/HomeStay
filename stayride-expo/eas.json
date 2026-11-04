@@ -19,7 +19,7 @@
       },
       "channel": "preview",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://home-stay-ten.vercel.app/v1"
+        "EXPO_PUBLIC_API_URL": "https://api.staycabs.in/v1"
       }
     },
     "production-apk": {
@@ -29,7 +29,7 @@
       },
       "channel": "production",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://home-stay-ten.vercel.app/v1"
+        "EXPO_PUBLIC_API_URL": "https://api.staycabs.in/v1"
       }
     },
     "production": {
@@ -42,7 +42,7 @@
       },
       "channel": "production",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://home-stay-ten.vercel.app/v1"
+        "EXPO_PUBLIC_API_URL": "https://api.staycabs.in/v1"
       }
     }
   },

@@ -3,6 +3,8 @@ import type { NextRequest } from "next/server";
 
 async function verifyJwt(token: string, secret: string | undefined): Promise<any> {
   try {
+    // fail closed: without the secret no token can be verified, so every page goes to /login
+    if (!secret) return null;
     const parts = token.split(".");
     if (parts.length !== 3) return null;
     const [headerB64, payloadB64, signatureB64] = parts;
@@ -12,7 +14,7 @@ async function verifyJwt(token: string, secret: string | undefined): Promise<any
     const payload = JSON.parse(json);
 
     // Cryptographically verify HMAC-SHA256 signature using Web Crypto API
-    if (secret) {
+    {
       const encoder = new TextEncoder();
       const key = await crypto.subtle.importKey(
         "raw",

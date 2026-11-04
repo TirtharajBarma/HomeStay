@@ -9,6 +9,9 @@ export interface Room {
   status: RoomStatus; // derived from bookings (MAINTENANCE is the only manual value)
   note: string;
   nextArrival?: number | null; // server: check-in of the next upcoming booking
+  roomType?: 'PRIVATE' | 'DORM';
+  bedCount?: number;
+  beds?: string[];
 }
 
 export interface Guest {
@@ -35,6 +38,7 @@ export interface Booking {
   checkIn: number; // epoch ms
   checkOut: number; // epoch ms
   roomNumber: string;
+  bedNumber?: string;
   guests: number;
   status: BookingStatus;
   paid: boolean;
@@ -242,6 +246,7 @@ export interface Homestay {
   checkOutTime?: string; // e.g. "11:00 AM"
   latitude?: number; // map pin (server-set via setHomestayLocation)
   longitude?: number;
+  propertyType?: 'HOMESTAY' | 'HOSTEL' | 'HOTEL' | 'RESORT';
 }
 
 export type UserRole = 'owner' | 'driver' | 'admin';

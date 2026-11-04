@@ -46,7 +46,6 @@ export interface PlatformConfig {
   sightseeingPresets: string[];
   routePresets: RoutePreset[];
   vehicles: Record<VehicleKey, VehicleConfig>;
-  requestExpiryHours: number;
   guestLinkDays: number;
   maxOpenRequestsPerPhone: number;
   maxFare: number;
@@ -187,7 +186,6 @@ export const DEFAULT_PLATFORM_CONFIG: PlatformConfig = {
     '7-seater': { label: '7 Seater (Ertiga / Maxi)', seats: 7, estFare: 3200, enabled: true },
     '9-seater': { label: '9+ Seater (Traveller)', seats: 9, estFare: 4200, enabled: true },
   },
-  requestExpiryHours: 6,
   guestLinkDays: 7,
   maxOpenRequestsPerPhone: 5,
   maxFare: 200000,
@@ -262,7 +260,6 @@ export function resolvePlatformConfig(saved: any): PlatformConfig {
     sightseeingPresets: presets,
     routePresets,
     vehicles,
-    requestExpiryHours: num(s.requestExpiryHours, d.requestExpiryHours, 1, 72),
     guestLinkDays: num(s.guestLinkDays, d.guestLinkDays, 1, 60),
     maxOpenRequestsPerPhone: num(s.maxOpenRequestsPerPhone, d.maxOpenRequestsPerPhone, 1, 50),
     maxFare: num(s.maxFare, d.maxFare, 1000, 1000000),
@@ -314,6 +311,7 @@ export function publicConfig(cfg: PlatformConfig) {
     advanceWindowMin: cfg.advanceWindowMin,
     ownFleetFeePercent: cfg.ownFleetFeePercent,
     ownFleetMinFee: cfg.ownFleetMinFee,
+    minDriverPayoutThreshold: cfg.minDriverPayoutThreshold, // driver wallet: withdraw button minimum
     businessName: cfg.business?.name || '', // UPI payee name on the guest page
     upiId: cfg.business?.upiId || '',
     supportPhone: cfg.business?.phone || '',

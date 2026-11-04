@@ -6,6 +6,7 @@ import {
   formatDate,
   formatDateRange,
   formatMoney,
+  formatNightly,
   formatNights,
   TAX_LABEL,
   quoteFor,
@@ -27,15 +28,16 @@ export function BookingCard({ stay, booking }: { stay: Stay; booking: Booking })
         <div className="mb-5 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b border-outline-variant/30 pb-4">
           <div>
             <span className="font-display text-headline-lg font-bold text-primary">
-              {formatMoney(stay.price)}
+              {formatNightly(stay.price)}
             </span>
-            <span className="ml-1 text-body-sm text-on-surface-variant">/ night</span>
+            {stay.price > 0 ? <span className="ml-1 text-body-sm text-on-surface-variant">/ night</span> : null}
           </div>
           <Stars rating={stay.rating} count={stay.reviewCount} />
         </div>
 
         <BookingControls slug={stay.slug} booking={booking} maxGuests={stay.maxGuests} />
 
+        {stay.price > 0 ? (<>
         <div className="mb-6 space-y-3 border-b border-outline-variant/30 pb-5 text-body-sm">
           <div className="flex justify-between text-on-surface-variant">
             <span>
@@ -80,6 +82,19 @@ export function BookingCard({ stay, booking }: { stay: Stay; booking: Booking })
             className="text-sm transition-transform group-hover:translate-x-0.5"
           />
         </Link>
+        </>) : (
+          // No room has a nightly price yet: nothing to total or charge online.
+          <div className="space-y-3 text-body-sm text-on-surface-variant">
+            <p>The host shares the price for this stay on request. Contact them to check dates and book.</p>
+            <Link
+              href={`/h/${stay.slug}`}
+              className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary-container py-3.5 text-label-md text-on-primary shadow-md"
+            >
+              Contact Host
+              <Icon name="arrow_forward" className="text-sm" />
+            </Link>
+          </div>
+        )}
 
         <div className="mt-5 space-y-2 text-center">
           <div className="flex items-center justify-center gap-1.5 text-label-sm text-on-surface-variant">

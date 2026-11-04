@@ -141,6 +141,10 @@ export interface ICabRequest extends Document {
   autoCompleted?: boolean;
   // auto-completed while still CONFIRMED (boarding PIN never entered): for the admin to review
   completedWithoutPin?: boolean;
+  // admin reviewed a completedWithoutPin trip (until then it is held out of every payout); noShow = refunded, nothing paid out
+  noPinReviewedAt?: Date | null;
+  noPinReviewedBy?: string;
+  noShow?: boolean;
   // advance must be paid by then or the confirmed driver is released (lazy, see releaseUnpaidAdvances)
   advanceDueAt?: Date | null;
   // Razorpay link for the current advance (replaced if the trip is released and confirmed again)
@@ -151,8 +155,13 @@ export interface ICabRequest extends Document {
   unmatchedPayments?: Array<{ paymentId: string; amount: number; status: string; at: Date; refundedAt?: Date | null; refundReference?: string }>;
   // Homestay coordinates at request time: "nearby" is measured from here
   homestayLocation?: { lat: number; lng: number } | null;
-  // Homestay's town (first part of its location, like Property.town): no-GPS drivers must be based there
+  // Homestay's place names, normalised comma parts of its location / town ("gandhi road, darjeeling, west bengal"):
+  // a no-GPS driver must be based in one of them (old requests hold just the first part)
   homestayArea?: string;
+  // No driver passed the radius / area filter, so the best-rated active drivers were told: any fitting driver may see it
+  nearbyFallback?: boolean;
+  // Last guest WhatsApp about a changed vehicle plate (at most one per 10 minutes)
+  vehicleNoticeSentAt?: Date | null;
   // Own drivers hear first; nearby drivers are told (and can see / quote it) once this passes. null = open to nearby
   nearbyNotifyAt?: Date | null;
   // Guest link that created the request: only that link unlocks the driver's phone / PIN
@@ -274,6 +283,8 @@ const CabRequestSchema = new Schema<ICabRequest>(
     },
     homestayLocation: { type: { lat: Number, lng: Number, _id: false }, default: null },
     homestayArea: { type: String, default: "" },
+    nearbyFallback: { type: Boolean, default: false },
+    vehicleNoticeSentAt: { type: Date, default: null },
     nearbyNotifyAt: { type: Date, default: null },
     guestLinkId: { type: String, default: "" },
     broadcastExpiresAt: { type: Date, default: null },
@@ -352,6 +363,9 @@ const CabRequestSchema = new Schema<ICabRequest>(
     autoAccepted: { type: Boolean, default: false },
     autoCompleted: { type: Boolean, default: false },
     completedWithoutPin: { type: Boolean, default: false },
+    noPinReviewedAt: { type: Date, default: null },
+    noPinReviewedBy: { type: String, default: "" },
+    noShow: { type: Boolean, default: false },
     cancelledBy: { type: String, default: "" },
     remainingCashAmount: { type: Number, default: 0 },
     financialSnapshot: { type: FinancialSnapshotSchema, default: null },

@@ -11,7 +11,7 @@ import stayrideV1Router from "./stayride/routes.js";
 import { errorHandler, notFoundHandler, httpError } from "./middlewares/error-handler.js";
 import { MongoRateLimitStore, MemoryRateLimitStore } from "./middlewares/rate-limit-store.js";
 import { mongoSanitize } from "./middlewares/sanitize.js";
-import { telemetryMiddleware } from "./utils/logger.js";
+import { telemetryMiddleware, safeUrl } from "./utils/logger.js";
 
 const app = express();
 
@@ -27,9 +27,7 @@ app.set("trust proxy", 1);
 
 // 2. HTTP Request Logging & Cloud Telemetry Stream (Axiom / Better Stack)
 // Guest-link tokens travel in the path/query; never write them to logs
-morgan.token("safe-url", (req: any) =>
-  String(req.originalUrl || req.url).replace(/\?.*$/, "").replace(/(\/guest-links\/)[^/]+/, "$1[token]")
-);
+morgan.token("safe-url", (req: any) => safeUrl(String(req.originalUrl || req.url).replace(/\?.*$/, "")));
 app.use(morgan(':remote-addr :method :safe-url :status :res[content-length] - :response-time ms'));
 app.use(telemetryMiddleware);
 
@@ -119,8 +117,15 @@ app.post(["/api/v1/drivers/bookings", "/api/v1/cabs/bookings"], strictLimiter);
 app.use(["/v1/auth/clerk-webhook", "/api/v1/stayride/auth/clerk-webhook"], express.raw({ type: "application/json" }));
 app.use(["/v1/webhooks/razorpay", "/api/v1/stayride/webhooks/razorpay"], express.raw({ type: "application/json" }));
 app.use(["/v1/webhooks/whatsapp", "/api/v1/stayride/webhooks/whatsapp"], express.raw({ type: "application/json" }));
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+// Homestay saves carry up to MAX_PHOTOS base64 photos (400 KB each, kept as-is when already stored): the only route
+// with a large body. It is parsed here first (the global parser then skips it); everything else is capped at 1 MB.
+// Vercel itself caps request bodies at 4.5 MB.
+app.use(
+  ["/v1/homestay", "/api/v1/stayride/homestay", "/v1/admin/stayride/tenants/:tenantKey/homestay", "/api/v1/admin/stayride/tenants/:tenantKey/homestay"],
+  express.json({ limit: "6mb" })
+);
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 // Express 5 leaves req.body undefined when there is no body; handlers destructure it.
 app.use((req, _res, next) => {
   req.body ??= {};

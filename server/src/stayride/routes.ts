@@ -7,7 +7,7 @@ import {
   OPEN_STATUSES, cabModel, payoutModel, userModel, parseFare, overlayTrips, ownerConfirmQuote, cancelRequest, expireStaleRequests,
   driverTripView, listDriverTrips, driverSubmitQuote, startTrip, completeTrip, payoutSummary, requestPayout,
   driverPayoutSummary, requestDriverPayout, maskPhone, linkDriverFilter, driverKey,
-  istDateTime, notifyNewRequest, dispatchFields, retryMissingPaymentLinks, rateDriver, rateDriverByGuest, ownerPayoutView, parseTime12, hashToken, readDriverQuoteToken, ownerCounterOffer, driverAcceptCounter, ownerCompleteTrip, onDriverStatusChange, issueGuestLink, sendAskCab, currentBookingOf, dispatchRequest, assignOwnFleet, recordGatewayPayment, pushOwner, whatsapp, scope, submitPaymentClaim,
+  istDateTime, areaParts, notifyNewRequest, dispatchFields, retryMissingPaymentLinks, rateDriver, rateDriverByGuest, ownerPayoutView, parseTime12, hashToken, readDriverQuoteToken, ownerCounterOffer, driverAcceptCounter, ownerCompleteTrip, onDriverStatusChange, issueGuestLink, sendAskCab, autoAskCab, currentBookingOf, dispatchRequest, assignOwnFleet, recordGatewayPayment, pushOwner, whatsapp, scope, submitPaymentClaim,
 } from './platform.js';
 import { CommissionService } from '../services/commission.service.js';
 import { getWhatsAppNativeLink, verifyHandshake, verifyMetaSignature, recordWhatsAppWebhook } from '../services/whatsapp.service.js';
@@ -675,7 +675,7 @@ stayrideV1Router.post('/auth/clerk-sync', async (req: Request, res: Response) =>
     const clerkId = clerkUser.id;
 
     // Profile hints from client
-    const { phone, homestayName, location, role, vehicleType, vehicleNumber, area } = req.body;
+    const { phone, homestayName, propertyType, location, role, vehicleType, vehicleNumber, area } = req.body;
     const requestedRole = (role === 'driver' ? 'driver' : 'owner') as 'owner' | 'driver';
     const cleanPhone = String(phone || '').replace(/\D/g, '').slice(-10);
     const primaryPhone = clerkUser.phoneNumbers?.find((p) => p.id === clerkUser.primaryPhoneNumberId)?.phoneNumber;
@@ -824,6 +824,11 @@ stayrideV1Router.post('/auth/clerk-sync', async (req: Request, res: Response) =>
     const cleanLng = req.body.longitude ? Number(req.body.longitude) : null;
     const cleanMapQuery = req.body.mapQuery || (cleanLat && cleanLng ? `${cleanLat},${cleanLng}` : cleanLocation);
     const tenantKey = cleanEmail;
+    const rawPropType = String(propertyType || '').toUpperCase();
+    const validPropType: 'HOMESTAY' | 'HOSTEL' | 'HOTEL' | 'RESORT' = ['HOMESTAY', 'HOSTEL', 'HOTEL', 'RESORT'].includes(rawPropType)
+      ? (rawPropType as any)
+      : 'HOMESTAY';
+
     const store = await tenantManager.createTenantIfMissing(tenantKey, {
       name: cleanHomestay,
       ownerName: cleanName,
@@ -831,6 +836,7 @@ stayrideV1Router.post('/auth/clerk-sync', async (req: Request, res: Response) =>
       email: cleanEmail,
       location: cleanLocation,
       mapQuery: cleanMapQuery,
+      propertyType: validPropType,
     });
 
     const PropertyModel = getPropertyModel(false);
@@ -839,6 +845,7 @@ stayrideV1Router.post('/auth/clerk-sync', async (req: Request, res: Response) =>
       propDoc = await PropertyModel.create({
         ownerId: (user as any)._id,
         name: cleanHomestay,
+        propertyType: validPropType.toLowerCase() as any,
         email: cleanEmail,
         phone: cleanPhone || 'not provided',
         address: cleanLocation || 'not provided',
@@ -966,7 +973,7 @@ async function createPlatformTrip(
     });
   // "Nearby" drivers are measured from the homestay: the owner's map pin, else the property's signup GPS.
   const pinned = await tenantManager.load(tenantKey).then((s) => s.homestay).catch(() => null);
-  const prop: any = isDemo || (pinned?.latitude && pinned?.longitude) ? null : await getPropertyModel(false).findOne({ email: tenantKey }).select('coordinates').lean();
+  const prop: any = isDemo ? null : await getPropertyModel(false).findOne({ email: tenantKey }).select('coordinates address town').lean();
   const homestayLocation =
     pinned?.latitude && pinned?.longitude
       ? { lat: Number(pinned.latitude), lng: Number(pinned.longitude) }
@@ -998,8 +1005,9 @@ async function createPlatformTrip(
       vehicleType: VEHICLE_TYPES.includes(trip.vehicleType) ? trip.vehicleType : 'SUV',
       requestSource: source,
       homestayLocation,
-      // the homestay's town, derived like Property.town at signup: drivers without GPS must be based there
-      homestayArea: String(pinned?.location || '').split(',')[0].trim(),
+      // every place name of the homestay's address (street, town, district...): drivers without GPS must be based in one.
+      // The property record only when the homestay has no location (some carry a placeholder "Darjeeling" town).
+      homestayArea: areaParts(pinned?.location || [prop?.address, prop?.town].filter(Boolean).join(',')).join(', '),
       status: 'FINDING_DRIVER',
       ...dispatch,
       ...extra,
@@ -1266,7 +1274,9 @@ stayrideV1Router.get('/public/cab-requests/:reference', async (req: Request, res
   const found = await findGuestTrip(req);
   if (!found) return res.status(404).json({ error: { message: 'Cab request not found.' } });
   const { doc, isDemo, isVerifiedGuest } = found;
-  const showContact = isVerifiedGuest && ['CONFIRMED', 'EN_ROUTE_PICKUP', 'ARRIVED_HOMESTAY', 'TRIP_STARTED', 'COMPLETED'].includes(doc.status);
+  // driver name / vehicle / phone only once the advance is paid (CONFIRMED on); before that the guest sees "after payment"
+  const confirmed = ['CONFIRMED', 'EN_ROUTE_PICKUP', 'ARRIVED_HOMESTAY', 'TRIP_STARTED', 'COMPLETED'].includes(doc.status);
+  const showContact = isVerifiedGuest && confirmed;
 
   return res.json({
     id: doc.tripId ?? null,
@@ -1283,11 +1293,9 @@ stayrideV1Router.get('/public/cab-requests/:reference', async (req: Request, res
     paymentClaim: doc.paymentClaim
       ? { status: doc.paymentClaim.status, submittedAt: doc.paymentClaim.submittedAt, reason: doc.paymentClaim.reason || '', utr: isVerifiedGuest ? doc.paymentClaim.utr : undefined }
       : null,
-    driverName: doc.assignedDriverName || '',
-    driverPhone: showContact
-      ? (doc.assignedDriverPhone || '')
-      : maskPhone(doc.assignedDriverPhone),
-    vehicle: [doc.vehicleDetails?.model, doc.vehicleDetails?.plate].filter(Boolean).join(' '),
+    driverName: confirmed ? doc.assignedDriverName || '' : '',
+    driverPhone: showContact ? doc.assignedDriverPhone || '' : confirmed ? maskPhone(doc.assignedDriverPhone) : '',
+    vehicle: confirmed ? [doc.vehicleDetails?.model, doc.vehicleDetails?.plate].filter(Boolean).join(' ') : '',
     pickup: doc.pickup || '',
     destinations: doc.destinations || [],
     date: doc.date,
@@ -1564,26 +1572,37 @@ stayrideV1Router.post('/public/driver-quote/update-vehicle', async (req: Request
   }
   const cleanModel = str(req.body?.vehicleModel, 50);
   const mine = { reference: ctx.reference, ...linkDriverFilter(String(ctx.driver._id)) };
+  // Only a paid (confirmed) trip that has not ended: before that the guest must not get the plate
   const trip: any = await cabModel(ctx.isDemo).findOneAndUpdate(
-    { ...mine, status: { $nin: ['COMPLETED', 'CANCELLED', 'EXPIRED'] } },
+    { ...mine, advancePaid: true, status: { $in: ['CONFIRMED', 'EN_ROUTE_PICKUP', 'ARRIVED_HOMESTAY', 'TRIP_STARTED'] } },
     { $set: { 'vehicleDetails.plate': cleanPlate, ...(cleanModel ? { 'vehicleDetails.model': cleanModel } : {}) } },
     { returnDocument: 'after' }
   ).lean();
   if (!trip) {
     return (await cabModel(ctx.isDemo).exists(mine))
-      ? res.status(400).json({ error: { message: 'Cannot update vehicle for a completed or cancelled trip.' } })
+      ? res.status(400).json({ error: { message: 'The vehicle can be changed only on a confirmed trip (advance paid) that has not ended.' } })
       : res.status(404).json({ error: { message: 'Trip not found or not assigned to you.' } });
   }
 
-  // Alert guest on WhatsApp immediately with updated standby plate!
-  if (trip.guestPhone) {
+  // Guest WhatsApp (costs money): at most one per 10 minutes per trip; the claim is the conditional update
+  const notice = trip.guestPhone
+    ? await cabModel(ctx.isDemo).updateOne(
+        { _id: trip._id, $or: [{ vehicleNoticeSentAt: null }, { vehicleNoticeSentAt: { $lt: new Date(Date.now() - 10 * 60000) } }] },
+        { $set: { vehicleNoticeSentAt: new Date() } }
+      )
+    : null;
+  if (notice?.modifiedCount) {
     await whatsapp(ctx.isDemo, trip.guestPhone, messages.vehicleUpdatedGuestMessage(trip.guestName, trip.reference, cleanPlate, trip.assignedDriverName, trip.pickupOtp), scope(trip)).catch(() => {});
   }
 
   await audit(`driver-web:${ctx.driver.name}`, 'cab.vehicle_updated', 'CabRequest', String(trip._id), { plate: cleanPlate, model: cleanModel }, ctx.isDemo, scope(trip));
 
   // only what the driver changed: the trip holds guest contact, PIN and payment data
-  return res.json({ success: true, message: `Vehicle plate updated to ${cleanPlate}. Guest has been notified via WhatsApp.`, vehicleDetails: trip.vehicleDetails });
+  return res.json({
+    success: true,
+    message: `Vehicle plate updated to ${cleanPlate}. ${notice?.modifiedCount ? 'Guest has been notified via WhatsApp.' : 'The guest sees it on the trip page (WhatsApp at most every 10 minutes).'}`,
+    vehicleDetails: trip.vehicleDetails,
+  });
 });
 
 // ==========================================
@@ -2366,22 +2385,10 @@ stayrideV1Router.post('/bookings', async (req: Request, res: Response) => {
   // Compact entry: also feeds the admin's notification bell (no phone stored here)
   await audit(actor || tenantKey, 'booking.create', 'Booking', `${tenantKey}:${created.id}`, { guestName: created.guestName, roomNumber: created.roomNumber, checkIn: created.checkIn, checkOut: created.checkOut }, isDemo, { tenantId: tenantKey, actorRole: 'OWNER' });
 
-  // Automated Ask-for-Cab WhatsApp on booking creation (before replying: a frozen function would lose it)
-  if (created?.phone) {
-    await loadReqStore(req)
-      .then((store) =>
-        sendAskCab(tenantKey, isDemo, store.homestay.name, {
-          guestId: created.guestId ?? created.id,
-          guestName: created.guestName || 'Guest',
-          guestPhone: created.phone,
-          checkInDate: created.checkIn || req.body?.checkIn,
-        }, { by: 'auto', booking: created })
-      )
-      .then((r) => { if (r.askCab) created.askCab = r.askCab; })
-      .catch((err) => {
-        console.warn(`[Auto-AskCab] Booking notice for ${created.guestName}:`, err?.message);
-      });
-  }
+  // Automated Ask-for-Cab WhatsApp on booking creation (before replying: a frozen function would lose it).
+  // Not for a back-dated stay that is already over (autoAskCab).
+  const askCab = await autoAskCab(tenantKey, isDemo, (await loadReqStore(req)).homestay.name, created);
+  if (askCab) created.askCab = askCab;
   res.status(201).json(created);
 });
 
@@ -2395,28 +2402,28 @@ stayrideV1Router.post('/bookings/:id/check-in', async (req: Request, res: Respon
   if (!b) return notFound(res, 'Booking');
   await audit(actor || tenantKey, 'booking.check_in', 'Booking', `${tenantKey}:${b.id}`, { guestName: b.guestName, roomNumber: b.roomNumber }, isDemo, { tenantId: tenantKey, actorRole: 'OWNER' });
 
-  // Automated Ask-for-Cab WhatsApp on check-in: skipped quietly if this booking was already asked
-  if (b?.phone) {
-    await loadReqStore(req)
-      .then((store) =>
-        sendAskCab(tenantKey, isDemo, store.homestay.name, {
-          guestId: b.guestId ?? b.id,
-          guestName: b.guestName || 'Guest',
-          guestPhone: b.phone,
-          checkInDate: b.checkIn || new Date(),
-        }, { by: 'auto', booking: b })
-      )
-      .then((r) => { if (r.askCab) b.askCab = r.askCab; })
-      .catch((err) => {
-        if (err?.code !== 'ASK_CAB_SENT') console.warn(`[Auto-AskCab] Check-in notice for ${b.guestName}:`, err?.message);
-      });
-  }
+  // Automated Ask-for-Cab WhatsApp on check-in: skipped quietly if this booking was already asked, unless that
+  // link has expired (one automatic resend), and never for a stay that is already over
+  const askCab = await autoAskCab(tenantKey, isDemo, (await loadReqStore(req)).homestay.name, b, true);
+  if (askCab) b.askCab = askCab;
+  res.json(b);
+});
+
+// The guest's name and phone (and email) on any booking, calendar imports included (dates and UID stay as synced).
+// Links or creates the guest; then the automatic ask-cab, like a new booking (once per booking, current stays only).
+stayrideV1Router.post('/bookings/:id/guest', async (req: Request, res: Response) => {
+  const { tenantKey, isDemo } = tenantOf(req);
+  const b = await mutateReq(req, (s) => s.attachGuest(Number(req.params.id), req.body || {}));
+  if (!b) return notFound(res, 'Booking');
+  logger.info('[Booking] guest details added', { action: 'booking.guest_details', tenantId: tenantKey, metadata: { bookingId: b.id, imported: Boolean(b.external) } });
+  const askCab = await autoAskCab(tenantKey, isDemo, (await loadReqStore(req)).homestay.name, b);
+  if (askCab) b.askCab = askCab;
   res.json(b);
 });
 stayrideV1Router.post('/bookings/:id/check-out', bookingAction((s, id) => s.checkOutBooking(id)));
 stayrideV1Router.post('/bookings/:id/cancel', bookingAction((s, id) => s.cancelBooking(id)));
 stayrideV1Router.patch('/bookings/:id/payment', bookingAction((s, id, body) => s.setBookingPaid(id, Boolean(body?.paid))));
-stayrideV1Router.post('/bookings/:id/room', bookingAction((s, id, body) => s.changeBookingRoom(id, body?.roomNumber)));
+stayrideV1Router.post('/bookings/:id/room', bookingAction((s, id, body) => s.changeBookingRoom(id, body?.roomNumber, body?.bedNumber)));
 stayrideV1Router.patch('/bookings/:id', bookingAction((s, id, body) => s.editBooking(id, body || {})));
 stayrideV1Router.post('/bookings/:id/payments', bookingAction((s, id, body) => s.addPayment(id, body || {})));
 stayrideV1Router.delete('/bookings/:id/payments/:paymentId', async (req: Request, res: Response) => {

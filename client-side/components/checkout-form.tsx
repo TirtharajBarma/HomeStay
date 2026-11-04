@@ -178,9 +178,10 @@ export function CheckoutForm({ stay, booking }: { stay: Stay; booking: Booking }
     expiry: "",
     cvc: "",
   });
+  const [touchedCard, setTouchedCard] = useState(false);
   const quote = quoteFor(stay.price, booking);
   const serverErrors = state.status === "error" ? state.errors : {};
-  const cardErrors = validateCard(card);
+  const cardErrors = (state.status === "error" || touchedCard) ? validateCard(card) : {};
   // Card fields are validated live with the same rules the action uses, so a
   // stale server error must not mask a value the guest has since corrected.
   const contactErrors = Object.fromEntries(
@@ -192,6 +193,7 @@ export function CheckoutForm({ stay, booking }: { stay: Stay; booking: Booking }
   const dueToday = plan === "deposit" ? quote.deposit : quote.total;
 
   function setCard(key: keyof CardFields, value: string) {
+    setTouchedCard(true);
     setCardState((current) => ({ ...current, [key]: value }));
   }
 
@@ -272,7 +274,7 @@ export function CheckoutForm({ stay, booking }: { stay: Stay; booking: Booking }
               name="email"
               type="email"
               autoComplete="email"
-              placeholder="you@meadowfallretreat.com"
+              placeholder="you@example.com"
               aria-invalid={Boolean(errors.email)}
               className={field}
             />

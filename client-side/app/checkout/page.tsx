@@ -35,6 +35,8 @@ export default async function CheckoutPage({
   // A checkout without a stay (bookmark, shared link, dropped query) sends the
   // guest back to the catalogue instead of a dead end.
   if (!stay) redirect("/#accommodations");
+  // No nightly price ("Price on request"): nothing to charge, so back to the stay page, which says so.
+  if (!(stay.price > 0)) redirect(`/stays/${stay.slug}`);
 
   const booking = resolveBooking(query, stay.maxGuests);
   const quote = quoteFor(stay.price, booking);

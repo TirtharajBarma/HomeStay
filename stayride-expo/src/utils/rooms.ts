@@ -13,25 +13,61 @@ export function heldUntil(b: Booking, now = Date.now()): number {
   return b.checkOut;
 }
 
-export function bookingClash(bookings: Booking[], roomNumber: string, checkIn: number, checkOut: number, exceptId?: number) {
-  return bookings.find(
-    (b) => b.id !== exceptId && b.roomNumber === roomNumber && b.status !== 'CANCELLED' && checkIn < heldUntil(b) && checkOut > b.checkIn
-  );
+export function bookingClash(
+  bookings: Booking[],
+  roomNumber: string,
+  checkIn: number,
+  checkOut: number,
+  exceptId?: number,
+  bedNumber?: string
+) {
+  const normBed = (b?: string) => (b ? String(b).trim().toLowerCase() : '');
+  const reqBed = normBed(bedNumber);
+
+  return bookings.find((b) => {
+    if (b.id === exceptId) return false;
+    if (b.roomNumber !== roomNumber) return false;
+    if (b.status === 'CANCELLED') return false;
+    if (!(checkIn < heldUntil(b) && checkOut > b.checkIn)) return false;
+
+    const bBed = normBed(b.bedNumber);
+    if (reqBed && bBed) {
+      return reqBed === bBed;
+    }
+    return true;
+  });
 }
 
 /** MAINTENANCE is the owner's only manual status; the rest comes from today's bookings. */
 export function roomStatusOf(room: Room, bookings: Booking[], now = Date.now()): RoomStatus {
   if (room.status === 'MAINTENANCE') return 'MAINTENANCE';
-  const mine = bookings.filter((b) => b.roomNumber === room.number);
+  const mine = bookings.filter((b) => b.roomNumber === room.number && b.status !== 'CANCELLED');
+  if (room.roomType === 'DORM' && room.bedCount && room.bedCount > 1) {
+    const checkedInCount = mine.filter((b) => b.status === 'CHECKED_IN').length;
+    if (checkedInCount >= room.bedCount) return 'OCCUPIED';
+    const activeStays = mine.filter((b) => b.status === 'CHECKED_IN' || (b.status === 'CONFIRMED' && b.checkIn <= now && now < b.checkOut));
+    if (activeStays.length >= room.bedCount) return 'RESERVED';
+    return 'AVAILABLE';
+  }
   if (mine.some((b) => b.status === 'CHECKED_IN')) return 'OCCUPIED';
   if (mine.some((b) => b.status === 'CONFIRMED' && b.checkIn <= now && now < b.checkOut)) return 'RESERVED';
   return 'AVAILABLE';
 }
 
-/** Every room with whether it can be booked for these dates, and why not. */
+/** Every room with whether it can be booked for these dates, and why not. For dorms, checks if any beds are free. */
 export function roomAvailability(rooms: Room[], bookings: Booking[], checkIn: number, checkOut: number) {
   return rooms.map((room) => {
     if (room.status === 'MAINTENANCE') return { room, free: false, reason: 'Under maintenance' };
+    if (room.roomType === 'DORM' && room.bedCount && room.bedCount > 1) {
+      const activeMine = bookings.filter(
+        (b) => b.roomNumber === room.number && b.status !== 'CANCELLED' && checkIn < heldUntil(b) && checkOut > b.checkIn
+      );
+      const bookedBeds = new Set(activeMine.map((b) => b.bedNumber).filter(Boolean));
+      const hasFreeBeds = bookedBeds.size < room.bedCount;
+      return hasFreeBeds
+        ? { room, free: true, reason: '' }
+        : { room, free: false, reason: `All ${room.bedCount} beds booked` };
+    }
     const clash = bookingClash(bookings, room.number, checkIn, checkOut);
     return clash
       ? { room, free: false, reason: `Booked by ${clash.guestName}` }

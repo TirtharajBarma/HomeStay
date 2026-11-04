@@ -14,7 +14,16 @@ export const RoomItem: React.FC<RoomItemProps> = ({ room, onPress }) => {
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.75}>
       <View style={styles.topRow}>
-        <Text style={styles.number}>Room {room.number}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Text style={styles.number}>Room {room.number}</Text>
+          {room.roomType === 'DORM' && (
+            <View style={{ backgroundColor: '#E0F2FE', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, borderWidth: 1, borderColor: '#BAE6FD' }}>
+              <Text style={{ fontSize: 10, fontWeight: '700', color: '#0369A1' }}>
+                DORM ({room.bedCount || 4} BEDS)
+              </Text>
+            </View>
+          )}
+        </View>
         <Pill label={room.status} />
       </View>
       <Text style={styles.meta}>
@@ -27,7 +36,9 @@ export const RoomItem: React.FC<RoomItemProps> = ({ room, onPress }) => {
       ) : null}
       {room.note ? <Text style={styles.note} numberOfLines={1}>{room.note}</Text> : null}
       <View style={styles.bottomRow}>
-        <Text style={styles.price}>₹{room.price.toLocaleString()} / night</Text>
+        <Text style={styles.price}>
+          ₹{room.price.toLocaleString()} {room.roomType === 'DORM' ? '/ bed / night' : '/ night'}
+        </Text>
         <Ionicons name="chevron-forward" size={16} color={Colors.textSecondary} />
       </View>
     </TouchableOpacity>

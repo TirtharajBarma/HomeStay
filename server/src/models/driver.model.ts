@@ -34,8 +34,8 @@ const DriverSchema = new Schema<IDriver>(
     ownerId: { type: Schema.Types.ObjectId, ref: "User", index: true },
     propertyId: { type: Schema.Types.ObjectId, ref: "Property", index: true },
     id: { type: String, required: true, unique: true, index: true },
-    // No shared default: every driver gets a unique random PIN, provisioned out-of-band.
-    pin: { type: String, default: () => String(crypto.randomInt(1000, 10000)) },
+    // No shared default: every driver gets a unique random PIN, provisioned out-of-band. Hidden from queries by default.
+    pin: { type: String, select: false, default: () => String(crypto.randomInt(1000, 10000)) },
     name: { type: String, required: true },
     phone: { type: String, required: true },
     email: { type: String, required: true },

@@ -33,18 +33,19 @@ export async function askGuestForCab(ask: Ask, guest: Guest): Promise<boolean> {
       Alert.alert('Already sent', res.message || `${guest.name} was already sent a cab link.`);
       return false;
     }
+    const failed = res.status === 'FAILED';
+    const title = failed ? "Couldn't deliver the WhatsApp" : 'Automated WhatsApp Not Set';
+    const body = failed
+      ? `Couldn't deliver the WhatsApp. Check the number (${guest.phone}); foreign guests need + and the country code.`
+      : 'Automated messaging is not configured yet on this server.';
     if (res.nativeLink) {
-      Alert.alert(
-        'Automated WhatsApp Not Set',
-        'Automated messaging is not configured yet on this server. Would you like to send the cab booking link to the guest via WhatsApp directly?',
-        [
-          { text: 'Later', style: 'cancel' },
-          { text: 'Send on WhatsApp', onPress: () => Linking.openURL(res.nativeLink!).catch(() => {}) },
-        ]
-      );
+      Alert.alert(title, `${body} Would you like to send the cab booking link to the guest via WhatsApp directly?`, [
+        { text: 'Later', style: 'cancel' },
+        { text: 'Send on WhatsApp', onPress: () => Linking.openURL(res.nativeLink!).catch(() => {}) },
+      ]);
       return false;
     }
-    Alert.alert('WhatsApp not connected', 'Messaging is not switched on for this account yet, so nothing was sent to the guest.');
+    Alert.alert(failed ? title : 'WhatsApp not connected', failed ? body : 'Messaging is not switched on for this account yet, so nothing was sent to the guest.');
   } catch (e: any) {
     Alert.alert('Could not send request', e?.message || 'Please try again.');
   }

@@ -142,12 +142,14 @@ The reservation schedule and CRM have been updated automatically.
     });
 
     // In-memory / Console fallback during development or when SMTP is not configured
-    console.log(`\n📧 [EMAIL DISPATCH TO GUEST] -> ${data.guestEmail}`);
-    console.log(`   Subject: ${guestSubject}`);
-    console.log(`   Ref: ${data.reference} | Room: ${data.roomName} | PIN: ${data.pin}`);
-    console.log(`📧 [ALERT DISPATCH TO OWNER] -> ${ownerEmail}`);
-    console.log(`   Subject: ${ownerSubject}`);
-    console.log(`   Guest: ${data.guestName} | Total: ₹${data.totalAmount}\n`);
+    if (!process.env.VERCEL && process.env.NODE_ENV !== "production") {
+      console.log(`\n📧 [EMAIL DISPATCH TO GUEST] -> ${data.guestEmail}`);
+      console.log(`   Subject: ${guestSubject}`);
+      console.log(`   Ref: ${data.reference} | Room: ${data.roomName} | PIN: ${data.pin}`);
+      console.log(`📧 [ALERT DISPATCH TO OWNER] -> ${ownerEmail}`);
+      console.log(`   Subject: ${ownerSubject}`);
+      console.log(`   Guest: ${data.guestName} | Total: ₹${data.totalAmount}\n`);
+    }
 
     return { guestNotified: true, ownerNotified: true };
   }

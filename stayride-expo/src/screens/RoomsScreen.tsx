@@ -39,6 +39,11 @@ const ROOM_STATUS_OPTIONS = [
   { label: 'Maintenance (cleaning / repairs, no bookings)', value: 'MAINTENANCE', icon: 'construct-outline' as const },
 ];
 
+const ROOM_TYPE_OPTIONS = [
+  { label: 'Private Room (Entire Room)', value: 'PRIVATE', icon: 'bed-outline' as const },
+  { label: 'Hostel Dorm (Per-bed booking)', value: 'DORM', icon: 'people-outline' as const },
+];
+
 export const RoomsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
@@ -57,6 +62,8 @@ export const RoomsScreen: React.FC = () => {
   const [editFloor, setEditFloor] = useState('1st Floor');
   const [editPrice, setEditPrice] = useState('1800');
   const [editStatus, setEditStatus] = useState<RoomStatus>('AVAILABLE');
+  const [editRoomType, setEditRoomType] = useState<'PRIVATE' | 'DORM'>('PRIVATE');
+  const [editBedCount, setEditBedCount] = useState('4');
   const [editNote, setEditNote] = useState('');
 
   const openRoomModal = (room?: Room) => {
@@ -66,6 +73,8 @@ export const RoomsScreen: React.FC = () => {
       setEditFloor(room.floor);
       setEditPrice(String(room.price));
       setEditStatus(room.status === 'MAINTENANCE' ? 'MAINTENANCE' : 'AVAILABLE');
+      setEditRoomType(room.roomType || 'PRIVATE');
+      setEditBedCount(room.bedCount ? String(room.bedCount) : '4');
       setEditNote(room.note || '');
     } else {
       setSelectedRoom(null);
@@ -73,6 +82,8 @@ export const RoomsScreen: React.FC = () => {
       setEditFloor('1st Floor');
       setEditPrice('1800');
       setEditStatus('AVAILABLE');
+      setEditRoomType('PRIVATE');
+      setEditBedCount('4');
       setEditNote('');
     }
     setModalVisible(true);
@@ -88,6 +99,7 @@ export const RoomsScreen: React.FC = () => {
       Alert.alert('Validation Error', 'Enter the room price per night in whole rupees.');
       return;
     }
+    const bedCountNum = editRoomType === 'DORM' ? Math.max(1, parseInt(editBedCount.trim() || '4', 10)) : undefined;
 
     if (selectedRoom) {
       const outcome = await updateRoom(selectedRoom.id, {
@@ -95,6 +107,8 @@ export const RoomsScreen: React.FC = () => {
         floor: editFloor.trim(),
         price: priceNum,
         status: editStatus,
+        roomType: editRoomType,
+        bedCount: bedCountNum,
         note: editNote.trim(),
       });
       if (!outcome.ok) {
@@ -108,6 +122,8 @@ export const RoomsScreen: React.FC = () => {
           floor: editFloor.trim(),
           price: priceNum,
           status: editStatus,
+          roomType: editRoomType,
+          bedCount: bedCountNum,
           note: editNote.trim(),
         });
       } catch (e: any) {
@@ -321,13 +337,33 @@ export const RoomsScreen: React.FC = () => {
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false}>
-              <Text style={styles.modalLabel}>Room Number</Text>
+              <Text style={styles.modalLabel}>Room / Dorm Name or Number</Text>
               <TextInput
                 style={styles.modalInput}
-                placeholder="101"
+                placeholder="101 or Dorm A"
                 value={editNumber}
                 onChangeText={setEditNumber}
               />
+
+              <PlatformSelect
+                label="Room Category"
+                value={editRoomType}
+                options={ROOM_TYPE_OPTIONS}
+                onSelect={(val) => setEditRoomType(val as 'PRIVATE' | 'DORM')}
+              />
+
+              {editRoomType === 'DORM' && (
+                <>
+                  <Text style={styles.modalLabel}>Beds in this Dorm Room</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="4"
+                    keyboardType="numeric"
+                    value={editBedCount}
+                    onChangeText={setEditBedCount}
+                  />
+                </>
+              )}
 
               <PlatformSelect
                 label="Floor"

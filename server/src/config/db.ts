@@ -13,6 +13,7 @@ let memoryServerInstance: any = null;
 
 // One shared connect per serverless instance: concurrent cold-start requests await the same promise
 let connecting: Promise<typeof mongoose> | null = null;
+let listenersOn = false;
 
 export async function connectDB(): Promise<typeof mongoose> {
   if (mongoose.connection.readyState === 1) {
@@ -64,19 +65,23 @@ async function openConnection(): Promise<typeof mongoose> {
 
   mongoose.set("strictQuery", true);
 
-  mongoose.connection.on("connected", () => {
-    console.log("✅ MongoDB connected successfully");
-  });
+  // once per process: openConnection runs again on every reconnect, and the listeners would pile up
+  if (!listenersOn) {
+    listenersOn = true;
+    mongoose.connection.on("connected", () => {
+      console.log("✅ MongoDB connected successfully");
+    });
 
-  mongoose.connection.on("error", (err) => {
-    console.error("❌ MongoDB connection error:", err);
-    connecting = null;
-  });
+    mongoose.connection.on("error", (err) => {
+      console.error("❌ MongoDB connection error:", err);
+      connecting = null;
+    });
 
-  mongoose.connection.on("disconnected", () => {
-    console.warn("⚠️  MongoDB disconnected");
-    connecting = null;
-  });
+    mongoose.connection.on("disconnected", () => {
+      console.warn("⚠️  MongoDB disconnected");
+      connecting = null;
+    });
+  }
 
   // Throws (before connecting) for a local "production" db without ALLOW_LOCAL_PRODUCTION_DB=true.
   const defaultDbName = liveDbName();

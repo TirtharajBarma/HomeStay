@@ -7,7 +7,7 @@ import { Icon } from "@/components/icon";
 import { MobileReserveBar } from "@/components/mobile-reserve-bar";
 import { StayGallery } from "@/components/stay-gallery";
 import { Stars } from "@/components/stars";
-import { formatMoney, homeHref, resolveBooking, stayHref } from "@/lib/booking";
+import { formatNightly, homeHref, resolveBooking, stayHref } from "@/lib/booking";
 import {
   breakfast,
   houseRules,
@@ -41,7 +41,7 @@ export default async function StayPage({ params, searchParams }: PageProps<"/sta
   const sectionClass = "border-b border-outline-variant/30 pb-3";
 
   return (
-    <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-4 sm:px-6 sm:py-8">
+    <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8 pb-28 lg:pb-8">
       {/* Breadcrumb & page header */}
       <div className="mb-8">
         <nav
@@ -193,7 +193,7 @@ export default async function StayPage({ params, searchParams }: PageProps<"/sta
                   </span>
                   <span className="text-body-sm text-on-surface-variant">{other.occupancy}</span>
                 </span>
-                <span className="text-title-md font-bold text-primary">{formatMoney(other.price)}</span>
+                <span className="text-title-md font-bold text-primary">{formatNightly(other.price)}</span>
               </Link>
             ))}
         </div>

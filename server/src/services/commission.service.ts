@@ -132,11 +132,18 @@ export class CommissionService {
     // Omitted values keep what is saved, so saving one settings form never reverts another's changes
     const pf = params.globalPlatformFeePercent === undefined ? settings.globalPlatformFeePercent : pct(params.globalPlatformFeePercent);
     const hc = params.globalHomestayCommissionPercent === undefined ? settings.globalHomestayCommissionPercent : pct(params.globalHomestayCommissionPercent);
-    const adv = params.defaultAdvancePercent === undefined ? settings.defaultAdvancePercent : pct(params.defaultAdvancePercent);
+    const adv = params.defaultAdvancePercent === undefined ? Math.max(settings.defaultAdvancePercent, pf + hc) : pct(params.defaultAdvancePercent);
     validateRates(pf, hc, adv);
     settings.globalPlatformFeePercent = pf;
     settings.globalHomestayCommissionPercent = hc;
     settings.defaultAdvancePercent = adv;
+    if (params.globalPlatformFeePercent !== undefined || params.globalHomestayCommissionPercent !== undefined) {
+      settings.totalCommissionPercent = pf + hc;
+      if (pf + hc > 0) {
+        settings.adminSharePercentOfCommission = Number(((pf / (pf + hc)) * 100).toFixed(2));
+        settings.homestaySharePercentOfCommission = Number((100 - settings.adminSharePercentOfCommission).toFixed(2));
+      }
+    }
     if (params.minAdvanceAmount !== undefined) {
       const min = pct(params.minAdvanceAmount);
       if (!Number.isFinite(min) || min < 0) throw new Error("Minimum advance must be 0 or more.");
@@ -254,7 +261,7 @@ export class CommissionService {
       advancePercent: o?.advancePercent ?? settings.defaultAdvancePercent ?? 15,
       minAdvanceAmount: settings.minAdvanceAmount ?? 500,
       quoteWindowHours: (settings as any).quoteWindowHours ?? 4,
-      minDriverPayoutThreshold: (settings as any).minDriverPayoutThreshold ?? 100,
+      minDriverPayoutThreshold: this.platformConfig(settings).minDriverPayoutThreshold, // same value the payout request enforces
       isOverride: Boolean(o),
     };
   }
@@ -334,66 +341,5 @@ export class CommissionService {
       remainingCashToDriver,
       driverShareOfAdvance,
     };
-  }
-
-  /**
-   * Given the net cash the driver wants in hand, calculate the total guest fare and breakdown
-   * so the driver is guaranteed 100% of their net cash quote.
-   */
-  static fromDriverNetCash(
-    driverCash: number,
-    pfPercent: number,
-    hcPercent: number,
-    minAdvanceAmount: number
-  ): CommissionCalculationResult {
-    if (!Number.isFinite(driverCash) || driverCash <= 0) throw new Error("Driver cash fare must be a positive number.");
-    const netCash = Math.round(driverCash);
-    const combinedRate = (pfPercent + hcPercent) / 100;
-    const naturalFee = combinedRate > 0 && combinedRate < 1 ? Math.round(netCash * (combinedRate / (1 - combinedRate))) : 0;
-    const advanceAmount = Math.max(minAdvanceAmount, naturalFee);
-    const agreedFare = netCash + advanceAmount;
-
-    const totalPct = pfPercent + hcPercent;
-    const platformFeeAmount = totalPct > 0 ? Math.round(advanceAmount * (pfPercent / totalPct)) : 0;
-    const homestayCommissionAmount = advanceAmount - platformFeeAmount;
-    const remainingCashToDriver = netCash;
-    const driverPayoutAmount = netCash;
-
-    const result: CommissionCalculationResult = {
-      agreedFare,
-      platformFeeRate: pfPercent / 100,
-      platformFeePercent: pfPercent,
-      platformFeeAmount,
-      homestayCommissionRate: hcPercent / 100,
-      homestayCommissionPercent: hcPercent,
-      homestayCommissionAmount,
-      driverPayoutRate: agreedFare > 0 ? driverPayoutAmount / agreedFare : 0,
-      driverPayoutAmount,
-      advanceRate: agreedFare > 0 ? advanceAmount / agreedFare : 0,
-      advanceAmount,
-      remainingCashToDriver,
-      driverShareOfAdvance: 0,
-    };
-
-    logger.info(
-      `[CALCULATION] Driver net cash ₹${driverCash} -> Total fare ₹${agreedFare} (Advance ₹${advanceAmount}, PF ₹${platformFeeAmount}, HC ₹${homestayCommissionAmount})`,
-      {
-        action: "from_driver_net_cash",
-        metadata: {
-          driverCash,
-          agreedFare,
-          advanceAmount,
-          platformFeeAmount,
-          homestayCommissionAmount,
-        },
-      }
-    );
-
-    return result;
-  }
-
-  static async calculateGrossFromDriverCash(driverCash: number, tenantKey?: string, isDemo = false): Promise<CommissionCalculationResult> {
-    const { pfPercent, hcPercent, minAdvanceAmount } = await this.getEffectiveRates(tenantKey, isDemo);
-    return this.fromDriverNetCash(driverCash, pfPercent, hcPercent, minAdvanceAmount);
   }
 }

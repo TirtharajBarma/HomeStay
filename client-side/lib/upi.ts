@@ -24,6 +24,9 @@ export function upiPayUrl({ upiId, payee, amount, reference }: UpiPayment): stri
   return `upi://pay?${params.map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join("&")}`;
 }
 
-/** UPI transaction reference (UTR / RRN): 12 digits; spaces are dropped. Same rule as the server's parseUtr. */
-export const cleanUtr = (v: string) => v.replace(/\s/g, "");
+/** UPI transaction reference (UTR / RRN): 12 digits; spaces/dashes and prefixes stripped. */
+export const cleanUtr = (v: string) => {
+  const digits = String(v ?? "").replace(/\D/g, "");
+  return digits.length === 12 ? digits : String(v ?? "").replace(/[\s-]/g, "");
+};
 export const isUtr = (v: string) => /^\d{12}$/.test(cleanUtr(v));

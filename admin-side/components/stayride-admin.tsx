@@ -332,7 +332,9 @@ export function DashboardTab({ demo }: TabProps) {
             <Kpi label="GMV (completed)" value={inr(cab.gmv)} />
             <Kpi label="Advance collected" value={inr(cab.advanceCollected)} />
             <Kpi label="Platform fee earned" value={inr(cab.platformFee)} hint={rateHint(rates?.pf)} />
-            <Kpi label="Homestay commission (owed to homestays)" value={inr(cab.homestayCommission)} hint={rateHint(rates?.hc)} />
+            <Kpi label="Homestay commission earned (lifetime)" value={inr(cab.homestayCommission)} hint={rateHint(rates?.hc)} />
+            <Kpi label="Homestay commission owed now (unpaid)" value={inr(cab.homestayCommissionUnpaid)} hint="Payable, not yet in any payout request" />
+            <Kpi label="Completed without PIN — to review" value={cab.noPinToReview ?? "—"} hint="Held out of payouts until reviewed (Cab requests filter)" />
             <Kpi label="Refunds pending" value={inr(cab.refundsPending)} />
             <Kpi label="Driver share dues pending" value={inr(cab.driverDuesPending)} />
             {typeof cab.unmatchedPending === "number" && cab.unmatchedPending > 0 && (
@@ -1165,6 +1167,7 @@ const CAB_FILTERS: Record<string, { label: string; query?: Any; pending?: boolea
   expired: { label: "Expired", query: { status: "EXPIRED" } },
   refunds: { label: "Refunds pending", query: { refundStatus: "PENDING" } },
   dues: { label: "Driver dues pending", query: { driverSettlementStatus: "PENDING" } },
+  nopin: { label: "Completed without PIN — to review", query: { noPin: "review" } },
   unmatched: { label: "Unmatched to refund", query: { unmatched: "true" } },
   all: { label: "All" },
 };
@@ -1246,10 +1249,11 @@ function CabRequestCard({ c, demo, onChanged }: { c: Any; demo: boolean; onChang
   const [busy, setBusy] = useState(false);
   const canVoid = c.status === "CONFIRMED" && c.advancePaid && !c.hostPayoutId;
   const canCancel = !["COMPLETED", "CANCELLED"].includes(c.status) && !c.hostPayoutId;
-  const canRefund = c.status === "CANCELLED" && c.refundStatus === "PENDING";
+  const canRefund = (c.status === "CANCELLED" || (c.status === "COMPLETED" && c.noShow)) && c.refundStatus === "PENDING";
+  const toReview = c.status === "COMPLETED" && c.completedWithoutPin && !c.noPinReviewedAt;
   const canStart = c.status === "CONFIRMED" && c.advancePaid && !c.needsReassignment;
   const canComplete = c.status === "TRIP_STARTED";
-  const canSettleDriver = c.status === "COMPLETED" && c.driverSettlementStatus === "PENDING";
+  const canSettleDriver = c.status === "COMPLETED" && c.driverSettlementStatus === "PENDING" && !(c.completedWithoutPin && !c.noPinReviewedAt);
 
   function voidPayment() {
     const reason = ask(`Reason for voiding payment ${c.advancePaymentId} (${inr(c.advanceAmount)}) on #${c.reference}:`);
@@ -1277,6 +1281,14 @@ function CabRequestCard({ c, demo, onChanged }: { c: Any; demo: boolean; onChang
       post("unmatched-refunded", { paymentId, reference });
     }
   }
+  function approveRide() {
+    if (window.confirm(`Approve #${c.reference}: the ride happened? Its commission and driver share become payable.`)) post("no-pin-review", { decision: "APPROVE" });
+  }
+  function markNoShow() {
+    const reason = ask(`Why is #${c.reference} a no-show?`);
+    const refundNote = c.advancePaid && c.advanceAmount > 0 ? ` The advance ${inr(c.advanceAmount)} becomes a pending refund.` : "";
+    if (reason && window.confirm(`Mark #${c.reference} as a no-show? No commission or driver share is paid for it.${refundNote}`)) post("no-pin-review", { decision: "NO_SHOW", reason });
+  }
   function settleDriver() {
     const due = typeof s.driverShareOfAdvance === "number" ? s.driverShareOfAdvance : undefined;
     const dest = c.assignedDriverPhone ? `(Phone/UPI: ${c.assignedDriverPhone})` : "";
@@ -1292,6 +1304,8 @@ function CabRequestCard({ c, demo, onChanged }: { c: Any; demo: boolean; onChang
             #{c.reference} <Badge tone={statusTone(c.status)}>{c.status}</Badge>{" "}
             {c.needsReassignment && <Badge tone="red">Needs driver</Badge>}{" "}
             {claim && <Badge tone="blue">Guest says paid</Badge>}{" "}
+            {toReview && <Badge tone="amber">No PIN — to review</Badge>}{" "}
+            {c.noShow && <Badge tone="red">No-show</Badge>}{" "}
             {c.ownFleet && <Badge tone="blue">Own fleet</Badge>}{" "}
             {c.dispatched === false && ["PENDING_REVIEW", "FINDING_DRIVER", "QUOTE_RECEIVED"].includes(c.status) && <Badge tone="slate">Held for owner</Badge>}{" "}
             {c.refundStatus && c.refundStatus !== "NONE" && <Badge tone={c.refundStatus === "PENDING" ? "amber" : "green"}>Refund {c.refundStatus}</Badge>}{" "}
@@ -1430,6 +1444,8 @@ function CabRequestCard({ c, demo, onChanged }: { c: Any; demo: boolean; onChang
         {canStart && <button className={btn.primary} onClick={() => window.confirm(`Start trip #${c.reference}?`) && post("start")}>Start trip</button>}
         {canComplete && <button className={btn.ok} onClick={() => window.confirm(`Complete trip #${c.reference}? Driver collects ${inr(c.remainingCashAmount)} in cash.`) && post("complete")}>Complete trip</button>}
         {canRefund && <button className={btn.ok} onClick={refund}>Mark refunded</button>}
+        {toReview && <button className={btn.ok} onClick={approveRide}>Approve ride happened</button>}
+        {toReview && <button className={btn.danger} onClick={markNoShow}>Mark no-show / refund guest</button>}
         {canSettleDriver && <button className={btn.ok} onClick={settleDriver}>Driver settled</button>}
         {canCancel && <button className={btn.danger} onClick={cancel}>Cancel</button>}
       </div>
@@ -2489,13 +2505,18 @@ export function AppealsTab({ demo }: TabProps) {
 // ---------------------------------------------------------------------------
 // 9. Audit log
 // ---------------------------------------------------------------------------
+const AUDIT_FILTERS = { action: "", targetId: "", tenantId: "", driverId: "", actorRole: "", actor: "", from: "", to: "" };
+
 export function AuditTab({ demo }: TabProps) {
-  const [action, setAction] = useState("");
-  const [targetId, setTargetId] = useState("");
-  const [q, setQ] = useState({ action: "", targetId: "" });
+  const [f, setF] = useState(AUDIT_FILTERS);
+  const [q, setQ] = useState(AUDIT_FILTERS);
+  const set = (k: keyof typeof AUDIT_FILTERS) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
+  // Date inputs are IST calendar days: from 00:00 IST to the end of the "to" day in IST.
+  const { from, to, ...rest } = q;
+  const query = { ...rest, startDate: from ? `${from}T00:00:00+05:30` : "", endDate: to ? `${to}T23:59:59.999+05:30` : "" };
   const [page, setPage] = useState(0);
   const { data, error, loading, reload, updatedAt } = useLoad(
-    () => adminApi("/audit-log", { demo, query: { ...q, ...pq(page) } }).then(toPage),
+    () => adminApi("/audit-log", { demo, query: { ...query, ...pq(page) } }).then(toPage),
     [demo, q, page],
     true
   );
@@ -2503,15 +2524,24 @@ export function AuditTab({ demo }: TabProps) {
   return (
     <Panel
       title="Audit log"
-      subtitle="Every admin and money action, newest first."
+      subtitle="Every admin and money action, newest first. Times and dates in IST."
       onRefresh={reload}
       error={error}
       loading={loading}
       updatedAt={updatedAt}
       right={
-        <form onSubmit={(e) => { e.preventDefault(); setPage(0); setQ({ action: action.trim(), targetId: targetId.trim() }); }} className="flex gap-2">
-          <input className={input} placeholder="Action (e.g. payment.record)" value={action} onChange={(e) => setAction(e.target.value)} />
-          <input className={input} placeholder="Target ID" value={targetId} onChange={(e) => setTargetId(e.target.value)} />
+        <form onSubmit={(e) => { e.preventDefault(); setPage(0); setQ(Object.fromEntries(Object.entries(f).map(([k, v]) => [k, v.trim()])) as typeof f); }} className="flex flex-wrap gap-2">
+          <input className={input} placeholder="Action (e.g. payment.record)" value={f.action} onChange={set("action")} />
+          <input className={input} placeholder="Target ID" value={f.targetId} onChange={set("targetId")} />
+          <input className={input} placeholder="Tenant (owner email)" value={f.tenantId} onChange={set("tenantId")} />
+          <input className={input} placeholder="Driver ID" value={f.driverId} onChange={set("driverId")} />
+          <input className={input} placeholder="Actor contains" value={f.actor} onChange={set("actor")} />
+          <select className={input} value={f.actorRole} onChange={set("actorRole")} aria-label="Actor role">
+            <option value="">Any role</option>
+            {["ADMIN", "OWNER", "DRIVER", "CUSTOMER", "SYSTEM"].map((r) => <option key={r} value={r}>{r}</option>)}
+          </select>
+          <input type="date" className={input} value={f.from} onChange={set("from")} aria-label="From date (IST)" title="From (IST)" />
+          <input type="date" className={input} value={f.to} onChange={set("to")} aria-label="To date (IST)" title="To (IST)" />
           <button className={btn.primary}>Filter</button>
         </form>
       }
@@ -2561,14 +2591,14 @@ const GUEST_FILTERS: Record<string, { label: string; status?: string }> = {
   in: { label: "Checked in", status: "CHECKED_IN" },
 };
 
-export function GuestsTab({ demo, initialSearch }: TabProps & { initialSearch?: string }) {
+export function GuestsTab({ demo, initialSearch, initialTenant }: TabProps & { initialSearch?: string; initialTenant?: string }) {
   const [filter, setFilter] = useState("all");
   const [text, setText] = useState(initialSearch || "");
   const [q, setQ] = useState(initialSearch || "");
   const [page, setPage] = useState(0);
   const { data, error, loading, reload, updatedAt } = useLoad(
-    () => adminApi("/stayride/guests-staying", { demo, query: { status: GUEST_FILTERS[filter].status, q, ...pq(page) } }).then(toPage),
-    [demo, filter, q, page],
+    () => adminApi("/stayride/guests-staying", { demo, query: { status: GUEST_FILTERS[filter].status, q, tenant: initialTenant || undefined, ...pq(page) } }).then(toPage),
+    [demo, filter, q, initialTenant, page],
     true
   );
   const items = data?.items || [];
@@ -2643,13 +2673,23 @@ function GuestRow({ g, demo, onChanged }: { g: Any; demo: boolean; onChanged: ()
   return (
     <tr className="align-top">
       <td className="p-3 font-semibold text-slate-100">{g.guestName || "Guest"}<div className="text-[10px] font-normal text-slate-500">Room {g.roomNumber || "—"}</div></td>
-      <td className="p-3 whitespace-nowrap font-mono text-slate-200">{g.tel || g.phone || "—"}</td>
+      <td className="p-3 whitespace-nowrap font-mono text-slate-200">
+        {g.tel || g.phone || "—"}
+        {g.phoneMissing && <div className="text-[10px] text-amber-400 font-sans font-medium">No WhatsApp phone</div>}
+      </td>
       <td className="p-3 text-slate-300">{g.homestayName || g.tenantKey}</td>
       <td className="p-3"><Badge tone={g.status === "CHECKED_IN" ? "green" : "blue"}>{g.status === "CHECKED_IN" ? "Checked in" : "Booked"}</Badge></td>
       <td className="p-3 whitespace-nowrap text-slate-400">{formatDate(g.checkIn)} → {formatDate(g.checkOut)}</td>
       <td className="p-3">
         <div className="flex flex-wrap gap-2">
-          <button className={btn.primary} disabled={busy} onClick={() => askCab()}>{busy ? "Sending..." : "Ask for cab"}</button>
+          <button
+            className={g.phoneMissing ? "cursor-not-allowed rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-500" : btn.primary}
+            disabled={busy || g.phoneMissing}
+            title={g.phoneMissing ? "Guest phone is missing or invalid for WhatsApp" : undefined}
+            onClick={() => askCab()}
+          >
+            {busy ? "Sending..." : "Ask for cab"}
+          </button>
           {g.tel && <a className={btn.ok} href={`tel:${g.tel}`} onClick={recordCall}>Call</a>}
           {(g.tel || g.phone) && <button className={btn.ghost} onClick={copy}>Copy</button>}
         </div>

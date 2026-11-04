@@ -13,6 +13,17 @@ assert.equal(toWhatsAppNumber('00919830112345'), '919830112345');
 assert.equal(toWhatsAppNumber('919830112345'), '919830112345');
 assert.equal(toWhatsAppNumber('12345'), null);
 assert.equal(toWhatsAppNumber(''), null);
+// foreign numbers: "+" or "00" keeps the country code; without it only an Indian mobile is accepted
+assert.equal(toWhatsAppNumber('+44 7911 123456'), '447911123456');
+assert.equal(toWhatsAppNumber('+44 (0)7911 123456'), '447911123456');
+assert.equal(toWhatsAppNumber('0044 7911-123456'), '447911123456');
+assert.equal(toWhatsAppNumber('+1 (415) 555-0123'), '14155550123');
+assert.equal(toWhatsAppNumber('447911123456'), null); // foreign without "+": ambiguous, not sent
+assert.equal(toWhatsAppNumber('2234567890'), null); // 10 digits but not an Indian mobile (landline)
+assert.equal(toWhatsAppNumber('91 22345 67890'), null);
+assert.equal(toWhatsAppNumber('+0044 7911 123456'), null);
+// "07911 123456" is also a valid Indian mobile with the trunk 0: without "+44" it stays Indian
+assert.equal(toWhatsAppNumber('07911 123456'), '917911123456');
 
 delete process.env.WHATSAPP_DISPATCH_MODE;
 const built = messages.askCabMessage('Asha', 'Hill View', 'https://x/y');

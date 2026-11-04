@@ -68,6 +68,14 @@ export async function confirmReservation(
     };
   }
 
+  if (!(stay.price > 0)) {
+    return {
+      status: "error",
+      message: "This stay is priced on request. Please contact the host for a price. Nothing was booked.",
+      errors: { stay: "Price on request: contact the host to book." },
+    };
+  }
+
   const booking = resolveBooking(bookingParams(formData), stay.maxGuests);
   const quote = quoteFor(stay.price, booking);
 

@@ -60,6 +60,7 @@ export const HomestayProfileScreen: React.FC = () => {
   // Edit form (copied from the saved profile when opened)
   const [name, setName] = useState('');
   const [owner, setOwner] = useState('');
+  const [propertyType, setPropertyType] = useState<'HOMESTAY' | 'HOSTEL' | 'HOTEL' | 'RESORT'>('HOMESTAY');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [address, setAddress] = useState(''); // filled from the map pin, never typed
@@ -70,6 +71,13 @@ export const HomestayProfileScreen: React.FC = () => {
   const [checkOutTime, setCheckOutTime] = useState('11:00 AM');
   const [amenityDraft, setAmenityDraft] = useState<string[]>([]);
 
+  const PROPERTY_TYPE_OPTIONS = [
+    { label: 'Homestay / Traditional Stay', value: 'HOMESTAY', icon: 'home-outline' as const },
+    { label: 'Hostel / Backpackers (Dorms & Beds)', value: 'HOSTEL', icon: 'people-outline' as const },
+    { label: 'Boutique Hotel / Inn', value: 'HOTEL', icon: 'business-outline' as const },
+    { label: 'Mountain Resort / Estate', value: 'RESORT', icon: 'leaf-outline' as const },
+  ];
+
   const hasPin = typeof homestay.latitude === 'number' && typeof homestay.longitude === 'number';
   const amenities = homestay.amenities || [];
   // Older profiles may hold text labels ("Deluxe room") instead of photos: they are not shown and are
@@ -79,6 +87,7 @@ export const HomestayProfileScreen: React.FC = () => {
   const openEdit = () => {
     setName(homestay.name || '');
     setOwner(homestay.ownerName || '');
+    setPropertyType(homestay.propertyType || 'HOMESTAY');
     setPhone(homestay.phone || '');
     setEmail(homestay.email || '');
     setAddress(homestay.location || '');
@@ -112,7 +121,7 @@ export const HomestayProfileScreen: React.FC = () => {
     // coordinates are saved only through the pin (above); never resend the old ones from this snapshot
     const { latitude: _lat, longitude: _lng, mapQuery: _mq, ...rest } = homestay as typeof homestay & { mapQuery?: string };
     save(
-      { ...rest, name: name.trim(), ownerName: owner.trim(), phone: phone.trim(), email: email.trim(), location: address, description: description.trim(), checkInTime, checkOutTime },
+      { ...rest, name: name.trim(), ownerName: owner.trim(), propertyType, phone: phone.trim(), email: email.trim(), location: address, description: description.trim(), checkInTime, checkOutTime },
       () => setEditVisible(false),
       'Saved'
     );
@@ -191,9 +200,10 @@ export const HomestayProfileScreen: React.FC = () => {
 
         {/* At a glance */}
         <View style={styles.factsRow}>
+          {fact('business-outline', 'Category', homestay.propertyType || 'HOMESTAY')}
+          {fact('bed-outline', 'Units', String(rooms.length))}
           {fact('log-in-outline', 'Check-in', homestay.checkInTime || '—')}
           {fact('log-out-outline', 'Check-out', homestay.checkOutTime || '—')}
-          {fact('bed-outline', 'Rooms', String(rooms.length))}
         </View>
 
         {/* Only when missing: drivers can't find an unpinned homestay */}
@@ -331,8 +341,14 @@ export const HomestayProfileScreen: React.FC = () => {
           </View>
           <FormScroll contentContainerStyle={styles.form}>
             <Text style={styles.formGroup}>Basics</Text>
-            <Text style={styles.label}>Homestay name</Text>
-            <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="e.g. Hill View Homestay" placeholderTextColor={Colors.textTertiary} />
+            <Text style={styles.label}>Property name</Text>
+            <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="e.g. Hill View Homestay or Zostel" placeholderTextColor={Colors.textTertiary} />
+            <PlatformSelect
+              label="Property Category"
+              value={propertyType}
+              options={PROPERTY_TYPE_OPTIONS}
+              onSelect={(val) => setPropertyType(val as any)}
+            />
             <Text style={styles.label}>Host name</Text>
             <TextInput style={styles.input} value={owner} onChangeText={setOwner} placeholder="Your name" placeholderTextColor={Colors.textTertiary} />
             <Text style={styles.label}>Location</Text>

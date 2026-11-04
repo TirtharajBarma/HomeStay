@@ -122,8 +122,9 @@ interface StayRideContextType {
   getRoomCalendar: (roomId: number) => Promise<RoomCalendar>;
   setRoomCalendarLinks: (roomId: number, importUrls: string[]) => Promise<RoomCalendar>;
   syncRoomCalendar: (roomId: number) => Promise<RoomCalendar>;
-  editBooking: (id: number, changes: { checkIn?: number; checkOut?: number; amount?: number; guests?: number }) => Promise<ActionOutcome>;
-  changeBookingRoom: (id: number, roomNumber: string) => Promise<ActionOutcome>;
+  editBooking: (id: number, changes: { checkIn?: number; checkOut?: number; amount?: number; guests?: number; guestName?: string; phone?: string; bedNumber?: string }) => Promise<ActionOutcome>;
+  changeBookingRoom: (id: number, roomNumber: string, bedNumber?: string) => Promise<ActionOutcome>;
+  attachGuest: (id: number, guest: { name: string; phone: string; email?: string }) => Promise<ActionOutcome & { booking?: Booking }>;
 
   createRoom: (data: Omit<Room, 'id'>) => Promise<Room>;
   updateRoom: (id: number, data: Partial<Room>) => Promise<ActionOutcome>;
@@ -220,6 +221,7 @@ interface StayRideContextType {
       latitude?: number;
       longitude?: number;
       mapQuery?: string;
+      propertyType?: 'HOMESTAY' | 'HOSTEL' | 'HOTEL' | 'RESORT';
       acceptedTerms?: boolean; // new accounts: Terms + Privacy accepted, 18+ confirmed
     }
   ) => Promise<void>;
@@ -1036,8 +1038,8 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return res;
   };
 
-  /** Change dates / amount / party size; the server checks the room is free for the new dates. */
-  const editBooking = async (id: number, changes: { checkIn?: number; checkOut?: number; amount?: number; guests?: number }): Promise<ActionOutcome> => {
+  /** Change dates / amount / party size / guest / bed; the server checks the room/bed is free for the new dates. */
+  const editBooking = async (id: number, changes: { checkIn?: number; checkOut?: number; amount?: number; guests?: number; guestName?: string; phone?: string; bedNumber?: string }): Promise<ActionOutcome> => {
     const prevBooking = bookings.find((b) => b.id === id);
     setBookings((prev) => prev.map((b) => (b.id === id ? { ...b, ...changes } : b)));
     return submit('PATCH', `/bookings/${id}`, changes, {
@@ -1050,10 +1052,10 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     });
   };
 
-  const changeBookingRoom = async (id: number, roomNumber: string): Promise<ActionOutcome> => {
+  const changeBookingRoom = async (id: number, roomNumber: string, bedNumber?: string): Promise<ActionOutcome> => {
     const prevBooking = bookings.find((b) => b.id === id);
-    setBookings((prev) => prev.map((b) => (b.id === id ? { ...b, roomNumber } : b)));
-    return submit('POST', `/bookings/${id}/room`, { roomNumber }, {
+    setBookings((prev) => prev.map((b) => (b.id === id ? { ...b, roomNumber, bedNumber } : b)));
+    return submit('POST', `/bookings/${id}/room`, { roomNumber, bedNumber }, {
       applyServer: (entity) => {
         if (entity?.id) setBookings((prev) => prev.map((b) => (b.id === id ? entity : b)));
       },
@@ -1061,6 +1063,19 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         if (prevBooking) setBookings((prev) => prev.map((b) => (b.id === id ? prevBooking : b)));
       },
     });
+  };
+
+  const attachGuest = async (id: number, guest: { name: string; phone: string; email?: string }): Promise<ActionOutcome & { booking?: Booking }> => {
+    let booking: Booking | undefined;
+    const outcome = await submit('POST', `/bookings/${id}/guest`, guest, {
+      applyServer: (entity) => {
+        if (!entity?.id) return;
+        booking = entity;
+        setBookings((prev) => prev.map((b) => (b.id === id ? entity : b)));
+      },
+    });
+    if (outcome.ok) sync().catch(() => {});
+    return { ...outcome, booking };
   };
 
   // ------------------------- Rooms Actions -------------------------
@@ -1882,6 +1897,7 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       latitude?: number;
       longitude?: number;
       mapQuery?: string;
+      propertyType?: 'HOMESTAY' | 'HOSTEL' | 'HOTEL' | 'RESORT';
       acceptedTerms?: boolean; // new accounts: Terms + Privacy accepted, 18+ confirmed
     }
   ) => {
@@ -1910,6 +1926,7 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         {
           phone,
           homestayName: extras?.homestayName,
+          propertyType: extras?.propertyType,
           location: extras?.location,
           role: extras?.role || 'owner',
           vehicleType: extras?.vehicleType,
@@ -2031,6 +2048,7 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setBookingPaid,
         changeBookingRoom,
         editBooking,
+        attachGuest,
         counterOffer,
         driverAcceptCounter,
         setHomestayLocation,

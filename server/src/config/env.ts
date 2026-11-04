@@ -9,7 +9,8 @@ if (!jwtSecret || jwtSecret === KNOWN_LEAKED_SECRET) {
   throw new Error("JWT_SECRET must be set to a private random value (the old default is public).");
 }
 
-// Deployed = running on Vercel. Everything that must fail closed keys off this.
+// Deployed = running in production (Vercel, Docker, VPS, etc.). Everything that must fail closed keys off this.
+const isDeployed = Boolean(process.env.VERCEL) || process.env.NODE_ENV === "production";
 const onVercel = Boolean(process.env.VERCEL);
 const isPreview = onVercel && process.env.VERCEL_ENV === "preview";
 
@@ -60,7 +61,7 @@ export const config = {
     originOf(publicApiUrl),
   ].map((s) => s.trim().replace(/\/+$/, "")).filter(Boolean),
   nodeEnv: process.env.NODE_ENV || "development",
-  isDeployed: onVercel,
+  isDeployed,
   isPreview,
   appName,
   appDomain,

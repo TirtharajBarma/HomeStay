@@ -21,7 +21,8 @@ import { api } from '../data/api';
 
 export const DriverEarningsScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
-  const { driverTrips } = useStayRide();
+  const { driverTrips, config } = useStayRide();
+  const minPayout = config.minDriverPayoutThreshold ?? 100; // admin's minimum (cached configs may lack it)
 
   // Driver Wallet state
   const [wallet, setWallet] = useState<{
@@ -155,13 +156,13 @@ export const DriverEarningsScreen: React.FC = () => {
             </View>
           ) : (
             <TouchableOpacity
-              style={[styles.withdrawBtn, availableBalance < 100 && { opacity: 0.5 }]}
-              disabled={availableBalance < 100}
+              style={[styles.withdrawBtn, availableBalance < minPayout && { opacity: 0.5 }]}
+              disabled={availableBalance < minPayout}
               onPress={() => setModalVisible(true)}
             >
               <Ionicons name="flash" size={16} color="#0F172A" />
               <Text style={styles.withdrawBtnText}>
-                {availableBalance < 100 ? 'Min Balance ₹100 to Withdraw' : `Withdraw ${formatINR(availableBalance)} via UPI`}
+                {availableBalance < minPayout ? `Min Balance ${formatINR(minPayout)} to Withdraw` : `Withdraw ${formatINR(availableBalance)} via UPI`}
               </Text>
             </TouchableOpacity>
           )}

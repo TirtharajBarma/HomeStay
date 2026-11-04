@@ -10,6 +10,15 @@ import { tenantRoomView } from '../src/services/room.service.js';
 import { CommissionService } from '../src/services/commission.service.js';
 import { ownFleetFee } from '../src/services/platform-config.js';
 import { upiPayUrl, isUtr, UPI_NOTE_MAX } from '../../client-side/lib/upi.ts';
+import { formatNightly } from '../../client-side/lib/booking.ts';
+import { publicConfig } from '../src/services/platform-config.js';
+import { applyFeed, isOwnerBlock, isCompleteIcs, buildIcs, syncSummary } from '../src/stayride/ical.js';
+import { guestLinkExpiry, autoAskCabDue, askCabResendOk } from '../src/stayride/platform.js';
+import { toWhatsAppNumber } from '../src/services/whatsapp.service.js';
+import { StayRideMemoryStore } from '../src/stayride/store.js';
+import { normTxnId, unmatchedReuse, claimHoldUntil, CLAIM_PICKUP_CAP_MS, eligibleFilter, eligibleDriverFilter } from '../src/stayride/platform.js';
+import { safeUrl } from '../src/utils/logger.js';
+import sift from 'sift'; // mongoose's own query matcher: evaluates the real payout filters against plain trips
 
 // driver phone masked from digits only, last 4 kept, whatever the formatting
 for (const p of ['9832012345', '+91 98320 12345', '098320-12345']) assert.equal(maskPhone(p), '******2345');
@@ -149,7 +158,11 @@ assert.equal(currentBookingOf(stays, undefined, '9876543210', t0)?.id, 2); // ph
 assert.equal(currentBookingOf([...stays, bk(6, { status: 'CHECKED_IN', checkIn: t0 - 86400000 })], 1, '', t0)?.id, 6); // current stay first
 assert.equal(currentBookingOf(stays, 2, '', t0)?.id, 5); // stay already started
 assert.equal(currentBookingOf(stays, 9, '1111111111', t0), undefined); // no current booking: per-phone cooldown applies
-assert.equal(currentBookingOf([bk(7, { external: { source: 'Airbnb' }, phone: '' })], 1, '', t0), undefined);
+// calendar imports count once the owner added the guest; without a guest (id 0, no phone) or as a date block they don't
+assert.equal(currentBookingOf([bk(7, { external: { source: 'Airbnb' }, guestId: 0, phone: '' })], 1, '', t0), undefined);
+assert.equal(currentBookingOf([bk(7, { external: { source: 'Airbnb' } })], undefined, '9876543210', t0)?.id, 7);
+assert.equal(currentBookingOf([bk(7, { external: { source: 'Airbnb' } })], 1, '', t0)?.id, 7);
+assert.equal(currentBookingOf([bk(7, { external: { source: 'Booking.com', block: true } as any })], 1, '9876543210', t0), undefined);
 
 // guests staying: checked in / arriving by today first, then by check-in date
 const today = Date.UTC(2026, 10, 1, 0, 0) - 330 * 60000; // IST midnight, 1 Nov
@@ -237,6 +250,211 @@ assert.ok(!vehicleFits({ type: 'Sedan' }, { vehicleType: 'SUV', passengers: 2 })
     assert.equal(s.driverShareOfAdvance, 0);
     assert.equal(s.homestayCommissionAmount, 0);
   }
+}
+
+// drivers see the admin's payout minimum; a saved stale requestExpiryHours is ignored
+{
+  const cfg = resolvePlatformConfig({ minDriverPayoutThreshold: 250, requestExpiryHours: 3 });
+  assert.equal(publicConfig(cfg).minDriverPayoutThreshold, 250);
+  assert.equal(publicConfig(resolvePlatformConfig({})).minDriverPayoutThreshold, 100);
+  assert.ok(!('requestExpiryHours' in cfg));
+  // the quote-link page reads it through getEffectiveRates, from the same platform config
+  assert.equal(CommissionService.platformConfig({ platform: { minDriverPayoutThreshold: 250 } } as any).minDriverPayoutThreshold, 250);
+}
+
+// stays without a nightly price show "Price on request", never ₹0
+assert.equal(formatNightly(0), 'Price on request');
+assert.equal(formatNightly(2400), '₹2,400');
+
+// iCal import: only bookings created by this sync are returned (one bell entry each), none on a re-sync
+{
+  const st = new StayRideMemoryStore(false);
+  st.createRoom({ number: '9', type: 'Std', floor: '1', price: 1000, status: 'AVAILABLE', note: '' } as any);
+  const day = 86400000;
+  const start = Date.UTC(2099, 0, 1) - 330 * 60000; // IST midnight
+  const evs = [{ uid: 'a', start, end: start + 2 * day, summary: '' }, { uid: 'b', start: start + 5 * day, end: start + 6 * day, summary: '' }];
+  const first = applyFeed(st, '9', 'f1', 'Airbnb', evs);
+  assert.deepEqual(first.created.map((b) => [b.checkIn, b.source]), [[start, 'Airbnb'], [start + 5 * day, 'Airbnb']]);
+  assert.equal(applyFeed(st, '9', 'f1', 'Airbnb', evs).created.length, 0);
+  assert.equal(applyFeed(st, '9', 'f1', 'Airbnb', [{ ...evs[0], end: start + 3 * day }]).created.length, 0); // moved / cancelled: updates only
+}
+
+// transaction ids: one form everywhere (spaces / dashes dropped, upper case); UTR still 12 digits
+assert.equal(normTxnId(' 4123-4567 8901 '), '412345678901');
+assert.equal(normTxnId('axis-ref 9f2a'), 'AXISREF9F2A');
+assert.equal(parseUtr('4123-4567-8901'), '412345678901');
+// reuse: refunded money never confirms a trip; a released guest claim only on its own trip and amount
+{
+  const claim = { paymentId: '412345678901', amount: 900, status: UNVERIFIED_CLAIM, refundedAt: null };
+  assert.equal(unmatchedReuse([], 'T1', 900), null);
+  assert.equal(unmatchedReuse([{ tripId: 'T1', entry: claim }], 'T1', 900), null);
+  assert.ok(unmatchedReuse([{ tripId: 'T2', entry: claim }], 'T1', 900));
+  assert.ok(unmatchedReuse([{ tripId: 'T1', entry: claim }], 'T1', 1200)); // other amount: the $pull would miss
+  assert.ok(unmatchedReuse([{ tripId: 'T1', entry: { ...claim, refundedAt: new Date() } }], 'T1', 900));
+  assert.ok(unmatchedReuse([{ tripId: 'T1', entry: { ...claim, status: 'CANCELLED' } }], 'T1', 900)); // gateway money stays to refund
+}
+
+// claim grace: now + 12h, capped at pickup + 2h, never shortening the current due time
+{
+  const n = Date.UTC(2026, 10, 1, 4, 0);
+  assert.equal(claimHoldUntil(n + 3600000, n, null), n + CLAIM_GRACE_MS);
+  assert.equal(claimHoldUntil(n + 3600000, n, n + 30 * 3600000), n + CLAIM_GRACE_MS); // pickup far away
+  assert.equal(claimHoldUntil(n + 1800000, n, n + 3600000), n + 3600000 + CLAIM_PICKUP_CAP_MS); // pickup in 1h
+  assert.equal(CLAIM_PICKUP_CAP_MS, 2 * 3600000);
+  assert.equal(claimHoldUntil(n + 20 * 3600000, n, n + 3600000), n + 20 * 3600000); // never earlier than already due
+}
+
+// payouts: a trip completed without the PIN waits for the admin's review; a no-show never pays out
+{
+  const done = { propertyId: 'a@x.com', assignedDriverUserId: 'u1', status: 'COMPLETED', advancePaid: true, hostPayoutId: null, driverPayoutId: null, driverSettlementStatus: 'PENDING', financialSnapshot: { homestayCommissionAmount: 100, driverShareOfAdvance: 50 } };
+  const host = sift(eligibleFilter('a@x.com'));
+  const drv = sift(eligibleDriverFilter('u1'));
+  const own = sift(eligibleDriverFilter('own-7:a@x.com'));
+  for (const t of [done, { ...done, completedWithoutPin: false }, { ...done, completedWithoutPin: true, noPinReviewedAt: new Date() }]) {
+    assert.ok(host(t) && drv(t), JSON.stringify(t));
+  }
+  for (const t of [{ ...done, completedWithoutPin: true }, { ...done, completedWithoutPin: true, noPinReviewedAt: null }, { ...done, completedWithoutPin: true, noPinReviewedAt: new Date(), noShow: true }]) {
+    assert.ok(!host(t) && !drv(t), JSON.stringify(t));
+  }
+  const ownTrip = { ...done, assignedDriverUserId: null, ownFleet: true, ownDriverId: 7 };
+  assert.ok(own(ownTrip) && !own({ ...ownTrip, completedWithoutPin: true })); // own-driver wallet's $or untouched
+  assert.ok(!host({ ...done, hostPayoutId: 'p1' })); // locked trips stay out as before
+}
+
+// logs: guest-link / iCal / JWT tokens in the path and t / token query values never reach them
+{
+  const tok = 'Abc_dEf-123456789012345678901234567890xyz';
+  assert.equal(safeUrl(`/v1/public/guest-links/${tok}`), '/v1/public/guest-links/[token]');
+  assert.equal(safeUrl('/v1/public/guest-links/short'), '/v1/public/guest-links/[token]');
+  assert.equal(safeUrl(`/v1/public/ical/${tok}.ics`), '/v1/public/ical/[token]');
+  assert.equal(safeUrl('/v1/x/eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.sig_nature'), '/v1/x/[token]');
+  assert.equal(safeUrl('/v1/public/driver-quote?t=eyJhbGciOiJIUzI1NiJ9.abc.def&x=1'), '/v1/public/driver-quote?t=[token]&x=1');
+  assert.equal(safeUrl('/v1/a?token=abc&phone=9876543210'), '/v1/a?token=[token]&phone=[token]');
+  assert.equal(safeUrl('/v1/admin/cab-requests/65f0c0ffee0000000000abcd/refund'), '/v1/admin/cab-requests/65f0c0ffee0000000000abcd/refund'); // ObjectIds kept
+  assert.equal(safeUrl('/v1/public/cab-requests/REQ-9F2A61C04B'), '/v1/public/cab-requests/REQ-9F2A61C04B');
+}
+
+// cab dispatch: no-GPS drivers match any place name of the homestay's address (pin codes, "india", case ignored)
+{
+  const { areaParts, isFleet, fallbackAllDrivers, driverLinkExpirySec, tripEndAt, biddingWindowMin } = await import('../src/stayride/platform.js');
+  const stored = areaParts('Gandhi Road, Darjeeling, West Bengal 734101, India').join(', ');
+  assert.equal(stored, 'gandhi road, darjeeling, west bengal');
+  assert.ok(areaMatches('Darjeeling', stored));
+  assert.ok(areaMatches('  DARJEELING town ', stored)); // contains a part as whole words
+  assert.ok(!areaMatches('darjeeling', 'Gandhi Road'));
+  assert.ok(!areaMatches('Siliguri', stored));
+  assert.ok(!areaMatches('734101', stored)); // a pin code alone is no place
+  assert.ok(!areaMatches('Darj', stored)); // whole words only
+  assert.ok(nearbyPasses(null, 40, 'Darjeeling', stored));
+  assert.ok(!nearbyPasses(55, 40, 'Darjeeling', stored)); // fresh GPS still uses the radius
+  assert.ok(areaMatches('Gangtok', 'Gangtok')); // old requests: just the first part
+
+  // nobody near: the best-rated active drivers whose vehicle fits, capped
+  const c = [{ id: 'a', avgRating: 4.1 }, { id: 'b', avgRating: 4.9 }, { id: 'c', avgRating: 4.5 }];
+  assert.equal(fallbackAllDrivers(2, c, 5), null);
+  assert.deepEqual(fallbackAllDrivers(0, c, 2)?.map((x) => x.id), ['b', 'c']);
+  assert.equal(fallbackAllDrivers(0, [], 5), null);
+  assert.equal(fallbackAllDrivers(0, c, 0), null);
+
+  // fleet / union accounts are never busy or overlapping
+  assert.ok(isFleet({ vehicle: { type: 'Fleet' } }));
+  assert.ok(isFleet({ driverCategory: 'UNION' }));
+  assert.ok(isFleet({ vehicleType: 'Fleet', driverId: 'x' })); // a quote
+  assert.ok(!isFleet({ vehicle: { type: 'SUV' }, driverCategory: 'INDIVIDUAL' }));
+
+  // driver link: 4 days, or a day past the trip (return of a round trip) when further out
+  const t0 = Date.UTC(2026, 10, 1, 4, 0);
+  assert.equal(driverLinkExpirySec(t0 + 3600000, t0), 4 * 86400);
+  assert.equal(driverLinkExpirySec(t0 + 20 * 86400000, t0), 21 * 86400);
+  const day = Date.UTC(2026, 10, 20);
+  assert.equal(tripEndAt({ date: day, time: '09:00 AM' }), istDateTime(day, '09:00 AM'));
+  assert.equal(tripEndAt({ date: day, time: '09:00 AM', isRoundTrip: true, returnDate: day + 2 * 86400000, returnTime: '05:00 PM' }), istDateTime(day + 2 * 86400000, '05:00 PM'));
+
+  // bidding never closes before nearby drivers had 10 min (own-first), except the admin's instant mode (0)
+  assert.equal(biddingWindowMin(5, 600, true), OWN_FIRST_MS / 60000 + 10);
+  assert.equal(biddingWindowMin(5, 600, false), 5);
+  assert.equal(biddingWindowMin(240, 600, true), 240);
+  assert.equal(biddingWindowMin(0, 600, true), 0);
+  assert.equal(biddingWindowMin(240, 150, true), 120); // close pickup: lead - 30
+}
+
+// phone normalisation: + / 00 = international, otherwise only an Indian mobile (6-9), else not sent
+assert.equal(toWhatsAppNumber('+44 7911 123456'), '447911123456');
+assert.equal(toWhatsAppNumber('0091 98320 12345'), '919832012345');
+assert.equal(toWhatsAppNumber('098320-12345'), '919832012345');
+assert.equal(toWhatsAppNumber('447911123456'), null);
+assert.equal(toWhatsAppNumber('2234567890'), null);
+
+// guest link expiry: the admin's days, but a booking's link lasts until the day after checkout
+{
+  const D = 86400000, now = Date.UTC(2026, 10, 1);
+  assert.equal(guestLinkExpiry(now, 7), now + 7 * D);
+  assert.equal(guestLinkExpiry(now, 7, now + 2 * D), now + 7 * D); // short stay: the 7 days
+  assert.equal(guestLinkExpiry(now, 7, now + 20 * D), now + 21 * D); // long stay: checkout + 1 day
+  // check-in resend: only when the blocking send's link is gone/expired, and only once
+  const h = [{ at: 1, by: 'auto', linkId: 'L1' }];
+  assert.ok(askCabResendOk(h, h[0], () => false));
+  assert.ok(!askCabResendOk(h, h[0], () => true)); // link still works
+  assert.ok(!askCabResendOk([...h, { at: 2, by: 'auto', linkId: 'L2', resend: true }], h[0], () => false)); // already resent once
+  assert.ok(!askCabResendOk(h, null, () => false)); // nothing blocking: a normal send
+  // back-dated: no automatic ask-cab once the checkout has passed
+  assert.ok(autoAskCabDue({ checkOut: now + D }, now));
+  assert.ok(!autoAskCabDue({ checkOut: now - D }, now));
+  assert.ok(!autoAskCabDue({ checkOut: now }, now));
+}
+
+// owner-blocked calendar events are date blocks, not stays
+for (const t of ['Not available', 'CLOSED - Not available', 'Blocked', 'Unavailable', 'Airbnb (Not available)']) assert.ok(isOwnerBlock(t), t);
+for (const t of ['Reserved', 'Asha Rao', '']) assert.ok(!isOwnerBlock(t), t);
+assert.ok(isCompleteIcs('BEGIN:VCALENDAR\r\nEND:VCALENDAR'));
+assert.ok(!isCompleteIcs('BEGIN:VCALENDAR\r\nBEGIN:VEVENT')); // cut off: never applied
+
+{
+  const st = new StayRideMemoryStore(false);
+  st.createRoom({ number: '9', type: 'Std', floor: '1', price: 1000, status: 'AVAILABLE', note: '' } as any);
+  const day = 86400000;
+  const start = Date.UTC(2099, 0, 1) - 330 * 60000;
+  const evs = [
+    { uid: 'r', start, end: start + 2 * day, summary: 'Reserved' },
+    { uid: 'x', start: start + 3 * day, end: start + 4 * day, summary: 'Airbnb (Not available)' },
+  ];
+  const first = applyFeed(st, '9', 'f1', 'Airbnb', evs);
+  assert.deepEqual(first.created.map((b) => b.external!.uid), ['r']); // the block is no new stay
+  assert.equal(first.added, 1);
+  const blk = st.bookings.find((b) => b.external?.uid === 'x')!;
+  assert.ok(blk.external!.block);
+  // a block still holds its dates (room protection), a stay booked here clashes
+  assert.throws(() => st.createBooking({ guestName: 'A', phone: '9876543210', checkIn: start + 3 * day, checkOut: start + 4 * day, roomNumber: '9', guests: 1, amount: 0, source: 'Direct', guestId: 0 } as any), /calendar/);
+  // a block overlapping a stay made here is not a double booking (often its echo)
+  const own = st.createBooking({ guestName: 'B', phone: '9876543211', checkIn: start + 10 * day, checkOut: start + 11 * day, roomNumber: '9', guests: 1, amount: 0, source: 'Direct', guestId: 0 } as any);
+  const echo = applyFeed(st, '9', 'f1', 'Airbnb', [...evs, { uid: 'e', start: start + 10 * day, end: start + 11 * day, summary: 'Not available' }]);
+  assert.equal(echo.conflicts, 0);
+  // export: only stays made here (no imported stay or block is sent back out)
+  const ics = buildIcs(st, st.rooms.find((r) => r.number === '9')!.id);
+  assert.equal((ics.match(/BEGIN:VEVENT/g) || []).length, 1);
+  assert.ok(ics.includes(`stayride-${st.rooms.find((r) => r.number === '9')!.id}-${own.id}@`));
+  // the owner adds the guest: kept by the next sync, which only moves dates
+  const stay = st.bookings.find((b) => b.external?.uid === 'r')!;
+  st.attachGuest(stay.id, { name: 'Asha', phone: '+44 7911 123456' });
+  applyFeed(st, '9', 'f1', 'Airbnb', [{ ...evs[0], end: start + 3 * day }, evs[1]]);
+  assert.deepEqual([stay.guestName, stay.phone, stay.checkOut, stay.external!.uid], ['Asha', '+44 7911 123456', start + 3 * day, 'r']);
+  assert.equal(st.guest(stay.guestId)?.phone, '+44 7911 123456');
+  assert.throws(() => st.attachGuest(stay.id, { name: 'Asha', phone: '447911123456' }), /country code/);
+  // the owner's cancel sticks; a cancel there (gone from the feed) is revived when it comes back
+  st.cancelBooking(stay.id);
+  applyFeed(st, '9', 'f1', 'Airbnb', evs);
+  assert.equal(stay.status, 'CANCELLED');
+  const gone = applyFeed(st, '9', 'f1', 'Airbnb', []);
+  assert.equal(gone.cancelled, 0); // only the block went (not counted) and the owner-cancelled stay stays as is
+  assert.equal(blk.status, 'CANCELLED');
+  applyFeed(st, '9', 'f1', 'Airbnb', evs);
+  assert.equal(blk.status, 'CONFIRMED');
+  // a guest's new phone reaches their current stays
+  st.updateGuest(own.guestId, { phone: '+91 90000 11111' });
+  assert.equal(st.booking(own.id)?.phone, '+91 90000 11111');
+  // owner push: one summary per room run, nothing when nothing changed
+  assert.equal(syncSummary('9', [{ ok: true, added: 0, cancelled: 0, newConflicts: 0 }]), null);
+  assert.match(syncSummary('9', [{ ok: true, added: 2 }, { ok: false, added: 5 }, { ok: true, cancelled: 1, newConflicts: 1 }])!.body, /^2 new bookings.*1 cancelled.*1 possible double booking/);
 }
 
 console.log('fix checks passed');

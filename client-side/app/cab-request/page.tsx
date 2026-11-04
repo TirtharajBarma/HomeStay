@@ -903,7 +903,7 @@ function CabRequestFormContent() {
             <div>
               <div className="flex items-center gap-1.5">
                 <span className="font-bold text-[#1F2328] text-sm tracking-tight">{siteConfig.appName}</span>
-                <span className="rounded bg-emerald-50 px-1.5 py-0.2 text-[10px] font-semibold text-emerald-800 border border-emerald-200">
+                <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800 border border-emerald-200">
                   Verified Mountain Network
                 </span>
               </div>
@@ -1100,6 +1100,8 @@ function CabRequestFormContent() {
                     </div>
                   </div>
 
+                  <p className="text-xs font-semibold text-[#57606A]">Driver details after payment.</p>
+
                   {/* Advance Policy & Cancellation Notice */}
                   <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] leading-relaxed text-amber-900 space-y-1">
                     <div className="flex items-center gap-1.5 font-bold text-amber-950">
@@ -1286,7 +1288,7 @@ function CabRequestFormContent() {
                       <div>
                         <div className="flex items-center gap-1.5">
                           <h4 className="font-bold text-[#1F2328] text-sm">{tripStatus?.driverName || "Assigned Driver"}</h4>
-                          <span className="rounded bg-emerald-100 px-1.5 py-0.2 text-[10px] font-bold text-emerald-800">
+                          <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">
                             Verified
                           </span>
                         </div>
@@ -1992,7 +1994,13 @@ function CabRequestFormContent() {
                     type="date"
                     value={date}
                     min={toLocalYmd(new Date())}
-                    onChange={(e) => setDate(e.target.value)}
+                    onChange={(e) => {
+                      const newDate = e.target.value;
+                      setDate(newDate);
+                      if (returnDate && returnDate < newDate) {
+                        setReturnDate(newDate);
+                      }
+                    }}
                     className="w-full rounded-xl border border-[#D0D7DE] px-3.5 py-2.5 text-xs text-[#1F2328] focus:border-emerald-600 focus:outline-none bg-white shadow-2xs"
                   />
                 </div>
@@ -2020,9 +2028,9 @@ function CabRequestFormContent() {
                           setTime(toTime12(e.target.value));
                         }
                       }}
-                      className="w-full rounded-xl border border-[#D0D7DE] bg-white py-2.5 pl-10 pr-24 text-sm font-bold text-[#1F2328] focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600 shadow-2xs cursor-pointer"
+                      className="w-full rounded-xl border border-[#D0D7DE] bg-white py-2.5 pl-10 pr-3 sm:pr-24 text-sm font-bold text-[#1F2328] focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600 shadow-2xs cursor-pointer"
                     />
-                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-[11px] text-[#57606A] font-medium">
+                    <div className="pointer-events-none absolute inset-y-0 right-0 hidden sm:flex items-center pr-3 text-[11px] text-[#57606A] font-medium">
                       Tap for clock
                     </div>
                   </div>
@@ -2097,9 +2105,9 @@ function CabRequestFormContent() {
                               setReturnTime(toTime12(e.target.value));
                             }
                           }}
-                          className="w-full rounded-xl border border-[#D0D7DE] bg-white py-2.5 pl-10 pr-24 text-sm font-bold text-[#1F2328] focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600 shadow-2xs cursor-pointer"
+                          className="w-full rounded-xl border border-[#D0D7DE] bg-white py-2.5 pl-10 pr-3 sm:pr-24 text-sm font-bold text-[#1F2328] focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600 shadow-2xs cursor-pointer"
                         />
-                        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-[11px] text-[#57606A] font-medium">
+                        <div className="pointer-events-none absolute inset-y-0 right-0 hidden sm:flex items-center pr-3 text-[11px] text-[#57606A] font-medium">
                           Tap for clock
                         </div>
                       </div>

@@ -13,6 +13,7 @@ import {
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { useStayRide } from '../data/store';
 import { Header } from '../components/Header';
 import { Pill } from '../components/Pill';
@@ -38,6 +39,7 @@ export const BookingDetailScreen: React.FC = () => {
     cancelBooking,
     changeBookingRoom,
     editBooking,
+    attachGuest,
     addPayment,
     removePayment,
     homestay,
@@ -47,6 +49,45 @@ export const BookingDetailScreen: React.FC = () => {
   } = useStayRide();
 
   const [assignModalVisible, setAssignModalVisible] = useState(false);
+  // Guest contact modal (especially for Airbnb / Booking.com synced bookings)
+  const [guestModalVisible, setGuestModalVisible] = useState(false);
+  const [guestNameInput, setGuestNameInput] = useState('');
+  const [guestPhoneInput, setGuestPhoneInput] = useState('');
+  const [guestEmailInput, setGuestEmailInput] = useState('');
+
+  const openGuestModal = () => {
+    setGuestNameInput(booking?.guestName || '');
+    setGuestPhoneInput(booking?.phone || '');
+    const g = guests.find((item) => item.id === booking?.guestId);
+    setGuestEmailInput(g?.email || '');
+    setGuestModalVisible(true);
+  };
+
+  const handleSaveGuestContact = async () => {
+    if (!guestNameInput.trim()) {
+      return Alert.alert('Required', 'Guest name is required.');
+    }
+    const cleanP = guestPhoneInput.replace(/\D/g, '');
+    if (cleanP.length < 10) {
+      return Alert.alert('Phone Required', 'Enter a 10-digit mobile number for WhatsApp messaging.');
+    }
+    setSaving(true);
+    const outcome = await attachGuest(booking!.id, {
+      name: guestNameInput.trim(),
+      phone: guestPhoneInput.trim(),
+      email: guestEmailInput.trim() || undefined,
+    });
+    setSaving(false);
+    if (outcome.ok) {
+      setGuestModalVisible(false);
+      Alert.alert(
+        'Guest Details Attached',
+        `Guest details saved for ${guestNameInput.trim()}. If guest cab links are enabled, an automated WhatsApp invitation will be sent.`
+      );
+    } else {
+      Alert.alert("Couldn't save", outcome.error || 'Please try again.');
+    }
+  };
   // Edit stay: draft dates/amount/party size until Save
   const [editVisible, setEditVisible] = useState(false);
   const [draftIn, setDraftIn] = useState(0);
@@ -266,7 +307,7 @@ export const BookingDetailScreen: React.FC = () => {
           </View>
 
           <Text style={styles.detailText}>
-            Room {booking.roomNumber} · {booking.guests}{' '}
+            Room {booking.roomNumber}{booking.bedNumber ? ` · ${booking.bedNumber}` : ''} · {booking.guests}{' '}
             {booking.guests === 1 ? 'guest' : 'guests'} · {nights} night(s)
           </Text>
           <Text style={styles.detailText}>
@@ -277,16 +318,32 @@ export const BookingDetailScreen: React.FC = () => {
               Check-in from {homestay.checkInTime || '—'} · Check-out by {homestay.checkOutTime || '—'}
             </Text>
           )}
-          {booking.phone ? <Text style={styles.detailText}>{booking.phone}</Text> : null}
+          {booking.phone ? (
+            <Text style={styles.detailText}>{booking.phone}</Text>
+          ) : (
+            <Text style={[styles.detailText, { color: Colors.statusOrange, fontWeight: '600' }]}>
+              Phone missing — add WhatsApp phone for cab link
+            </Text>
+          )}
           {booking.external && (
             <View style={[styles.externalBox, booking.external.conflict && styles.externalConflict]}>
               <Text style={styles.externalText}>
                 {booking.external.conflict
                   ? `⚠ Possible double booking: this ${booking.external.source} stay overlaps another booking in room ${booking.roomNumber}. Move or cancel one of them.`
-                  : `Imported from your ${booking.external.source} calendar. Guest details are on ${booking.external.source}; dates update on each sync.`}
+                  : `Imported from your ${booking.external.source} calendar. ${booking.phone ? 'Guest phone attached.' : 'Add guest WhatsApp phone below to auto-send cab link.'}`}
               </Text>
             </View>
           )}
+
+          <TouchableOpacity
+            style={[styles.outlineBtn, { marginTop: 10, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }]}
+            onPress={openGuestModal}
+          >
+            <Ionicons name="person-circle-outline" size={16} color={Colors.brandPrimaryDark} style={{ marginRight: 6 }} />
+            <Text style={[styles.outlineBtnText, { fontSize: 13 }]}>
+              {booking.phone ? 'Edit guest contact' : '+ Add guest contact (WhatsApp)'}
+            </Text>
+          </TouchableOpacity>
 
           <View style={styles.divider} />
 
@@ -439,6 +496,57 @@ export const BookingDetailScreen: React.FC = () => {
               </TouchableOpacity>
               <TouchableOpacity style={styles.outlineBtn} onPress={() => setPayVisible(false)}>
                 <Text style={styles.outlineBtnText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAwareOverlay>
+      </Modal>
+
+      {/* Attach / Update Guest Contact Modal */}
+      <Modal visible={guestModalVisible} transparent animationType="slide" onRequestClose={() => setGuestModalVisible(false)}>
+        <KeyboardAwareOverlay style={{ flex: 1 }}>
+          <View style={styles.editOverlay}>
+            <View style={[styles.editSheet, { paddingBottom: 24 }]}>
+              <Text style={styles.modalTitle}>Guest Contact Details</Text>
+              <Text style={styles.editSummary}>
+                Attach the guest&apos;s phone number to send WhatsApp cab booking links.
+              </Text>
+
+              <Text style={styles.editLabel}>Guest Full Name *</Text>
+              <TextInput
+                style={styles.editInput}
+                value={guestNameInput}
+                onChangeText={setGuestNameInput}
+                placeholder="e.g. Rahul Sharma"
+                placeholderTextColor={Colors.textSecondary}
+              />
+
+              <Text style={styles.editLabel}>WhatsApp Phone Number *</Text>
+              <TextInput
+                style={styles.editInput}
+                value={guestPhoneInput}
+                onChangeText={setGuestPhoneInput}
+                placeholder="10-digit mobile number or +country"
+                placeholderTextColor={Colors.textSecondary}
+                keyboardType="phone-pad"
+              />
+
+              <Text style={styles.editLabel}>Email Address (Optional)</Text>
+              <TextInput
+                style={styles.editInput}
+                value={guestEmailInput}
+                onChangeText={setGuestEmailInput}
+                placeholder="guest@example.com"
+                placeholderTextColor={Colors.textSecondary}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+
+              <TouchableOpacity style={[styles.solidBtn, { marginTop: 14 }]} disabled={saving} onPress={handleSaveGuestContact}>
+                <Text style={styles.solidBtnText}>{saving ? 'Saving…' : 'Save & Attach Contact'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.outlineBtn} onPress={() => setGuestModalVisible(false)}>
+                <Text style={styles.outlineBtnText}>Cancel</Text>
               </TouchableOpacity>
             </View>
           </View>

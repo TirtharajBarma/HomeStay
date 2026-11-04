@@ -38,7 +38,12 @@ const columns = [
   },
   {
     title: "Support & Desk",
-    links: supportLinks,
+    links: [
+      ...supportLinks,
+      { href: "/legal/privacy", label: "Privacy Policy" },
+      { href: "/legal/terms", label: "Terms of Service" },
+      { href: "/legal/refunds", label: "Refund & Cancellation Policy" },
+    ],
   },
 ];
 

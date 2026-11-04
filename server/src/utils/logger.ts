@@ -175,6 +175,19 @@ class TelemetryLogger {
 
 export const logger = new TelemetryLogger();
 
+const SECRET_SEGMENT = /^(?:[A-Za-z0-9_-]{32,}(?:\.\w+)?|eyJ[\w-]*\.[\w-]+\.[\w-]*)$/; // random base64url tokens (guest links, iCal) or a JWT
+const SECRET_PARAM = /([?&](?:t|token|phone)=)[^&#]*/gi;
+
+/** A URL safe to log: guest-link / token path segments and t / token / phone query values become [token]. */
+export function safeUrl(url: string): string {
+  const q = url.indexOf("?");
+  const path = (q < 0 ? url : url.slice(0, q))
+    .split("/")
+    .map((seg, i, all) => (all[i - 1] === "guest-links" || SECRET_SEGMENT.test(seg) ? (seg ? "[token]" : seg) : seg))
+    .join("/");
+  return q < 0 ? path : path + url.slice(q).replace(SECRET_PARAM, "$1[token]");
+}
+
 /**
  * Express Request Telemetry Middleware.
  * Records route latency, status code, and identifies the tenant/driver/user.
@@ -187,7 +200,7 @@ export function telemetryMiddleware(req: Request, res: Response, next: NextFunct
     if (logged) return;
     logged = true;
     const durationMs = Date.now() - start;
-    const url = String(req.originalUrl || req.url).replace(/\?.*$/, "");
+    const url = safeUrl(String(req.originalUrl || req.url).replace(/\?.*$/, ""));
     
     // Ignore static health checks to prevent noise
     if (url === "/health" || url === "/" || url === "/api/v1/health") {

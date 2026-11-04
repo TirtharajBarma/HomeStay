@@ -384,7 +384,7 @@ export class AuthService {
 
   static async driverLogin(data: { phone: string; pin: string }) {
     const cleanPhone = data.phone.trim();
-    const driver = await Driver.findOne({ phone: cleanPhone });
+    const driver = await Driver.findOne({ phone: cleanPhone }).select("+pin");
 
     if (!driver) {
       throw new Error("Driver with this phone number not found in fleet roster.");

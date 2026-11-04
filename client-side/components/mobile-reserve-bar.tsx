@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import {
   checkoutHref,
-  formatMoney,
+  formatNightly,
   formatNights,
   type Booking,
 } from "@/lib/booking";
@@ -16,14 +16,16 @@ import { Icon } from "./icon";
  */
 export function MobileReserveBar({ stay, booking }: { stay: Stay; booking: Booking }) {
   return (
-    <div className="sticky bottom-0 z-40 border-t border-outline-variant/40 bg-surface/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur-md shadow-drawer lg:hidden">
+    <div className="fixed inset-x-0 bottom-0 z-40 border-t border-outline-variant/40 bg-surface/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur-md shadow-drawer lg:hidden">
       <div className="flex items-center gap-3">
         <div className="min-w-0">
           <p className="truncate font-display text-headline-sm font-semibold text-primary">
-            {formatMoney(stay.price)}{" "}
-            <span className="font-body text-body-sm font-normal text-on-surface-variant">
-              / night
-            </span>
+            {formatNightly(stay.price)}{" "}
+            {stay.price > 0 ? (
+              <span className="font-body text-body-sm font-normal text-on-surface-variant">
+                / night
+              </span>
+            ) : null}
           </p>
           <p className="truncate text-label-sm text-outline">
             {formatNights(booking.nights)} • {booking.guests} Adult
@@ -31,10 +33,10 @@ export function MobileReserveBar({ stay, booking }: { stay: Stay; booking: Booki
           </p>
         </div>
         <Link
-          href={checkoutHref(stay.slug, booking)}
+          href={stay.price > 0 ? checkoutHref(stay.slug, booking) : `/h/${stay.slug}`}
           className="ml-auto flex min-h-12 shrink-0 items-center gap-2 rounded-xl bg-primary-container px-5 text-label-md text-on-primary shadow-md active:scale-[0.99]"
         >
-          Reserve
+          {stay.price > 0 ? "Reserve" : "Contact Host"}
           <Icon name="arrow_forward" className="text-base" />
         </Link>
       </div>

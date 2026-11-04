@@ -120,7 +120,7 @@ function propertyToStay(p: Raw): Stay {
   const defaultImage = photos[0] || rawRooms[0]?.image || "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1200&q=80";
 
   const roomPrices = rawRooms.map((r: Raw) => num(r.price) || num(r.nightly)).filter((pr: number) => pr > 0);
-  const minPrice = roomPrices.length ? Math.min(...roomPrices) : 2400;
+  const minPrice = roomPrices.length ? Math.min(...roomPrices) : 0; // 0 = "Price on request" (no room priced)
 
   const galleryShots: GalleryShot[] = photos.length
     ? photos.map((src: string, i: number) => ({ src, alt: `${name} Photo ${i + 1}`, caption: name }))

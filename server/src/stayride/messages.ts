@@ -159,9 +159,10 @@ export const advancePaidDriverMessage = (doc: any, driverLink?: string): Built =
   };
 };
 
-/** The trip was cancelled (by the homestay or StayRide); a paid advance is refunded. */
-export const tripCancelledGuestMessage = (doc: any): Built => {
-  const params = [doc.guestName, doc.reference, whenText(doc), doc.advancePaid ? `Your advance of ${rupees(doc.advanceAmount)} will be refunded.` : 'No charge was made.'];
+/** The trip was cancelled (by the homestay or StayRide, or it expired: `reason`); a paid advance is refunded. */
+export const tripCancelledGuestMessage = (doc: any, reason?: string): Built => {
+  const money = doc.advancePaid ? `Your advance of ${rupees(doc.advanceAmount)} will be refunded.` : 'No charge was made.';
+  const params = [doc.guestName, doc.reference, whenText(doc), reason ? `${reason}. ${money}` : money];
   return {
     event: 'TRIP_CANCELLED_GUEST',
     context: ctxOf(doc),

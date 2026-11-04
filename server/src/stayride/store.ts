@@ -6,6 +6,9 @@ export interface StayRideRoom {
   price: number;
   status: 'AVAILABLE' | 'OCCUPIED' | 'RESERVED' | 'MAINTENANCE';
   note: string;
+  roomType?: 'PRIVATE' | 'DORM';
+  bedCount?: number;
+  beds?: string[];
 }
 
 export interface StayRideGuest {
@@ -29,6 +32,7 @@ export interface StayRideBooking {
   checkIn: number;
   checkOut: number;
   roomNumber: string;
+  bedNumber?: string;
   guests: number;
   status: 'CONFIRMED' | 'CHECKED_IN' | 'CHECKED_OUT' | 'CANCELLED';
   paid: boolean;
@@ -41,10 +45,15 @@ export interface StayRideBooking {
   spendCounted?: boolean | number;
   // Money received for this stay (advance, balance...). `paid` = received >= amount.
   payments?: BookingPayment[];
-  // Imported from an OTA calendar (Airbnb, Booking.com...): no guest record, dates only
-  external?: { source: string; uid: string; feedId: string; conflict?: boolean };
-  // Set by the server: successful Ask-for-cab sends (last 5); one per booking unless an admin sends again
-  askCab?: Array<{ at: number; by: string; linkId?: string }>;
+  // Imported from an OTA calendar (Airbnb, Booking.com...): dates come from the feed; the guest's name and phone
+  // are added by the owner (attachGuest) and never touched by a sync. `block`: an owner-blocked event ("Not
+  // available", "CLOSED"...), it holds the dates but is not a stay. `ownerCancelled`: a sync never revives it.
+  external?: { source: string; uid: string; feedId: string; conflict?: boolean; block?: boolean; ownerCancelled?: boolean };
+  // Set by the server: successful Ask-for-cab sends (last 5); one per booking unless an admin sends again.
+  // `resend`: the one automatic resend at check-in after the earlier link expired.
+  askCab?: Array<{ at: number; by: string; linkId?: string; resend?: boolean }>;
+  // Set by the server while an ask-cab WhatsApp is being sent (ms), so two sends can't race; cleared after
+  askCabSending?: number;
 }
 
 export interface BookingPayment {
@@ -81,23 +90,54 @@ export function heldUntil(b: StayRideBooking, now = Date.now()): number {
   return b.checkOut;
 }
 
-/** The one overlap rule, for new bookings and room moves alike. */
-export function bookingClash(bookings: StayRideBooking[], roomNumber: string, checkIn: number, checkOut: number, exceptId?: number, now = Date.now()) {
-  return bookings.find(
-    (b) => b.id !== exceptId && b.roomNumber === roomNumber && b.status !== 'CANCELLED' && checkIn < heldUntil(b, now) && checkOut > b.checkIn
-  );
+/** The one overlap rule, for new bookings and room moves alike. Supports dorm bed clashes. */
+export function bookingClash(
+  bookings: StayRideBooking[],
+  roomNumber: string,
+  checkIn: number,
+  checkOut: number,
+  exceptId?: number,
+  now = Date.now(),
+  bedNumber?: string
+) {
+  const normBed = (b?: string) => (b ? String(b).trim().toLowerCase() : '');
+  const reqBed = normBed(bedNumber);
+
+  return bookings.find((b) => {
+    if (b.id === exceptId) return false;
+    if (b.roomNumber !== roomNumber) return false;
+    if (b.status === 'CANCELLED') return false;
+    if (!(checkIn < heldUntil(b, now) && checkOut > b.checkIn)) return false;
+
+    const bBed = normBed(b.bedNumber);
+    // If both specify a bed, they conflict only if they are for the same bed
+    if (reqBed && bBed) {
+      return reqBed === bBed;
+    }
+    // If one specifies a bed and the other doesn't (whole room booking), they conflict.
+    // If neither specifies a bed, they conflict (standard whole-room booking clash).
+    return true;
+  });
 }
 
 /**
  * Room status is derived, never stored: MAINTENANCE is the owner's only manual setting; otherwise a
  * checked-in guest makes it OCCUPIED, a confirmed stay that has started (arrival today or overdue)
  * makes it RESERVED, and anything else (including future bookings) leaves it AVAILABLE.
+ * For dorms, all beds must be occupied to mark OCCUPIED.
  */
 export function roomStatusOf(room: StayRideRoom, bookings: StayRideBooking[], now = Date.now()): StayRideRoom['status'] {
   if (room.status === 'MAINTENANCE') return 'MAINTENANCE';
-  const mine = bookings.filter((b) => b.roomNumber === room.number);
+  const mine = bookings.filter((b) => b.roomNumber === room.number && b.status !== 'CANCELLED');
+  if (room.roomType === 'DORM' && room.bedCount && room.bedCount > 1) {
+    const checkedInCount = mine.filter((b) => b.status === 'CHECKED_IN').length;
+    if (checkedInCount >= room.bedCount) return 'OCCUPIED';
+    const activeStays = mine.filter((b) => b.status === 'CHECKED_IN' || (b.status === 'CONFIRMED' && !b.external?.block && b.checkIn <= now && now < b.checkOut));
+    if (activeStays.length >= room.bedCount) return 'RESERVED';
+    return 'AVAILABLE';
+  }
   if (mine.some((b) => b.status === 'CHECKED_IN')) return 'OCCUPIED';
-  if (mine.some((b) => b.status === 'CONFIRMED' && b.checkIn <= now && now < b.checkOut)) return 'RESERVED';
+  if (mine.some((b) => b.status === 'CONFIRMED' && !b.external?.block && b.checkIn <= now && now < b.checkOut)) return 'RESERVED';
   return 'AVAILABLE';
 }
 
@@ -197,18 +237,19 @@ export interface StayRideHomestay {
   // Map pin set by the owner (server-set via PUT /homestay/location); "nearby" drivers are measured from it
   latitude?: number;
   longitude?: number;
+  propertyType?: 'HOMESTAY' | 'HOSTEL' | 'HOTEL' | 'RESORT';
 }
 
 const DAY = 86400000;
 
 // Client-writable fields per entity. Everything else (ids, money, status) is server-owned.
 export const WRITABLE = {
-  room: ['number', 'type', 'floor', 'price', 'status', 'note'],
+  room: ['number', 'type', 'floor', 'price', 'status', 'note', 'roomType', 'bedCount', 'beds'],
   guest: ['name', 'phone', 'email', 'notes', 'marketingConsent'],
-  booking: ['guestId', 'guestName', 'phone', 'checkIn', 'checkOut', 'roomNumber', 'guests', 'amount', 'source', 'paid'],
+  booking: ['guestId', 'guestName', 'phone', 'checkIn', 'checkOut', 'roomNumber', 'bedNumber', 'guests', 'amount', 'source', 'paid'],
   driver: ['name', 'phone', 'vehicle', 'vehicleType', 'seats', 'rating', 'area', 'trips', 'available', 'active', 'plate'],
   trip: ['guestName', 'phone', 'pickup', 'pickupLat', 'pickupLng', 'destination', 'destinations', 'isRoundTrip', 'returnDate', 'returnTime', 'date', 'time', 'passengers', 'vehicleType', 'guestId', 'bookingId'],
-  homestay: ['name', 'description', 'location', 'phone', 'email', 'ownerName', 'link', 'mapQuery', 'amenities', 'photos', 'checkInTime', 'checkOutTime'],
+  homestay: ['name', 'description', 'location', 'phone', 'email', 'ownerName', 'link', 'mapQuery', 'amenities', 'photos', 'checkInTime', 'checkOutTime', 'propertyType'],
 } as const;
 
 export function pick(obj: any, keys: readonly string[]): any {
@@ -237,13 +278,18 @@ const MONEY = N({ int: true, max: 10_000_000 });
 const DATE = N({ max: 8_640_000_000_000 });
 export const VEHICLE_TYPES = ['SUV', 'Sedan', '7-seater', '9-seater'] as const;
 export const ROOM_STATUSES = ['AVAILABLE', 'OCCUPIED', 'RESERVED', 'MAINTENANCE'] as const;
+export const ROOM_TYPES = ['PRIVATE', 'DORM'] as const;
+export const PROPERTY_TYPES = ['HOMESTAY', 'HOSTEL', 'HOTEL', 'RESORT'] as const;
 
 export const FIELDS: Record<string, Record<string, FieldRule>> = {
-  room: { number: S(20), type: S(60), floor: S(30), price: MONEY, status: E(ROOM_STATUSES), note: S(300) },
+  room: {
+    number: S(20), type: S(60), floor: S(30), price: MONEY, status: E(ROOM_STATUSES), note: S(300),
+    roomType: E(ROOM_TYPES), bedCount: N({ int: true, max: 100, nullable: true }), beds: { t: 'strs', maxItems: 100, max: 30 },
+  },
   guest: { name: S(100), phone: S(20), email: S(120), notes: S(1000), marketingConsent: B },
   booking: {
     guestId: N({ int: true, nullable: true }), guestName: S(100), phone: S(20), checkIn: DATE, checkOut: DATE,
-    roomNumber: S(20), guests: N({ int: true, max: 50 }), amount: MONEY, source: S(60), paid: B,
+    roomNumber: S(20), bedNumber: S(30), guests: N({ int: true, max: 50 }), amount: MONEY, source: S(60), paid: B,
   },
   driver: {
     name: S(100), phone: S(20), vehicle: S(60), vehicleType: E(VEHICLE_TYPES), seats: N({ int: true, max: 60 }),
@@ -261,7 +307,7 @@ export const FIELDS: Record<string, Record<string, FieldRule>> = {
   homestay: {
     name: S(100), description: S(2000), location: S(200), phone: S(20), email: S(120), ownerName: S(100),
     mapQuery: S(300), amenities: { t: 'strs', maxItems: 30, max: 60 }, photos: { t: 'photos' },
-    checkInTime: S(10), checkOutTime: S(10),
+    checkInTime: S(10), checkOutTime: S(10), propertyType: E(PROPERTY_TYPES),
   },
 };
 
@@ -269,6 +315,11 @@ export const MAX_PHOTOS = 10;
 const MAX_PHOTO_BYTES = 400 * 1024;
 const DATA_IMAGE = /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/]+={0,2})$/;
 const bad = (message: string) => Object.assign(new Error(message), { status: 400, code: 'VALIDATION_ERROR' });
+export const PHONE_HINT = "Enter the guest's mobile number. Foreign guests: include + and the country code.";
+/** A phone we can WhatsApp (same rule as sending). Empty is allowed where the phone is optional. */
+const checkPhone = (phone: unknown, required = false) => {
+  if ((required || String(phone ?? '').trim()) && !toWhatsAppNumber(phone)) throw bad(PHONE_HINT);
+};
 
 function checkPhoto(p: unknown): string {
   if (typeof p !== 'string') throw bad('Each photo must be an https URL or an image.');
@@ -317,6 +368,7 @@ export function clean(kind: keyof typeof FIELDS, body: any, existingPhotos: stri
         out[k] = v;
         break;
       case 'enum':
+        if (v === null || v === '') break;
         if (!rule.values.includes(v)) throw bad(`${k} must be one of: ${rule.values.join(', ')}.`);
         out[k] = v;
         break;
@@ -569,6 +621,7 @@ export class StayRideMemoryStore {
   createGuest(data: Omit<StayRideGuest, 'id' | 'visits' | 'totalSpending' | 'firstVisit' | 'lastVisit'>) {
     const fields = clean('guest', data);
     if (!fields.name) throw bad('Guest name is required.');
+    checkPhone(fields.phone);
     const existing = this.guestByPhone(fields.phone);
     if (existing) {
       throw Object.assign(new Error(`${existing.name} already has this phone number in your guest list.`), { status: 409, code: 'DUPLICATE_GUEST' });
@@ -594,8 +647,38 @@ export class StayRideMemoryStore {
     if (owner && owner.id !== id) {
       throw Object.assign(new Error(`${owner.name} already has this phone number in your guest list.`), { status: 409, code: 'DUPLICATE_GUEST' });
     }
+    const newPhone = 'phone' in fields && fields.phone !== g.phone;
+    if (newPhone) checkPhone(fields.phone);
     Object.assign(g, fields);
+    // The new number reaches this guest's current and upcoming stays (no ask-cab is sent for an edit)
+    if (newPhone) {
+      const now = Date.now();
+      for (const b of this.bookings) {
+        if (b.guestId === id && (b.status === 'CHECKED_IN' || (b.status === 'CONFIRMED' && b.checkOut > now))) b.phone = g.phone;
+      }
+    }
     return g;
+  }
+
+  /**
+   * Put the guest's name and phone (and email) on any booking, including a calendar import: its synced dates and
+   * UID stay, and a sync never touches these fields. Links the guest with this phone, else creates one. An
+   * imported date block given a guest becomes a stay.
+   */
+  attachGuest(id: number, input: { name?: unknown; phone?: unknown; email?: unknown }) {
+    const b = this.booking(id);
+    if (!b) return null;
+    const f = clean('guest', { name: input.name ?? '', phone: input.phone ?? '', email: input.email ?? '' });
+    if (!f.name) throw bad('Guest name is required.');
+    checkPhone(f.phone, true);
+    let g = this.guestByPhone(f.phone);
+    if (!g) g = this.createGuest({ name: f.name, phone: f.phone, email: f.email, notes: '', marketingConsent: false });
+    else if (f.email && !g.email) g.email = f.email;
+    b.guestId = g.id;
+    b.guestName = f.name;
+    b.phone = f.phone;
+    if (b.external?.block) delete b.external.block;
+    return b;
   }
 
   deleteGuest(id: number) {
@@ -620,10 +703,17 @@ export class StayRideMemoryStore {
     if (room.status === 'MAINTENANCE') {
       throw Object.assign(new Error(`Room ${room.number} is under maintenance. Clear maintenance in Rooms first.`), { status: 409 });
     }
-    const clash = bookingClash(this.bookings, data.roomNumber, requestedCheckIn, requestedCheckOut);
-    if (clash) {
+    const clash = bookingClash(this.bookings, data.roomNumber, requestedCheckIn, requestedCheckOut, undefined, Date.now(), data.bedNumber);
+    if (clash?.external) {
       throw Object.assign(
-        new Error(`Room ${data.roomNumber} is already booked for these dates (${clash.guestName}). Please choose different dates or another room.`),
+        new Error(`Room ${data.roomNumber} is held by your ${clash.external.source} calendar on these dates. If this is that guest, open that booking and use "Add guest details" instead.`),
+        { status: 409 }
+      );
+    }
+    if (clash) {
+      const target = data.bedNumber ? `Bed ${data.bedNumber} in room ${data.roomNumber}` : `Room ${data.roomNumber}`;
+      throw Object.assign(
+        new Error(`${target} is already booked for these dates (${clash.guestName}). Please choose different dates or another bed/room.`),
         { status: 409 }
       );
     }
@@ -631,7 +721,7 @@ export class StayRideMemoryStore {
     let guest = this.guest(Number(data.guestId)) || this.guestByPhone(data.phone);
     if (!guest) {
       if (!String(data.guestName || '').trim()) throw bad('Guest name is required.');
-      if (last10(data.phone).length !== 10) throw bad('A 10-digit phone number is required for a new guest.');
+      checkPhone(data.phone, true);
       guest = this.createGuest({ name: data.guestName, phone: data.phone, email: '', notes: '', marketingConsent: false } as any);
     }
 
@@ -663,8 +753,18 @@ export class StayRideMemoryStore {
       const day = new Date(b.checkIn).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' });
       throw Object.assign(new Error(`Check-in opens on ${day}. For an early arrival, cancel and book again from today.`), { status: 409, code: 'CHECK_IN_TOO_EARLY' });
     }
-    const occupant = this.bookings.find((o) => o.id !== b.id && o.roomNumber === b.roomNumber && o.status === 'CHECKED_IN');
-    if (occupant) throw Object.assign(new Error(`${occupant.guestName} is still checked in to room ${b.roomNumber}. Check them out first.`), { status: 409 });
+    const occupant = this.bookings.find((o) => {
+      if (o.id === b.id || o.roomNumber !== b.roomNumber || o.status !== 'CHECKED_IN') return false;
+      const room = this.rooms.find((r) => r.number === b.roomNumber);
+      if (room?.roomType === 'DORM' && b.bedNumber && o.bedNumber) {
+        return o.bedNumber.trim().toLowerCase() === b.bedNumber.trim().toLowerCase();
+      }
+      return true;
+    });
+    if (occupant) {
+      const target = occupant.bedNumber ? `bed ${occupant.bedNumber} in room ${b.roomNumber}` : `room ${b.roomNumber}`;
+      throw Object.assign(new Error(`${occupant.guestName} is still checked in to ${target}. Check them out first.`), { status: 409 });
+    }
     b.status = 'CHECKED_IN';
     return b;
   }
@@ -737,6 +837,7 @@ export class StayRideMemoryStore {
     if (!b) return null;
     if (b.status !== 'CONFIRMED') throw Object.assign(new Error(`Cannot cancel a ${b.status} booking.`), { status: 409 });
     b.status = 'CANCELLED';
+    if (b.external) b.external.ownerCancelled = true; // the next calendar sync must not revive it
     return b;
   }
 
@@ -757,11 +858,11 @@ export class StayRideMemoryStore {
   }
 
   /**
-   * Edit a stay. Before arrival: dates, amount, party size (early arrival = move the check-in earlier).
-   * While the guest is in: only the checkout (extend or leave earlier), amount and party size.
+   * Edit a stay. Before arrival: dates, amount, party size, guest name, phone, bed.
+   * While the guest is in: checkout, amount, party size, guest name, phone, bed.
    * Same overlap rule as new bookings; check-ins never move into the past.
    */
-  editBooking(id: number, changes: { checkIn?: unknown; checkOut?: unknown; amount?: unknown; guests?: unknown }) {
+  editBooking(id: number, changes: { checkIn?: unknown; checkOut?: unknown; amount?: unknown; guests?: unknown; guestName?: unknown; phone?: unknown; bedNumber?: unknown }) {
     const b = this.booking(id);
     if (!b) return null;
     if (b.status !== 'CONFIRMED' && b.status !== 'CHECKED_IN') {
@@ -784,14 +885,31 @@ export class StayRideMemoryStore {
     if (room?.status === 'MAINTENANCE' && (checkIn < b.checkIn || checkOut > b.checkOut)) {
       throw Object.assign(new Error(`Room ${b.roomNumber} is under maintenance; it cannot be held longer.`), { status: 409 });
     }
-    const clash = bookingClash(this.bookings, b.roomNumber, checkIn, checkOut, b.id);
+    const bedNumber = changes.bedNumber !== undefined ? (changes.bedNumber ? String(changes.bedNumber).trim() : undefined) : b.bedNumber;
+    const clash = bookingClash(this.bookings, b.roomNumber, checkIn, checkOut, b.id, Date.now(), bedNumber);
     if (clash) {
-      throw Object.assign(new Error(`Room ${b.roomNumber} is booked by ${clash.guestName} on some of these dates. Move this booking to another room first.`), { status: 409 });
+      const target = bedNumber ? `Bed ${bedNumber} in room ${b.roomNumber}` : `Room ${b.roomNumber}`;
+      throw Object.assign(new Error(`${target} is booked by ${clash.guestName} on some of these dates. Move this booking first.`), { status: 409 });
     }
     const amount = num(changes.amount);
     if (amount !== undefined && (!Number.isFinite(amount) || amount < 0 || amount > 10000000)) throw bad('Enter a valid amount.');
     const guests = num(changes.guests);
     if (guests !== undefined && (!Number.isInteger(guests) || guests < 1 || guests > 50)) throw bad('Enter a valid number of guests.');
+
+    if (changes.guestName !== undefined) {
+      const name = String(changes.guestName || '').trim();
+      if (!name) throw bad('Guest name cannot be empty.');
+      b.guestName = name;
+    }
+    if (changes.phone !== undefined) {
+      const p = String(changes.phone || '').trim();
+      checkPhone(p, false);
+      b.phone = p;
+    }
+    if (changes.bedNumber !== undefined) {
+      b.bedNumber = bedNumber;
+    }
+
     b.checkIn = checkIn;
     b.checkOut = checkOut;
     if (amount !== undefined && Math.round(amount) < paidOf(b) && b.payments?.length) {
@@ -803,7 +921,7 @@ export class StayRideMemoryStore {
     return b;
   }
 
-  changeBookingRoom(id: number, roomNumber: string) {
+  changeBookingRoom(id: number, roomNumber: string, bedNumber?: string) {
     const b = this.booking(id);
     if (!b) return null;
     if (b.status !== 'CONFIRMED') throw Object.assign(new Error(`Cannot move a ${b.status} booking.`), { status: 409 });
@@ -811,10 +929,13 @@ export class StayRideMemoryStore {
     const room = this.rooms.find((r) => r.number === roomNumber);
     if (!room) throw Object.assign(new Error('Unknown room.'), { status: 400 });
     if (room.status === 'MAINTENANCE') throw Object.assign(new Error(`Room ${roomNumber} is under maintenance.`), { status: 409 });
-    if (bookingClash(this.bookings, roomNumber, b.checkIn, b.checkOut, b.id)) {
-      throw Object.assign(new Error(`Room ${roomNumber} is already booked for these dates.`), { status: 409 });
+    const targetBed = bedNumber !== undefined ? (bedNumber ? String(bedNumber).trim() : undefined) : b.bedNumber;
+    if (bookingClash(this.bookings, roomNumber, b.checkIn, b.checkOut, b.id, Date.now(), targetBed)) {
+      const target = targetBed ? `Bed ${targetBed} in room ${roomNumber}` : `Room ${roomNumber}`;
+      throw Object.assign(new Error(`${target} is already booked for these dates.`), { status: 409 });
     }
     b.roomNumber = roomNumber;
+    b.bedNumber = targetBed;
     return b;
   }
 
@@ -1087,6 +1208,7 @@ import crypto from 'node:crypto';
 import { getISTTimestamp } from '../utils/date.js';
 import { config, dbNameFor } from '../config/env.js';
 import { CloudinaryService } from '../services/cloudinary.service.js';
+import { toWhatsAppNumber } from '../services/whatsapp.service.js';
 
 export const StayRideTenantSchema = new Schema(
   {

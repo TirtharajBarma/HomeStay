@@ -10,9 +10,9 @@ import { getAuditLogModel, audit } from "../models/audit-log.model.js";
 import { getStayRideTenantModel, tenantManager, normKey, isDemoKey, clean, FIELDS, TENANT_COLLECTIONS, TenantCollection } from "../stayride/store.js";
 import {
   OPEN_STATUSES, cabModel, payoutModel, userModel, parseFare, cancelRequest, startTrip, completeTrip,
-  adminAssignDriver, adminRecordPayment, adminRejectPaymentClaim, adminVoidPayment, adminMarkRefunded, adminSettleDriver,
+  adminAssignDriver, adminRecordPayment, adminRejectPaymentClaim, adminVoidPayment, adminMarkRefunded, adminSettleDriver, adminReviewNoPin,
   settlePayout, rejectPayout, expireStaleRequests, overlayTrips, onDriverStatusChange, releaseDriverTrips, adminRefundUnmatched, maskPhone,
-  sendAskCab, askCabConfirmText, askCabLine, stayOrder, last10,
+  sendAskCab, autoAskCab, askCabConfirmText, askCabLine, stayOrder, last10,
 } from "../stayride/platform.js";
 import { getGuestLinkModel } from "../models/guest-link.model.js";
 import { toWhatsAppNumber } from "../services/whatsapp.service.js";
@@ -449,6 +449,7 @@ router.get("/cab-requests", async (req, res) => {
   if (req.query.needsReassignment === "true") filter.needsReassignment = true;
   if (req.query.unmatched === "true") filter.unmatchedPayments = { $elemMatch: { refundedAt: null } };
   if (req.query.claim === "pending") filter["paymentClaim.status"] = "PENDING";
+  if (req.query.noPin === "review") Object.assign(filter, NO_PIN_TO_REVIEW);
   const q = search(req);
   if (q) {
     const regex = new RegExp(escapeRegex(q), "i");
@@ -456,6 +457,9 @@ router.get("/cab-requests", async (req, res) => {
   }
   await sendPage(req, res, cabModel(demo), filter, { createdAt: -1 });
 });
+
+// completed without the boarding PIN, not reviewed yet: held out of every payout (see adminReviewNoPin)
+const NO_PIN_TO_REVIEW = { status: "COMPLETED", completedWithoutPin: true, noPinReviewedAt: null };
 
 const cabAction = (fn: (demo: boolean, id: string, req: Request) => Promise<any>, message: string) => async (req: Request, res: Response) => {
   if (!mongoose.Types.ObjectId.isValid(String(req.params.id))) throw httpError(404, "Cab request not found.");
@@ -471,6 +475,7 @@ router.post("/cab-requests/:id/refund", cabAction((d, id, req) => adminMarkRefun
 router.post("/cab-requests/:id/start", cabAction((d, id, req) => startTrip(d, { _id: id }, actor(req), undefined, false), "Trip started."));
 router.post("/cab-requests/:id/complete", cabAction((d, id, req) => completeTrip(d, { _id: id }, actor(req)), "Trip completed."));
 router.post("/cab-requests/:id/unmatched-refunded", cabAction((d, id, req) => adminRefundUnmatched(d, id, req.body.paymentId, req.body.reference, actor(req)), "Unmatched payment marked refunded."));
+router.post("/cab-requests/:id/no-pin-review", cabAction((d, id, req) => adminReviewNoPin(d, id, req.body.decision, req.body.reason, actor(req)), "Review recorded."));
 router.post("/cab-requests/:id/driver-settled", cabAction((d, id, req) => adminSettleDriver(d, id, req.body.reference, actor(req)), "Driver settlement recorded."));
 
 // ---------------------------------------------------------------------------
@@ -567,11 +572,16 @@ router.get("/stayride/summary", async (req, res) => {
         open: { $sum: { $cond: [{ $in: ["$status", OPEN_STATUSES] }, 1, 0] } },
         awaitingPayment: { $sum: { $cond: [{ $eq: ["$status", "AWAITING_ADVANCE_PAYMENT"] }, 1, 0] } },
         completed: { $sum: { $cond: [{ $eq: ["$status", "COMPLETED"] }, 1, 0] } },
-        gmv: { $sum: { $cond: [{ $eq: ["$status", "COMPLETED"] }, "$agreedFare", 0] } },
-        // Cancelled paid advances are owed back (see refundsPending / refunded), not money kept
-        advanceCollected: { $sum: { $cond: [{ $and: ["$advancePaid", { $ne: ["$status", "CANCELLED"] }] }, "$advanceAmount", 0] } },
-        platformFee: { $sum: { $cond: [{ $and: [{ $eq: ["$status", "COMPLETED"] }, "$advancePaid"] }, "$financialSnapshot.platformFeeAmount", 0] } },
-        homestayCommission: { $sum: { $cond: [{ $and: [{ $eq: ["$status", "COMPLETED"] }, "$advancePaid"] }, "$financialSnapshot.homestayCommissionAmount", 0] } },
+        gmv: { $sum: { $cond: [{ $and: [{ $eq: ["$status", "COMPLETED"] }, { $ne: ["$noShow", true] }] }, "$agreedFare", 0] } },
+        // Cancelled / no-show paid advances are owed back (see refundsPending / refunded), not money kept
+        advanceCollected: { $sum: { $cond: [{ $and: ["$advancePaid", { $ne: ["$status", "CANCELLED"] }, { $ne: ["$noShow", true] }] }, "$advanceAmount", 0] } },
+        platformFee: { $sum: { $cond: [{ $and: [{ $eq: ["$status", "COMPLETED"] }, "$advancePaid", { $ne: ["$noShow", true] }] }, "$financialSnapshot.platformFeeAmount", 0] } },
+        // earned over the platform's life (settled or not) vs owed now: payable, not yet in any homestay payout (a PENDING one shows under payouts)
+        homestayCommission: { $sum: { $cond: [{ $and: [{ $eq: ["$status", "COMPLETED"] }, "$advancePaid", { $ne: ["$noShow", true] }] }, "$financialSnapshot.homestayCommissionAmount", 0] } },
+        homestayCommissionUnpaid: {
+          $sum: { $cond: [{ $and: [{ $eq: ["$status", "COMPLETED"] }, "$advancePaid", { $ne: ["$noShow", true] }, { $not: ["$hostPayoutId"] }, { $not: [{ $and: [{ $eq: ["$completedWithoutPin", true] }, { $not: ["$noPinReviewedAt"] }] }] }] }, "$financialSnapshot.homestayCommissionAmount", 0] },
+        },
+        noPinToReview: { $sum: { $cond: [{ $and: [{ $eq: ["$status", "COMPLETED"] }, { $eq: ["$completedWithoutPin", true] }, { $not: ["$noPinReviewedAt"] }] }, 1, 0] } },
         refundsPending: { $sum: { $cond: [{ $eq: ["$refundStatus", "PENDING"] }, "$advanceAmount", 0] } },
         driverDuesPending: {
           $sum: {
@@ -808,8 +818,10 @@ router.get("/stayride/guests-staying", async (req, res) => {
   const now = Date.now();
   // One aggregation over every homestay, returning only the live bookings' few fields (no per-homestay queries).
   // ponytail: filter / search / sort run in memory over all live bookings; move them into the pipeline ($facet) past a few thousand.
+  // ?tenant=<key>: one homestay (the bell's calendar-import and guest-reply items open it)
+  const tenant = typeof req.query.tenant === "string" && req.query.tenant ? normKey(req.query.tenant) : "";
   const tenants = await getStayRideTenantModel(demo).aggregate([
-    { $match: { "data.bookings.status": { $in: LIVE_BOOKINGS } } },
+    { $match: { "data.bookings.status": { $in: LIVE_BOOKINGS }, ...(tenant ? { tenantId: tenant } : {}) } },
     {
       $project: {
         _id: 0,
@@ -817,10 +829,10 @@ router.get("/stayride/guests-staying", async (req, res) => {
         homestayName: 1,
         bookings: {
           $map: {
-            // calendar imports (external) have no guest to contact
-            input: { $filter: { input: "$data.bookings", as: "b", cond: { $and: [{ $in: ["$$b.status", LIVE_BOOKINGS] }, { $not: ["$$b.external"] }] } } },
+            // calendar imports are stays (the phone may still be missing); their "Not available" date blocks are not
+            input: { $filter: { input: "$data.bookings", as: "b", cond: { $and: [{ $in: ["$$b.status", LIVE_BOOKINGS] }, { $ne: ["$$b.external.block", true] }] } } },
             as: "b",
-            in: { id: "$$b.id", guestName: "$$b.guestName", phone: "$$b.phone", checkIn: "$$b.checkIn", checkOut: "$$b.checkOut", status: "$$b.status", roomNumber: "$$b.roomNumber", askCab: "$$b.askCab" },
+            in: { id: "$$b.id", guestName: "$$b.guestName", phone: "$$b.phone", checkIn: "$$b.checkIn", checkOut: "$$b.checkOut", status: "$$b.status", roomNumber: "$$b.roomNumber", askCab: "$$b.askCab", source: "$$b.external.source" },
           },
         },
       },
@@ -863,6 +875,7 @@ router.get("/stayride/guests-staying", async (req, res) => {
     const wa = toWhatsAppNumber(b.phone);
     return {
       ...b,
+      phoneMissing: !wa, // no phone, or not one we can WhatsApp: Ask for cab is disabled until it is added
       tel: wa ? `+${wa}` : "",
       askCab: history, // newest first
       lastCall: c ? { at: new Date(c.createdAt).getTime(), by: c.actorName || c.actor } : null,
@@ -892,6 +905,23 @@ router.post("/stayride/tenants/:tenantKey/bookings/:id/ask-cab", async (req, res
   ok(res, { status: sent.result }, message);
 });
 
+// Admin adds the guest's name and phone to a booking (e.g. a calendar import, after talking to the owner): the same
+// store logic and automatic ask-cab as the owner's "Add guest details".
+router.post("/stayride/tenants/:tenantKey/bookings/:id/guest", async (req, res) => {
+  const { key, demo } = await existingTenant(req);
+  const id = Number(req.params.id);
+  let before: any = null;
+  const b = await tenantManager.mutate(key, (s) => {
+    const old = s.booking(id);
+    before = old ? { guestId: old.guestId, guestName: old.guestName, phone: maskPhone(old.phone) } : null;
+    return s.attachGuest(id, req.body || {});
+  });
+  if (!b) throw httpError(404, "Booking not found.");
+  await audit(actor(req), "booking.guest_details", "Booking", `${key}:${b.id}`, { before, after: { guestId: b.guestId, guestName: b.guestName, phone: maskPhone(b.phone) } }, demo, { tenantId: key, actorName: adminName(req) });
+  const asked = await autoAskCab(key, demo, (await tenantManager.load(key)).homestay.name, b);
+  ok(res, { id: b.id, guestName: b.guestName, asked: Boolean(asked) }, asked ? "Guest details saved and the cab link was sent." : "Guest details saved.");
+});
+
 // Records that the admin started a call (it can't be known whether it connected).
 router.post("/stayride/tenants/:tenantKey/bookings/:id/call", async (req, res) => {
   const { key, demo } = await existingTenant(req);
@@ -905,7 +935,7 @@ router.post("/stayride/tenants/:tenantKey/bookings/:id/call", async (req, res) =
 // Notification bell: derived from existing records (no notifications collection). Read state is per
 // browser (the admin panel keeps "last seen at"); `since` = that time.
 // ---------------------------------------------------------------------------
-const BELL_ACTIONS = ["booking.create", "booking.check_in", "payment.claim"];
+const BELL_ACTIONS = ["booking.create", "booking.import", "booking.check_in", "payment.claim", "cab.needs_reassignment", "whatsapp.reply"];
 const SOURCE_LABELS: Record<string, string> = { GUEST_WEB_LINK: "guest link", MANUAL_OWNER: "owner", HOMESTAY_WEB_PORTAL: "portal", ADMIN_DISPATCH: "admin" };
 
 router.get("/stayride/notifications", async (req, res) => {
@@ -928,6 +958,15 @@ router.get("/stayride/notifications", async (req, res) => {
       const homestay = names.get(a.tenantId) || a.tenantId || "";
       const d = a.details || {};
       const base = { id: String(a._id), at: new Date(a.createdAt).getTime(), tenantKey: a.tenantId || "", guestName: d.guestName || "" };
+      // Calendar import (Airbnb, Booking.com…): no guest name, so the guests tab opens on the homestay
+      if (a.action === "whatsapp.reply") {
+        const where = d.tenantKey ? ` (${d.homestayName || homestay || d.tenantKey})` : "";
+        // opens Guests staying for that homestay, searched by the sender's last 4 digits (only the masked phone is stored)
+        return { ...base, tenantKey: d.tenantKey || "", guestName: String(d.from || "").slice(-4), kind: "reply", title: `Guest reply from ${d.from || "unknown"}${where}`, sub: String(d.text || `(${d.type || "message"})`).slice(0, 80) };
+      }
+      if (a.action === "booking.import") return { ...base, guestName: "", kind: "import", title: `New booking from ${d.source || "calendar"}${homestay ? ` · ${homestay}` : ""}`, sub: [d.checkIn, d.checkOut].filter(Boolean).map((t: number) => new Date(t).toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" })).join(" – ") };
+      // a paid trip whose driver was removed: opens the cab requests of that homestay ("Needs driver")
+      if (a.action === "cab.needs_reassignment") return { ...base, kind: "cab", title: `Needs a new driver: ${d.ref || "trip"}`, sub: [d.guestName, homestay].filter(Boolean).join(" • ") };
       if (a.action === "payment.claim") return { ...base, kind: "claim", title: `Guest says paid: ${d.ref || "trip"}`, sub: [typeof d.amount === "number" ? `₹${d.amount.toLocaleString("en-IN")}` : "", homestay].filter(Boolean).join(" • ") };
       return { ...base, kind: a.action === "booking.create" ? "booking" : "check_in", title: `${a.action === "booking.create" ? "New booking" : "Checked in"}: ${d.guestName || "Guest"}`, sub: homestay };
     }),

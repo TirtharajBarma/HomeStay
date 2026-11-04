@@ -28,6 +28,7 @@ export interface IProperty extends Document {
   checkOutTime: string;
   responseTime: string;
   currency: string;
+  propertyType?: "homestay" | "hostel" | "hotel" | "resort";
   status: "active" | "pending" | "paused" | "suspended";
   commissionRate: number;
   platformFeePercent?: number | null;
@@ -84,6 +85,12 @@ const PropertySchema = new Schema<IProperty>(
     checkOutTime: { type: String, default: "11:00 AM" },
     responseTime: { type: String, default: "Usually within 20 minutes" },
     currency: { type: String, default: "INR" },
+    propertyType: {
+      type: String,
+      enum: ["homestay", "hostel", "hotel", "resort"],
+      default: "homestay",
+      index: true,
+    },
     status: {
       type: String,
       enum: ["active", "pending", "paused", "suspended"],

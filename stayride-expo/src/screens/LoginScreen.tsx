@@ -56,6 +56,7 @@ interface Profile {
   name: string;
   phone: string;
   homestayName?: string;
+  propertyType?: 'HOMESTAY' | 'HOSTEL' | 'HOTEL' | 'RESORT';
   location?: string;
   latitude?: number;
   longitude?: number;
@@ -147,6 +148,7 @@ export const LoginScreen: React.FC = () => {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [homestayName, setHomestayName] = useState('');
+  const [propertyType, setPropertyType] = useState<'HOMESTAY' | 'HOSTEL' | 'HOTEL' | 'RESORT'>('HOMESTAY');
   const [location, setLocation] = useState('');
   const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
   const [vehicleType, setVehicleType] = useState<VehicleType>('SUV');
@@ -201,6 +203,7 @@ export const LoginScreen: React.FC = () => {
     ...(role === 'owner'
       ? {
           homestayName: homestayName.trim(),
+          propertyType,
           location: location.trim(),
           latitude: coords?.latitude,
           longitude: coords?.longitude,
@@ -537,13 +540,26 @@ export const LoginScreen: React.FC = () => {
     </View>
   );
 
+  const PROPERTY_TYPE_OPTIONS = [
+    { label: 'Homestay / Traditional Stay', value: 'HOMESTAY', icon: 'home-outline' as const },
+    { label: 'Hostel / Backpackers (Beds & Dorms)', value: 'HOSTEL', icon: 'people-outline' as const },
+    { label: 'Boutique Hotel / Inn', value: 'HOTEL', icon: 'business-outline' as const },
+    { label: 'Mountain Resort / Estate', value: 'RESORT', icon: 'leaf-outline' as const },
+  ];
+
   const profileFields = role ? (
     <View style={{ gap: 10 }}>
       {field('person-outline', { placeholder: 'Full name', value: name, onChangeText: setName, autoComplete: 'name' })}
       {field('call-outline', { placeholder: 'Mobile number (WhatsApp)', value: phone, onChangeText: setPhone, keyboardType: 'phone-pad' })}
       {role === 'owner' ? (
         <>
-          {field('business-outline', { placeholder: 'Homestay name', value: homestayName, onChangeText: setHomestayName })}
+          {field('business-outline', { placeholder: 'Property name (Homestay / Hostel)', value: homestayName, onChangeText: setHomestayName })}
+          <PlatformSelect
+            label="Property Category"
+            value={propertyType}
+            options={PROPERTY_TYPE_OPTIONS}
+            onSelect={(val) => setPropertyType(val as any)}
+          />
           <TouchableOpacity
             style={[
               styles.pinBtn,

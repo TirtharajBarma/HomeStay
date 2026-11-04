@@ -77,6 +77,8 @@ export default function AdminDashboardPage() {
   const [cabFilter, setCabFilter] = useState("");
   // Guest name handed from the notification bell to the Guests staying desk.
   const [guestSearch, setGuestSearch] = useState("");
+  // ...and the homestay, for a calendar import or a guest's WhatsApp reply
+  const [guestTenant, setGuestTenant] = useState("");
 
   const handleTabChange = (tab: Tab) => {
     setActiveTab(tab);
@@ -85,7 +87,10 @@ export default function AdminDashboardPage() {
       setCabTenant("");
       setCabFilter("");
     }
-    if (tab === "guests") setGuestSearch("");
+    if (tab === "guests") {
+      setGuestSearch("");
+      setGuestTenant("");
+    }
   };
 
   const handleDemoToggle = (isDemo: boolean) => {
@@ -231,6 +236,7 @@ export default function AdminDashboardPage() {
                   } else {
                     handleTabChange("guests");
                     setGuestSearch(n.guestName || "");
+                    if (n.kind === "import" || n.kind === "reply") setGuestTenant(n.tenantKey || "");
                   }
                 }}
               />
@@ -289,7 +295,7 @@ export default function AdminDashboardPage() {
             }}
           />
         )}
-        {activeTab === "guests" && <GuestsTab key={guestSearch} demo={demo} initialSearch={guestSearch || undefined} />}
+        {activeTab === "guests" && <GuestsTab key={`${guestTenant}|${guestSearch}`} demo={demo} initialSearch={guestSearch || undefined} initialTenant={guestTenant || undefined} />}
         {activeTab === "drivers" && <DriversTab demo={demo} />}
         {activeTab === "cab-requests" && <CabRequestsTab key={`${cabTenant}|${cabFilter}`} demo={demo} initialTenantKey={cabTenant || undefined} initialFilter={cabFilter || undefined} />}
         {activeTab === "payouts" && <PayoutsTab demo={demo} />}

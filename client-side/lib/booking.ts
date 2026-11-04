@@ -250,6 +250,9 @@ export function formatMoney(amount: number): string {
   return rupeeFormat.format(Math.round(amount)).replace(/\u00a0/g, "");
 }
 
+/** A stay's nightly price; 0 means the host has not set one (rooms on "Price on request"). */
+export const formatNightly = (price: number) => (price > 0 ? formatMoney(price) : "Price on request");
+
 
 export function cancellationDeadline(checkIn: string): string {
   return formatDate(addDays(checkIn, -FREE_CANCELLATION_DAYS));

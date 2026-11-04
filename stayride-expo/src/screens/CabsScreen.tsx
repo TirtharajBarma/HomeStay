@@ -19,7 +19,7 @@ import { Header } from '../components/Header';
 import { FeatureLocked } from '../components/FeatureLocked';
 import { plusDays } from '../data/seeder';
 import { CabTrip, Guest } from '../types';
-import { askGuestForCab as askForCab } from '../utils/askCab';
+import { askGuestForCab as askForCab, cabSentText } from '../utils/askCab';
 
 export const CabsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -167,7 +167,7 @@ export const CabsScreen: React.FC = () => {
   };
 
   // StayRide's server sends the link from the company WhatsApp number
-  const handleSendAskCabLink = async (guest: Guest) => {
+  const handleSendAskCabLink = async (guest: Guest, confirmed = false) => {
     // Fix 14: check if guest already has an active trip today before sending another link
     const today = new Date();
     const todayStr = today.toDateString();
@@ -179,13 +179,13 @@ export const CabsScreen: React.FC = () => {
            new Date(t.date).toDateString() === todayStr
     );
 
-    if (hasOpenTripToday) {
+    if (hasOpenTripToday && !confirmed) {
       Alert.alert(
         'Cab Already Requested',
         `${guest.name} already has an active cab request today. Send another link anyway?`,
         [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Send Anyway', onPress: () => handleSendAskCabLink(guest) },
+          { text: 'Send Anyway', onPress: () => handleSendAskCabLink(guest, true) },
         ]
       );
       return;
@@ -427,22 +427,37 @@ export const CabsScreen: React.FC = () => {
               {checkedInGuests.length === 0 ? (
                 <Text style={styles.noGuestsText}>No guests are currently checked in.</Text>
               ) : (
-                checkedInGuests.map((g) => (
-                  <TouchableOpacity
-                    key={g.id}
-                    style={styles.guestPickRow}
-                    onPress={() => handleSendAskCabLink(g)}
-                  >
-                    <View style={styles.guestAvatar}>
-                      <Text style={styles.guestAvatarText}>{g.name.charAt(0)}</Text>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.guestPickName}>{g.name}</Text>
-                      <Text style={styles.guestPickPhone}>{g.phone}</Text>
-                    </View>
-                    <Ionicons name="logo-whatsapp" size={20} color="#16A34A" />
-                  </TouchableOpacity>
-                ))
+                checkedInGuests.map((g) => {
+                  const b = bookings.find((bk) => bk.status === 'CHECKED_IN' && (bk.guestId === g.id || bk.phone === g.phone));
+                  const sent = b ? cabSentText(b) : null;
+                  return (
+                    <TouchableOpacity
+                      key={g.id}
+                      style={[styles.guestPickRow, sent ? { opacity: 0.85 } : null]}
+                      onPress={() => handleSendAskCabLink(g)}
+                    >
+                      <View style={styles.guestAvatar}>
+                        <Text style={styles.guestAvatarText}>{g.name.charAt(0)}</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.guestPickName}>{g.name}</Text>
+                        <Text style={styles.guestPickPhone}>{g.phone}</Text>
+                        {sent ? (
+                          <Text style={{ fontSize: 11, color: '#059669', marginTop: 2, fontWeight: '500' }}>
+                            {sent}
+                          </Text>
+                        ) : null}
+                      </View>
+                      {sent ? (
+                        <View style={{ backgroundColor: '#ECFDF5', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: '#A7F3D0' }}>
+                          <Text style={{ fontSize: 10, fontWeight: '700', color: '#059669' }}>Sent</Text>
+                        </View>
+                      ) : (
+                        <Ionicons name="logo-whatsapp" size={20} color="#16A34A" />
+                      )}
+                    </TouchableOpacity>
+                  );
+                })
               )}
             </ScrollView>
             </>

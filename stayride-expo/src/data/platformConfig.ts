@@ -17,6 +17,7 @@ export interface PlatformPublicConfig {
   advanceWindowMin: number;
   ownFleetFeePercent: number;
   ownFleetMinFee: number;
+  minDriverPayoutThreshold: number;
 }
 
 const halfHours = (from: number, to: number) =>
@@ -52,6 +53,7 @@ export const DEFAULT_PLATFORM_CONFIG: PlatformPublicConfig = {
   advanceWindowMin: 0,
   ownFleetFeePercent: 5,
   ownFleetMinFee: 100,
+  minDriverPayoutThreshold: 100,
 };
 
 // The store sets this after every sync so plain helpers (vehicle labels) see the admin's values too.
@@ -71,6 +73,7 @@ export function setPlatformConfig(next: Partial<PlatformPublicConfig> | null | u
     advanceWindowMin: Number.isFinite(Number(n.advanceWindowMin)) ? Number(n.advanceWindowMin) : d.advanceWindowMin,
     ownFleetFeePercent: Number.isFinite(Number(n.ownFleetFeePercent)) ? Number(n.ownFleetFeePercent) : d.ownFleetFeePercent,
     ownFleetMinFee: Number.isFinite(Number(n.ownFleetMinFee)) ? Number(n.ownFleetMinFee) : d.ownFleetMinFee,
+    minDriverPayoutThreshold: Number.isFinite(Number(n.minDriverPayoutThreshold)) ? Number(n.minDriverPayoutThreshold) : d.minDriverPayoutThreshold,
   };
   return current;
 }

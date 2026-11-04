@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 
-import { formatMoney, stayHref, type Booking } from "@/lib/booking";
+import { formatNightly, stayHref, type Booking } from "@/lib/booking";
 import type { Stay } from "@/lib/stays";
 
 import { Icon } from "./icon";
@@ -33,8 +33,8 @@ export function StayCard({ stay, booking }: { stay: Stay; booking: Booking }) {
           ) : null}
         </div>
         <div className="absolute right-3 bottom-3 rounded-lg bg-inverse-surface/85 px-3 py-1 text-title-md font-bold text-surface backdrop-blur-md">
-          {formatMoney(stay.price)}{" "}
-          <span className="text-body-sm font-normal text-surface-variant">/ night</span>
+          {formatNightly(stay.price)}{" "}
+          {stay.price > 0 ? <span className="text-body-sm font-normal text-surface-variant">/ night</span> : null}
         </div>
       </div>
 
@@ -81,7 +81,7 @@ export function StayCard({ stay, booking }: { stay: Stay; booking: Booking }) {
 
       <Link href={stayHref(stay.slug, booking)} className="absolute inset-0 rounded-xl">
         <span className="sr-only">
-          {stay.name} — {stay.kindLabel}, {stay.occupancy}, {formatMoney(stay.price)} per night.
+          {stay.name} — {stay.kindLabel}, {stay.occupancy}, {stay.price > 0 ? `${formatNightly(stay.price)} per night` : formatNightly(stay.price)}.
           View room details and reserve.
         </span>
       </Link>

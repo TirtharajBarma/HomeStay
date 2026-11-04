@@ -17,7 +17,7 @@ import { api } from '../data/api';
 import { Header } from '../components/Header';
 import { PlatformSelect } from '../components/PlatformSelect';
 import { RangeCalendar } from '../components/RangeCalendar';
-import { roomAvailability } from '../utils/rooms';
+import { roomAvailability, heldUntil } from '../utils/rooms';
 import { PAYMENT_METHODS } from '../utils/payments';
 import { Colors } from '../theme/colors';
 import { FormScroll } from '../components/FormScroll';
@@ -69,6 +69,7 @@ export const NewBookingScreen: React.FC = () => {
 
   const nights = Math.max(1, Math.round((checkOut - checkIn) / dayMs));
   const [amount, setAmount] = useState(() => (initialRoom ? String(initialRoom.price * (presetCheckIn ? 1 : 2)) : ''));
+  const [pickedBed, setPickedBed] = useState<string>('');
   // Money received while booking: an advance, the full amount, or nothing yet
   const [received, setReceived] = useState('');
   const [receivedMethod, setReceivedMethod] = useState<PaymentMethod>('UPI');
@@ -132,6 +133,24 @@ export const NewBookingScreen: React.FC = () => {
   // A room picked earlier stops counting once new dates make it unavailable
   const pickedRoom = selectedRoom && freeRooms.some((r) => r.id === selectedRoom.id) ? selectedRoom : null;
 
+  const dormBeds = pickedRoom?.roomType === 'DORM'
+    ? Array.from({ length: pickedRoom.bedCount || 4 }, (_, i) => `Bed ${i + 1}`)
+    : [];
+  const occupiedBedsInDorm = pickedRoom?.roomType === 'DORM'
+    ? new Set(
+        bookings
+          .filter(
+            (b) =>
+              b.roomNumber === pickedRoom.number &&
+              b.status !== 'CANCELLED' &&
+              checkIn < heldUntil(b) &&
+              checkOut > b.checkIn &&
+              b.bedNumber
+          )
+          .map((b) => b.bedNumber!)
+      )
+    : new Set<string>();
+
   const handleSave = async () => {
     if (submitting) return;
     const trimmedName = guestName.trim();
@@ -167,6 +186,10 @@ export const NewBookingScreen: React.FC = () => {
       return;
     }
 
+    const chosenBed = pickedRoom.roomType === 'DORM'
+      ? (pickedBed || dormBeds.find((b) => !occupiedBedsInDorm.has(b)) || 'Bed 1')
+      : undefined;
+
     setSubmitting(true);
     try {
       await createBooking({
@@ -174,6 +197,7 @@ export const NewBookingScreen: React.FC = () => {
         guestName: trimmedName,
         phone: trimmedPhone || selectedGuest?.phone || '',
         roomNumber: pickedRoom.number,
+        bedNumber: chosenBed,
         checkIn,
         checkOut,
         guests: parsedCount,
@@ -187,7 +211,7 @@ export const NewBookingScreen: React.FC = () => {
       const phoneToSend = trimmedPhone || selectedGuest?.phone || '';
       Alert.alert(
         '🎉 Booking Created!',
-        `Booking confirmed for ${trimmedName} · Room ${pickedRoom.number} (${nights} night${nights > 1 ? 's' : ''}).\n\nWould you like to send a booking confirmation via WhatsApp?`,
+        `Booking confirmed for ${trimmedName} · Room ${pickedRoom.number}${chosenBed ? ` (${chosenBed})` : ''} (${nights} night${nights > 1 ? 's' : ''}).\n\nWould you like to send a booking confirmation via WhatsApp?`,
         [
           {
             text: 'Done',
@@ -202,7 +226,7 @@ export const NewBookingScreen: React.FC = () => {
                     const inStr = new Date(checkIn).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
                     const outStr = new Date(checkOut).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
                     const homestayName = homestay?.name || 'Our Homestay';
-                    const message = `Namaste ${trimmedName}! 🙏\n\nYour booking at *${homestayName}* is confirmed:\n🏨 Room: ${pickedRoom.number}\n📅 Check-in: ${inStr}\n📅 Check-out: ${outStr} (${nights} night${nights > 1 ? 's' : ''})\n👥 Guests: ${parsedCount}\n💰 Total: ₹${parsedAmount.toLocaleString('en-IN')}${receivedNum > 0 ? ` (Advance paid: ₹${receivedNum.toLocaleString('en-IN')})` : ''}\n\nWe look forward to hosting you in the hills! Let us know if you need airport or station cab pickup.`;
+                    const message = `Namaste ${trimmedName}! 🙏\n\nYour booking at *${homestayName}* is confirmed:\n🏨 Room: ${pickedRoom.number}${chosenBed ? ` (${chosenBed})` : ''}\n📅 Check-in: ${inStr}\n📅 Check-out: ${outStr} (${nights} night${nights > 1 ? 's' : ''})\n👥 Guests: ${parsedCount}\n💰 Total: ₹${parsedAmount.toLocaleString('en-IN')}${receivedNum > 0 ? ` (Advance paid: ₹${receivedNum.toLocaleString('en-IN')})` : ''}\n\nWe look forward to hosting you in the hills! Let us know if you need airport or station cab pickup.`;
                     const cleanPhone = phoneToSend.replace(/\D/g, '');
                     const targetPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
                     Linking.openURL(`whatsapp://send?phone=${targetPhone}&text=${encodeURIComponent(message)}`).catch(() => {
@@ -286,23 +310,38 @@ export const NewBookingScreen: React.FC = () => {
 
         {/* Room Picker */}
         <PlatformSelect
-          label="Room"
+          label="Room / Dorm"
           value={pickedRoom ? String(pickedRoom.id) : ''}
           options={freeRooms.map((r) => ({
-            label: `Room ${r.number}`,
+            label: r.roomType === 'DORM' ? `Room ${r.number} (Dorm - ${r.bedCount || 4} Beds)` : `Room ${r.number}`,
             value: String(r.id),
-            icon: 'bed-outline' as const,
-            subLabel: `₹${r.price.toLocaleString()}/night · ${r.floor}`,
+            icon: (r.roomType === 'DORM' ? 'people-outline' : 'bed-outline') as any,
+            subLabel: `₹${r.price.toLocaleString()}${r.roomType === 'DORM' ? '/bed/night' : '/night'} · ${r.floor}`,
           }))}
           onSelect={(roomIdStr) => {
             const rm = freeRooms.find((r) => String(r.id) === roomIdStr);
             if (rm) {
               setSelectedRoom(rm);
               setAmount(String(rm.price * nights));
+              setPickedBed('');
             }
           }}
           placeholder={freeRooms.length ? `${freeRooms.length} room(s) free for these dates` : 'No room is free for these dates'}
         />
+
+        {/* Dorm Bed Selection */}
+        {pickedRoom?.roomType === 'DORM' && (
+          <PlatformSelect
+            label="Select Bed in Dorm"
+            value={pickedBed || (dormBeds.find((b) => !occupiedBedsInDorm.has(b)) || 'Bed 1')}
+            options={dormBeds.map((bed) => ({
+              label: bed + (occupiedBedsInDorm.has(bed) ? ' (Occupied)' : ' (Available)'),
+              value: bed,
+              icon: 'bed-outline' as const,
+            }))}
+            onSelect={setPickedBed}
+          />
+        )}
         {busyRooms.length > 0 && (
           <Text style={styles.selectedGuestMeta}>
             Not free for these dates: {busyRooms.map((a) => `Room ${a.room.number} (${a.reason})`).join(', ')}

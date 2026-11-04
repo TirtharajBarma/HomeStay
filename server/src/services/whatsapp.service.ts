@@ -12,6 +12,7 @@ import crypto from 'node:crypto';
 import { logger } from '../utils/logger.js';
 import { audit } from '../models/audit-log.model.js';
 import { getGuestLinkModel } from '../models/guest-link.model.js';
+import { notify } from './push.service.js';
 
 const TIMEOUT_MS = 4000;
 const API_VERSION = process.env.WHATSAPP_API_VERSION || 'v26.0';
@@ -109,12 +110,18 @@ const enabled = () =>
   configured(process.env.WHATSAPP_PHONE_NUMBER_ID) &&
   configured(process.env.WHATSAPP_ACCESS_TOKEN);
 
-/** Digits only with country code; a bare 10-digit Indian number gets 91. null when it cannot be a phone. */
+/**
+ * Digits with country code, or null (not a number we can WhatsApp). "+" or "00" = international, kept as
+ * written ("+44 (0)7911 123456" → 447911123456). Otherwise only an Indian mobile: 10 digits starting 6-9,
+ * optionally after 0 / 91 → 91XXXXXXXXXX. A foreign number typed without "+" (e.g. "447911123456") is null:
+ * it cannot be told apart from a typo, so the owner app asks for "+ and the country code".
+ */
 export function toWhatsAppNumber(phone: unknown): string | null {
-  // leading 0 (trunk) / 00 (international) prefixes: no country code starts with 0
-  const digits = String(phone ?? '').replace(/\D/g, '').replace(/^0+/, '');
-  const full = digits.length === 10 ? `91${digits}` : digits;
-  return /^\d{11,15}$/.test(full) ? full : null;
+  const s = String(phone ?? '').replace(/\(0\)/g, '').replace(/[\s\-().]/g, '');
+  const intl = s.match(/^(?:\+|00)([1-9]\d{7,14})$/);
+  if (intl) return intl[1];
+  const india = s.match(/^(?:0|91)?([6-9]\d{9})$/);
+  return india ? `91${india[1]}` : null;
 }
 
 /** Pre-filled native wa.me link for manual dispatch fallback when Cloud API is unconfigured */
@@ -209,10 +216,48 @@ export async function sendWhatsApp(isDemo: boolean, msg: WhatsAppMessage, langua
 }
 
 /**
+ * Live stays (booked or checked in, checkout within the last 2 days or later) whose booking phone ends with
+ * this sender's last 10 digits, in at most 3 homestays. Never throws.
+ * ponytail: regex scan over the tenant docs (booking phones are stored as typed); fine for a few thousand
+ * homestays and only on inbound messages. Store a normalised phone index if replies get frequent.
+ */
+export async function staysOfPhone(waFrom: unknown): Promise<Array<{ tenantKey: string; homestayName: string; bookingId?: number; guestName: string }>> {
+  const d = String(waFrom ?? '').replace(/\D/g, '').slice(-10);
+  if (d.length !== 10) return [];
+  try {
+    const { getStayRideTenantModel } = await import('../stayride/store.js'); // lazy: store.ts imports this file
+    const re = new RegExp(`${d.split('').join('\\D*')}\\D*$`);
+    const live = { $in: ['CONFIRMED', 'CHECKED_IN'] };
+    const since = Date.now() - 2 * 86400000;
+    const rows: any[] = await getStayRideTenantModel(false).aggregate([
+      { $match: { 'data.bookings': { $elemMatch: { phone: re, status: live, checkOut: { $gt: since } } } } },
+      { $limit: 3 },
+      {
+        $project: {
+          _id: 0, tenantId: 1, homestayName: 1,
+          booking: {
+            $first: {
+              $filter: {
+                input: '$data.bookings', as: 'b',
+                cond: { $and: [{ $in: ['$$b.status', live.$in] }, { $gt: ['$$b.checkOut', since] }, { $regexMatch: { input: { $ifNull: ['$$b.phone', ''] }, regex: re } }] },
+              },
+            },
+          },
+        },
+      },
+    ]);
+    return rows.map((r) => ({ tenantKey: r.tenantId, homestayName: r.homestayName || '', bookingId: r.booking?.id, guestName: r.booking?.guestName || '' }));
+  } catch (e: any) {
+    logger.warn('[WhatsApp Reply] homestay lookup failed', { action: 'whatsapp.reply_lookup_failed', metadata: { error: e?.message } });
+    return [];
+  }
+}
+
+/**
  * Signed Meta webhook payload (production only): every delivery status and inbound message goes to Axiom;
  * failed deliveries and replies also get a compact Mongo audit entry (90-day TTL). Phones are masked.
- * ponytail: replies aren't linked to a trip (phones are stored unnormalised, so no cheap indexed lookup);
- * Axiom joins them through replyTo = the wamid of our message, which the send log carries as messageId.
+ * Replies are linked to the sender's live stay (staysOfPhone) for the admin bell and an owner push; Axiom also
+ * joins them through replyTo = the wamid of our message, which the send log carries as messageId.
  */
 export async function recordWhatsAppWebhook(body: any): Promise<void> {
   for (const entry of body?.entry || []) {
@@ -253,7 +298,16 @@ export async function recordWhatsAppWebhook(body: any): Promise<void> {
           // whitelist, never the raw message: "contacts" / "location" messages carry other people's phones and places
           metadata: { id: m.id, type: m.type, timestamp: m.timestamp, from, replyTo: m.context?.id, text, contacts: m.contacts?.length, errors: m.errors },
         });
-        await audit(`whatsapp:${from}`, 'whatsapp.reply', 'whatsapp_sender', from, { from, type: m.type, text: text.slice(0, 300), replyTo: m.context?.id || '' }, false);
+        // Which homestay(s) this guest is staying with, so the admin bell and the owner see the reply
+        const stays = await staysOfPhone(m.from);
+        const first = stays[0];
+        await audit(`whatsapp:${from}`, 'whatsapp.reply', 'whatsapp_sender', from, {
+          from, type: m.type, text: text.slice(0, 300), replyTo: m.context?.id || '',
+          ...(first ? { tenantKey: first.tenantKey, bookingId: first.bookingId, homestayName: first.homestayName, guestName: first.guestName } : {}),
+        }, false, first ? { tenantId: first.tenantKey, actorRole: 'SYSTEM' } : undefined);
+        for (const st of stays) {
+          await notify(false, { email: st.tenantKey, role: 'owner' }, { title: `WhatsApp reply from ${st.guestName || from}`, body: (text || `(${m.type})`).slice(0, 120), data: { type: 'GUEST_REPLY' } });
+        }
       }
       if (v.errors || (!v.statuses && !v.messages)) {
         logger.info(`[WhatsApp Webhook] ${change?.field || 'unknown'}`, { action: 'whatsapp.webhook', metadata: { field: change?.field, errors: v.errors, event: v.event, messageTemplateName: v.message_template_name, reason: v.reason } });

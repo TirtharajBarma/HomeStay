@@ -362,7 +362,9 @@ export class DriverService {
     if (!process.env.VERCEL && process.env.NODE_ENV !== "production") {
       console.log(`🧑✈️ [DRIVER PIN] ${driver.id} (${driver.phone}) -> ${driver.pin}`);
     }
-    return driver;
+    const driverObj = driver.toObject();
+    delete (driverObj as any).pin;
+    return driverObj;
   }
 
   static async updateDriverStatus(

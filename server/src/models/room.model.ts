@@ -33,6 +33,8 @@ export interface IRoom extends Document {
   kind: "cottage" | "loft" | "cabin";
   kindLabel: string;
   status: "Active" | "Maintenance";
+  roomType?: "private" | "dorm";
+  bedCount?: number;
   petFriendly: boolean;
   maxGuests: number;
   occupancy: string;
@@ -93,6 +95,8 @@ const RoomSchema = new Schema<IRoom>(
       enum: ["Active", "Maintenance"],
       default: "Active",
     },
+    roomType: { type: String, enum: ["private", "dorm"], default: "private" },
+    bedCount: { type: Number, default: 1 },
     petFriendly: { type: Boolean, default: false },
     maxGuests: { type: Number, required: true, default: 2 },
     occupancy: { type: String, default: "" },

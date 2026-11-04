@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
-import { logger } from "../utils/logger.js";
+import { logger, safeUrl } from "../utils/logger.js";
 
 // Errors may carry an HTTP `status` (4xx = client error, safe to show) and a machine `code`.
 export function errorHandler(err: any, req: Request, res: Response, _next: NextFunction) {
@@ -9,9 +9,10 @@ export function errorHandler(err: any, req: Request, res: Response, _next: NextF
     try {
       const stayrideUser: any = (req as any).stayrideUser;
       const user: any = (req as any).user || stayrideUser;
-      logger.error(`[UNHANDLED SERVER 500] ${req.method} ${req.originalUrl}: ${err?.message || err}`, err, {
+      const url = safeUrl(req.originalUrl); // ?t=<JWT> and token paths never reach the logs
+      logger.error(`[UNHANDLED SERVER 500] ${req.method} ${url}: ${err?.message || err}`, err, {
         method: req.method,
-        route: req.originalUrl,
+        route: url,
         statusCode: status,
         tenantId: stayrideUser?.tenantKey || user?.tenantId,
         driverId: stayrideUser?.role === "driver" ? stayrideUser?.id : user?.driverId,

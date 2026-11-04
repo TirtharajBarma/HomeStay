@@ -1,5 +1,10 @@
 {
   "version": 2,
+  "functions": {
+    "api/index.ts": {
+      "maxDuration": 60
+    }
+  },
   "crons": [
     {
       "path": "/api/v1/stayride/cron/cab-cycle",
