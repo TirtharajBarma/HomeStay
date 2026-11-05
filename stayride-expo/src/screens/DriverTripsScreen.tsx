@@ -364,6 +364,15 @@ export const DriverTripsScreen: React.FC = () => {
                           </Text>
                         </View>
                       )}
+
+                      {t.isRoundTrip && (
+                        <View style={[styles.routeRow, { marginTop: 4, paddingLeft: 4 }]}>
+                          <Ionicons name="repeat" size={16} color={Colors.brandPrimary} />
+                          <Text style={[styles.routeText, { color: Colors.brandPrimary, fontWeight: '700' }]} numberOfLines={1}>
+                            Return: Back to {t.pickup} (Round Trip)
+                          </Text>
+                        </View>
+                      )}
                     </View>
 
                     <View style={styles.metaRow}>
@@ -371,6 +380,11 @@ export const DriverTripsScreen: React.FC = () => {
                         📅 {new Date(t.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} at {t.time}
                       </Text>
                       <Text style={styles.metaText}>👥 {t.passengers} Pax • {t.vehicleType}</Text>
+                      {t.isRoundTrip && (
+                        <Text style={[styles.metaText, { color: '#047857', fontWeight: '600' }]}>
+                          🔄 Round Trip: Driver waits during tour
+                        </Text>
+                      )}
                     </View>
 
                     {/* Homestay's counter-offer: accept = trip confirmed at that fare */}
@@ -414,7 +428,7 @@ export const DriverTripsScreen: React.FC = () => {
                     ) : (
                       <View>
                         <View style={styles.chipRow}>
-                          {[1800, 2200, 2800, 3500].map((amt) => (
+                          {(t.isRoundTrip ? [2800, 3500, 4200, 5000] : [1800, 2200, 2800, 3500]).map((amt) => (
                             <TouchableOpacity
                               key={amt}
                               style={[styles.chip, Number(inputValue) === amt && styles.chipActive]}

@@ -711,16 +711,28 @@ function DriverQuoteContent() {
                     <div className="h-3 w-3 rounded-full bg-[#14422D]" />
                     <div className="h-8 w-0.5 bg-[#E5E8E5] my-0.5" />
                     <div className="h-3 w-3 rounded-full bg-red-600" />
+                    {view.isRoundTrip && (
+                      <>
+                        <div className="h-8 w-0.5 border-l border-dashed border-[#14422D] my-0.5" />
+                        <div className="h-3.5 w-3.5 rounded-full bg-[#14422D] flex items-center justify-center text-[9px] text-white font-bold">↺</div>
+                      </>
+                    )}
                   </div>
                   <div className="flex-1 space-y-3">
                     <div>
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-[#717973]">Pickup Location</span>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-[#717973]">1. Pickup Location</span>
                       <p className="font-semibold text-xs text-[#181C1B]">{view.pickup}</p>
                     </div>
                     <div>
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-[#717973]">Drop Destination</span>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-[#717973]">2. Destination / Sightseeing</span>
                       <p className="font-semibold text-xs text-[#181C1B]">{view.destination}</p>
                     </div>
+                    {view.isRoundTrip && (
+                      <div>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-[#14422D]">3. Return Journey (Round Trip)</span>
+                        <p className="font-bold text-xs text-[#14422D]">Return drop back to {view.pickup}</p>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -733,8 +745,19 @@ function DriverQuoteContent() {
                 </div>
 
                 {view.isRoundTrip && (
-                  <div className="rounded-2xl bg-[#14422D]/6 border border-[#14422D]/15 p-3 text-[#14422D] font-semibold text-xs">
-                    Round trip return scheduled: {view.returnDate ? `${new Date(Number(view.returnDate)).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short" })}${view.returnTime ? ` at ${view.returnTime}` : ""}` : ""}
+                  <div className="rounded-2xl bg-[#14422D]/8 border border-[#14422D]/20 p-4 text-[#14422D] space-y-1 shadow-2xs">
+                    <div className="flex items-center gap-1.5 font-bold text-xs">
+                      <Icon name="sync_alt" className="text-base text-[#14422D]" />
+                      <span>ROUND TRIP — RETURN TO {view.pickup.toUpperCase()}</span>
+                    </div>
+                    <p className="text-[11px] text-[#14422D]/90 leading-relaxed">
+                      {view.returnDate || view.returnTime
+                        ? `Return journey: ${view.returnDate ? new Date(Number(view.returnDate)).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short" }) : "Same Day"}${view.returnTime ? ` at ${view.returnTime}` : ""}.`
+                        : "Driver stays with passenger / waits during sightseeing & returns to pickup location."}
+                    </p>
+                    <p className="text-[11px] font-semibold text-[#14422D]">
+                      💡 Quote your TOTAL fare including both legs and waiting time.
+                    </p>
                   </div>
                 )}
               </div>
@@ -1043,7 +1066,10 @@ function DriverQuoteContent() {
                     Quick-Select Total Fare:
                   </span>
                   <div className="flex flex-wrap gap-2">
-                    {[1800, 2200, 2600, 3000, 3400, 3800].map((amount) => (
+                    {(view.isRoundTrip
+                      ? [2800, 3400, 4000, 4600, 5200, 6000]
+                      : [1800, 2200, 2600, 3000, 3400, 3800]
+                    ).map((amount) => (
                       <button
                         key={amount}
                         type="button"

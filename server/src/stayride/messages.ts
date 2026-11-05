@@ -21,7 +21,12 @@ const whenText = (doc: any) =>
   `${new Date(doc.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' })} at ${doc.time}`;
 const routeText = (doc: any) => {
   const stops = (doc.destinations || []).map((d: any) => d.address).filter(Boolean);
-  return [doc.pickupLocation?.address, ...stops].filter(Boolean).join(' → ') || 'Local trip';
+  const base = [doc.pickupLocation?.address, ...stops].filter(Boolean).join(' → ') || 'Local trip';
+  if (doc.isRoundTrip) {
+    const pickupAddr = doc.pickupLocation?.address || 'Pickup';
+    return `${base} ➔ [Return to ${pickupAddr}] (ROUND TRIP)`;
+  }
+  return base;
 };
 const vehicleText = (doc: any) => {
   const model = doc.vehicleDetails?.model || '';
@@ -60,6 +65,9 @@ export const welcomeSightseeingMessage = (guestName: string, homestayName: strin
 /** quoteLink: the driver's own page to quote without opening the app (WhatsApp-only drivers). */
 export const newRequestMessage = (doc: any, quoteLink: string): Built => {
   const budgetInfo = doc.guestBudget ? `\nGuest Target Budget: ₹${Number(doc.guestBudget).toLocaleString('en-IN')}` : '';
+  const roundTripInfo = doc.isRoundTrip
+    ? `\nTrip Type: 🔄 ROUND TRIP (Driver waits at destination & drives guest back)${doc.returnTime ? `\nReturn: ${doc.returnDate ? new Date(Number(doc.returnDate)).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' }) : 'Same Day'} at ${doc.returnTime}` : ''}`
+    : '\nTrip Type: 🚗 ONE-WAY DROP';
   const params = [doc.homestayName || 'a homestay', routeText(doc), whenText(doc), doc.vehicleType || 'Cab', quoteLink];
   return {
     event: 'NEW_REQUEST',
@@ -67,7 +75,7 @@ export const newRequestMessage = (doc: any, quoteLink: string): Built => {
     params,
     text:
       `New trip request from ${params[0]}\n` +
-      `Route: ${params[1]}\nPickup: ${params[2]}\nVehicle: ${params[3]}${budgetInfo}\n\n` +
+      `Route: ${params[1]}\nPickup: ${params[2]}\nVehicle: ${params[3]}${roundTripInfo}${budgetInfo}\n\n` +
       `Submit your total trip fare quote here:\n${params[4]}\n` +
       `(Guest pays 15% advance online, you collect remaining in cash at drop-off + wallet credit)`,
   };
