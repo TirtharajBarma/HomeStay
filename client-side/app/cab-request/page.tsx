@@ -1739,308 +1739,222 @@ function CabRequestFormContent() {
             {/* STEP 1: ROUTE & ITINERARY */}
             {currentStep === 1 && (
               <div className="space-y-6 rounded-3xl border border-[#E5E8E5] bg-white p-6 sm:p-8 shadow-[0_10px_35px_-4px_rgba(20,66,45,0.05)]">
-                <div>
-                  <h2 className="font-display text-2xl font-bold text-[#14422D]">Plan Your Mountain Route</h2>
-                  <p className="text-xs text-[#717973] mt-1">Select your pickup and destinations across Darjeeling, Sikkim, and the hills.</p>
+                {/* Header & Trip Type Selector */}
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-[#ECEFEB] pb-5">
+                  <div>
+                    <h2 className="font-display text-2xl font-bold text-[#14422D]">Where are you heading?</h2>
+                    <p className="text-xs text-[#717973] mt-0.5">Verified local drivers · Fair rates · Door-to-door hill transfers</p>
+                  </div>
+
+                  {/* Top-Level Trip Type Segmented Pill: One-Way vs Round Trip */}
+                  <div className="inline-flex items-center p-1 bg-[#ECEFEB] rounded-full self-start sm:self-auto shadow-inner">
+                    <button
+                      type="button"
+                      onClick={() => setIsRoundTrip(false)}
+                      className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                        !isRoundTrip
+                          ? "bg-white text-[#14422D] shadow-xs"
+                          : "text-[#717973] hover:text-[#181C1B]"
+                      }`}
+                    >
+                      One-Way
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsRoundTrip(true)}
+                      className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                        isRoundTrip
+                          ? "bg-[#14422D] text-white shadow-xs"
+                          : "text-[#717973] hover:text-[#181C1B]"
+                      }`}
+                    >
+                      <Icon name="sync_alt" className="text-xs" />
+                      <span>Round Trip</span>
+                    </button>
+                  </div>
                 </div>
 
-                {/* 2 Tabs: Custom Tour (Default) & Popular Mountain Routes */}
-                <div className="grid grid-cols-2 gap-1.5 p-1.5 bg-[#ECEFEB] rounded-2xl">
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab("custom")}
-                    className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      activeTab === "custom"
-                        ? "bg-white text-[#14422D] shadow-sm font-bold"
-                        : "text-[#414943] hover:text-[#181C1B]"
-                    }`}
-                  >
-                    <Icon name="edit_road" className="text-sm text-[#14422D]" />
-                    <span>Custom Itinerary</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActiveTab("popular");
-                      handleSelectPopularRoute(selectedPopularRouteId || "homestay-to-bagdogra");
-                    }}
-                    className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      activeTab === "popular"
-                        ? "bg-white text-[#14422D] shadow-sm font-bold"
-                        : "text-[#414943] hover:text-[#181C1B]"
-                    }`}
-                  >
-                    <Icon name="alt_route" className="text-sm text-[#14422D]" />
-                    <span>Popular Transfers</span>
-                  </button>
-                </div>
-
-                {/* TAB 1: CUSTOM TOUR (Default Active) */}
-                {activeTab === "custom" && (
-                  <div className="space-y-5">
-                    {/* Pickup Location Mode */}
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <label className="text-xs font-bold text-[#181C1B] flex items-center gap-1.5">
-                          <Icon name="location_on" className="text-sm text-[#14422D]" />
-                          <span>Pickup Location</span>
-                        </label>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setMapTarget({
-                              type: "pickup",
-                              title: "Move Map Pin for Pickup",
-                              initialAddress: getResolvedPickup(),
-                            })
-                          }
-                          className="inline-flex items-center gap-1 text-[11px] font-bold text-[#14422D] hover:underline transition-colors cursor-pointer"
-                          title="Pin on Map (Blinkit style)"
-                        >
-                          <Icon name="pin_drop" className="text-xs" />
-                          <span>{pickupCoords ? "Adjust Pin on Map" : "Move Pin on Map"}</span>
-                        </button>
-                      </div>
-
-                      {/* 2-Option Pickup Selection: At Homestay vs Other Location */}
-                      <div className="grid grid-cols-2 gap-3">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setCustomPickup(false);
-                            const homestayLoc = link?.pickup
-                              ? (link.homestayName && !link.pickup.toLowerCase().includes(link.homestayName.toLowerCase())
-                                  ? `${link.homestayName}, ${link.pickup}`
-                                  : link.pickup)
-                              : link?.homestayName || "Homestay gate";
-                            setPickup(homestayLoc);
-                          }}
-                          className={`flex items-center justify-center gap-2 py-3 px-3 rounded-2xl text-xs font-bold border transition-all cursor-pointer ${
-                            !customPickup
-                              ? "bg-[#14422D]/8 border-[#14422D] text-[#14422D] shadow-2xs"
-                              : "bg-[#F7FAF7] border-[#D8DBD7] text-[#414943] hover:bg-[#F1F4F1]"
-                          }`}
-                        >
-                          <Icon name="home" className="text-base text-[#14422D]" />
-                          <span>At Homestay</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setCustomPickup(true);
-                            if (!pickup || pickup === link?.pickup || pickup === link?.homestayName) {
-                              setPickup("");
-                            }
-                          }}
-                          className={`flex items-center justify-center gap-2 py-3 px-3 rounded-2xl text-xs font-bold border transition-all cursor-pointer ${
-                            customPickup
-                              ? "bg-[#14422D]/8 border-[#14422D] text-[#14422D] shadow-2xs"
-                              : "bg-[#F7FAF7] border-[#D8DBD7] text-[#414943] hover:bg-[#F1F4F1]"
-                          }`}
-                        >
-                          <Icon name="edit_location" className="text-base text-[#14422D]" />
-                          <span>Other Location</span>
-                        </button>
-                      </div>
-
-                      {!customPickup ? (
-                        <div className="space-y-2">
-                          <div className="rounded-2xl border border-[#E5E8E5] bg-[#F7FAF7] p-4 flex items-center justify-between">
-                            <div className="flex items-center gap-3 min-w-0">
-                              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#14422D]/10 text-[#14422D]">
-                                <Icon name="storefront" className="text-lg" />
-                              </span>
-                              <div className="min-w-0">
-                                <p className="text-xs font-bold text-[#181C1B] truncate">
-                                  {link?.homestayName || "Verified Partner Homestay"}
-                                </p>
-                                <p className="text-[11px] text-[#717973] truncate">
-                                  Driver navigates straight to homestay gate
-                                </p>
-                              </div>
-                            </div>
-                            <span className="shrink-0 rounded-full bg-[#14422D]/10 px-2.5 py-0.5 text-[10px] font-bold text-[#14422D] uppercase tracking-wider">
-                              Homestay
-                            </span>
-                          </div>
-
-                          {pickupCoords && (
-                            <div className="flex items-center justify-between rounded-xl bg-[#14422D]/5 px-3 py-1.5 text-[11px] text-[#14422D] border border-[#14422D]/15">
-                              <span className="flex items-center gap-1 font-medium">
-                                <Icon name="my_location" className="text-xs text-[#14422D]" />
-                                <span>GPS Pin: {pickupCoords.latitude.toFixed(5)}, {pickupCoords.longitude.toFixed(5)}</span>
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => setPickupCoords(null)}
-                                className="text-[10px] text-[#14422D] font-bold hover:underline"
-                              >
-                                Reset Pin
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="space-y-2.5 pt-1">
-                          <div className="relative">
-                            <div className="flex items-center gap-2">
-                              <div className="relative flex-1">
-                                <input
-                                  type="text"
-                                  value={pickup}
-                                  onFocus={() => setActiveSuggestIdx("pickup")}
-                                  onChange={(e) => {
-                                    setPickup(e.target.value);
-                                    setActiveSuggestIdx("pickup");
-                                  }}
-                                  placeholder="Enter pickup address, landmark, town, or station"
-                                  className="w-full rounded-2xl border border-[#D8DBD7] bg-white px-4 py-3 text-sm text-[#181C1B] placeholder:text-[#717973]/60 focus:border-[#14422D] focus:ring-4 focus:ring-[#14422D]/10 focus:outline-none transition-all shadow-2xs pr-9"
-                                />
-                                {pickup && (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setPickup("");
-                                      setPickupCoords(null);
-                                    }}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#717973] hover:text-[#181C1B] cursor-pointer"
-                                  >
-                                    <Icon name="close" className="text-xs" />
-                                  </button>
-                                )}
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setMapTarget({
-                                    type: "pickup",
-                                    title: "Move Map Pin for Pickup",
-                                    initialAddress: pickup,
-                                  })
-                                }
-                                className="inline-flex items-center gap-1.5 shrink-0 rounded-2xl border border-[#D8DBD7] bg-white px-3.5 py-3 text-xs font-bold text-[#14422D] hover:bg-[#F1F4F1] transition-colors cursor-pointer"
-                                title="Move pin on map"
-                              >
-                                <Icon name="pin_drop" className="text-base text-[#14422D]" />
-                                <span className="hidden sm:inline">Map Pin</span>
-                              </button>
-                            </div>
-
-                            {/* Autocomplete Suggestions Popover for Pickup */}
-                            {activeSuggestIdx === "pickup" && (
-                              <div className="absolute z-30 left-0 right-12 sm:right-28 mt-2 rounded-2xl border border-[#E5E8E5] bg-white p-3 shadow-xl space-y-1.5 backdrop-blur-md">
-                                <div className="flex items-center justify-between px-2 py-1 border-b border-[#ECEFEB]">
-                                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#717973]">
-                                    Suggested Pickup Hubs & Towns
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => setActiveSuggestIdx(null)}
-                                    className="text-[10px] text-[#14422D] font-bold hover:underline cursor-pointer"
-                                  >
-                                    Done
-                                  </button>
-                                </div>
-                                <div className="max-h-52 overflow-y-auto divide-y divide-[#ECEFEB]/60">
-                                  {getFilteredSuggestions(pickup).length > 0 ? (
-                                    getFilteredSuggestions(pickup).map((place) => (
-                                      <button
-                                        key={place}
-                                        type="button"
-                                        onMouseDown={(e) => e.preventDefault()}
-                                        onClick={() => {
-                                          setPickup(place);
-                                          setActiveSuggestIdx(null);
-                                        }}
-                                        className="w-full text-left px-3 py-2 text-xs font-medium text-[#181C1B] hover:bg-[#14422D]/8 hover:text-[#14422D] rounded-xl flex items-center justify-between transition-colors cursor-pointer"
-                                      >
-                                        <span className="truncate">{place}</span>
-                                        <Icon name="north_west" className="text-xs text-[#717973]" />
-                                      </button>
-                                    ))
-                                  ) : (
-                                    <div className="px-3 py-2.5 text-xs text-[#717973]">
-                                      Type an address, town, or landmark
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-
-                          {pickupCoords && (
-                            <div className="flex items-center justify-between rounded-xl bg-[#14422D]/5 px-3 py-1.5 text-[11px] text-[#14422D] border border-[#14422D]/15">
-                              <span className="flex items-center gap-1 font-medium">
-                                <Icon name="my_location" className="text-xs text-[#14422D]" />
-                                <span>GPS Pin: {pickupCoords.latitude.toFixed(5)}, {pickupCoords.longitude.toFixed(5)}</span>
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => setPickupCoords(null)}
-                                className="text-[10px] text-[#14422D] font-bold hover:underline"
-                              >
-                                Clear Pin
-                              </button>
-                            </div>
-                          )}
-
-                          <div className="flex flex-wrap gap-1.5 pt-0.5">
-                            {["Bagdogra Airport (IXB)", "NJP Railway Station", "Darjeeling Mall", "Siliguri Junction", "Jalpaiguri (DBC Road)"].map((preset) => (
-                              <button
-                                key={preset}
-                                type="button"
-                                onClick={() => setPickup(preset)}
-                                className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition-all cursor-pointer ${
-                                  pickup === preset
-                                    ? "bg-[#14422D] border-[#14422D] text-white font-bold shadow-xs"
-                                    : "bg-white border-[#D8DBD7] text-[#414943] hover:border-[#14422D] hover:text-[#14422D]"
-                                }`}
-                              >
-                                + {preset}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
+                {/* Unified Connected Route Card */}
+                <div className="rounded-2xl border border-[#D8DBD7] bg-[#F7FAF7]/60 p-4 sm:p-5 shadow-2xs">
+                  <div className="flex gap-3">
+                    {/* Visual Route Indicator Column */}
+                    <div className="flex flex-col items-center pt-3 shrink-0 select-none">
+                      <div className="h-3 w-3 rounded-full bg-[#14422D] ring-4 ring-[#14422D]/15" />
+                      <div className="w-0.5 flex-1 bg-gradient-to-b from-[#14422D] via-[#D8DBD7] to-red-500 my-1 min-h-[44px]" />
+                      <div className="h-3 w-3 rounded-full bg-red-600 ring-4 ring-red-100" />
+                      {isRoundTrip && (
+                        <>
+                          <div className="w-0.5 h-6 border-l-2 border-dashed border-[#14422D] my-1" />
+                          <div className="h-3.5 w-3.5 rounded-full bg-[#14422D] flex items-center justify-center text-[9px] text-white font-bold">↺</div>
+                        </>
                       )}
                     </div>
 
-                    {/* Drop Locations (Multiple stops + Suggestions) */}
-                    <div className="space-y-3 pt-2">
-                      <div className="flex items-center justify-between">
-                        <label className="text-xs font-bold text-[#181C1B] flex items-center gap-1.5">
-                          <Icon name="navigation" className="text-sm text-[#14422D]" />
-                          <span>Drop Locations</span>
-                        </label>
-                        <span className="text-[11px] text-[#717973]">Add 1 or more stops</span>
+                    {/* Inputs Column */}
+                    <div className="flex-1 space-y-3.5">
+                      {/* Pickup Field */}
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-[#717973]">
+                            Pickup Location
+                          </span>
+                          {pickupCoords && (
+                            <span className="text-[10px] font-mono text-[#14422D] bg-[#14422D]/10 px-2 py-0.5 rounded-md flex items-center gap-1">
+                              <Icon name="my_location" className="text-[10px]" /> Pinned ({pickupCoords.latitude.toFixed(3)}, {pickupCoords.longitude.toFixed(3)})
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="relative flex items-center">
+                          <input
+                            type="text"
+                            value={pickup}
+                            onFocus={() => setActiveSuggestIdx("pickup")}
+                            onChange={(e) => {
+                              setPickup(e.target.value);
+                              setCustomPickup(true);
+                              setActiveSuggestIdx("pickup");
+                            }}
+                            placeholder="Enter pickup address, homestay, station, or airport"
+                            className="w-full rounded-xl border border-[#D8DBD7] bg-white px-3.5 py-2.5 text-xs font-semibold text-[#181C1B] placeholder:text-[#717973]/60 focus:border-[#14422D] focus:ring-2 focus:ring-[#14422D]/10 focus:outline-none transition-all shadow-2xs pr-16"
+                          />
+                          <div className="absolute right-2 flex items-center gap-1">
+                            {pickup && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPickup("");
+                                  setPickupCoords(null);
+                                  setCustomPickup(true);
+                                }}
+                                className="text-[#717973] hover:text-[#181C1B] p-1 cursor-pointer"
+                                title="Clear"
+                              >
+                                <Icon name="close" className="text-xs" />
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setMapTarget({
+                                  type: "pickup",
+                                  title: "Pin Pickup Location on Map",
+                                  initialAddress: getResolvedPickup(),
+                                })
+                              }
+                              className="text-[#14422D] hover:bg-[#14422D]/10 p-1.5 rounded-lg transition-colors cursor-pointer"
+                              title="Pin on Map"
+                            >
+                              <Icon name="pin_drop" className="text-sm" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Pickup Suggestions Popover */}
+                        {activeSuggestIdx === "pickup" && (
+                          <div className="absolute z-30 left-12 right-6 mt-1 rounded-2xl border border-[#E5E8E5] bg-white p-3 shadow-xl space-y-1.5 backdrop-blur-md">
+                            <div className="flex items-center justify-between px-2 py-1 border-b border-[#ECEFEB]">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-[#717973]">
+                                Suggested Pickup Hubs & Towns
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setActiveSuggestIdx(null)}
+                                className="text-[10px] text-[#14422D] font-bold hover:underline cursor-pointer"
+                              >
+                                Done
+                              </button>
+                            </div>
+                            <div className="max-h-52 overflow-y-auto divide-y divide-[#ECEFEB]/60">
+                              {getFilteredSuggestions(pickup).length > 0 ? (
+                                getFilteredSuggestions(pickup).map((place) => (
+                                  <button
+                                    key={place}
+                                    type="button"
+                                    onMouseDown={(e) => e.preventDefault()}
+                                    onClick={() => {
+                                      setPickup(place);
+                                      setCustomPickup(true);
+                                      setActiveSuggestIdx(null);
+                                    }}
+                                    className="w-full text-left px-3 py-2 text-xs font-medium text-[#181C1B] hover:bg-[#14422D]/8 hover:text-[#14422D] rounded-xl flex items-center justify-between transition-colors cursor-pointer"
+                                  >
+                                    <span className="truncate">{place}</span>
+                                    <Icon name="north_west" className="text-xs text-[#717973]" />
+                                  </button>
+                                ))
+                              ) : (
+                                <div className="px-3 py-2.5 text-xs text-[#717973]">
+                                  Type an address, town, or landmark
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
 
-                      <div className="space-y-3">
+                      {/* Swap Pickup & Destination Button */}
+                      <div className="flex justify-end pr-2 -my-2 relative z-10">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const curPickup = pickup || getResolvedPickup();
+                            const curDrop = customDestinations[0] || "";
+                            setPickup(curDrop);
+                            const copy = [...customDestinations];
+                            copy[0] = curPickup;
+                            setCustomDestinations(copy);
+                            setCustomPickup(true);
+                          }}
+                          className="flex h-7 w-7 items-center justify-center rounded-full bg-white border border-[#D8DBD7] text-[#14422D] shadow-2xs hover:bg-[#F1F4F1] hover:scale-105 active:scale-95 transition-all cursor-pointer"
+                          title="Swap Pickup and Destination"
+                        >
+                          <Icon name="swap_vert" className="text-sm" />
+                        </button>
+                      </div>
+
+                      {/* Destination / Stops Fields */}
+                      <div className="space-y-2.5">
                         {customDestinations.map((dest, idx) => {
                           const suggestions = getFilteredSuggestions(dest);
                           const isShowingSuggestions = activeSuggestIdx === idx;
 
                           return (
-                            <div key={idx} className="relative">
-                              <div className="flex items-center gap-2">
-                                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#14422D]/8 text-xs font-bold text-[#14422D]">
-                                  {idx + 1}
+                            <div key={idx} className="space-y-1">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-[#717973]">
+                                  {customDestinations.length > 1 ? `Stop ${idx + 1} (Destination)` : "Where to? (Destination)"}
                                 </span>
-                                <div className="relative flex-1">
-                                  <input
-                                    type="text"
-                                    value={dest}
-                                    onFocus={() => setActiveSuggestIdx(idx)}
-                                    onChange={(e) => {
-                                      const copy = [...customDestinations];
-                                      copy[idx] = e.target.value;
-                                      setCustomDestinations(copy);
-                                      setActiveSuggestIdx(idx);
+                                {idx === 0 && customDestinations.length < 5 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setCustomDestinations([...customDestinations, ""]);
+                                      setActiveSuggestIdx(customDestinations.length);
                                     }}
-                                    placeholder={idx === 0 ? "Enter destination (e.g. Tiger Hill, Batasia Loop)" : `Destination ${idx + 1}`}
-                                    className="w-full rounded-2xl border border-[#D8DBD7] bg-white px-4 py-3 text-sm text-[#181C1B] placeholder:text-[#717973]/60 focus:border-[#14422D] focus:ring-4 focus:ring-[#14422D]/10 focus:outline-none transition-all shadow-2xs pr-9"
-                                  />
+                                    className="text-[11px] font-bold text-[#14422D] hover:underline cursor-pointer"
+                                  >
+                                    + Add Stop
+                                  </button>
+                                )}
+                              </div>
+
+                              <div className="relative flex items-center">
+                                <input
+                                  type="text"
+                                  value={dest}
+                                  onFocus={() => setActiveSuggestIdx(idx)}
+                                  onChange={(e) => {
+                                    const copy = [...customDestinations];
+                                    copy[idx] = e.target.value;
+                                    setCustomDestinations(copy);
+                                    setActiveSuggestIdx(idx);
+                                  }}
+                                  placeholder={idx === 0 ? "Enter destination (e.g. Bagdogra Airport, Tiger Hill)" : `Destination stop ${idx + 1}`}
+                                  className="w-full rounded-xl border border-[#D8DBD7] bg-white px-3.5 py-2.5 text-xs font-semibold text-[#181C1B] placeholder:text-[#717973]/60 focus:border-[#14422D] focus:ring-2 focus:ring-[#14422D]/10 focus:outline-none transition-all shadow-2xs pr-16"
+                                />
+
+                                <div className="absolute right-2 flex items-center gap-1">
                                   {dest && (
                                     <button
                                       type="button"
@@ -2049,242 +1963,161 @@ function CabRequestFormContent() {
                                         copy[idx] = "";
                                         setCustomDestinations(copy);
                                       }}
-                                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#717973] hover:text-[#181C1B] cursor-pointer"
+                                      className="text-[#717973] hover:text-[#181C1B] p-1 cursor-pointer"
+                                      title="Clear"
                                     >
                                       <Icon name="close" className="text-xs" />
                                     </button>
                                   )}
-                                </div>
-
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setMapTarget({
-                                      type: "drop",
-                                      index: idx,
-                                      title: `Set Destination ${idx + 1} Pin`,
-                                      initialAddress: dest,
-                                    })
-                                  }
-                                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[#D8DBD7] text-[#414943] hover:bg-[#14422D]/8 hover:text-[#14422D] hover:border-[#14422D] transition-colors cursor-pointer"
-                                  title="Pick drop location on map"
-                                >
-                                  <Icon name="pin_drop" className="text-base" />
-                                </button>
-
-                                {customDestinations.length > 1 && (
                                   <button
                                     type="button"
-                                    onClick={() => {
-                                      const copy = customDestinations.filter((_, i) => i !== idx);
-                                      setCustomDestinations(copy.length > 0 ? copy : [""]);
-                                      setActiveSuggestIdx(null);
-                                    }}
-                                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-red-200 text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
-                                    title="Remove this destination"
+                                    onClick={() =>
+                                      setMapTarget({
+                                        type: "drop",
+                                        index: idx,
+                                        title: `Pin Destination ${idx + 1} on Map`,
+                                        initialAddress: dest,
+                                      })
+                                    }
+                                    className="text-[#14422D] hover:bg-[#14422D]/10 p-1.5 rounded-lg transition-colors cursor-pointer"
+                                    title="Pin on Map"
                                   >
-                                    <Icon name="delete" className="text-base" />
+                                    <Icon name="pin_drop" className="text-sm" />
                                   </button>
-                                )}
-                              </div>
-
-                              {/* Interactive Autocomplete / Tourist Spots Popover */}
-                              {isShowingSuggestions && (
-                                <div className="absolute z-20 left-11 right-0 mt-2 rounded-2xl border border-[#E5E8E5] bg-white p-3 shadow-xl space-y-1.5 backdrop-blur-md">
-                                  <div className="flex items-center justify-between px-2 py-1 border-b border-[#ECEFEB]">
-                                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#717973]">
-                                      Suggested Hill Landmarks & Attractions
-                                    </span>
+                                  {customDestinations.length > 1 && (
                                     <button
                                       type="button"
-                                      onClick={() => setActiveSuggestIdx(null)}
-                                      className="text-[10px] text-[#14422D] font-bold hover:underline cursor-pointer"
+                                      onClick={() => {
+                                        const copy = customDestinations.filter((_, i) => i !== idx);
+                                        setCustomDestinations(copy.length > 0 ? copy : [""]);
+                                        setActiveSuggestIdx(null);
+                                      }}
+                                      className="text-red-500 hover:text-red-700 p-1 cursor-pointer"
+                                      title="Remove stop"
                                     >
-                                      Done
+                                      <Icon name="delete" className="text-sm" />
                                     </button>
-                                  </div>
-                                  <div className="max-h-52 overflow-y-auto divide-y divide-[#ECEFEB]/60">
-                                    {suggestions.length > 0 ? (
-                                      suggestions.map((place) => (
-                                        <button
-                                          key={place}
-                                          type="button"
-                                          onMouseDown={(e) => e.preventDefault()}
-                                          onClick={() => handleSelectSuggestion(place, idx)}
-                                          className="w-full text-left px-3 py-2 text-xs font-medium text-[#181C1B] hover:bg-[#14422D]/8 hover:text-[#14422D] rounded-xl flex items-center justify-between transition-colors cursor-pointer"
-                                        >
-                                          <span className="truncate">{place}</span>
-                                          <Icon name="north_west" className="text-xs text-[#717973]" />
-                                        </button>
-                                      ))
-                                    ) : (
-                                      <div className="px-3 py-2.5 text-xs text-[#717973]">
-                                        Type a specific landmark or attraction
-                                      </div>
-                                    )}
-                                  </div>
+                                  )}
                                 </div>
-                              )}
+
+                                {/* Autocomplete Dropdown Popover */}
+                                {isShowingSuggestions && (
+                                  <div className="absolute z-20 left-0 right-0 top-full mt-1 rounded-2xl border border-[#E5E8E5] bg-white p-3 shadow-xl space-y-1.5 backdrop-blur-md">
+                                    <div className="flex items-center justify-between px-2 py-1 border-b border-[#ECEFEB]">
+                                      <span className="text-[10px] font-bold uppercase tracking-wider text-[#717973]">
+                                        Suggested Hill Landmarks & Attractions
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => setActiveSuggestIdx(null)}
+                                        className="text-[10px] text-[#14422D] font-bold hover:underline cursor-pointer"
+                                      >
+                                        Done
+                                      </button>
+                                    </div>
+                                    <div className="max-h-52 overflow-y-auto divide-y divide-[#ECEFEB]/60">
+                                      {suggestions.length > 0 ? (
+                                        suggestions.map((place) => (
+                                          <button
+                                            key={place}
+                                            type="button"
+                                            onMouseDown={(e) => e.preventDefault()}
+                                            onClick={() => handleSelectSuggestion(place, idx)}
+                                            className="w-full text-left px-3 py-2 text-xs font-medium text-[#181C1B] hover:bg-[#14422D]/8 hover:text-[#14422D] rounded-xl flex items-center justify-between transition-colors cursor-pointer"
+                                          >
+                                            <span className="truncate">{place}</span>
+                                            <Icon name="north_west" className="text-xs text-[#717973]" />
+                                          </button>
+                                        ))
+                                      ) : (
+                                        <div className="px-3 py-2.5 text-xs text-[#717973]">
+                                          Type a specific landmark, station, or airport
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           );
                         })}
                       </div>
 
-                      {/* Add Destination Button (Up to 6 stops) */}
-                      {customDestinations.length < 6 && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setCustomDestinations([...customDestinations, ""]);
-                            setActiveSuggestIdx(customDestinations.length);
-                          }}
-                          className="inline-flex items-center gap-1.5 rounded-2xl border border-dashed border-[#14422D]/40 bg-[#14422D]/5 px-4 py-2.5 text-xs font-bold text-[#14422D] hover:bg-[#14422D]/10 transition-colors cursor-pointer"
-                        >
-                          <Icon name="add" className="text-sm font-bold" />
-                          <span>Add Destination Stop</span>
-                        </button>
+                      {/* Return Leg Notice if Round Trip */}
+                      {isRoundTrip && (
+                        <div className="pt-2 border-t border-[#ECEFEB] flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-1.5 text-[#14422D] font-bold text-xs">
+                            <Icon name="sync_alt" className="text-sm text-[#14422D]" />
+                            <span>Return Leg: Back to {pickup || getResolvedPickup()}</span>
+                          </div>
+                          <span className="text-[10px] text-[#717973] bg-white border border-[#D8DBD7] px-2 py-0.5 rounded-md font-medium">
+                            Driver Waits
+                          </span>
+                        </div>
                       )}
                     </div>
+                  </div>
+                </div>
 
-                    {/* Round Trip Toggle (Requirement 5) */}
-                    <div className="rounded-2xl border border-[#E5E8E5] bg-[#F7FAF7] p-4 sm:p-5 flex items-center justify-between">
-                      <div className="space-y-0.5 pr-2">
-                        <span className="text-xs font-bold text-[#181C1B] flex items-center gap-1.5">
-                          <Icon name="sync_alt" className="text-sm text-[#14422D]" />
-                          <span>
-                            {!customPickup && link?.homestayName
-                              ? `Return to ${link.homestayName}`
-                              : "Round Trip (Return to Pickup Location)"}
-                          </span>
-                        </span>
-                        <p className="text-[11px] text-[#717973]">
-                          {isRoundTrip
-                            ? "Round trip: Driver waits at your destination and brings you back."
-                            : "One-way trip: Driver drops you off at your final destination."}
-                        </p>
-                      </div>
+                {/* Popular Transfer Quick Chips */}
+                <div className="space-y-2 pt-1">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-[#717973] block">
+                    Popular Destinations & Hill Excursions:
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { name: "Bagdogra Airport (IXB)", icon: "flight" },
+                      { name: "NJP Railway Station", icon: "train" },
+                      { name: "Tiger Hill Sunrise", icon: "wb_sunny" },
+                      { name: "Darjeeling Mall Road", icon: "store" },
+                      { name: "Mirik Lake", icon: "park" },
+                      { name: "Lamahatta Eco Park", icon: "forest" },
+                      { name: "Siliguri Junction", icon: "directions_car" },
+                    ].map((spot) => (
                       <button
+                        key={spot.name}
                         type="button"
-                        role="switch"
-                        aria-checked={isRoundTrip}
-                        onClick={() => setIsRoundTrip(!isRoundTrip)}
-                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                          isRoundTrip ? "bg-[#14422D]" : "bg-[#D8DBD7]"
+                        onClick={() => {
+                          const copy = [...customDestinations];
+                          copy[0] = spot.name;
+                          setCustomDestinations(copy);
+                          setActiveSuggestIdx(null);
+                        }}
+                        className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-all cursor-pointer shadow-2xs ${
+                          customDestinations[0] === spot.name
+                            ? "bg-[#14422D] border-[#14422D] text-white shadow-xs font-bold"
+                            : "bg-white border-[#D8DBD7] text-[#181C1B] hover:border-[#14422D] hover:bg-[#14422D]/5"
                         }`}
                       >
-                        <span
-                          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
-                            isRoundTrip ? "translate-x-5" : "translate-x-0"
-                          }`}
-                        />
+                        <Icon name={spot.icon} className="text-xs" />
+                        <span>{spot.name}</span>
                       </button>
-                    </div>
+                    ))}
                   </div>
-                )}
+                </div>
 
-                {/* TAB 2: POPULAR MOUNTAIN ROUTES (4 Transfer Options Only, Zero Prices) */}
-                {activeTab === "popular" && (
-                  <div className="space-y-4">
-                    <div>
-                      <h3 className="text-xs font-bold text-[#181C1B]">Select Transfer Route</h3>
-                      <p className="text-[11px] text-[#717973]">Direct transfers between your homestay and major transit hubs.</p>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {POPULAR_TRANSFER_ROUTES.map((route) => {
-                        const isSelected = selectedPopularRouteId === route.id;
-                        return (
-                          <button
-                            key={route.id}
-                            type="button"
-                            onClick={() => handleSelectPopularRoute(route.id)}
-                            className={`p-4 rounded-2xl border text-left transition-all cursor-pointer ${
-                              isSelected
-                                ? "border-[#14422D] bg-[#14422D]/8 shadow-sm"
-                                : "border-[#E5E8E5] bg-white hover:border-[#14422D]/40"
-                            }`}
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="flex items-center gap-3">
-                                <span className={`flex h-10 w-10 items-center justify-center rounded-xl text-base ${
-                                  isSelected ? "bg-[#14422D] text-white" : "bg-[#F7FAF7] text-[#14422D]"
-                                }`}>
-                                  <Icon name={route.direction === "outbound" ? "flight_takeoff" : "flight_land"} className="text-lg" />
-                                </span>
-                                <div>
-                                  <span className="text-xs font-bold tracking-tight text-[#181C1B] block">
-                                    {route.name}
-                                  </span>
-                                  <span className="text-[11px] text-[#717973]">
-                                    {route.direction === "outbound" ? "Homestay Drop to Hub" : "Hub Pickup to Homestay"}
-                                  </span>
-                                </div>
-                              </div>
-                              {isSelected && (
-                                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#14422D] text-white">
-                                  <Icon name="check" className="text-xs" />
-                                </span>
-                              )}
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    {/* Round Trip Toggle for Transfer */}
-                    <div className="rounded-2xl border border-[#E5E8E5] bg-[#F7FAF7] p-4 sm:p-5 flex items-center justify-between">
-                      <div className="space-y-0.5 pr-2">
-                        <span className="text-xs font-bold text-[#181C1B] flex items-center gap-1.5">
-                          <Icon name="sync_alt" className="text-sm text-[#14422D]" />
-                          <span>Round Trip Transfer</span>
-                        </span>
-                        <p className="text-[11px] text-[#717973]">
-                          {isRoundTrip
-                            ? "Round trip: Includes return transfer."
-                            : "One-way transfer."}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={isRoundTrip}
-                        onClick={() => setIsRoundTrip(!isRoundTrip)}
-                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                          isRoundTrip ? "bg-[#14422D]" : "bg-[#D8DBD7]"
-                        }`}
-                      >
-                        <span
-                          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
-                            isRoundTrip ? "translate-x-5" : "translate-x-0"
-                          }`}
-                        />
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Continue to Step 2 Button */}
+                {/* Next Step CTA Button */}
                 <div className="pt-2">
                   <button
                     type="button"
                     onClick={() => {
                       const pickupLoc = getResolvedPickup();
-                      const drops = getResolvedDestinations();
                       if (!pickupLoc) {
                         setErrorMessage("Please choose or specify a pickup location.");
                         return;
                       }
-                      if (drops.length === 0) {
-                        setErrorMessage("Please specify at least one drop location.");
+                      const drops = getResolvedDestinations();
+                      if (!drops || drops.length === 0 || !drops[0]?.trim()) {
+                        setErrorMessage("Please select or enter at least one destination.");
                         return;
                       }
                       setErrorMessage("");
                       setCurrentStep(2);
                     }}
-                    className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-[#14422D] py-4 text-sm font-bold text-white shadow-[0_8px_25px_-3px_rgba(20,66,45,0.25)] hover:bg-[#1C593E] active:scale-[0.99] transition-all cursor-pointer"
+                    className="w-full flex items-center justify-center gap-2 rounded-2xl bg-[#14422D] py-4 text-sm font-bold text-white shadow-[0_8px_20px_-4px_rgba(20,66,45,0.25)] hover:bg-[#0B2519] active:scale-[0.99] cursor-pointer transition-all"
                   >
                     <span>Continue to Schedule & Travelers</span>
-                    <Icon name="arrow_forward" className="text-sm" />
+                    <Icon name="arrow_forward" className="text-base" />
                   </button>
                 </div>
               </div>
