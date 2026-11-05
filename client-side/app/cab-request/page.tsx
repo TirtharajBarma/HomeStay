@@ -1792,19 +1792,13 @@ function CabRequestFormContent() {
                 </div>
 
                 {/* Unified Connected Route Card */}
-                <div className="rounded-2xl border border-[#D8DBD7] bg-[#F7FAF7]/60 p-4 sm:p-5 shadow-2xs">
+                <div className="rounded-2xl border border-[#D8DBD7] bg-[#F7FAF7]/60 p-4 sm:p-5 shadow-2xs space-y-3.5">
                   <div className="flex gap-3">
                     {/* Visual Route Indicator Column */}
                     <div className="flex flex-col items-center pt-3 shrink-0 select-none">
                       <div className="h-3 w-3 rounded-full bg-[#14422D] ring-4 ring-[#14422D]/15" />
                       <div className="w-0.5 flex-1 bg-gradient-to-b from-[#14422D] via-[#D8DBD7] to-red-500 my-1 min-h-[44px]" />
                       <div className="h-3 w-3 rounded-full bg-red-600 ring-4 ring-red-100" />
-                      {isRoundTrip && (
-                        <>
-                          <div className="w-0.5 h-6 border-l-2 border-dashed border-[#14422D] my-1" />
-                          <div className="h-3.5 w-3.5 rounded-full bg-[#14422D] flex items-center justify-center text-[9px] text-white font-bold">↺</div>
-                        </>
-                      )}
                     </div>
 
                     {/* Inputs Column */}
@@ -1812,8 +1806,9 @@ function CabRequestFormContent() {
                       {/* Pickup Field */}
                       <div className="space-y-1">
                         <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-[#717973]">
-                            Pickup Location
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-[#717973] flex items-center gap-1.5">
+                            <span className="h-2 w-2 rounded-full bg-[#14422D]" />
+                            <span>Pickup Location</span>
                           </span>
                           {pickupCoords && (
                             <span className="text-[10px] font-mono text-[#14422D] bg-[#14422D]/10 px-2 py-0.5 rounded-md flex items-center gap-1">
@@ -1912,25 +1907,27 @@ function CabRequestFormContent() {
                         </div>
                       </div>
 
-                      {/* Swap Pickup & Destination Button */}
-                      <div className="flex justify-end pr-2 -my-2 relative z-10">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const curPickup = pickup || getResolvedPickup();
-                            const curDrop = customDestinations[0] || "";
-                            setPickup(curDrop);
-                            const copy = [...customDestinations];
-                            copy[0] = curPickup;
-                            setCustomDestinations(copy);
-                            setCustomPickup(true);
-                          }}
-                          className="flex h-7 w-7 items-center justify-center rounded-full bg-white border border-[#D8DBD7] text-[#14422D] shadow-2xs hover:bg-[#F1F4F1] hover:scale-105 active:scale-95 transition-all cursor-pointer"
-                          title="Swap Pickup and Destination"
-                        >
-                          <Icon name="swap_vert" className="text-sm" />
-                        </button>
-                      </div>
+                      {/* Swap Pickup & Destination Button (Only for 1-to-1 route) */}
+                      {customDestinations.length === 1 && (
+                        <div className="flex justify-end pr-2 -my-2 relative z-10">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const curPickup = pickup || getResolvedPickup();
+                              const curDrop = customDestinations[0] || "";
+                              setPickup(curDrop);
+                              const copy = [...customDestinations];
+                              copy[0] = curPickup;
+                              setCustomDestinations(copy);
+                              setCustomPickup(true);
+                            }}
+                            className="flex h-7 w-7 items-center justify-center rounded-full bg-white border border-[#D8DBD7] text-[#14422D] shadow-2xs hover:bg-[#F1F4F1] hover:scale-105 active:scale-95 transition-all cursor-pointer"
+                            title="Swap Pickup and Destination"
+                          >
+                            <Icon name="swap_vert" className="text-sm" />
+                          </button>
+                        </div>
+                      )}
 
                       {/* Destination / Multi-Stop Route */}
                       <div className="space-y-3">
@@ -1943,7 +1940,7 @@ function CabRequestFormContent() {
                             <div key={idx} className="space-y-1.5">
                               <div className="flex items-center justify-between">
                                 <span className="text-[10px] font-bold uppercase tracking-wider text-[#717973] flex items-center gap-1.5">
-                                  <span className={`h-2 w-2 rounded-full ${isFinal && customDestinations.length > 1 ? "bg-red-600" : customDestinations.length > 1 ? "bg-amber-500" : "bg-red-600"}`} />
+                                  <span className={`h-2 w-2 rounded-full ${customDestinations.length === 1 ? "bg-red-600" : isFinal ? "bg-red-600" : "bg-amber-500"}`} />
                                   <span>
                                     {customDestinations.length === 1
                                       ? "Where to? (Destination)"
@@ -1952,22 +1949,6 @@ function CabRequestFormContent() {
                                       : `Stop ${idx + 1}`}
                                   </span>
                                 </span>
-
-                                {customDestinations.length > 1 && (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const copy = customDestinations.filter((_, i) => i !== idx);
-                                      setCustomDestinations(copy.length > 0 ? copy : [""]);
-                                      setActiveSuggestIdx(null);
-                                    }}
-                                    className="text-[11px] font-semibold text-[#717973] hover:text-red-700 flex items-center gap-1 cursor-pointer transition-colors"
-                                    title="Remove this stop"
-                                  >
-                                    <Icon name="close" className="text-xs" />
-                                    <span>Remove</span>
-                                  </button>
-                                )}
                               </div>
 
                               <div className="relative flex items-center">
@@ -1982,7 +1963,9 @@ function CabRequestFormContent() {
                                     setActiveSuggestIdx(idx);
                                   }}
                                   placeholder={idx === 0 ? "Enter destination (e.g. Bagdogra Airport, Tiger Hill)" : `Destination stop ${idx + 1}`}
-                                  className="w-full rounded-2xl border border-[#D8DBD7] bg-white pl-4 pr-24 py-2.5 text-xs font-semibold text-[#181C1B] placeholder:text-[#717973]/60 focus:border-[#14422D] focus:ring-2 focus:ring-[#14422D]/10 focus:outline-none transition-all shadow-2xs"
+                                  className={`w-full rounded-2xl border border-[#D8DBD7] bg-white pl-4 py-2.5 text-xs font-semibold text-[#181C1B] placeholder:text-[#717973]/60 focus:border-[#14422D] focus:ring-2 focus:ring-[#14422D]/10 focus:outline-none transition-all shadow-2xs ${
+                                    customDestinations.length > 1 ? "pr-32" : "pr-24"
+                                  }`}
                                 />
 
                                 <div className="absolute right-2.5 flex items-center gap-1.5">
@@ -2015,6 +1998,21 @@ function CabRequestFormContent() {
                                   >
                                     <Icon name="pin_drop" className="text-sm" />
                                   </button>
+
+                                  {customDestinations.length > 1 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const copy = customDestinations.filter((_, i) => i !== idx);
+                                        setCustomDestinations(copy.length > 0 ? copy : [""]);
+                                        setActiveSuggestIdx(null);
+                                      }}
+                                      className="h-7 w-7 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 flex items-center justify-center transition-colors cursor-pointer shrink-0"
+                                      title="Remove this stop"
+                                    >
+                                      <Icon name="delete_outline" className="text-sm" />
+                                    </button>
+                                  )}
                                 </div>
 
                                 {/* Autocomplete Dropdown Popover */}
@@ -2058,39 +2056,41 @@ function CabRequestFormContent() {
                             </div>
                           );
                         })}
-
-                        {/* Add Stop Button (Uber-style, cleanly below destination fields) */}
-                        {customDestinations.length < 5 && (
-                          <div className="pt-1 flex items-center justify-between">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setCustomDestinations([...customDestinations, ""]);
-                                setActiveSuggestIdx(customDestinations.length);
-                              }}
-                              className="inline-flex items-center gap-1.5 text-xs font-bold text-[#14422D] bg-[#14422D]/8 hover:bg-[#14422D]/12 border border-[#14422D]/15 px-3 py-1.5 rounded-full transition-all cursor-pointer"
-                            >
-                              <Icon name="add" className="text-sm font-bold" />
-                              <span>+ Add Stop along Route</span>
-                            </button>
-                            <span className="text-[10px] text-[#717973] font-medium">Up to 5 stops</span>
-                          </div>
-                        )}
                       </div>
-
-                      {/* Return Leg Notice if Round Trip */}
-                      {isRoundTrip && (
-                        <div className="pt-2 border-t border-[#ECEFEB] flex items-center justify-between text-xs">
-                          <div className="flex items-center gap-1.5 text-[#14422D] font-bold text-xs">
-                            <Icon name="sync_alt" className="text-sm text-[#14422D]" />
-                            <span>Return Leg: Back to {pickup || getResolvedPickup()}</span>
-                          </div>
-                          <span className="text-[10px] text-[#717973] bg-white border border-[#D8DBD7] px-2 py-0.5 rounded-md font-medium">
-                            Driver Waits
-                          </span>
-                        </div>
-                      )}
                     </div>
+                  </div>
+
+                  {/* Route Card Footer: Add Stop & Round Trip Return Notice */}
+                  <div className="pt-2.5 border-t border-[#D8DBD7]/60 space-y-2">
+                    {customDestinations.length < 5 && (
+                      <div className="flex items-center justify-between">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCustomDestinations([...customDestinations, ""]);
+                            setActiveSuggestIdx(customDestinations.length);
+                          }}
+                          className="inline-flex items-center gap-1.5 text-xs font-bold text-[#14422D] bg-[#14422D]/8 hover:bg-[#14422D]/12 border border-[#14422D]/15 px-3.5 py-1.5 rounded-full transition-all cursor-pointer"
+                        >
+                          <Icon name="add" className="text-sm font-bold" />
+                          <span>Add Stop along Route</span>
+                        </button>
+                        <span className="text-[10px] text-[#717973] font-medium">Up to 5 stops</span>
+                      </div>
+                    )}
+
+                    {/* Return Leg Notice if Round Trip */}
+                    {isRoundTrip && (
+                      <div className="pt-1 flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-1.5 text-[#14422D] font-bold text-xs">
+                          <Icon name="sync_alt" className="text-sm text-[#14422D]" />
+                          <span>Return Leg: Back to {pickup || getResolvedPickup()}</span>
+                        </div>
+                        <span className="text-[10px] text-[#717973] bg-white border border-[#D8DBD7] px-2 py-0.5 rounded-md font-medium">
+                          Driver Waits
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
