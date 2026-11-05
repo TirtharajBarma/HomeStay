@@ -457,4 +457,15 @@ assert.ok(!isCompleteIcs('BEGIN:VCALENDAR\r\nBEGIN:VEVENT')); // cut off: never 
   assert.match(syncSummary('9', [{ ok: true, added: 2 }, { ok: false, added: 5 }, { ok: true, cancelled: 1, newConflicts: 1 }])!.body, /^2 new bookings.*1 cancelled.*1 possible double booking/);
 }
 
+// User without initial GPS location must NOT have locationPoint populated (prevents MongoDB 2dsphere geo key extraction error)
+import { User } from '../src/models/user.model.js';
+const testDriver = new User({
+  name: 'Test Driver',
+  email: 'test_driver@example.com',
+  password: 'password123',
+  role: 'driver',
+  phone: '9876543210'
+});
+assert.equal(testDriver.locationPoint, undefined, 'locationPoint must be undefined when no coordinates');
+
 console.log('fix checks passed');

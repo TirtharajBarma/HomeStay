@@ -2,7 +2,7 @@
   "expo": {
     "name": "Partner — Host & Driver",
     "description": "Partner Console for Himalayan Homestay Hosts and Cab Drivers across Darjeeling, Kurseong, Kalimpong and Sikkim.",
-    "slug": "partner-app",
+    "slug": "stayride",
     "scheme": "partner",
     "version": "1.0.3",
     "orientation": "portrait",

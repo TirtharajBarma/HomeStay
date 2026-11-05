@@ -53,8 +53,14 @@ const UserSchema = new Schema<IUser>(
     whatsappAlerts: { type: Boolean, default: true },
     location: { type: { lat: Number, lng: Number, updatedAt: Date, _id: false }, default: null },
     locationPoint: {
-      type: { type: String, enum: ["Point"], default: "Point" },
-      coordinates: { type: [Number], default: undefined },
+      type: new Schema(
+        {
+          type: { type: String, enum: ["Point"], default: "Point" },
+          coordinates: { type: [Number], required: true },
+        },
+        { _id: false }
+      ),
+      default: undefined,
     },
     vehicle: {
       type: { type: String, default: "" },
@@ -82,7 +88,7 @@ const UserSchema = new Schema<IUser>(
   { timestamps: true }
 );
 
-UserSchema.index({ locationPoint: "2dsphere" });
+UserSchema.index({ locationPoint: "2dsphere" }, { sparse: true });
 UserSchema.index({ role: 1, accountStatus: 1, createdAt: -1 });
 UserSchema.index({ role: 1, phone: 1 });
 
@@ -97,6 +103,8 @@ UserSchema.pre("save", async function () {
       type: "Point",
       coordinates: [this.location.lng, this.location.lat],
     };
+  } else if (!(this as any).locationPoint?.coordinates || (this as any).locationPoint.coordinates.length < 2) {
+    (this as any).locationPoint = undefined;
   }
   if (!this.isModified("password")) return;
   const salt = await bcrypt.genSalt(10);
