@@ -20,7 +20,7 @@ const BASE_TOWNS = [
 ];
 
 const VEHICLE_TIERS = [
-  { value: "SUV", label: "SUV / Mountain MUV", seats: 6, desc: "Bolero, Scorpio, Xylo", icon: "directions_car" },
+  { value: "SUV", label: "Mountain SUV", seats: 6, desc: "Bolero, Scorpio, Xylo", icon: "directions_car" },
   { value: "7-seater", label: "7-Seater Premium", seats: 7, desc: "Innova, Crysta, Carens", icon: "airport_shuttle" },
   { value: "Sedan", label: "Sedan / Hatchback", seats: 4, desc: "Dzire, Etios, WagonR", icon: "local_taxi" },
   { value: "9-seater", label: "9-Seater Maxi", seats: 9, desc: "Sumo, Trax, Cruiser", icon: "commute" },
@@ -237,7 +237,7 @@ export default function JoinDriverPage() {
           </div>
         ) : (
           /* Split 2-Column Responsive Layout */
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 lg:items-center">
             {/* LEFT COLUMN: Value Proposition, WhatsApp Alert Mockup & Honest Pillars (7 Cols) */}
             <div className="lg:col-span-7 space-y-6">
               {/* Headline */}
@@ -245,8 +245,9 @@ export default function JoinDriverPage() {
                 <span className="text-[11px] font-bold uppercase tracking-wider text-[#14422D] bg-[#14422D]/8 px-3 py-1 rounded-full border border-[#14422D]/15 inline-block">
                   Verified Mountain Cab Network
                 </span>
-                <h1 className="font-display text-3xl sm:text-4xl font-bold tracking-tight text-[#14422D] leading-[1.15]">
-                  Direct Homestay Trips. Your Fare. 100% Cash In-Hand.
+                <h1 className="font-display text-3xl sm:text-4xl lg:text-[40px] font-bold tracking-tight text-[#14422D] leading-[1.2]">
+                  <span>Direct Homestay Trips. Your Fare.</span>
+                  <span className="block mt-1 text-[#14422D]">100% Cash In-Hand.</span>
                 </h1>
                 <p className="text-sm text-[#717973] leading-relaxed max-w-xl">
                   Connect directly with verified tourists staying at partner homestays in Darjeeling, Kalimpong, Kurseong, Siliguri, and Sikkim. Quote your own rate, get accepted, and collect cash directly from the guest.
@@ -543,7 +544,7 @@ export default function JoinDriverPage() {
                             <label className="text-xs font-bold text-[#181C1B] block mb-1.5">
                               Vehicle Class *
                             </label>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                               {VEHICLE_TIERS.map((tier) => {
                                 const selected = vehicleType === tier.value;
                                 return (
@@ -551,19 +552,19 @@ export default function JoinDriverPage() {
                                     key={tier.value}
                                     type="button"
                                     onClick={() => setVehicleType(tier.value)}
-                                    className={`text-left p-3 rounded-2xl border transition-all cursor-pointer ${
+                                    className={`text-left p-3.5 rounded-2xl border transition-all cursor-pointer relative ${
                                       selected
-                                        ? "border-[#14422D] bg-[#14422D]/5 shadow-xs ring-1 ring-[#14422D]"
-                                        : "border-[#D8DBD7] bg-white hover:bg-[#F7FAF7]"
+                                        ? "border-[#14422D] bg-[#14422D]/5 shadow-xs ring-1.5 ring-[#14422D]"
+                                        : "border-[#D8DBD7] bg-white hover:bg-[#F7FAF7] hover:border-[#14422D]/40"
                                     }`}
                                   >
-                                    <div className="flex justify-between items-center">
-                                      <span className="text-xs font-bold text-[#181C1B]">{tier.label}</span>
-                                      <span className="text-[10px] font-bold text-[#14422D] bg-[#14422D]/10 px-2 py-0.5 rounded-full">
-                                        {tier.seats} seats
+                                    <div className="flex items-center justify-between gap-1.5 mb-1">
+                                      <span className="text-xs font-bold text-[#181C1B] truncate">{tier.label}</span>
+                                      <span className="shrink-0 whitespace-nowrap text-[10px] font-bold text-[#14422D] bg-[#14422D]/10 px-2 py-0.5 rounded-full">
+                                        {tier.seats} Seats
                                       </span>
                                     </div>
-                                    <p className="mt-1 text-[10px] text-[#717973]">{tier.desc}</p>
+                                    <p className="text-[10px] text-[#717973] truncate">{tier.desc}</p>
                                   </button>
                                 );
                               })}

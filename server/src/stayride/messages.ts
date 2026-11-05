@@ -64,20 +64,23 @@ export const welcomeSightseeingMessage = (guestName: string, homestayName: strin
 
 /** quoteLink: the driver's own page to quote without opening the app (WhatsApp-only drivers). */
 export const newRequestMessage = (doc: any, quoteLink: string): Built => {
-  const budgetInfo = doc.guestBudget ? `\nGuest Target Budget: ₹${Number(doc.guestBudget).toLocaleString('en-IN')}` : '';
+  const budgetInfo = doc.guestBudget ? `\n💰 Guest Target Budget: ₹${Number(doc.guestBudget).toLocaleString('en-IN')}` : '';
   const roundTripInfo = doc.isRoundTrip
-    ? `\nTrip Type: 🔄 ROUND TRIP (Driver waits at destination & drives guest back)${doc.returnTime ? `\nReturn: ${doc.returnDate ? new Date(Number(doc.returnDate)).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' }) : 'Same Day'} at ${doc.returnTime}` : ''}`
-    : '\nTrip Type: 🚗 ONE-WAY DROP';
+    ? `\n🔄 Trip Type: Round Trip (Driver waits at destination & drives guest back)${doc.returnTime ? `\nReturn Schedule: ${doc.returnDate ? new Date(Number(doc.returnDate)).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' }) : 'Same Day'} at ${doc.returnTime}` : ''}`
+    : '\n🚗 Trip Type: One-Way Drop';
   const params = [doc.homestayName || 'a homestay', routeText(doc), whenText(doc), doc.vehicleType || 'Cab', quoteLink];
   return {
     event: 'NEW_REQUEST',
     context: ctxOf(doc),
     params,
     text:
-      `New trip request from ${params[0]}\n` +
-      `Route: ${params[1]}\nPickup: ${params[2]}\nVehicle: ${params[3]}${roundTripInfo}${budgetInfo}\n\n` +
-      `Submit your total trip fare quote here:\n${params[4]}\n` +
-      `(Guest pays 15% advance online, you collect remaining in cash at drop-off + wallet credit)`,
+      `🏔️ *New Homestay Cab Request*\n` +
+      `From: ${params[0]}\n\n` +
+      `📍 *Route:* ${params[1]}\n` +
+      `🕒 *Pickup:* ${params[2]}\n` +
+      `🚙 *Vehicle:* ${params[3]}${roundTripInfo}${budgetInfo}\n\n` +
+      `👉 *Tap to quote your fare:*\n${params[4]}\n\n` +
+      `💵 Collect your cash directly from the guest at destination.`,
   };
 };
 

@@ -2244,10 +2244,6 @@ function CabRequestFormContent() {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-bold text-[#181C1B] block">Pickup Time</label>
-                    <span className="text-[11px] text-[#14422D] font-bold bg-[#14422D]/8 border border-[#14422D]/15 px-3 py-1 rounded-full flex items-center gap-1.5 shadow-2xs">
-                      <Icon name="schedule" className="text-xs text-[#14422D]" />
-                      <span>{time}</span>
-                    </span>
                   </div>
 
                   {/* Native Clock Dialer / Time Picker */}
