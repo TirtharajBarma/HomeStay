@@ -61,28 +61,7 @@ export function WebLocationPicker({
     setLoadingAddress(true);
     setStatusNotice("");
 
-    // Try Google Geocoding if available
-    const gKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-    if (gKey && typeof window !== "undefined" && (window as any).google?.maps?.Geocoder) {
-      try {
-        const geocoder = new (window as any).google.maps.Geocoder();
-        geocoder.geocode({ location: { lat, lng } }, (results: any, status: string) => {
-          setLoadingAddress(false);
-          if (status === "OK" && results && results[0]) {
-            const formatted = results[0].formatted_address;
-            addressCacheRef.current.set(key, formatted);
-            setAddress(formatted);
-          } else {
-            fallbackNominatim(lat, lng, key);
-          }
-        });
-        return;
-      } catch {
-        // Fall through to Nominatim
-      }
-    }
-
-    // Fallback: OpenStreetMap Nominatim
+    // Fast, reliable reverse geocoding via OpenStreetMap Nominatim
     fallbackNominatim(lat, lng, key);
   }, []);
 
@@ -124,76 +103,15 @@ export function WebLocationPicker({
     [reverseGeocode]
   );
 
-  // Initialize Map Engine (Google Maps if key present, else Leaflet)
+  // Initialize Map Engine: uses Leaflet + OpenStreetMap for reliable, billing-free hill maps
   useEffect(() => {
     if (!isOpen || !mapContainerRef.current) return;
 
     let isSubscribed = true;
-    const googleKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY?.trim();
 
-    // Catch Google Maps authentication failures and immediately swap to Leaflet
-    (window as any).gm_authFailure = () => {
-      console.warn("Google Maps key invalid/unauthorized — falling back to OpenStreetMap / Leaflet");
-      if (googleMapRef.current) {
-        googleMapRef.current = null;
-      }
-      initLeaflet();
-    };
+    // Initialize Leaflet with OpenStreetMap tiles (never shows Google billing or authorization popups)
+    initLeaflet();
 
-    if (googleKey) {
-      // Check if google maps script is already on page
-      const existingScript = document.getElementById("google-maps-script");
-      const initGoogle = () => {
-        if (!isSubscribed || !mapContainerRef.current) return;
-        try {
-          const map = new (window as any).google.maps.Map(mapContainerRef.current, {
-            center: { lat: center.latitude, lng: center.longitude },
-            zoom: 16,
-            disableDefaultUI: true,
-            zoomControl: true,
-            zoomControlOptions: {
-              position: (window as any).google?.maps?.ControlPosition?.RIGHT_CENTER || 8,
-            },
-            gestureHandling: "greedy",
-            clickableIcons: false,
-          });
-
-          map.addListener("idle", () => {
-            const c = map.getCenter();
-            if (c) {
-              handleMapMoved(c.lat(), c.lng());
-            }
-          });
-
-          googleMapRef.current = map;
-          setMapEngine("google");
-          reverseGeocode(center.latitude, center.longitude);
-        } catch {
-          initLeaflet();
-        }
-      };
-
-      if ((window as any).google?.maps) {
-        initGoogle();
-      } else if (!existingScript) {
-        const script = document.createElement("script");
-        script.id = "google-maps-script";
-        script.src = `https://maps.googleapis.com/maps/api/js?key=${googleKey}&libraries=places`;
-        script.async = true;
-        script.defer = true;
-        script.onload = initGoogle;
-        script.onerror = () => {
-          if (isSubscribed) initLeaflet();
-        };
-        document.head.appendChild(script);
-      } else {
-        existingScript.addEventListener("load", initGoogle);
-      }
-    } else {
-      initLeaflet();
-    }
-
-    // Leaflet fallback initialization
     function initLeaflet() {
       if (!isSubscribed || !mapContainerRef.current) return;
       import("leaflet").then((L) => {

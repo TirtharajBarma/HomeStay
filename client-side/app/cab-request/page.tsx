@@ -138,14 +138,21 @@ const POPULAR_TRANSFER_ROUTES: PopularTransferRoute[] = [
 ];
 
 const DEFAULT_TOURIST_DESTINATIONS = [
-  // Airport & Major Transit Hubs
+  // Airport & Railway Transit Hubs
   "Bagdogra Airport (IXB)",
   "NJP Railway Station (New Jalpaiguri)",
-  "Siliguri Junction / Tenzing Norgay Bus Terminus",
-  "Sevoke Road / Vega Circle, Siliguri",
-  "Hill Cart Road / Pradhan Nagar, Siliguri",
-  "Jalpaiguri Town (DBC Road / Kadamtala / Babupara)",
-  "Gomastapara / Kharia, Jalpaiguri",
+  "Siliguri Junction",
+  "Tenzing Norgay Bus Terminus, Siliguri",
+  "Sevoke Road, Siliguri",
+  "Hill Cart Road, Siliguri",
+  "Pradhan Nagar, Siliguri",
+
+  // Jalpaiguri Hubs
+  "DBC Road, Jalpaiguri",
+  "Gomastapara, Jalpaiguri",
+  "Kadamtala, Jalpaiguri",
+  "Babupara, Jalpaiguri",
+  "Jalpaiguri Town",
   "Jalpaiguri Road Railway Station",
 
   // Darjeeling & Hill Heritage Points
@@ -154,34 +161,34 @@ const DEFAULT_TOURIST_DESTINATIONS = [
   "Batasia Loop & War Memorial",
   "Happy Valley Tea Estate",
   "Padmaja Naidu Zoo & HMI",
-  "Ghoom Monastery & Railway Station",
+  "Ghoom Monastery",
   "Japanese Peace Pagoda",
   "Rock Garden & Ganga Maya Park",
-  "Lebong & Tukvar Tea Estate",
+  "Lebong & Tukvar Valley",
   "Lamahatta Eco Park",
   "Mirik Lake (Sumendu Lake)",
   "Pashupati Nagar (Nepal Border)",
-  "Kurseong Town (Dow Hill / Eagles Crag)",
-  "Tindharia & Rohini Viewpoint",
+  "Kurseong Town (Dow Hill)",
+  "Rohini Viewpoint",
 
   // Kalimpong & Dooars
-  "Kalimpong Town / Dambar Chowk",
-  "Deolo Hill & Science City",
+  "Kalimpong Town",
+  "Deolo Hill, Kalimpong",
   "Lava & Rishop Pine Forest",
   "Pedong / Sillery Gaon",
   "Malbazar & Chalsa Junction",
   "Lataguri (Gorumara National Park)",
   "Madarihat (Jaldapara Safari)",
   "Cooch Behar Palace",
-  "Alipurduar Town & Buxa Tiger Reserve",
+  "Alipurduar Town & Buxa",
 
   // Sikkim & Higher Ranges
-  "Gangtok MG Marg / Ridge Park",
-  "Deorali & Namgyal Institute of Tibetology",
+  "Gangtok MG Marg",
+  "Deorali, Gangtok",
   "Tsomgo (Changu) Lake & Baba Mandir",
-  "Pelling Skywalk & Pemayangtse Monastery",
+  "Pelling Skywalk & Helipad",
   "Ravangla Buddha Park",
-  "Namchi Char Dham (Siddheshwar Dham)",
+  "Namchi Char Dham",
 ];
 
 type PublicConfig = {
@@ -437,7 +444,13 @@ function CabRequestFormContent() {
       ])
     );
     if (!q) return presets.slice(0, 8);
-    return presets.filter((p) => p.toLowerCase().includes(q)).slice(0, 8);
+    const tokens = q.split(/[\s,]+/).filter(Boolean);
+    return presets
+      .filter((p) => {
+        const lower = p.toLowerCase();
+        return tokens.every((token) => lower.includes(token));
+      })
+      .slice(0, 8);
   };
 
   const handleSelectSuggestion = (place: string, idx: number) => {
