@@ -74,12 +74,13 @@ export interface BusinessDetails {
   email: string;
   phone: string;
   upiId?: string; // VPA for advance payments (e.g. stayride@upi)
+  paymentPageUrl?: string; // Hosted payment link (e.g. Razorpay Payment Page)
   grievanceOfficer: string; // India IT Rules / DPDP Act: named contact for complaints
   grievanceEmail: string;
   website: string;
 }
 
-const BUSINESS_KEYS = ['name', 'legalName', 'address', 'email', 'phone', 'upiId', 'grievanceOfficer', 'grievanceEmail', 'website'] as const;
+const BUSINESS_KEYS = ['name', 'legalName', 'address', 'email', 'phone', 'upiId', 'paymentPageUrl', 'grievanceOfficer', 'grievanceEmail', 'website'] as const;
 
 export const WHATSAPP_EVENTS = [
   'ASK_CAB',
@@ -314,6 +315,7 @@ export function publicConfig(cfg: PlatformConfig) {
     minDriverPayoutThreshold: cfg.minDriverPayoutThreshold, // driver wallet: withdraw button minimum
     businessName: cfg.business?.name || '', // UPI payee name on the guest page
     upiId: cfg.business?.upiId || '',
+    paymentPageUrl: cfg.business?.paymentPageUrl || process.env.PAYMENT_PAGE_URL || 'https://rzp.io/rzp/id3OHPlh',
     supportPhone: cfg.business?.phone || '',
     supportEmail: cfg.business?.email || '',
     website: cfg.business?.website || '',

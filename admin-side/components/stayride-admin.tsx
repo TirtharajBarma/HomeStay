@@ -2112,6 +2112,7 @@ const BUSINESS_FIELDS: { key: string; label: string; hint?: string }[] = [
   { key: "email", label: "Support email" },
   { key: "phone", label: "Support Phone / WhatsApp", hint: "Primary platform support line for guest help, WhatsApp inquiries, and homestay contact fallback." },
   { key: "upiId", label: "Platform Collection UPI ID (VPA)", hint: "VPA for advance booking fee payments (e.g. platform@okhdfcbank)" },
+  { key: "paymentPageUrl", label: "Online Payment Page URL (Razorpay / Hosted)", hint: "Hosted gateway or payment page URL (e.g. https://rzp.io/rzp/id3OHPlh). Used when direct API is in simulation mode." },
   { key: "grievanceOfficer", label: "Grievance Officer name" },
   { key: "grievanceEmail", label: "Grievance email" },
   { key: "website", label: "Website" },

@@ -38,6 +38,7 @@ export const siteConfig = {
   bookingEmail: process.env.NEXT_PUBLIC_BOOKING_EMAIL?.trim() || "",
   supportPhone: process.env.NEXT_PUBLIC_SUPPORT_PHONE?.trim() || "",
   upiId: process.env.NEXT_PUBLIC_UPI_ID?.trim() || "",
+  paymentPageUrl: process.env.NEXT_PUBLIC_PAYMENT_PAGE_URL?.trim() || "https://rzp.io/rzp/id3OHPlh",
 
   homestayUrl: (slug: string): string => {
     const base = getOrigin();

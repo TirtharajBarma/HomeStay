@@ -163,6 +163,7 @@ type PublicConfig = {
   routePresets?: RoutePreset[];
   vehicles?: { value: string; label: string; seats: number; estFare?: number }[];
   upiId?: string;
+  paymentPageUrl?: string;
   businessName?: string;
   supportPhone?: string;
   supportEmail?: string;
@@ -268,6 +269,32 @@ const formatIstDateTime = (v: number | string) =>
 
 const formatInr = (n: number | null | undefined) =>
   typeof n === "number" ? `₹${n.toLocaleString("en-IN")}` : "—";
+
+const formatVehicleDisplay = (vehicleRaw?: string | null, typeRaw?: string | null) => {
+  if (!vehicleRaw && !typeRaw) return { model: "Verified Mountain Cab", plate: "" };
+  const str = (vehicleRaw || "").trim();
+  const plateMatch = str.match(/([A-Z]{2}\s*[-]?\s*\d{1,2}\s*[-]?\s*[A-Z]{0,3}\s*[-]?\s*\d{4})/i);
+  let plate = plateMatch ? plateMatch[0].toUpperCase().replace(/\s+/g, " ") : "";
+  let model = str;
+  if (plate) {
+    model = str.replace(plateMatch![0], "").trim().replace(/^[-•,]+|[-•,]+$/g, "").trim();
+  }
+  if (!model && typeRaw) {
+    model = typeRaw;
+  }
+  if (!model) {
+    model = "Mountain Cab";
+  }
+  return { model, plate };
+};
+
+const formatDriverName = (name?: string | null) => {
+  if (!name) return "Assigned Driver";
+  return name
+    .split(" ")
+    .map((w) => (w.length > 0 ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : ""))
+    .join(" ");
+};
 
 function CabRequestFormContent() {
   const searchParams = useSearchParams();
@@ -508,6 +535,7 @@ function CabRequestFormContent() {
                   sightseeingPresets: [],
                   routePresets: [],
                   upiId: siteConfig.upiId || process.env.NEXT_PUBLIC_UPI_ID || "",
+                  paymentPageUrl: siteConfig.paymentPageUrl || process.env.NEXT_PUBLIC_PAYMENT_PAGE_URL || "https://rzp.io/rzp/id3OHPlh",
                   supportPhone: (siteConfig.supportPhone || process.env.NEXT_PUBLIC_SUPPORT_PHONE || "").replace(/[^0-9]/g, ""),
                   supportEmail: siteConfig.supportEmail || "",
                 },
@@ -528,6 +556,7 @@ function CabRequestFormContent() {
                       sightseeingPresets: live.sightseeingPresets || prev.config?.sightseeingPresets || [],
                       routePresets: live.routePresets || prev.config?.routePresets || [],
                       upiId: live.upiId || prev.config?.upiId || siteConfig.upiId || process.env.NEXT_PUBLIC_UPI_ID || "",
+                      paymentPageUrl: live.paymentPageUrl || prev.config?.paymentPageUrl || siteConfig.paymentPageUrl || "https://rzp.io/rzp/id3OHPlh",
                       supportPhone: live.supportPhone || prev.config?.supportPhone || (siteConfig.supportPhone || process.env.NEXT_PUBLIC_SUPPORT_PHONE || "").replace(/[^0-9]/g, ""),
                       supportEmail: (live as any).supportEmail || prev.config?.supportEmail || siteConfig.supportEmail || "",
                     },
@@ -762,6 +791,16 @@ function CabRequestFormContent() {
   const activeSupportPhone = waNumber(tripStatus?.config?.supportPhone || link?.config?.supportPhone || siteConfig.supportPhone || process.env.NEXT_PUBLIC_SUPPORT_PHONE || "");
   const activeSupportEmail = tripStatus?.config?.supportEmail || link?.config?.supportEmail || siteConfig.supportEmail || process.env.NEXT_PUBLIC_SUPPORT_EMAIL || "";
   const payeeName = tripStatus?.config?.businessName || link?.config?.businessName || siteConfig.appName;
+
+  const configuredPaymentPageUrl =
+    (tripStatus?.config as any)?.paymentPageUrl ||
+    (link?.config as any)?.paymentPageUrl ||
+    siteConfig.paymentPageUrl ||
+    process.env.NEXT_PUBLIC_PAYMENT_PAGE_URL ||
+    "https://rzp.io/rzp/id3OHPlh";
+
+  // Dynamic payment link: when direct Razorpay API is active, server provides tripStatus.paymentLinkUrl; otherwise falls back to configured hosted payment page
+  const effectivePaymentUrl = tripStatus?.paymentLinkUrl || configuredPaymentPageUrl;
   // "" when no UPI ID is configured or the trip is not waiting for its advance: the UPI section is not shown
   const advanceUpiUrl =
     tripStatus?.status === "AWAITING_ADVANCE_PAYMENT" && !tripStatus.advancePaid && activeUpiId
@@ -894,42 +933,43 @@ function CabRequestFormContent() {
   return (
     <div className="min-h-screen bg-[#F8F9FA] text-[#1F2328] antialiased">
       {/* Top Navigation Bar */}
-      <header className="sticky top-0 z-30 border-b border-[#E1E4E8] bg-white/95 backdrop-blur-md px-4 py-3.5 shadow-xs">
-        <div className="mx-auto flex max-w-2xl items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600 text-white font-bold text-sm shadow-xs">
-              HC
+      <header className="sticky top-0 z-30 border-b border-[#E1E4E8] bg-white/95 backdrop-blur-md px-4 py-3 shadow-2xs">
+        <div className="mx-auto flex max-w-2xl items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-700 text-white shadow-2xs">
+              <Icon name="local_taxi" className="text-xl" />
             </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="font-bold text-[#1F2328] text-sm tracking-tight">{siteConfig.appName}</span>
-                <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800 border border-emerald-200">
-                  Verified Mountain Network
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="font-extrabold text-[#1F2328] text-base tracking-tight leading-none">{siteConfig.appName}</span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800 border border-emerald-200 shrink-0">
+                  <Icon name="verified" className="text-xs text-emerald-600" />
+                  <span>Verified Network</span>
                 </span>
               </div>
-              <p className="text-[11px] text-[#57606A] truncate max-w-[200px] sm:max-w-xs">
-                {link?.homestayName || "Verified Hill Stay"}
+              <p className="text-[11px] text-[#57606A] truncate font-medium mt-0.5 max-w-[220px] sm:max-w-xs">
+                {link?.homestayName || "Verified Hill Stay Partner"}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             {activeSupportPhone ? (
               <a
                 href={`https://wa.me/${activeSupportPhone}?text=${encodeURIComponent(`Hello, I need assistance with cab booking on ${siteConfig.appName}.`)}`}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-full border border-[#D0D7DE] bg-white px-3 py-1.5 text-xs font-semibold text-[#24292F] hover:bg-[#F6F8FA] transition-colors"
+                className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-900 hover:bg-emerald-100 transition-colors shadow-2xs"
               >
-                <Icon name="support_agent" className="text-sm text-emerald-700" />
+                <Icon name="chat" className="text-xs text-emerald-700" />
                 <span>Help</span>
               </a>
             ) : activeSupportEmail ? (
               <a
                 href={`mailto:${activeSupportEmail}?subject=${encodeURIComponent(`${siteConfig.appName} Cab Assistance`)}`}
-                className="inline-flex items-center gap-1.5 rounded-full border border-[#D0D7DE] bg-white px-3 py-1.5 text-xs font-semibold text-[#24292F] hover:bg-[#F6F8FA] transition-colors"
+                className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-900 hover:bg-emerald-100 transition-colors shadow-2xs"
               >
-                <Icon name="support_agent" className="text-sm text-emerald-700" />
+                <Icon name="support_agent" className="text-xs text-emerald-700" />
                 <span>Help</span>
               </a>
             ) : null}
@@ -974,14 +1014,14 @@ function CabRequestFormContent() {
                 </div>
               </div>
 
-              {/* Fix 12: 5-Step Visual Timeline */}
-              <div className="py-3">
-                <div className="grid grid-cols-5 gap-1.5 text-center text-[11px]">
-                  <div className="space-y-1">
+              {/* 5-Step Visual Timeline */}
+              <div className="py-2.5">
+                <div className="grid grid-cols-5 gap-1.5 text-center text-[10px] sm:text-xs">
+                  <div className="space-y-1.5">
                     <div className="h-1.5 w-full rounded-full bg-emerald-600" />
-                    <span className="font-bold text-emerald-900 block truncate">Received</span>
+                    <span className="font-bold text-emerald-900 block truncate">1. Received</span>
                   </div>
-                  <div className="space-y-1">
+                  <div className="space-y-1.5">
                     <div
                       className={`h-1.5 w-full rounded-full ${
                         ["QUOTE_RECEIVED", "AWAITING_ADVANCE_PAYMENT", "CONFIRMED", "EN_ROUTE_PICKUP", "ARRIVED_HOMESTAY", "TRIP_STARTED", "COMPLETED"].includes(
@@ -993,9 +1033,19 @@ function CabRequestFormContent() {
                           : "bg-[#E1E4E8]"
                       }`}
                     />
-                    <span className="font-medium text-[#57606A] block truncate">Assigned</span>
+                    <span
+                      className={`block truncate ${
+                        ["QUOTE_RECEIVED", "AWAITING_ADVANCE_PAYMENT", "CONFIRMED", "EN_ROUTE_PICKUP", "ARRIVED_HOMESTAY", "TRIP_STARTED", "COMPLETED"].includes(
+                          tripStatus?.status || ""
+                        )
+                          ? "font-bold text-emerald-900"
+                          : "font-medium text-[#57606A]"
+                      }`}
+                    >
+                      2. Assigned
+                    </span>
                   </div>
-                  <div className="space-y-1">
+                  <div className="space-y-1.5">
                     <div
                       className={`h-1.5 w-full rounded-full ${
                         ["CONFIRMED", "EN_ROUTE_PICKUP", "ARRIVED_HOMESTAY", "TRIP_STARTED", "COMPLETED"].includes(tripStatus?.status || "")
@@ -1005,9 +1055,19 @@ function CabRequestFormContent() {
                           : "bg-[#E1E4E8]"
                       }`}
                     />
-                    <span className="font-medium text-[#57606A] block truncate">Confirmed</span>
+                    <span
+                      className={`block truncate ${
+                        ["CONFIRMED", "EN_ROUTE_PICKUP", "ARRIVED_HOMESTAY", "TRIP_STARTED", "COMPLETED"].includes(tripStatus?.status || "")
+                          ? "font-bold text-emerald-900"
+                          : tripStatus?.status === "AWAITING_ADVANCE_PAYMENT"
+                          ? "font-bold text-amber-900"
+                          : "font-medium text-[#57606A]"
+                      }`}
+                    >
+                      3. Confirmed
+                    </span>
                   </div>
-                  <div className="space-y-1">
+                  <div className="space-y-1.5">
                     <div
                       className={`h-1.5 w-full rounded-full ${
                         ["TRIP_STARTED", "COMPLETED"].includes(tripStatus?.status || "")
@@ -1017,15 +1077,29 @@ function CabRequestFormContent() {
                           : "bg-[#E1E4E8]"
                       }`}
                     />
-                    <span className="font-medium text-[#57606A] block truncate">In Progress</span>
+                    <span
+                      className={`block truncate ${
+                        ["TRIP_STARTED", "COMPLETED"].includes(tripStatus?.status || "")
+                          ? "font-bold text-emerald-900"
+                          : "font-medium text-[#57606A]"
+                      }`}
+                    >
+                      4. On Trip
+                    </span>
                   </div>
-                  <div className="space-y-1">
+                  <div className="space-y-1.5">
                     <div
                       className={`h-1.5 w-full rounded-full ${
                         tripStatus?.status === "COMPLETED" ? "bg-emerald-600" : "bg-[#E1E4E8]"
                       }`}
                     />
-                    <span className="font-medium text-[#57606A] block truncate">Completed</span>
+                    <span
+                      className={`block truncate ${
+                        tripStatus?.status === "COMPLETED" ? "font-bold text-emerald-900" : "font-medium text-[#57606A]"
+                      }`}
+                    >
+                      5. Done
+                    </span>
                   </div>
                 </div>
               </div>
@@ -1068,193 +1142,267 @@ function CabRequestFormContent() {
 
               {/* Advance Payment Card (when reserved) */}
               {tripStatus?.status === "AWAITING_ADVANCE_PAYMENT" && !tripStatus.advancePaid && (
-                <div className="rounded-2xl border border-amber-300 bg-amber-50/50 p-5 space-y-4">
-                  <div className="flex items-start justify-between">
+                <div className="rounded-2xl border border-amber-300 bg-white p-5 sm:p-6 shadow-sm space-y-5">
+                  {/* Status & Deadline Header */}
+                  <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-4">
                     <div>
-                      <span className="inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-900">
-                        <Icon name="lock" className="text-xs" /> Driver Reserved on Hold
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-bold text-amber-900">
+                        <Icon name="lock" className="text-xs" />
+                        <span>Driver Reserved on Hold</span>
                       </span>
-                      <h3 className="mt-1 font-bold text-[#1F2328] text-base">Confirm with Advance Payment</h3>
+                      <h3 className="mt-1.5 font-extrabold text-[#1F2328] text-lg sm:text-xl">Confirm Mountain Cab</h3>
+                      <p className="text-xs text-[#57606A] mt-0.5">Pay booking advance to unlock driver contact & vehicle plate</p>
                     </div>
                     <div className="text-right">
-                      <span className="text-xs text-[#57606A]">Advance Due</span>
-                      <p className="text-xl font-extrabold text-emerald-800">{formatInr(tripStatus.advanceAmount)}</p>
+                      <span className="text-[11px] font-medium text-[#57606A] uppercase tracking-wider block">Advance Due</span>
+                      <p className="text-2xl font-black text-emerald-800 leading-none mt-0.5">{formatInr(tripStatus.advanceAmount)}</p>
                       {tripStatus.advanceDueAt && !claimPending && (
-                        <p className="text-[11px] font-semibold text-amber-900">Pay by {formatIstDateTime(tripStatus.advanceDueAt)} IST</p>
+                        <p className="text-[11px] font-bold text-amber-800 mt-1">
+                          Pay before {formatIstDateTime(tripStatus.advanceDueAt)}
+                        </p>
                       )}
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/60 p-3 space-y-1.5 text-xs">
+                  {/* Fare Transparency Breakdown */}
+                  <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3.5 space-y-2 text-xs">
                     <div className="flex justify-between items-center text-[#24292F]">
-                      <span>Total Trip Fare:</span>
-                      <strong className="font-bold">{formatInr(tripStatus.agreedFare)}</strong>
+                      <span className="font-medium">Total Trip Fare (Agreed with Driver):</span>
+                      <strong className="font-extrabold text-slate-900">{formatInr(tripStatus.agreedFare)}</strong>
                     </div>
                     <div className="flex justify-between items-center text-[#57606A]">
-                      <span>Online Booking Fee (Pay now):</span>
-                      <strong className="text-emerald-800">{formatInr(tripStatus.advanceAmount)}</strong>
+                      <span>Online Reservation Advance (Pay now):</span>
+                      <strong className="text-emerald-800 font-extrabold text-sm">{formatInr(tripStatus.advanceAmount)}</strong>
                     </div>
-                    <div className="pt-1.5 border-t border-emerald-200 flex justify-between items-center text-emerald-950 font-bold">
-                      <span>Driver Cash Fare (Pay driver at destination):</span>
-                      <span className="text-sm font-extrabold text-emerald-700">{formatInr(tripStatus.remainingCashAmount)}</span>
+                    <div className="pt-2 border-t border-emerald-200/70 flex justify-between items-center text-emerald-950 font-bold">
+                      <span>Remaining Cash to Driver (At drop-off):</span>
+                      <span className="text-sm sm:text-base font-black text-emerald-800">{formatInr(tripStatus.remainingCashAmount)}</span>
                     </div>
-                  </div>
-
-                  <p className="text-xs font-semibold text-[#57606A]">Driver details after payment.</p>
-
-                  {/* Advance Policy & Cancellation Notice */}
-                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] leading-relaxed text-amber-900 space-y-1">
-                    <div className="flex items-center gap-1.5 font-bold text-amber-950">
-                      <Icon name="info" className="text-xs text-amber-700" /> Non-Refundable Vehicle Reservation Fee
-                    </div>
-                    <p>
-                      This advance locks in your verified mountain driver exclusively for your schedule. Once paid, verified driver contact details are released instantly.
-                    </p>
-                    <p className="text-amber-800">
-                      <strong>Cancellation Policy:</strong> To protect mountain drivers against empty hill runs and avoid offline platform bypass, this advance is strictly non-refundable once driver details are unlocked (except in cases of driver cancellation, breakdown, or official road blockage).
-                    </p>
                   </div>
 
                   {tripStatus.paymentClaim?.status === "REJECTED" && (
-                    <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-900">
-                      <p className="font-bold">Your payment could not be verified{tripStatus.paymentClaim.reason ? `: ${tripStatus.paymentClaim.reason}` : "."}</p>
-                      <p className="mt-0.5">Please check the UTR in your UPI app and submit it again, or pay below.</p>
+                    <div className="rounded-xl border border-red-200 bg-red-50 p-3.5 text-xs text-red-900 space-y-1">
+                      <p className="font-bold flex items-center gap-1.5">
+                        <Icon name="error" className="text-sm text-red-700" />
+                        <span>Payment verification issue{tripStatus.paymentClaim.reason ? `: ${tripStatus.paymentClaim.reason}` : ""}</span>
+                      </p>
+                      <p className="text-[11px] text-red-800">
+                        Please check the 12-digit UTR in your payment app and submit it again below, or contact support.
+                      </p>
                     </div>
                   )}
 
                   {claimPending && (
-                    <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-3 text-xs text-emerald-900 space-y-1">
-                      <p className="flex items-center gap-1.5 font-bold text-emerald-950">
-                        <Icon name="check_circle" className="text-sm" /> Payment submitted
-                      </p>
-                      <p>
-                        UTR <span className="font-mono font-bold">{tripStatus.paymentClaim?.utr || "received"}</span>. Waiting for {payeeName} to confirm (usually within a few hours). Your driver stays reserved meanwhile.
+                    <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-xs text-emerald-950 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <p className="flex items-center gap-1.5 font-extrabold text-emerald-900 text-sm">
+                          <Icon name="check_circle" className="text-base text-emerald-700" />
+                          <span>Payment Reference Submitted</span>
+                        </p>
+                        <span className="rounded-full bg-emerald-200/70 px-2 py-0.5 text-[10px] font-bold text-emerald-900">
+                          Verifying
+                        </span>
+                      </div>
+                      <p className="leading-relaxed">
+                        UTR / Ref: <span className="font-mono font-bold text-slate-900 bg-white px-2 py-0.5 rounded border border-emerald-200">{tripStatus.paymentClaim?.utr || "received"}</span>. Our operations desk is confirming the receipt. Your driver stays reserved on hold.
                       </p>
                       {!editingClaim && (
-                        <button type="button" onClick={() => { setEditingClaim(true); setUtrInput(tripStatus.paymentClaim?.utr || ""); }} className="font-semibold text-emerald-700 hover:underline cursor-pointer">
-                          Wrong UTR? Correct it
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingClaim(true);
+                            setUtrInput(tripStatus.paymentClaim?.utr || "");
+                          }}
+                          className="font-bold text-emerald-800 hover:text-emerald-900 underline cursor-pointer text-[11px]"
+                        >
+                          Entered wrong UTR? Update Reference
                         </button>
                       )}
                     </div>
                   )}
 
-                  <div className="space-y-2">
-                    {tripStatus.paymentLinkUrl && !claimPending && (
+                  {/* PRIMARY ACTION: High-Converting Razorpay Online Payment Button */}
+                  {!claimPending && (
+                    <div className="space-y-3">
                       <a
-                        href={tripStatus.paymentLinkUrl}
+                        href={effectivePaymentUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-800 px-4 py-3 text-sm font-bold text-white shadow hover:bg-emerald-900 transition-all cursor-pointer"
+                        className="w-full flex items-center justify-between gap-3 rounded-2xl bg-emerald-800 hover:bg-emerald-900 px-5 py-4 text-white shadow-md active:scale-[0.99] transition-all cursor-pointer group"
                       >
-                        <Icon name="payments" className="text-base" /> Pay {formatInr(tripStatus.advanceAmount)} Online
-                      </a>
-                    )}
-                  </div>
-
-                  {/* Manual UPI: pay, then send the UTR for us to verify */}
-                  {advanceUpiUrl && !claimPending && (
-                    <div className="rounded-xl border border-[#D0D7DE] bg-white p-3.5 text-xs space-y-3">
-                      <ol className="list-decimal pl-4 space-y-0.5 text-[#24292F]">
-                        <li>Pay <strong>{formatInr(tripStatus.advanceAmount)}</strong> to the UPI ID below.</li>
-                        <li>Enter the 12-digit UTR number from your UPI app below.</li>
-                      </ol>
-
-                      {/* upi:// opens the UPI app on Android; iPhones may not open it, so the ID and QR are shown too */}
-                      <a
-                        href={advanceUpiUrl}
-                        className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white shadow hover:bg-emerald-700 transition-all cursor-pointer"
-                      >
-                        <Icon name="account_balance_wallet" className="text-base" /> Pay {formatInr(tripStatus.advanceAmount)} with UPI app
-                      </a>
-
-                      <div className="space-y-1.5 rounded-lg bg-[#F6F8FA] p-2.5">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-[#57606A]">UPI ID</span>
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="font-mono font-bold text-[#1F2328] break-all">{activeUpiId}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleCopyUpi(activeUpiId)}
-                              className="rounded px-2 py-0.5 font-bold bg-white border border-[#D0D7DE] text-xs hover:bg-[#E1E4E8] cursor-pointer"
-                            >
-                              {copiedUpi ? "Copied" : "Copy"}
-                            </button>
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/15 text-white shadow-inner">
+                            <Icon name="payments" className="text-2xl" />
+                          </div>
+                          <div className="text-left">
+                            <span className="text-[10px] uppercase tracking-wider text-emerald-200 font-bold block">
+                              Instant Driver Confirmation
+                            </span>
+                            <span className="text-base sm:text-lg font-extrabold leading-tight block">
+                              Pay {formatInr(tripStatus.advanceAmount)} via Razorpay
+                            </span>
                           </div>
                         </div>
-                        <div className="flex justify-between gap-2">
-                          <span className="text-[#57606A]">Amount</span>
-                          <span className="font-mono font-bold text-[#1F2328]">{formatInr(tripStatus.advanceAmount)}</span>
+                        <div className="flex items-center gap-1 text-xs font-bold bg-white/15 px-3 py-1.5 rounded-xl border border-white/20 group-hover:bg-white/25 transition-colors">
+                          <span>Pay Now</span>
+                          <Icon name="arrow_forward" className="text-sm" />
                         </div>
-                        <div className="flex justify-between gap-2">
-                          <span className="text-[#57606A]">Note / remark</span>
-                          <span className="font-mono font-bold text-[#1F2328]">{tripStatus.reference}</span>
-                        </div>
-                      </div>
+                      </a>
 
-                      {/* QR open on wide screens; behind a button on phones (they pay from the same device) */}
-                      <button type="button" onClick={() => setShowQr(!showQr)} className="md:hidden font-semibold text-emerald-700 hover:underline cursor-pointer">
-                        {showQr ? "Hide QR" : "Show QR"}
-                      </button>
-                      {qr.url === advanceUpiUrl && (
-                        <div className={`${showQr ? "flex" : "hidden md:flex"} flex-col items-center justify-center`}>
-                          <img src={qr.data} alt="UPI payment QR code" className="h-44 w-44 rounded-lg border border-[#D0D7DE] p-1 bg-white" />
-                          <span className="mt-1 text-[11px] text-[#57606A]">Scan with any UPI app</span>
-                        </div>
-                      )}
+                      <div className="flex flex-wrap items-center justify-center gap-3 text-[11px] text-[#57606A] pt-0.5">
+                        <span className="flex items-center gap-1 font-medium">
+                          <Icon name="lock" className="text-xs text-emerald-700" /> 256-Bit SSL Secure
+                        </span>
+                        <span>•</span>
+                        <span>UPI (GPay / PhonePe / Paytm)</span>
+                        <span>•</span>
+                        <span>Credit / Debit Cards & NetBanking</span>
+                      </div>
                     </div>
                   )}
 
-                  {advanceUpiUrl && (!claimPending || editingClaim) && (
-                    <form onSubmit={handleSubmitClaim} className="rounded-xl border border-[#D0D7DE] bg-white p-3.5 text-xs space-y-2">
-                      <label htmlFor="utr" className="block font-semibold text-[#1F2328]">
-                        UPI reference / UTR number (12 digits)
-                      </label>
+                  {/* Step 2: Instant UTR / Payment Reference Submission */}
+                  {(!claimPending || editingClaim) && (
+                    <form onSubmit={handleSubmitClaim} className="rounded-xl border border-[#D0D7DE] bg-slate-50/60 p-4 text-xs space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <label htmlFor="utr" className="block font-bold text-[#1F2328] text-xs">
+                          Already paid? Enter UPI UTR or Payment ID:
+                        </label>
+                        <span className="text-[10px] text-[#57606A] font-mono">12-digit Ref</span>
+                      </div>
                       <div className="flex gap-2">
                         <input
                           id="utr"
                           inputMode="numeric"
                           autoComplete="off"
-                          maxLength={20}
+                          maxLength={24}
                           placeholder="e.g. 412345678901"
                           value={utrInput}
                           onChange={(e) => setUtrInput(e.target.value)}
-                          className="min-w-0 flex-1 rounded-lg border border-[#D0D7DE] px-3 py-2 font-mono text-sm text-[#1F2328] focus:border-emerald-600 focus:outline-none"
+                          className="min-w-0 flex-1 rounded-xl border border-[#D0D7DE] bg-white px-3.5 py-2.5 font-mono text-sm text-[#1F2328] placeholder:text-[#57606A]/60 focus:border-emerald-600 focus:outline-none"
                         />
-                        <button type="submit" disabled={claimBusy} className="rounded-lg bg-[#1F2328] px-4 py-2 text-xs font-bold text-white hover:bg-black disabled:opacity-60 cursor-pointer">
-                          {claimBusy ? "Submitting..." : "Submit"}
+                        <button
+                          type="submit"
+                          disabled={claimBusy}
+                          className="rounded-xl bg-[#1F2328] px-4 py-2.5 text-xs font-bold text-white hover:bg-black disabled:opacity-60 cursor-pointer transition-colors shadow-2xs"
+                        >
+                          {claimBusy ? "Submitting…" : "Confirm"}
                         </button>
                       </div>
-                      <p className="text-[11px] text-[#57606A]">Find it in your UPI app under the payment details (also called UPI Ref No. or Transaction ID).</p>
+                      <p className="text-[11px] text-[#57606A]">
+                        Found in your payment receipt / SMS (12-digit UPI Ref / UTR number).
+                      </p>
                       {claimError && <p className="text-[11px] font-semibold text-red-700">{claimError}</p>}
                     </form>
                   )}
 
-                  {/* Verification & Help */}
+                  {/* Secondary Alternative: Direct UPI QR Code (Collapsible) */}
+                  {activeUpiId && !claimPending && (
+                    <div className="rounded-xl border border-slate-200 bg-white p-3.5 text-xs space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-slate-800 text-xs">Alternative: Direct UPI Transfer</span>
+                        <button
+                          type="button"
+                          onClick={() => setShowQr(!showQr)}
+                          className="font-bold text-emerald-800 hover:text-emerald-900 cursor-pointer flex items-center gap-1 text-[11px]"
+                        >
+                          <Icon name="qr_code" className="text-sm" />
+                          <span>{showQr ? "Hide UPI QR" : "Show UPI QR & ID"}</span>
+                        </button>
+                      </div>
+
+                      {showQr && (
+                        <div className="space-y-3 pt-2 border-t border-slate-100">
+                          {advanceUpiUrl && (
+                            <a
+                              href={advanceUpiUrl}
+                              className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white shadow-2xs hover:bg-emerald-800 transition-all"
+                            >
+                              <Icon name="account_balance_wallet" className="text-sm" /> Open in UPI App
+                            </a>
+                          )}
+
+                          <div className="space-y-1.5 rounded-lg bg-[#F6F8FA] p-2.5">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-[#57606A]">UPI ID</span>
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="font-mono font-bold text-[#1F2328] break-all">{activeUpiId}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopyUpi(activeUpiId)}
+                                  className="rounded px-2 py-0.5 font-bold bg-white border border-[#D0D7DE] text-xs hover:bg-[#E1E4E8] cursor-pointer"
+                                >
+                                  {copiedUpi ? "Copied" : "Copy"}
+                                </button>
+                              </div>
+                            </div>
+                            <div className="flex justify-between gap-2">
+                              <span className="text-[#57606A]">Amount</span>
+                              <span className="font-mono font-bold text-[#1F2328]">{formatInr(tripStatus.advanceAmount)}</span>
+                            </div>
+                          </div>
+
+                          {qr.url === advanceUpiUrl && qr.data && (
+                            <div className="flex flex-col items-center justify-center pt-1">
+                              <img src={qr.data} alt="UPI payment QR code" className="h-40 w-40 rounded-xl border border-[#D0D7DE] p-1 bg-white shadow-xs" />
+                              <span className="mt-1.5 text-[11px] text-[#57606A]">Scan with Google Pay, PhonePe, or Paytm</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Professional Policy & Safety Guarantee (Replaces scary yellow warning) */}
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 space-y-2 text-xs">
+                    <div className="flex items-center gap-1.5 font-bold text-slate-900 border-b border-slate-200 pb-2">
+                      <Icon name="shield" className="text-sm text-emerald-700" />
+                      <span>StayCabs Mountain Ride Guarantee & Fair Policy</span>
+                    </div>
+                    <ul className="space-y-1.5 text-[11px] leading-relaxed text-slate-700">
+                      <li className="flex items-start gap-2">
+                        <span className="text-emerald-700 font-bold shrink-0">✓</span>
+                        <span><strong>Dedicated Cab Hold:</strong> Advance payment guarantees cab allocation from our verified mountain fleet for your scheduled itinerary.</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-emerald-700 font-bold shrink-0">✓</span>
+                        <span><strong>Instant Driver Release:</strong> Verified driver contact number, vehicle plate, and live pickup PIN are unlocked immediately upon payment confirmation.</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-emerald-700 font-bold shrink-0">✓</span>
+                        <span><strong>Fair Weather & Mountain Policy:</strong> 100% full refund or free reschedule if hill roads are blocked due to weather or landslides, or in case of vehicle breakdown. Advance is non-refundable for guest no-shows once the driver has been dispatched.</span>
+                      </li>
+                    </ul>
+                  </div>
+
+                  {/* WhatsApp Verification & Concierge Help */}
                   <div className="pt-1 text-center space-y-2">
                     {activeSupportPhone ? (
                       <>
                         <a
-                          href={`https://wa.me/${activeSupportPhone}?text=${encodeURIComponent(`Namaste, I have paid the advance of ₹${tripStatus.advanceAmount} for cab reference ${tripStatus.reference}. Please confirm my booking.`)}`}
+                          href={`https://wa.me/${activeSupportPhone}?text=${encodeURIComponent(`Namaste, I am at the advance payment step for StayCabs trip #${tripStatus.reference} (Amount: ₹${tripStatus.advanceAmount}). Please confirm my booking.`)}`}
                           target="_blank"
                           rel="noreferrer"
-                          className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#128C7E] hover:underline"
+                          className="inline-flex items-center justify-center gap-2 rounded-xl bg-white border border-[#D0D7DE] px-4 py-2.5 text-xs font-bold text-[#128C7E] hover:bg-[#F6F8FA] transition-colors w-full shadow-2xs"
                         >
-                          <Icon name="chat" className="text-sm" /> Share Payment Screenshot on WhatsApp
+                          <Icon name="chat" className="text-sm" />
+                          <span>Share Payment Confirmation on WhatsApp</span>
                         </a>
-                        <div className="pt-1 border-t border-amber-200/60">
+                        <div className="pt-1">
                           <a
-                            href={`https://wa.me/${activeSupportPhone}?text=${encodeURIComponent(`Namaste, regarding cab request ${tripStatus.reference}: the quoted fare is ₹${tripStatus.agreedFare}. Can you assist with the pricing or vehicle options?`)}`}
+                            href={`https://wa.me/${activeSupportPhone}?text=${encodeURIComponent(`Namaste, regarding cab request #${tripStatus.reference}: the quoted fare is ₹${tripStatus.agreedFare}. Can you assist with the pricing or vehicle options?`)}`}
                             target="_blank"
                             rel="noreferrer"
                             className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#57606A] hover:text-[#1F2328] hover:underline"
                           >
-                            <Icon name="chat" className="text-xs text-emerald-700" /> Need a Different Fare or Vehicle? Chat with Desk
+                            <Icon name="support_agent" className="text-xs text-emerald-700" />
+                            <span>Need a Different Fare or Vehicle? Chat with Desk</span>
                           </a>
                         </div>
                       </>
                     ) : activeSupportEmail ? (
                       <a
-                        href={`mailto:${activeSupportEmail}?subject=${encodeURIComponent(`Payment Confirmation - Reference ${tripStatus.reference}`)}`}
+                        href={`mailto:${activeSupportEmail}?subject=${encodeURIComponent(`Payment Confirmation - Reference #${tripStatus.reference}`)}`}
                         className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#128C7E] hover:underline"
                       >
                         <Icon name="mail" className="text-sm" /> Email Payment Confirmation ({activeSupportEmail})
@@ -1278,87 +1426,123 @@ function CabRequestFormContent() {
               )}
 
               {/* Confirmed Driver Details Card */}
-              {["CONFIRMED", "EN_ROUTE_PICKUP", "ARRIVED_HOMESTAY", "TRIP_STARTED", "COMPLETED"].includes(tripStatus?.status || "") && (
-                <div className="rounded-2xl border border-emerald-300 bg-emerald-50/40 p-5 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-600 text-white font-bold">
-                        {tripStatus?.driverName?.charAt(0) || "D"}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <h4 className="font-bold text-[#1F2328] text-sm">{tripStatus?.driverName || "Assigned Driver"}</h4>
-                          <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">
-                            Verified
+              {["CONFIRMED", "EN_ROUTE_PICKUP", "ARRIVED_HOMESTAY", "TRIP_STARTED", "COMPLETED"].includes(tripStatus?.status || "") && (() => {
+                const vehicleDisplay = formatVehicleDisplay(tripStatus?.vehicle, tripStatus?.vehicleType);
+                const driverDisplayName = formatDriverName(tripStatus?.driverName);
+                const hasUnlockedContact = Boolean(tripStatus?.driverPhone && !tripStatus.driverPhone.includes("*"));
+
+                return (
+                  <div className="rounded-2xl border border-emerald-200 bg-white p-5 sm:p-6 shadow-sm space-y-4">
+                    {/* Driver Profile Header */}
+                    <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="relative">
+                          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-700 text-white font-extrabold text-base shadow-xs">
+                            {driverDisplayName.charAt(0) || "D"}
+                          </div>
+                          <span className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-xs">
+                            <Icon name="verified" className="text-sm text-emerald-600" />
                           </span>
                         </div>
-                        <p className="text-xs text-[#57606A]">{tripStatus?.vehicle || "Mountain Cab"}</p>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-extrabold text-[#1F2328] text-base leading-tight">
+                              {driverDisplayName}
+                            </h4>
+                            <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800 border border-emerald-200">
+                              Verified
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 mt-1 flex-wrap">
+                            <span className="text-xs text-[#57606A] font-semibold">{vehicleDisplay.model}</span>
+                            {vehicleDisplay.plate && (
+                              <span className="inline-flex items-center rounded bg-amber-50 px-2 py-0.5 font-mono text-[11px] font-extrabold text-slate-900 border border-amber-300 tracking-wider shadow-2xs">
+                                {vehicleDisplay.plate}
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </div>
+
+                      {/* Right side: Masked notice if contact still locked */}
+                      {!hasUnlockedContact && tripStatus?.driverPhone && (
+                        <div className="text-right max-w-[45%]">
+                          <p className="font-mono text-xs font-bold text-[#1F2328]">{tripStatus.driverPhone}</p>
+                          <p className="text-[10px] text-[#57606A] mt-0.5">Unlocked once advance is confirmed</p>
+                        </div>
+                      )}
                     </div>
 
-                    {tripStatus?.driverPhone?.includes("*") ? (
-                      <div className="text-right max-w-[50%]">
-                        <p className="font-mono text-xs font-bold text-[#1F2328]">{tripStatus.driverPhone}</p>
-                        <p className="text-[10px] text-[#57606A]">Driver contact appears after your advance is confirmed.</p>
-                      </div>
-                    ) : tripStatus?.driverPhone && (
-                      <div className="flex items-center gap-1.5">
+                    {/* Dedicated 2-Button Action Row (Clean, Thumb-Friendly, Native Layout) */}
+                    {hasUnlockedContact && (
+                      <div className="grid grid-cols-2 gap-2.5">
                         <a
-                          href={`tel:${tripStatus.driverPhone}`}
-                          className="flex h-9 w-9 items-center justify-center rounded-full bg-white border border-[#D0D7DE] text-[#24292F] shadow-xs hover:bg-[#F6F8FA]"
-                          title="Call Driver"
+                          href={`tel:${tripStatus?.driverPhone}`}
+                          className="inline-flex items-center justify-center gap-2 rounded-xl bg-white border border-[#D0D7DE] px-4 py-3 text-xs font-bold text-[#24292F] shadow-2xs hover:bg-[#F6F8FA] active:scale-[0.98] transition-all"
                         >
-                          <Icon name="phone" className="text-sm text-emerald-700" />
+                          <Icon name="phone" className="text-base text-emerald-700" />
+                          <span>Call Driver</span>
                         </a>
                         <a
-                          href={`https://wa.me/${waNumber(tripStatus.driverPhone)}`}
+                          href={`https://wa.me/${waNumber(tripStatus?.driverPhone || "")}?text=${encodeURIComponent(`Namaste ${driverDisplayName}, I am your passenger for StayCabs trip #${confirmedTrip.reference}.`)}`}
                           target="_blank"
                           rel="noreferrer"
-                          className="flex h-9 w-9 items-center justify-center rounded-full bg-[#25D366] text-white shadow-xs hover:opacity-90"
-                          title="WhatsApp Driver"
+                          className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#25D366] px-4 py-3 text-xs font-bold text-white shadow-2xs hover:bg-[#20ba59] active:scale-[0.98] transition-all"
                         >
-                          <Icon name="chat" className="text-sm" />
+                          <Icon name="chat" className="text-base" />
+                          <span>WhatsApp Driver</span>
                         </a>
                       </div>
                     )}
-                  </div>
 
-                  {typeof tripStatus?.remainingCashAmount === "number" && (
-                    <div className="flex items-center justify-between rounded-xl bg-white border border-[#D0D7DE] p-3 text-xs">
-                      <span className="text-[#57606A] font-medium">Cash to pay driver at drop-off:</span>
-                      <span className="font-bold text-base text-emerald-900">{formatInr(tripStatus.remainingCashAmount)}</span>
-                    </div>
-                  )}
-
-                  {tripStatus?.pickupOtp && (
-                    <div className="rounded-xl border border-emerald-300 bg-white p-3.5 shadow-xs">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 text-emerald-800">
-                            <Icon name="key" className="text-base" />
+                    {/* Boarding Verification PIN (Apple Wallet / Pass Voucher Style) */}
+                    {tripStatus?.pickupOtp && (
+                      <div className="relative overflow-hidden rounded-2xl border border-emerald-300 bg-gradient-to-br from-emerald-900 via-slate-900 to-emerald-950 text-white p-4 sm:p-5 shadow-xs">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1.5 text-emerald-300 text-[11px] font-bold uppercase tracking-wider">
+                              <Icon name="key" className="text-xs" />
+                              <span>Boarding Verification PIN</span>
+                            </div>
+                            <p className="text-xs text-slate-300 max-w-xs leading-relaxed">
+                              Share this PIN with your driver upon vehicle arrival to verify trip
+                            </p>
                           </div>
-                          <div>
-                            <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-900">
-                              Boarding Verification PIN
-                            </span>
-                            <p className="text-[11px] text-[#57606A]">Share with driver upon vehicle boarding to start trip</p>
+                          <div className="flex items-center tracking-[0.25em] font-mono text-2xl sm:text-3xl font-black text-amber-300 bg-white/10 px-4 py-2 rounded-xl border border-white/20 shadow-inner">
+                            {tripStatus.pickupOtp.split("").join(" ")}
                           </div>
-                        </div>
-                        <div className="flex items-center font-mono text-xl font-extrabold tracking-widest text-emerald-800 bg-emerald-50 px-3 py-1 rounded-lg border border-emerald-200">
-                          {tripStatus.pickupOtp}
                         </div>
                       </div>
-                    </div>
-                  )}
+                    )}
 
-                  <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/60 p-2.5 text-[11px] leading-relaxed text-emerald-950 flex items-start gap-2">
-                    <Icon name="check_circle" className="text-xs text-emerald-700 mt-0.5 shrink-0" />
-                    <span>
-                      <strong>Driver Allocated:</strong> For coordination or minor pickup adjustments, contact your driver directly. Note: Advance payments are non-refundable once driver contact details are released.
-                    </span>
+                    {/* Cash to Pay Driver Card */}
+                    {typeof tripStatus?.remainingCashAmount === "number" && (
+                      <div className="flex items-center justify-between rounded-xl bg-slate-50 border border-slate-200 p-3.5 text-xs">
+                        <div className="flex items-center gap-2.5">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 text-emerald-800">
+                            <Icon name="payments" className="text-base" />
+                          </div>
+                          <div>
+                            <span className="font-bold text-slate-800">Cash Due at Drop-off</span>
+                            <p className="text-[11px] text-[#57606A]">Pay directly to driver upon reaching destination</p>
+                          </div>
+                        </div>
+                        <span className="text-base sm:text-lg font-black text-emerald-900">
+                          {formatInr(tripStatus.remainingCashAmount)}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Mountain Safety Assurance Note */}
+                    <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/60 p-3 text-[11px] leading-relaxed text-emerald-950 flex items-start gap-2">
+                      <Icon name="check_circle" className="text-xs text-emerald-700 mt-0.5 shrink-0" />
+                      <span>
+                        <strong>Driver Allocated & Verified:</strong> Contact your driver directly for coordination or luggage adjustments. Mountain route assistance is monitored by StayCabs operations.
+                      </span>
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Guest Rating & Review Form (when COMPLETED) */}
               {tripStatus?.status === "COMPLETED" && (
