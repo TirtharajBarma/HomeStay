@@ -910,7 +910,7 @@ export function validateSchedule(body: any, cfgOrHorizon: PlatformConfig | numbe
     }
   }
 
-  if (body.isRoundTrip) {
+  if (body.isRoundTrip && (body.returnDate || body.returnTime)) {
     const returnAt = istDateTime(body.returnDate, body.returnTime);
     if (returnAt === null) return 'Round trips need a return date and time.';
     if (returnAt <= pickupAt) return 'Return must be after the pickup date and time.';

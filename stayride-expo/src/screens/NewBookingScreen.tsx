@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   Alert,
   Modal,
-  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -208,35 +207,14 @@ export const NewBookingScreen: React.FC = () => {
         advanceMethod: receivedMethod,
       });
 
-      const phoneToSend = trimmedPhone || selectedGuest?.phone || '';
       Alert.alert(
         '🎉 Booking Created!',
-        `Booking confirmed for ${trimmedName} · Room ${pickedRoom.number}${chosenBed ? ` (${chosenBed})` : ''} (${nights} night${nights > 1 ? 's' : ''}).\n\nWould you like to send a booking confirmation via WhatsApp?`,
+        `Booking confirmed for ${trimmedName} · Room ${pickedRoom.number}${chosenBed ? ` (${chosenBed})` : ''} (${nights} night${nights > 1 ? 's' : ''}).\n\nBooking confirmation & cab link are automatically dispatched to the guest via official WhatsApp.`,
         [
           {
             text: 'Done',
-            style: 'cancel',
             onPress: () => navigation.goBack(),
           },
-          ...(phoneToSend
-            ? [
-                {
-                  text: '💬 Send WhatsApp',
-                  onPress: () => {
-                    const inStr = new Date(checkIn).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-                    const outStr = new Date(checkOut).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-                    const homestayName = homestay?.name || 'Our Homestay';
-                    const message = `Namaste ${trimmedName}! 🙏\n\nYour booking at *${homestayName}* is confirmed:\n🏨 Room: ${pickedRoom.number}${chosenBed ? ` (${chosenBed})` : ''}\n📅 Check-in: ${inStr}\n📅 Check-out: ${outStr} (${nights} night${nights > 1 ? 's' : ''})\n👥 Guests: ${parsedCount}\n💰 Total: ₹${parsedAmount.toLocaleString('en-IN')}${receivedNum > 0 ? ` (Advance paid: ₹${receivedNum.toLocaleString('en-IN')})` : ''}\n\nWe look forward to hosting you in the hills! Let us know if you need airport or station cab pickup.`;
-                    const cleanPhone = phoneToSend.replace(/\D/g, '');
-                    const targetPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
-                    Linking.openURL(`whatsapp://send?phone=${targetPhone}&text=${encodeURIComponent(message)}`).catch(() => {
-                      Alert.alert('WhatsApp not installed', 'Could not open WhatsApp.');
-                    });
-                    navigation.goBack();
-                  },
-                },
-              ]
-            : []),
         ]
       );
     } catch (err: any) {

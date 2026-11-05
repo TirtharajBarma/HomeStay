@@ -459,21 +459,8 @@ function CabRequestFormContent() {
     return customDestinations.map((d) => d.trim()).filter(Boolean);
   };
 
-  // Same checks the server runs on a round trip's return
+  // Round trips have flexible return schedules (driver waits)
   const getReturnError = (): string => {
-    if (!isRoundTrip) return "";
-    if (!returnDate || !returnTime) return "Round trips need a return date and time.";
-    const returnAt = istInstant(returnDate, returnTime);
-    if (!(returnAt > istInstant(date, time))) return "Return must be after the pickup date and time.";
-    const horizonDays = link?.config?.bookingHorizonDays || 30;
-    if (returnAt > Date.now() + (horizonDays + 1) * 86400000) return `Return date must be within the next ${horizonDays} days.`;
-    const times = link?.config?.pickupTimes || [];
-    if (times.length) {
-      const start = times[0];
-      const end = times[times.length - 1];
-      const t = minutesOf(returnTime);
-      if (t < minutesOf(start) || t > minutesOf(end)) return `Return time must be between ${start} and ${end}.`;
-    }
     return "";
   };
 
@@ -753,8 +740,8 @@ function CabRequestFormContent() {
         passengers,
         vehicleType: autoVehicleType,
         isRoundTrip,
-        returnDate: isRoundTrip ? new Date(`${returnDate}T12:00:00Z`).getTime() : undefined,
-        returnTime: isRoundTrip ? returnTime : undefined,
+        returnDate: undefined,
+        returnTime: undefined,
         guestName: guestName.trim(),
         phone: cleanPhone,
         notes: notes.trim(),
@@ -2256,45 +2243,15 @@ function CabRequestFormContent() {
                   </div>
                 </div>
 
-                {/* Round trip: return date and time (same controls as the pickup) */}
+                {/* Round trip: flexible return banner */}
                 {isRoundTrip && (
-                  <div className="space-y-3">
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-[#1F2328] block">Return Date</label>
-                      <input
-                        type="date"
-                        value={returnDate}
-                        min={date || toLocalYmd(new Date())}
-                        onChange={(e) => setReturnDate(e.target.value)}
-                        className="w-full rounded-xl border border-[#D0D7DE] px-3.5 py-2.5 text-xs text-[#1F2328] focus:border-emerald-600 focus:outline-none bg-white shadow-2xs"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <label className="text-xs font-bold text-[#1F2328] block">Return Time</label>
-                        <span className="text-[11px] text-emerald-800 font-bold bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
-                          <Icon name="schedule" className="text-xs text-emerald-700" />
-                          <span>{returnTime}</span>
-                        </span>
-                      </div>
-                      <div className="relative flex items-center">
-                        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-emerald-700">
-                          <Icon name="alarm" className="text-base" />
-                        </div>
-                        <input
-                          type="time"
-                          value={toTime24(returnTime)}
-                          onChange={(e) => {
-                            if (e.target.value) {
-                              setReturnTime(toTime12(e.target.value));
-                            }
-                          }}
-                          className="w-full rounded-xl border border-[#D0D7DE] bg-white py-2.5 pl-10 pr-3 sm:pr-24 text-sm font-bold text-[#1F2328] focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600 shadow-2xs cursor-pointer"
-                        />
-                        <div className="pointer-events-none absolute inset-y-0 right-0 hidden sm:flex items-center pr-3 text-[11px] text-[#57606A] font-medium">
-                          Tap for clock
-                        </div>
-                      </div>
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 text-xs text-emerald-900 flex items-start gap-2.5 shadow-2xs">
+                    <Icon name="schedule" className="text-sm text-emerald-700 mt-0.5 shrink-0" />
+                    <div>
+                      <span className="font-bold block">Flexible Return Schedule</span>
+                      <span className="text-[11px] text-emerald-800 leading-relaxed block">
+                        Your driver will accompany you, wait during sightseeing or meetings, and drive you back to your homestay when you are ready.
+                      </span>
                     </div>
                   </div>
                 )}
@@ -2503,7 +2460,7 @@ function CabRequestFormContent() {
                     {isRoundTrip && (
                       <div className="flex items-start justify-between gap-2">
                         <span className="text-[#57606A] shrink-0 font-medium">Return:</span>
-                        <span className="font-semibold text-[#1F2328]">{returnDate} at {returnTime}</span>
+                        <span className="font-semibold text-emerald-700">Flexible (Same Day / Driver Waits)</span>
                       </div>
                     )}
 
