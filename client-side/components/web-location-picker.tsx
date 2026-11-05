@@ -131,6 +131,15 @@ export function WebLocationPicker({
     let isSubscribed = true;
     const googleKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY?.trim();
 
+    // Catch Google Maps authentication failures and immediately swap to Leaflet
+    (window as any).gm_authFailure = () => {
+      console.warn("Google Maps key invalid/unauthorized — falling back to OpenStreetMap / Leaflet");
+      if (googleMapRef.current) {
+        googleMapRef.current = null;
+      }
+      initLeaflet();
+    };
+
     if (googleKey) {
       // Check if google maps script is already on page
       const existingScript = document.getElementById("google-maps-script");
@@ -281,7 +290,7 @@ export function WebLocationPicker({
     );
   };
 
-  // Search input handler
+  // Robust Search input handler: tries OpenStreetMap Nominatim, Photon & Google Geocoder
   const handleSearchSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const q = searchQuery.trim();
@@ -290,50 +299,84 @@ export function WebLocationPicker({
     setSearching(true);
     setStatusNotice("");
 
+    const applyLocationMatch = (lat: number, lng: number, label?: string) => {
+      setCenter({ latitude: lat, longitude: lng });
+      if (googleMapRef.current && mapEngine === "google") {
+        try {
+          googleMapRef.current.panTo({ lat, lng });
+          googleMapRef.current.setZoom(16);
+        } catch {}
+      }
+      if (leafletMapRef.current) {
+        try {
+          leafletMapRef.current.flyTo([lat, lng], 16);
+        } catch {}
+      }
+      handleMapMoved(lat, lng);
+      if (label) {
+        setAddress(label);
+      }
+    };
+
     try {
-      // If Google Places/Geocoder is loaded:
-      if (mapEngine === "google" && (window as any).google?.maps?.Geocoder) {
-        const geocoder = new (window as any).google.maps.Geocoder();
-        geocoder.geocode({ address: q }, (results: any, status: string) => {
-          setSearching(false);
-          if (status === "OK" && results?.[0]?.geometry?.location) {
-            const loc = results[0].geometry.location;
-            const lat = loc.lat();
-            const lng = loc.lng();
-            googleMapRef.current?.panTo({ lat, lng });
-            googleMapRef.current?.setZoom(16);
-            handleMapMoved(lat, lng);
-          } else {
-            setStatusNotice("Location not found. Try entering a nearby landmark or town.");
+      // 1. Nominatim lookup (prioritized for Eastern Himalayas & India)
+      try {
+        const osmRes = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&countrycodes=in&viewbox=87.0,28.0,90.0,25.5&limit=3`,
+          { headers: { "Accept-Language": "en" } }
+        );
+        if (osmRes.ok) {
+          const osmData = await osmRes.json();
+          if (Array.isArray(osmData) && osmData.length > 0 && osmData[0].lat && osmData[0].lon) {
+            applyLocationMatch(parseFloat(osmData[0].lat), parseFloat(osmData[0].lon), osmData[0].display_name);
+            setSearching(false);
+            return;
           }
-        });
-        return;
-      }
-
-      // Nominatim search fallback
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=1`,
-        { headers: { "Accept-Language": "en" } }
-      );
-      if (res.ok) {
-        const data = await res.json();
-        if (data && data[0]) {
-          const lat = parseFloat(data[0].lat);
-          const lng = parseFloat(data[0].lon);
-          setCenter({ latitude: lat, longitude: lng });
-
-          if (mapEngine === "leaflet" && leafletMapRef.current) {
-            leafletMapRef.current.flyTo([lat, lng], 16);
-          }
-          handleMapMoved(lat, lng);
-        } else {
-          setStatusNotice("Place not found. Try a nearby landmark or town.");
         }
-      } else {
-        setStatusNotice("Search unavailable. Please pan the map directly.");
+      } catch {}
+
+      // 2. Photon geocoder fallback (fast OSM search without restrictions)
+      try {
+        const photonRes = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=1`);
+        if (photonRes.ok) {
+          const pData = await photonRes.json();
+          if (pData?.features?.[0]?.geometry?.coordinates) {
+            const [lon, lat] = pData.features[0].geometry.coordinates;
+            const pProps = pData.features[0].properties;
+            const pLabel = [pProps.name, pProps.locality, pProps.city, pProps.state].filter(Boolean).join(", ");
+            applyLocationMatch(lat, lon, pLabel || q);
+            setSearching(false);
+            return;
+          }
+        }
+      } catch {}
+
+      // 3. Google Geocoder (only if Google maps is active and key is valid)
+      if (mapEngine === "google" && (window as any).google?.maps?.Geocoder) {
+        try {
+          const geocoder = new (window as any).google.maps.Geocoder();
+          const googleResult: any = await new Promise((resolve) => {
+            geocoder.geocode({ address: q }, (results: any, status: string) => {
+              if (status === "OK" && results?.[0]?.geometry?.location) {
+                resolve(results[0]);
+              } else {
+                resolve(null);
+              }
+            });
+          });
+
+          if (googleResult) {
+            const loc = googleResult.geometry.location;
+            applyLocationMatch(loc.lat(), loc.lng(), googleResult.formatted_address);
+            setSearching(false);
+            return;
+          }
+        } catch {}
       }
+
+      setStatusNotice("Location not found. Try entering a nearby town or landmark.");
     } catch {
-      setStatusNotice("Search unavailable. Please pan the map directly.");
+      setStatusNotice("Search unavailable. Please pan the map directly to drop the pin.");
     } finally {
       setSearching(false);
     }

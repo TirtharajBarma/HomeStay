@@ -138,22 +138,50 @@ const POPULAR_TRANSFER_ROUTES: PopularTransferRoute[] = [
 ];
 
 const DEFAULT_TOURIST_DESTINATIONS = [
+  // Airport & Major Transit Hubs
+  "Bagdogra Airport (IXB)",
+  "NJP Railway Station (New Jalpaiguri)",
+  "Siliguri Junction / Tenzing Norgay Bus Terminus",
+  "Sevoke Road / Vega Circle, Siliguri",
+  "Hill Cart Road / Pradhan Nagar, Siliguri",
+  "Jalpaiguri Town (DBC Road / Kadamtala / Babupara)",
+  "Gomastapara / Kharia, Jalpaiguri",
+  "Jalpaiguri Road Railway Station",
+
+  // Darjeeling & Hill Heritage Points
+  "Darjeeling Mall Road / Chowrasta",
   "Tiger Hill Sunrise Point",
   "Batasia Loop & War Memorial",
-  "Darjeeling Mall Road / Chowrasta",
-  "Japanese Peace Pagoda",
-  "Rock Garden & Ganga Maya Park",
   "Happy Valley Tea Estate",
   "Padmaja Naidu Zoo & HMI",
-  "Ghoom Monastery",
+  "Ghoom Monastery & Railway Station",
+  "Japanese Peace Pagoda",
+  "Rock Garden & Ganga Maya Park",
+  "Lebong & Tukvar Tea Estate",
   "Lamahatta Eco Park",
-  "Mirik Lake",
+  "Mirik Lake (Sumendu Lake)",
   "Pashupati Nagar (Nepal Border)",
-  "Bagdogra Airport (IXB)",
-  "NJP Railway Station",
-  "Kalimpong Town",
-  "Gangtok MG Marg",
-  "Pelling Skywalk",
+  "Kurseong Town (Dow Hill / Eagles Crag)",
+  "Tindharia & Rohini Viewpoint",
+
+  // Kalimpong & Dooars
+  "Kalimpong Town / Dambar Chowk",
+  "Deolo Hill & Science City",
+  "Lava & Rishop Pine Forest",
+  "Pedong / Sillery Gaon",
+  "Malbazar & Chalsa Junction",
+  "Lataguri (Gorumara National Park)",
+  "Madarihat (Jaldapara Safari)",
+  "Cooch Behar Palace",
+  "Alipurduar Town & Buxa Tiger Reserve",
+
+  // Sikkim & Higher Ranges
+  "Gangtok MG Marg / Ridge Park",
+  "Deorali & Namgyal Institute of Tibetology",
+  "Tsomgo (Changu) Lake & Baba Mandir",
+  "Pelling Skywalk & Pemayangtse Monastery",
+  "Ravangla Buddha Park",
+  "Namchi Char Dham (Siddheshwar Dham)",
 ];
 
 type PublicConfig = {
@@ -335,7 +363,7 @@ function CabRequestFormContent() {
   const [guestBudget, setGuestBudget] = useState<string>("");
 
   // Autocomplete / Suggestions state
-  const [activeSuggestIdx, setActiveSuggestIdx] = useState<number | null>(null);
+  const [activeSuggestIdx, setActiveSuggestIdx] = useState<number | "pickup" | null>(null);
   const [placesList, setPlacesList] = useState<string[]>([]);
 
   // Schedule & Passengers (Requirement 7: Number of Passengers only)
@@ -1838,29 +1866,90 @@ function CabRequestFormContent() {
                         </div>
                       ) : (
                         <div className="space-y-2.5 pt-1">
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="text"
-                              value={pickup}
-                              onChange={(e) => setPickup(e.target.value)}
-                              placeholder="Enter pickup address, landmark, or station"
-                              className="w-full rounded-2xl border border-[#D8DBD7] bg-white px-4 py-3 text-sm text-[#181C1B] placeholder:text-[#717973]/60 focus:border-[#14422D] focus:ring-4 focus:ring-[#14422D]/10 focus:outline-none transition-all shadow-2xs"
-                            />
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setMapTarget({
-                                  type: "pickup",
-                                  title: "Move Map Pin for Pickup",
-                                  initialAddress: pickup,
-                                })
-                              }
-                              className="inline-flex items-center gap-1.5 shrink-0 rounded-2xl border border-[#D8DBD7] bg-white px-3.5 py-3 text-xs font-bold text-[#14422D] hover:bg-[#F1F4F1] transition-colors cursor-pointer"
-                              title="Move pin on map"
-                            >
-                              <Icon name="pin_drop" className="text-base text-[#14422D]" />
-                              <span className="hidden sm:inline">Map Pin</span>
-                            </button>
+                          <div className="relative">
+                            <div className="flex items-center gap-2">
+                              <div className="relative flex-1">
+                                <input
+                                  type="text"
+                                  value={pickup}
+                                  onFocus={() => setActiveSuggestIdx("pickup")}
+                                  onChange={(e) => {
+                                    setPickup(e.target.value);
+                                    setActiveSuggestIdx("pickup");
+                                  }}
+                                  placeholder="Enter pickup address, landmark, town, or station"
+                                  className="w-full rounded-2xl border border-[#D8DBD7] bg-white px-4 py-3 text-sm text-[#181C1B] placeholder:text-[#717973]/60 focus:border-[#14422D] focus:ring-4 focus:ring-[#14422D]/10 focus:outline-none transition-all shadow-2xs pr-9"
+                                />
+                                {pickup && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setPickup("");
+                                      setPickupCoords(null);
+                                    }}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#717973] hover:text-[#181C1B] cursor-pointer"
+                                  >
+                                    <Icon name="close" className="text-xs" />
+                                  </button>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setMapTarget({
+                                    type: "pickup",
+                                    title: "Move Map Pin for Pickup",
+                                    initialAddress: pickup,
+                                  })
+                                }
+                                className="inline-flex items-center gap-1.5 shrink-0 rounded-2xl border border-[#D8DBD7] bg-white px-3.5 py-3 text-xs font-bold text-[#14422D] hover:bg-[#F1F4F1] transition-colors cursor-pointer"
+                                title="Move pin on map"
+                              >
+                                <Icon name="pin_drop" className="text-base text-[#14422D]" />
+                                <span className="hidden sm:inline">Map Pin</span>
+                              </button>
+                            </div>
+
+                            {/* Autocomplete Suggestions Popover for Pickup */}
+                            {activeSuggestIdx === "pickup" && (
+                              <div className="absolute z-30 left-0 right-12 sm:right-28 mt-2 rounded-2xl border border-[#E5E8E5] bg-white p-3 shadow-xl space-y-1.5 backdrop-blur-md">
+                                <div className="flex items-center justify-between px-2 py-1 border-b border-[#ECEFEB]">
+                                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#717973]">
+                                    Suggested Pickup Hubs & Towns
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setActiveSuggestIdx(null)}
+                                    className="text-[10px] text-[#14422D] font-bold hover:underline cursor-pointer"
+                                  >
+                                    Done
+                                  </button>
+                                </div>
+                                <div className="max-h-52 overflow-y-auto divide-y divide-[#ECEFEB]/60">
+                                  {getFilteredSuggestions(pickup).length > 0 ? (
+                                    getFilteredSuggestions(pickup).map((place) => (
+                                      <button
+                                        key={place}
+                                        type="button"
+                                        onMouseDown={(e) => e.preventDefault()}
+                                        onClick={() => {
+                                          setPickup(place);
+                                          setActiveSuggestIdx(null);
+                                        }}
+                                        className="w-full text-left px-3 py-2 text-xs font-medium text-[#181C1B] hover:bg-[#14422D]/8 hover:text-[#14422D] rounded-xl flex items-center justify-between transition-colors cursor-pointer"
+                                      >
+                                        <span className="truncate">{place}</span>
+                                        <Icon name="north_west" className="text-xs text-[#717973]" />
+                                      </button>
+                                    ))
+                                  ) : (
+                                    <div className="px-3 py-2.5 text-xs text-[#717973]">
+                                      Type an address, town, or landmark
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
                           </div>
 
                           {pickupCoords && (
@@ -1880,7 +1969,7 @@ function CabRequestFormContent() {
                           )}
 
                           <div className="flex flex-wrap gap-1.5 pt-0.5">
-                            {["Bagdogra Airport (IXB)", "NJP Railway Station", "Darjeeling Mall", "Siliguri Junction"].map((preset) => (
+                            {["Bagdogra Airport (IXB)", "NJP Railway Station", "Darjeeling Mall", "Siliguri Junction", "Jalpaiguri (DBC Road)"].map((preset) => (
                               <button
                                 key={preset}
                                 type="button"
@@ -2044,12 +2133,16 @@ function CabRequestFormContent() {
                       <div className="space-y-0.5 pr-2">
                         <span className="text-xs font-bold text-[#181C1B] flex items-center gap-1.5">
                           <Icon name="sync_alt" className="text-sm text-[#14422D]" />
-                          <span>Return to Homestay</span>
+                          <span>
+                            {!customPickup && link?.homestayName
+                              ? `Return to ${link.homestayName}`
+                              : "Round Trip (Return to Pickup Location)"}
+                          </span>
                         </span>
                         <p className="text-[11px] text-[#717973]">
                           {isRoundTrip
-                            ? "Round trip: Driver will wait and take you back to homestay."
-                            : "One-way trip: Driver drops you off at the final destination."}
+                            ? "Round trip: Driver waits at your destination and brings you back."
+                            : "One-way trip: Driver drops you off at your final destination."}
                         </p>
                       </div>
                       <button
