@@ -809,10 +809,13 @@ function CabRequestFormContent() {
 
   if (linkState === "loading") {
     return (
-      <div className="min-h-screen bg-surface flex items-center justify-center p-6">
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-600 border-t-transparent" />
-          <p className="text-xs font-medium text-[#57606A]">Connecting to verified cab network…</p>
+      <div className="min-h-screen bg-[#F7FAF7] flex items-center justify-center p-6 font-body">
+        <div className="flex flex-col items-center gap-4 text-center">
+          <div className="h-10 w-10 animate-spin rounded-full border-3 border-[#14422D] border-t-transparent" />
+          <div>
+            <p className="text-sm font-bold text-[#14422D]">Connecting to Verified Hill Fleet…</p>
+            <p className="text-xs text-[#717973] mt-0.5">StayCabs Mountain Mobility Concierge</p>
+          </div>
         </div>
       </div>
     );
@@ -821,50 +824,50 @@ function CabRequestFormContent() {
   if (linkState === "invalid") {
     if (isNoLink) {
       return (
-        <div className="min-h-screen bg-[#F8F9FA] flex items-center justify-center p-6 text-[#1F2328]">
-          <div className="max-w-md w-full rounded-2xl border border-[#D0D7DE] bg-white p-8 text-center space-y-5 shadow-xs">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-800 border border-emerald-100 shadow-xs">
-              <Icon name="local_taxi" className="text-3xl text-emerald-700" />
+        <div className="min-h-screen bg-[#F7FAF7] flex items-center justify-center p-6 text-[#181C1B] font-body">
+          <div className="max-w-md w-full rounded-3xl border border-[#E5E8E5] bg-white p-8 sm:p-10 text-center space-y-6 shadow-[0_12px_40px_-6px_rgba(20,66,45,0.08)]">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[#14422D]/8 text-[#14422D] border border-[#14422D]/15 shadow-2xs">
+              <Icon name="local_taxi" className="text-3xl text-[#14422D]" />
             </div>
 
-            <div>
-              <span className="inline-block rounded-full bg-emerald-100 px-3 py-1 text-[11px] font-bold text-emerald-900 uppercase tracking-wider">
+            <div className="space-y-2">
+              <span className="inline-block rounded-full bg-[#14422D]/10 px-3.5 py-1 text-[11px] font-bold text-[#14422D] uppercase tracking-wider">
                 Exclusive Guest Concierge
               </span>
-              <h1 className="mt-2 text-xl font-extrabold text-[#1F2328]">
+              <h1 className="font-display text-2xl sm:text-3xl font-bold text-[#14422D]">
                 {siteConfig.appName} Hill Cabs
               </h1>
-              <p className="mt-2 text-xs sm:text-sm text-[#57606A] leading-relaxed">
+              <p className="text-xs sm:text-sm text-[#414943] leading-relaxed">
                 Hill Cabs are arranged exclusively for guests of our partner homestays. Check your WhatsApp for your private booking link, or ask your host to send you a booking invite.
               </p>
             </div>
 
-            <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-4 text-left text-xs space-y-2 text-[#24292F]">
-              <div className="flex items-center gap-2">
-                <Icon name="verified" className="text-emerald-700 text-sm" />
+            <div className="rounded-2xl border border-[#E5E8E5] bg-[#F7FAF7] p-4 text-left text-xs space-y-2.5 text-[#181C1B]">
+              <div className="flex items-center gap-2.5">
+                <Icon name="verified" className="text-[#14422D] text-sm shrink-0" />
                 <span>Door-to-door mountain airport & station transfers</span>
               </div>
-              <div className="flex items-center gap-2">
-                <Icon name="payments" className="text-emerald-700 text-sm" />
+              <div className="flex items-center gap-2.5">
+                <Icon name="payments" className="text-[#14422D] text-sm shrink-0" />
                 <span>100% direct cash fare to mountain drivers</span>
               </div>
-              <div className="flex items-center gap-2">
-                <Icon name="chat" className="text-emerald-700 text-sm" />
-                <span>Direct WhatsApp coordination & tracking</span>
+              <div className="flex items-center gap-2.5">
+                <Icon name="chat" className="text-[#14422D] text-sm shrink-0" />
+                <span>Direct WhatsApp coordination & live PIN verification</span>
               </div>
             </div>
 
-            <div className="flex flex-col gap-2 pt-2">
+            <div className="flex flex-col gap-2.5 pt-2">
               <Link
                 href="/#accommodations"
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-800 px-5 py-3 text-xs font-bold text-white shadow-xs hover:bg-emerald-900 transition-colors"
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#14422D] px-5 py-3.5 text-xs font-bold text-white shadow-sm hover:bg-[#1C593E] transition-all"
               >
                 <Icon name="cottage" className="text-sm" />
                 <span>View Partner Homestays</span>
               </Link>
               <Link
                 href="/"
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#D0D7DE] bg-white px-5 py-2.5 text-xs font-semibold text-[#1F2328] hover:bg-[#F6F8FA] transition-colors"
+                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-[#D8DBD7] bg-white px-5 py-3 text-xs font-semibold text-[#181C1B] hover:bg-[#F1F4F1] transition-colors"
               >
                 Return to Home
               </Link>
@@ -875,18 +878,18 @@ function CabRequestFormContent() {
     }
 
     return (
-      <div className="min-h-screen bg-[#F8F9FA] flex items-center justify-center p-6">
-        <div className="max-w-md w-full rounded-2xl border border-[#D0D7DE] bg-white p-8 text-center space-y-4 shadow-sm">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-red-50 text-red-600">
+      <div className="min-h-screen bg-[#F7FAF7] flex items-center justify-center p-6 font-body">
+        <div className="max-w-md w-full rounded-3xl border border-[#E5E8E5] bg-white p-8 text-center space-y-5 shadow-[0_10px_30px_-4px_rgba(20,66,45,0.06)]">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-red-50 text-red-600 border border-red-100">
             <Icon name="link_off" className="text-2xl" />
           </div>
-          <h1 className="text-base font-bold text-[#1F2328]">Link Expired or Invalid</h1>
-          <p className="text-xs text-[#57606A]">
+          <h1 className="font-display text-xl font-bold text-[#181C1B]">Link Expired or Invalid</h1>
+          <p className="text-xs text-[#717973] leading-relaxed">
             This private cab booking link is no longer active. Please contact your homestay host to receive a fresh booking link.
           </p>
           <Link
             href="/"
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#1F2328] px-5 py-2.5 text-xs font-semibold text-white shadow-sm hover:opacity-95"
+            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#14422D] px-6 py-3 text-xs font-bold text-white shadow-sm hover:bg-[#1C593E] transition-all"
           >
             Go to Home
           </Link>
@@ -897,18 +900,18 @@ function CabRequestFormContent() {
 
   if (bookingNotFound) {
     return (
-      <div className="min-h-screen bg-[#F8F9FA] flex items-center justify-center p-6">
-        <div className="max-w-md w-full rounded-2xl border border-[#D0D7DE] bg-white p-8 text-center space-y-4 shadow-sm">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-red-50 text-red-600">
+      <div className="min-h-screen bg-[#F7FAF7] flex items-center justify-center p-6 font-body">
+        <div className="max-w-md w-full rounded-3xl border border-[#E5E8E5] bg-white p-8 text-center space-y-5 shadow-[0_10px_30px_-4px_rgba(20,66,45,0.06)]">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-red-50 text-red-600 border border-red-100">
             <Icon name="search_off" className="text-2xl" />
           </div>
-          <h1 className="text-base font-bold text-[#1F2328]">Booking Not Found</h1>
-          <p className="text-xs text-[#57606A]">
+          <h1 className="font-display text-xl font-bold text-[#181C1B]">Booking Not Found</h1>
+          <p className="text-xs text-[#717973] leading-relaxed">
             We could not find a cab booking for this reference. Please check the link in your WhatsApp message or contact your homestay host.
           </p>
           <Link
             href="/"
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#1F2328] px-5 py-2.5 text-xs font-semibold text-white shadow-sm hover:opacity-95"
+            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#14422D] px-6 py-3 text-xs font-bold text-white shadow-sm hover:bg-[#1C593E] transition-all"
           >
             Go to Home
           </Link>
@@ -918,23 +921,25 @@ function CabRequestFormContent() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F8F9FA] text-[#1F2328] antialiased">
+    <div className="min-h-screen bg-[#F7FAF7] text-[#181C1B] font-body antialiased">
       {/* Top Navigation Bar */}
-      <header className="sticky top-0 z-30 border-b border-[#E1E4E8] bg-white/95 backdrop-blur-md px-4 py-3 shadow-2xs">
+      <header className="sticky top-0 z-30 border-b border-[#E5E8E5]/80 bg-white/85 backdrop-blur-xl px-4 py-3.5 shadow-[0_2px_12px_-2px_rgba(20,66,45,0.03)]">
         <div className="mx-auto flex max-w-2xl items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-700 text-white shadow-2xs">
-              <Icon name="local_taxi" className="text-xl" />
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#14422D] text-white shadow-sm">
+              <Icon name="local_taxi" className="text-xl text-[#BCEECF]" />
             </div>
             <div className="min-w-0">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="font-extrabold text-[#1F2328] text-base tracking-tight leading-none">{siteConfig.appName}</span>
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800 border border-emerald-200 shrink-0">
-                  <Icon name="verified" className="text-xs text-emerald-600" />
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-display font-bold text-[#14422D] text-lg tracking-tight leading-none">
+                  {siteConfig.appName}
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-[#14422D]/8 px-2 py-0.5 text-[10px] font-bold text-[#14422D] border border-[#14422D]/15 shrink-0">
+                  <Icon name="verified" className="text-xs text-[#14422D]" />
                   <span>Verified Network</span>
                 </span>
               </div>
-              <p className="text-[11px] text-[#57606A] truncate font-medium mt-0.5 max-w-[220px] sm:max-w-xs">
+              <p className="text-[11px] text-[#717973] truncate font-medium mt-0.5 max-w-[220px] sm:max-w-xs">
                 {link?.homestayName || "Verified Hill Stay Partner"}
               </p>
             </div>
@@ -946,18 +951,18 @@ function CabRequestFormContent() {
                 href={`https://wa.me/${activeSupportPhone}?text=${encodeURIComponent(`Hello, I need assistance with cab booking on ${siteConfig.appName}.`)}`}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-900 hover:bg-emerald-100 transition-colors shadow-2xs"
+                className="inline-flex items-center gap-1.5 rounded-full border border-[#14422D]/15 bg-white/90 px-3.5 py-1.5 text-xs font-semibold text-[#14422D] hover:bg-[#F1F4F1] transition-all shadow-2xs"
               >
-                <Icon name="chat" className="text-xs text-emerald-700" />
-                <span>Help</span>
+                <Icon name="chat" className="text-xs text-[#25D366]" />
+                <span>Concierge</span>
               </a>
             ) : activeSupportEmail ? (
               <a
                 href={`mailto:${activeSupportEmail}?subject=${encodeURIComponent(`${siteConfig.appName} Cab Assistance`)}`}
-                className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-900 hover:bg-emerald-100 transition-colors shadow-2xs"
+                className="inline-flex items-center gap-1.5 rounded-full border border-[#14422D]/15 bg-white/90 px-3.5 py-1.5 text-xs font-semibold text-[#14422D] hover:bg-[#F1F4F1] transition-all shadow-2xs"
               >
-                <Icon name="support_agent" className="text-xs text-emerald-700" />
-                <span>Help</span>
+                <Icon name="support_agent" className="text-xs text-[#14422D]" />
+                <span>Concierge</span>
               </a>
             ) : null}
           </div>
@@ -969,22 +974,22 @@ function CabRequestFormContent() {
         {confirmedTrip ? (
           <div className="space-y-6">
             {/* Live Status Tracker Header */}
-            <div className="rounded-2xl border border-[#D0D7DE] bg-white p-5 sm:p-6 shadow-xs space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#E1E4E8] pb-4">
+            <div className="rounded-3xl border border-[#E5E8E5]/90 bg-white p-6 sm:p-7 shadow-[0_10px_30px_-4px_rgba(20,66,45,0.05)] space-y-5">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#ECEFEB] pb-4">
                 <div>
-                  <span className="text-xs font-semibold text-[#57606A] uppercase tracking-wider">Trip Reference</span>
-                  <p className="text-lg font-mono font-bold text-[#1F2328]">#{confirmedTrip.reference}</p>
+                  <span className="text-[11px] font-semibold text-[#717973] uppercase tracking-wider block">Mountain Trip Reference</span>
+                  <p className="text-xl font-mono font-bold text-[#14422D]">#{confirmedTrip.reference}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <span
-                    className={`rounded-full px-3 py-1 text-xs font-bold ${
+                    className={`rounded-full px-3.5 py-1 text-xs font-bold ${
                       (tripStatus?.status || confirmedTrip.status) === "COMPLETED"
-                        ? "bg-emerald-100 text-emerald-900 border border-emerald-300"
+                        ? "bg-[#14422D]/10 text-[#14422D] border border-[#14422D]/20"
                         : (tripStatus?.status || confirmedTrip.status) === "CONFIRMED"
-                        ? "bg-blue-100 text-blue-900 border border-blue-300"
+                        ? "bg-blue-50 text-blue-900 border border-blue-200"
                         : ["CANCELLED", "EXPIRED"].includes(tripStatus?.status || confirmedTrip.status)
-                        ? "bg-red-100 text-red-900 border border-red-300"
-                        : "bg-amber-100 text-amber-900 border border-amber-300"
+                        ? "bg-red-50 text-red-900 border border-red-200"
+                        : "bg-amber-50 text-amber-900 border border-amber-200"
                     }`}
                   >
                     {STATUS_FRIENDLY_LABELS[tripStatus?.status || confirmedTrip.status] || tripStatus?.status || confirmedTrip.status || "Loading…"}
@@ -993,7 +998,7 @@ function CabRequestFormContent() {
                     type="button"
                     disabled={statusLoading}
                     onClick={() => fetchStatus(confirmedTrip.reference)}
-                    className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-[#F6F8FA] text-[#57606A] transition-colors cursor-pointer"
+                    className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-[#F1F4F1] text-[#717973] hover:text-[#181C1B] transition-colors cursor-pointer"
                     title="Refresh Status"
                   >
                     <Icon name="refresh" className={`text-base ${statusLoading ? "animate-spin" : ""}`} />
@@ -1002,22 +1007,22 @@ function CabRequestFormContent() {
               </div>
 
               {/* 5-Step Visual Timeline */}
-              <div className="py-2.5">
-                <div className="grid grid-cols-5 gap-1.5 text-center text-[10px] sm:text-xs">
+              <div className="py-2">
+                <div className="grid grid-cols-5 gap-1.5 sm:gap-2 text-center text-[10px] sm:text-xs">
                   <div className="space-y-1.5">
-                    <div className="h-1.5 w-full rounded-full bg-emerald-600" />
-                    <span className="font-bold text-emerald-900 block truncate">1. Received</span>
+                    <div className="h-2 w-full rounded-full bg-[#14422D]" />
+                    <span className="font-bold text-[#14422D] block truncate">1. Received</span>
                   </div>
                   <div className="space-y-1.5">
                     <div
-                      className={`h-1.5 w-full rounded-full ${
+                      className={`h-2 w-full rounded-full transition-all ${
                         ["QUOTE_RECEIVED", "AWAITING_ADVANCE_PAYMENT", "CONFIRMED", "EN_ROUTE_PICKUP", "ARRIVED_HOMESTAY", "TRIP_STARTED", "COMPLETED"].includes(
                           tripStatus?.status || ""
                         )
-                          ? "bg-emerald-600"
+                          ? "bg-[#14422D]"
                           : ["PENDING_REVIEW", "FINDING_DRIVER"].includes(tripStatus?.status || confirmedTrip.status)
-                          ? "bg-blue-500 animate-pulse"
-                          : "bg-[#E1E4E8]"
+                          ? "bg-sky-500 animate-pulse"
+                          : "bg-[#ECEFEB]"
                       }`}
                     />
                     <span
@@ -1025,8 +1030,8 @@ function CabRequestFormContent() {
                         ["QUOTE_RECEIVED", "AWAITING_ADVANCE_PAYMENT", "CONFIRMED", "EN_ROUTE_PICKUP", "ARRIVED_HOMESTAY", "TRIP_STARTED", "COMPLETED"].includes(
                           tripStatus?.status || ""
                         )
-                          ? "font-bold text-emerald-900"
-                          : "font-medium text-[#57606A]"
+                          ? "font-bold text-[#14422D]"
+                          : "font-medium text-[#717973]"
                       }`}
                     >
                       2. Assigned
@@ -1034,21 +1039,21 @@ function CabRequestFormContent() {
                   </div>
                   <div className="space-y-1.5">
                     <div
-                      className={`h-1.5 w-full rounded-full ${
+                      className={`h-2 w-full rounded-full transition-all ${
                         ["CONFIRMED", "EN_ROUTE_PICKUP", "ARRIVED_HOMESTAY", "TRIP_STARTED", "COMPLETED"].includes(tripStatus?.status || "")
-                          ? "bg-emerald-600"
+                          ? "bg-[#14422D]"
                           : tripStatus?.status === "AWAITING_ADVANCE_PAYMENT"
                           ? "bg-amber-500 animate-pulse"
-                          : "bg-[#E1E4E8]"
+                          : "bg-[#ECEFEB]"
                       }`}
                     />
                     <span
                       className={`block truncate ${
                         ["CONFIRMED", "EN_ROUTE_PICKUP", "ARRIVED_HOMESTAY", "TRIP_STARTED", "COMPLETED"].includes(tripStatus?.status || "")
-                          ? "font-bold text-emerald-900"
+                          ? "font-bold text-[#14422D]"
                           : tripStatus?.status === "AWAITING_ADVANCE_PAYMENT"
                           ? "font-bold text-amber-900"
-                          : "font-medium text-[#57606A]"
+                          : "font-medium text-[#717973]"
                       }`}
                     >
                       3. Confirmed
@@ -1056,19 +1061,19 @@ function CabRequestFormContent() {
                   </div>
                   <div className="space-y-1.5">
                     <div
-                      className={`h-1.5 w-full rounded-full ${
+                      className={`h-2 w-full rounded-full transition-all ${
                         ["TRIP_STARTED", "COMPLETED"].includes(tripStatus?.status || "")
-                          ? "bg-emerald-600"
+                          ? "bg-[#14422D]"
                           : ["CONFIRMED", "EN_ROUTE_PICKUP", "ARRIVED_HOMESTAY"].includes(tripStatus?.status || "")
-                          ? "bg-blue-400"
-                          : "bg-[#E1E4E8]"
+                          ? "bg-sky-400"
+                          : "bg-[#ECEFEB]"
                       }`}
                     />
                     <span
                       className={`block truncate ${
                         ["TRIP_STARTED", "COMPLETED"].includes(tripStatus?.status || "")
-                          ? "font-bold text-emerald-900"
-                          : "font-medium text-[#57606A]"
+                          ? "font-bold text-[#14422D]"
+                          : "font-medium text-[#717973]"
                       }`}
                     >
                       4. On Trip
@@ -1076,13 +1081,13 @@ function CabRequestFormContent() {
                   </div>
                   <div className="space-y-1.5">
                     <div
-                      className={`h-1.5 w-full rounded-full ${
-                        tripStatus?.status === "COMPLETED" ? "bg-emerald-600" : "bg-[#E1E4E8]"
+                      className={`h-2 w-full rounded-full transition-all ${
+                        tripStatus?.status === "COMPLETED" ? "bg-[#14422D]" : "bg-[#ECEFEB]"
                       }`}
                     />
                     <span
                       className={`block truncate ${
-                        tripStatus?.status === "COMPLETED" ? "font-bold text-emerald-900" : "font-medium text-[#57606A]"
+                        tripStatus?.status === "COMPLETED" ? "font-bold text-[#14422D]" : "font-medium text-[#717973]"
                       }`}
                     >
                       5. Done
@@ -1093,14 +1098,14 @@ function CabRequestFormContent() {
 
               {/* Bidding Radar / Active Searching Banner */}
               {["PENDING_REVIEW", "FINDING_DRIVER"].includes(tripStatus?.status || confirmedTrip.status) && (
-                <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-4 space-y-2">
+                <div className="rounded-2xl border border-sky-200/80 bg-gradient-to-r from-sky-50/80 via-white to-emerald-50/40 p-5 space-y-2.5">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className="relative flex h-3.5 w-3.5">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
-                        <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-blue-600" />
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-sky-600" />
                       </div>
-                      <span className="text-xs font-bold text-blue-900 uppercase tracking-wide">
+                      <span className="text-xs font-bold text-sky-950 uppercase tracking-wider">
                         {tripStatus?.awaitingOwner
                           ? "Request received"
                           : (tripStatus?.status || confirmedTrip.status) === "PENDING_REVIEW"
@@ -1108,11 +1113,11 @@ function CabRequestFormContent() {
                           : "Finding your driver in this valley…"}
                       </span>
                     </div>
-                    <span className="text-[10px] text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full font-semibold">
+                    <span className="text-[10px] text-sky-800 bg-sky-100/80 px-2.5 py-0.5 rounded-full font-semibold">
                       Auto-syncing
                     </span>
                   </div>
-                  <p className="text-xs text-blue-800 leading-relaxed">
+                  <p className="text-xs text-sky-900 leading-relaxed">
                     {tripStatus?.awaitingOwner
                       ? "Received. The homestay will arrange your cab shortly."
                       : tripStatus?.quotesCount && tripStatus.quotesCount > 0
@@ -1120,7 +1125,7 @@ function CabRequestFormContent() {
                       : "Dispatched to verified local hill drivers. Connecting with available cabs near your homestay."}
                   </p>
                   {tripStatus?.biddingFallback && (
-                    <div className="rounded-lg bg-amber-50 border border-amber-300 p-2.5 text-xs text-amber-900 font-medium">
+                    <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-xs text-amber-900 font-medium">
                       Nearby drivers are currently on other mountain routes. Your homestay host has been notified to assist and allocate private fleet options.
                     </div>
                   )}
@@ -1129,22 +1134,30 @@ function CabRequestFormContent() {
 
               {/* Advance Payment Card (when reserved) */}
               {tripStatus?.status === "AWAITING_ADVANCE_PAYMENT" && !tripStatus.advancePaid && (
-                <div className="rounded-2xl border border-amber-300 bg-white p-5 sm:p-6 shadow-sm space-y-5">
+                <div className="rounded-3xl border border-amber-200/90 bg-white p-6 sm:p-7 shadow-[0_12px_40px_-6px_rgba(20,66,45,0.07)] space-y-6">
                   {/* Status & Deadline Header */}
-                  <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-4">
-                    <div>
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-bold text-amber-900">
-                        <Icon name="lock" className="text-xs" />
+                  <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[#ECEFEB] pb-5">
+                    <div className="space-y-1">
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-200 px-3 py-0.5 text-[11px] font-bold text-amber-900">
+                        <Icon name="lock" className="text-xs text-amber-700" />
                         <span>Driver Reserved on Hold</span>
                       </span>
-                      <h3 className="mt-1.5 font-extrabold text-[#1F2328] text-lg sm:text-xl">Confirm Mountain Cab</h3>
-                      <p className="text-xs text-[#57606A] mt-0.5">Pay booking advance to unlock driver contact & vehicle plate</p>
+                      <h3 className="font-display font-bold text-[#14422D] text-xl sm:text-2xl pt-1">
+                        Confirm Mountain Cab
+                      </h3>
+                      <p className="text-xs text-[#717973]">
+                        Pay reservation advance to unlock driver contact & vehicle plate
+                      </p>
                     </div>
                     <div className="text-right">
-                      <span className="text-[11px] font-medium text-[#57606A] uppercase tracking-wider block">Advance Due</span>
-                      <p className="text-2xl font-black text-emerald-800 leading-none mt-0.5">{formatInr(tripStatus.advanceAmount)}</p>
+                      <span className="text-[11px] font-semibold text-[#717973] uppercase tracking-wider block">
+                        Advance Required
+                      </span>
+                      <p className="text-3xl font-extrabold text-[#14422D] tracking-tight leading-none mt-1">
+                        {formatInr(tripStatus.advanceAmount)}
+                      </p>
                       {tripStatus.advanceDueAt && !claimPending && (
-                        <p className="text-[11px] font-bold text-amber-800 mt-1">
+                        <p className="text-[11px] font-semibold text-amber-800 mt-1.5">
                           Pay before {formatIstDateTime(tripStatus.advanceDueAt)}
                         </p>
                       )}
@@ -1152,46 +1165,49 @@ function CabRequestFormContent() {
                   </div>
 
                   {/* Fare Transparency Breakdown */}
-                  <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3.5 space-y-2 text-xs">
-                    <div className="flex justify-between items-center text-[#24292F]">
+                  <div className="rounded-2xl border border-[#E5E8E5] bg-[#F7FAF7] p-4 sm:p-5 space-y-2.5 text-xs">
+                    <div className="flex justify-between items-center text-[#414943]">
                       <span className="font-medium">Total Trip Fare (Agreed with Driver):</span>
-                      <strong className="font-extrabold text-slate-900">{formatInr(tripStatus.agreedFare)}</strong>
+                      <strong className="font-bold text-[#181C1B] text-sm">{formatInr(tripStatus.agreedFare)}</strong>
                     </div>
-                    <div className="flex justify-between items-center text-[#57606A]">
+                    <div className="flex justify-between items-center text-[#717973]">
                       <span>Online Reservation Advance (Pay now):</span>
-                      <strong className="text-emerald-800 font-extrabold text-sm">{formatInr(tripStatus.advanceAmount)}</strong>
+                      <strong className="text-[#14422D] font-bold text-sm">{formatInr(tripStatus.advanceAmount)}</strong>
                     </div>
-                    <div className="pt-2 border-t border-emerald-200/70 flex justify-between items-center text-emerald-950 font-bold">
-                      <span>Remaining Cash to Driver (At drop-off):</span>
-                      <span className="text-sm sm:text-base font-black text-emerald-800">{formatInr(tripStatus.remainingCashAmount)}</span>
+                    <div className="pt-2.5 border-t border-[#E5E8E5] flex justify-between items-center text-[#181C1B]">
+                      <div>
+                        <span className="font-bold block text-sm">Remaining Cash to Driver</span>
+                        <span className="text-[11px] text-[#717973]">Hand directly to driver at drop-off</span>
+                      </div>
+                      <span className="text-base sm:text-lg font-extrabold text-[#14422D]">{formatInr(tripStatus.remainingCashAmount)}</span>
                     </div>
                   </div>
 
                   {tripStatus.paymentClaim?.status === "REJECTED" && (
-                    <div className="rounded-xl border border-red-200 bg-red-50 p-3.5 text-xs text-red-900 space-y-1">
+                    <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-xs text-red-900 space-y-1">
                       <p className="font-bold flex items-center gap-1.5">
                         <Icon name="error" className="text-sm text-red-700" />
                         <span>Payment verification issue{tripStatus.paymentClaim.reason ? `: ${tripStatus.paymentClaim.reason}` : ""}</span>
                       </p>
                       <p className="text-[11px] text-red-800">
-                        Please check the 12-digit UTR in your payment app and submit it again below, or contact support.
+                        Please check the 12-digit UTR in your payment app and submit it again below, or contact concierge.
                       </p>
                     </div>
                   )}
 
                   {claimPending && (
-                    <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-xs text-emerald-950 space-y-2">
+                    <div className="rounded-2xl border border-[#14422D]/20 bg-[#14422D]/5 p-5 text-xs text-[#14422D] space-y-2.5">
                       <div className="flex items-center justify-between">
-                        <p className="flex items-center gap-1.5 font-extrabold text-emerald-900 text-sm">
-                          <Icon name="check_circle" className="text-base text-emerald-700" />
+                        <p className="flex items-center gap-2 font-bold text-[#14422D] text-sm">
+                          <Icon name="check_circle" className="text-base text-[#14422D]" />
                           <span>Payment Reference Submitted</span>
                         </p>
-                        <span className="rounded-full bg-emerald-200/70 px-2 py-0.5 text-[10px] font-bold text-emerald-900">
+                        <span className="rounded-full bg-[#14422D]/15 px-3 py-0.5 text-[10px] font-bold text-[#14422D]">
                           Verifying
                         </span>
                       </div>
-                      <p className="leading-relaxed">
-                        UTR / Ref: <span className="font-mono font-bold text-slate-900 bg-white px-2 py-0.5 rounded border border-emerald-200">{tripStatus.paymentClaim?.utr || "received"}</span>. Our operations desk is confirming the receipt. Your driver stays reserved on hold.
+                      <p className="leading-relaxed text-[#414943]">
+                        UTR / Ref: <span className="font-mono font-bold text-[#14422D] bg-white px-2.5 py-0.5 rounded-lg border border-[#14422D]/20">{tripStatus.paymentClaim?.utr || "received"}</span>. Our operations desk is verifying receipt. Your cab remains reserved on hold.
                       </p>
                       {!editingClaim && (
                         <button
@@ -1200,7 +1216,7 @@ function CabRequestFormContent() {
                             setEditingClaim(true);
                             setUtrInput(tripStatus.paymentClaim?.utr || "");
                           }}
-                          className="font-bold text-emerald-800 hover:text-emerald-900 underline cursor-pointer text-[11px]"
+                          className="font-bold text-[#14422D] hover:underline cursor-pointer text-xs"
                         >
                           Entered wrong UTR? Update Reference
                         </button>
@@ -1215,47 +1231,47 @@ function CabRequestFormContent() {
                         href={effectivePaymentUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="w-full flex items-center justify-between gap-3 rounded-2xl bg-emerald-800 hover:bg-emerald-900 px-5 py-4 text-white shadow-md active:scale-[0.99] transition-all cursor-pointer group"
+                        className="w-full flex items-center justify-between gap-4 rounded-2xl bg-[#14422D] hover:bg-[#1C593E] active:scale-[0.99] p-4 sm:p-5 text-white shadow-[0_10px_25px_-3px_rgba(20,66,45,0.3)] transition-all cursor-pointer group"
                       >
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/15 text-white shadow-inner">
-                            <Icon name="payments" className="text-2xl" />
+                        <div className="flex items-center gap-3.5">
+                          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/10 text-white shadow-inner">
+                            <Icon name="payments" className="text-2xl text-[#BCEECF]" />
                           </div>
                           <div className="text-left">
-                            <span className="text-[10px] uppercase tracking-wider text-emerald-200 font-bold block">
+                            <span className="text-[10px] uppercase tracking-wider text-[#A1D1B4] font-bold block">
                               Instant Driver Confirmation
                             </span>
-                            <span className="text-base sm:text-lg font-extrabold leading-tight block">
+                            <span className="text-base sm:text-lg font-bold leading-tight block">
                               Pay {formatInr(tripStatus.advanceAmount)} via Razorpay
                             </span>
                           </div>
                         </div>
-                        <div className="flex items-center gap-1 text-xs font-bold bg-white/15 px-3 py-1.5 rounded-xl border border-white/20 group-hover:bg-white/25 transition-colors">
+                        <div className="flex items-center gap-1.5 text-xs font-bold bg-white/10 px-3.5 py-2 rounded-xl border border-white/15 group-hover:bg-white/20 transition-all">
                           <span>Pay Now</span>
                           <Icon name="arrow_forward" className="text-sm" />
                         </div>
                       </a>
 
-                      <div className="flex flex-wrap items-center justify-center gap-3 text-[11px] text-[#57606A] pt-0.5">
+                      <div className="flex flex-wrap items-center justify-center gap-3 text-[11px] text-[#717973] pt-0.5">
                         <span className="flex items-center gap-1 font-medium">
-                          <Icon name="lock" className="text-xs text-emerald-700" /> 256-Bit SSL Secure
+                          <Icon name="lock" className="text-xs text-[#14422D]" /> 256-Bit SSL Secure
                         </span>
                         <span>•</span>
                         <span>UPI (GPay / PhonePe / Paytm)</span>
                         <span>•</span>
-                        <span>Credit / Debit Cards & NetBanking</span>
+                        <span>Cards & NetBanking</span>
                       </div>
                     </div>
                   )}
 
                   {/* Step 2: Instant UTR / Payment Reference Submission */}
                   {(!claimPending || editingClaim) && (
-                    <form onSubmit={handleSubmitClaim} className="rounded-xl border border-[#D0D7DE] bg-slate-50/60 p-4 text-xs space-y-2.5">
+                    <form onSubmit={handleSubmitClaim} className="rounded-2xl border border-[#E5E8E5] bg-[#F7FAF7] p-4 sm:p-5 text-xs space-y-3">
                       <div className="flex items-center justify-between">
-                        <label htmlFor="utr" className="block font-bold text-[#1F2328] text-xs">
+                        <label htmlFor="utr" className="block font-bold text-[#181C1B] text-xs">
                           Already paid? Enter UPI UTR or Payment ID:
                         </label>
-                        <span className="text-[10px] text-[#57606A] font-mono">12-digit Ref</span>
+                        <span className="text-[10px] text-[#717973] font-mono">12-digit Ref</span>
                       </div>
                       <div className="flex gap-2">
                         <input
@@ -1266,17 +1282,17 @@ function CabRequestFormContent() {
                           placeholder="e.g. 412345678901"
                           value={utrInput}
                           onChange={(e) => setUtrInput(e.target.value)}
-                          className="min-w-0 flex-1 rounded-xl border border-[#D0D7DE] bg-white px-3.5 py-2.5 font-mono text-sm text-[#1F2328] placeholder:text-[#57606A]/60 focus:border-emerald-600 focus:outline-none"
+                          className="min-w-0 flex-1 rounded-xl border border-[#D8DBD7] bg-white px-3.5 py-2.5 font-mono text-sm text-[#181C1B] placeholder:text-[#717973]/60 focus:border-[#14422D] focus:ring-4 focus:ring-[#14422D]/10 focus:outline-none transition-all"
                         />
                         <button
                           type="submit"
                           disabled={claimBusy}
-                          className="rounded-xl bg-[#1F2328] px-4 py-2.5 text-xs font-bold text-white hover:bg-black disabled:opacity-60 cursor-pointer transition-colors shadow-2xs"
+                          className="rounded-xl bg-[#14422D] px-5 py-2.5 text-xs font-bold text-white hover:bg-[#1C593E] disabled:opacity-60 cursor-pointer transition-colors shadow-2xs"
                         >
                           {claimBusy ? "Submitting…" : "Confirm"}
                         </button>
                       </div>
-                      <p className="text-[11px] text-[#57606A]">
+                      <p className="text-[11px] text-[#717973]">
                         Found in your payment receipt / SMS (12-digit UPI Ref / UTR number).
                       </p>
                       {claimError && <p className="text-[11px] font-semibold text-red-700">{claimError}</p>}
@@ -1285,13 +1301,13 @@ function CabRequestFormContent() {
 
                   {/* Secondary Alternative: Direct UPI QR Code (Collapsible) */}
                   {activeUpiId && !claimPending && (
-                    <div className="rounded-xl border border-slate-200 bg-white p-3.5 text-xs space-y-3">
+                    <div className="rounded-2xl border border-[#E5E8E5] bg-white p-4 text-xs space-y-3">
                       <div className="flex items-center justify-between">
-                        <span className="font-bold text-slate-800 text-xs">Alternative: Direct UPI Transfer</span>
+                        <span className="font-bold text-[#181C1B] text-xs">Alternative: Direct UPI Transfer</span>
                         <button
                           type="button"
                           onClick={() => setShowQr(!showQr)}
-                          className="font-bold text-emerald-800 hover:text-emerald-900 cursor-pointer flex items-center gap-1 text-[11px]"
+                          className="font-bold text-[#14422D] hover:underline cursor-pointer flex items-center gap-1 text-[11px]"
                         >
                           <Icon name="qr_code" className="text-sm" />
                           <span>{showQr ? "Hide UPI QR" : "Show UPI QR & ID"}</span>
@@ -1299,40 +1315,40 @@ function CabRequestFormContent() {
                       </div>
 
                       {showQr && (
-                        <div className="space-y-3 pt-2 border-t border-slate-100">
+                        <div className="space-y-3 pt-3 border-t border-[#ECEFEB]">
                           {advanceUpiUrl && (
                             <a
                               href={advanceUpiUrl}
-                              className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white shadow-2xs hover:bg-emerald-800 transition-all"
+                              className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-[#14422D] px-4 py-3 text-xs font-bold text-white shadow-sm hover:bg-[#1C593E] transition-all"
                             >
                               <Icon name="account_balance_wallet" className="text-sm" /> Open in UPI App
                             </a>
                           )}
 
-                          <div className="space-y-1.5 rounded-lg bg-[#F6F8FA] p-2.5">
+                          <div className="space-y-2 rounded-xl bg-[#F7FAF7] p-3 border border-[#E5E8E5]">
                             <div className="flex items-center justify-between gap-2">
-                              <span className="text-[#57606A]">UPI ID</span>
+                              <span className="text-[#717973]">UPI ID</span>
                               <div className="flex items-center gap-2 min-w-0">
-                                <span className="font-mono font-bold text-[#1F2328] break-all">{activeUpiId}</span>
+                                <span className="font-mono font-bold text-[#181C1B] break-all">{activeUpiId}</span>
                                 <button
                                   type="button"
                                   onClick={() => handleCopyUpi(activeUpiId)}
-                                  className="rounded px-2 py-0.5 font-bold bg-white border border-[#D0D7DE] text-xs hover:bg-[#E1E4E8] cursor-pointer"
+                                  className="rounded-lg px-2.5 py-1 font-bold bg-white border border-[#D8DBD7] text-xs hover:bg-[#ECEFEB] cursor-pointer"
                                 >
                                   {copiedUpi ? "Copied" : "Copy"}
                                 </button>
                               </div>
                             </div>
                             <div className="flex justify-between gap-2">
-                              <span className="text-[#57606A]">Amount</span>
-                              <span className="font-mono font-bold text-[#1F2328]">{formatInr(tripStatus.advanceAmount)}</span>
+                              <span className="text-[#717973]">Amount</span>
+                              <span className="font-mono font-bold text-[#181C1B]">{formatInr(tripStatus.advanceAmount)}</span>
                             </div>
                           </div>
 
                           {qr.url === advanceUpiUrl && qr.data && (
                             <div className="flex flex-col items-center justify-center pt-1">
-                              <img src={qr.data} alt="UPI payment QR code" className="h-40 w-40 rounded-xl border border-[#D0D7DE] p-1 bg-white shadow-xs" />
-                              <span className="mt-1.5 text-[11px] text-[#57606A]">Scan with Google Pay, PhonePe, or Paytm</span>
+                              <img src={qr.data} alt="UPI payment QR code" className="h-44 w-44 rounded-2xl border border-[#E5E8E5] p-2 bg-white shadow-xs" />
+                              <span className="mt-2 text-[11px] text-[#717973]">Scan with Google Pay, PhonePe, or Paytm</span>
                             </div>
                           )}
                         </div>
@@ -1340,37 +1356,37 @@ function CabRequestFormContent() {
                     </div>
                   )}
 
-                  {/* Professional Policy & Safety Guarantee (Replaces scary yellow warning) */}
-                  <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 space-y-2 text-xs">
-                    <div className="flex items-center gap-1.5 font-bold text-slate-900 border-b border-slate-200 pb-2">
-                      <Icon name="shield" className="text-sm text-emerald-700" />
+                  {/* Professional Policy & Safety Guarantee */}
+                  <div className="rounded-2xl border border-[#E5E8E5] bg-[#F7FAF7] p-4 sm:p-5 space-y-2 text-xs">
+                    <div className="flex items-center gap-1.5 font-bold text-[#181C1B] border-b border-[#E5E8E5] pb-2.5">
+                      <Icon name="shield" className="text-sm text-[#14422D]" />
                       <span>StayCabs Mountain Ride Guarantee & Fair Policy</span>
                     </div>
-                    <ul className="space-y-1.5 text-[11px] leading-relaxed text-slate-700">
+                    <ul className="space-y-2 text-[11px] leading-relaxed text-[#414943] pt-1">
                       <li className="flex items-start gap-2">
-                        <span className="text-emerald-700 font-bold shrink-0">✓</span>
+                        <span className="text-[#14422D] font-bold shrink-0">✓</span>
                         <span><strong>Dedicated Cab Hold:</strong> Advance payment guarantees cab allocation from our verified mountain fleet for your scheduled itinerary.</span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-emerald-700 font-bold shrink-0">✓</span>
+                        <span className="text-[#14422D] font-bold shrink-0">✓</span>
                         <span><strong>Instant Driver Release:</strong> Verified driver contact number, vehicle plate, and live pickup PIN are unlocked immediately upon payment confirmation.</span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-emerald-700 font-bold shrink-0">✓</span>
+                        <span className="text-[#14422D] font-bold shrink-0">✓</span>
                         <span><strong>Fair Weather & Mountain Policy:</strong> 100% full refund or free reschedule if hill roads are blocked due to weather or landslides, or in case of vehicle breakdown. Advance is non-refundable for guest no-shows once the driver has been dispatched.</span>
                       </li>
                     </ul>
                   </div>
 
                   {/* WhatsApp Verification & Concierge Help */}
-                  <div className="pt-1 text-center space-y-2">
+                  <div className="pt-1 text-center space-y-2.5">
                     {activeSupportPhone ? (
                       <>
                         <a
                           href={`https://wa.me/${activeSupportPhone}?text=${encodeURIComponent(`Namaste, I am at the advance payment step for StayCabs trip #${tripStatus.reference} (Amount: ₹${tripStatus.advanceAmount}). Please confirm my booking.`)}`}
                           target="_blank"
                           rel="noreferrer"
-                          className="inline-flex items-center justify-center gap-2 rounded-xl bg-white border border-[#D0D7DE] px-4 py-2.5 text-xs font-bold text-[#128C7E] hover:bg-[#F6F8FA] transition-colors w-full shadow-2xs"
+                          className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white border border-[#D8DBD7] px-4 py-3 text-xs font-bold text-[#25D366] hover:bg-[#F7FAF7] transition-all w-full shadow-2xs"
                         >
                           <Icon name="chat" className="text-sm" />
                           <span>Share Payment Confirmation on WhatsApp</span>
@@ -1380,9 +1396,9 @@ function CabRequestFormContent() {
                             href={`https://wa.me/${activeSupportPhone}?text=${encodeURIComponent(`Namaste, regarding cab request #${tripStatus.reference}: the quoted fare is ₹${tripStatus.agreedFare}. Can you assist with the pricing or vehicle options?`)}`}
                             target="_blank"
                             rel="noreferrer"
-                            className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#57606A] hover:text-[#1F2328] hover:underline"
+                            className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#717973] hover:text-[#14422D] hover:underline"
                           >
-                            <Icon name="support_agent" className="text-xs text-emerald-700" />
+                            <Icon name="support_agent" className="text-xs text-[#14422D]" />
                             <span>Need a Different Fare or Vehicle? Chat with Desk</span>
                           </a>
                         </div>
@@ -1390,7 +1406,7 @@ function CabRequestFormContent() {
                     ) : activeSupportEmail ? (
                       <a
                         href={`mailto:${activeSupportEmail}?subject=${encodeURIComponent(`Payment Confirmation - Reference #${tripStatus.reference}`)}`}
-                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#128C7E] hover:underline"
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#14422D] hover:underline"
                       >
                         <Icon name="mail" className="text-sm" /> Email Payment Confirmation ({activeSupportEmail})
                       </a>
@@ -1401,7 +1417,7 @@ function CabRequestFormContent() {
 
               {/* Cancelled / Expired Details */}
               {["CANCELLED", "EXPIRED"].includes(tripStatus?.status || "") && (
-                <div className="rounded-xl border border-red-200 bg-red-50 p-4 space-y-1.5 text-xs text-red-900">
+                <div className="rounded-2xl border border-red-200 bg-red-50 p-5 space-y-1.5 text-xs text-red-900">
                   <p className="font-bold">
                     {tripStatus?.status === "EXPIRED" ? "This cab request has expired." : "This cab request was cancelled."}
                   </p>
@@ -1419,31 +1435,31 @@ function CabRequestFormContent() {
                 const hasUnlockedContact = Boolean(tripStatus?.driverPhone && !tripStatus.driverPhone.includes("*"));
 
                 return (
-                  <div className="rounded-2xl border border-emerald-200 bg-white p-5 sm:p-6 shadow-sm space-y-4">
+                  <div className="rounded-3xl border border-[#E5E8E5] bg-white p-6 sm:p-7 shadow-[0_10px_30px_-4px_rgba(20,66,45,0.05)] space-y-5">
                     {/* Driver Profile Header */}
-                    <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-4">
-                      <div className="flex items-center gap-3">
+                    <div className="flex items-start justify-between gap-3 border-b border-[#ECEFEB] pb-4">
+                      <div className="flex items-center gap-3.5">
                         <div className="relative">
-                          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-700 text-white font-extrabold text-base shadow-xs">
+                          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#14422D] text-white font-display font-bold text-lg shadow-sm">
                             {driverDisplayName.charAt(0) || "D"}
                           </div>
                           <span className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-xs">
-                            <Icon name="verified" className="text-sm text-emerald-600" />
+                            <Icon name="verified" className="text-sm text-[#14422D]" />
                           </span>
                         </div>
                         <div>
                           <div className="flex items-center gap-2">
-                            <h4 className="font-extrabold text-[#1F2328] text-base leading-tight">
+                            <h4 className="font-bold text-[#181C1B] text-base leading-tight">
                               {driverDisplayName}
                             </h4>
-                            <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800 border border-emerald-200">
-                              Verified
+                            <span className="inline-flex items-center rounded-full bg-[#14422D]/8 px-2 py-0.5 text-[10px] font-bold text-[#14422D] border border-[#14422D]/15">
+                              Verified Driver
                             </span>
                           </div>
-                          <div className="flex items-center gap-2 mt-1 flex-wrap">
-                            <span className="text-xs text-[#57606A] font-semibold">{vehicleDisplay.model}</span>
+                          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                            <span className="text-xs text-[#717973] font-medium">{vehicleDisplay.model}</span>
                             {vehicleDisplay.plate && (
-                              <span className="inline-flex items-center rounded bg-amber-50 px-2 py-0.5 font-mono text-[11px] font-extrabold text-slate-900 border border-amber-300 tracking-wider shadow-2xs">
+                              <span className="inline-flex items-center rounded-lg bg-amber-50 px-2.5 py-0.5 font-mono text-xs font-bold text-amber-950 border border-amber-300 tracking-wider shadow-2xs">
                                 {vehicleDisplay.plate}
                               </span>
                             )}
@@ -1454,48 +1470,48 @@ function CabRequestFormContent() {
                       {/* Right side: Masked notice if contact still locked */}
                       {!hasUnlockedContact && tripStatus?.driverPhone && (
                         <div className="text-right max-w-[45%]">
-                          <p className="font-mono text-xs font-bold text-[#1F2328]">{tripStatus.driverPhone}</p>
-                          <p className="text-[10px] text-[#57606A] mt-0.5">Unlocked once advance is confirmed</p>
+                          <p className="font-mono text-xs font-bold text-[#181C1B]">{tripStatus.driverPhone}</p>
+                          <p className="text-[10px] text-[#717973] mt-0.5">Unlocked once advance is confirmed</p>
                         </div>
                       )}
                     </div>
 
-                    {/* Dedicated 2-Button Action Row (Clean, Thumb-Friendly, Native Layout) */}
+                    {/* Dedicated 2-Button Action Row (Apple Native High-Contrast Controls) */}
                     {hasUnlockedContact && (
-                      <div className="grid grid-cols-2 gap-2.5">
+                      <div className="grid grid-cols-2 gap-3">
                         <a
                           href={`tel:${tripStatus?.driverPhone}`}
-                          className="inline-flex items-center justify-center gap-2 rounded-xl bg-white border border-[#D0D7DE] px-4 py-3 text-xs font-bold text-[#24292F] shadow-2xs hover:bg-[#F6F8FA] active:scale-[0.98] transition-all"
+                          className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white border border-[#D8DBD7] px-4 py-3.5 text-xs font-bold text-[#181C1B] shadow-2xs hover:bg-[#F1F4F1] active:scale-[0.98] transition-all"
                         >
-                          <Icon name="phone" className="text-base text-emerald-700" />
+                          <Icon name="phone" className="text-base text-[#14422D]" />
                           <span>Call Driver</span>
                         </a>
                         <a
                           href={`https://wa.me/${waNumber(tripStatus?.driverPhone || "")}?text=${encodeURIComponent(`Namaste ${driverDisplayName}, I am your passenger for StayCabs trip #${confirmedTrip.reference}.`)}`}
                           target="_blank"
                           rel="noreferrer"
-                          className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#25D366] px-4 py-3 text-xs font-bold text-white shadow-2xs hover:bg-[#20ba59] active:scale-[0.98] transition-all"
+                          className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#25D366] hover:bg-[#20ba59] px-4 py-3.5 text-xs font-bold text-white shadow-2xs active:scale-[0.98] transition-all"
                         >
                           <Icon name="chat" className="text-base" />
-                          <span>WhatsApp Driver</span>
+                          <span>WhatsApp</span>
                         </a>
                       </div>
                     )}
 
-                    {/* Boarding Verification PIN (Apple Wallet / Pass Voucher Style) */}
+                    {/* Boarding Verification PIN (Apple Pass Voucher / Passbook Style) */}
                     {tripStatus?.pickupOtp && (
-                      <div className="relative overflow-hidden rounded-2xl border border-emerald-300 bg-gradient-to-br from-emerald-900 via-slate-900 to-emerald-950 text-white p-4 sm:p-5 shadow-xs">
-                        <div className="flex items-center justify-between gap-3">
+                      <div className="relative overflow-hidden rounded-3xl border border-emerald-500/20 bg-gradient-to-br from-[#0B2519] via-[#14422D] to-[#0A1D13] text-white p-5 sm:p-6 shadow-[0_12px_36px_-6px_rgba(20,66,45,0.3)]">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                           <div className="space-y-1">
-                            <div className="flex items-center gap-1.5 text-emerald-300 text-[11px] font-bold uppercase tracking-wider">
+                            <div className="flex items-center gap-1.5 text-[#BCEECF] text-[11px] font-bold uppercase tracking-widest">
                               <Icon name="key" className="text-xs" />
                               <span>Boarding Verification PIN</span>
                             </div>
-                            <p className="text-xs text-slate-300 max-w-xs leading-relaxed">
+                            <p className="text-xs text-white/80 max-w-xs leading-relaxed">
                               Share this PIN with your driver upon vehicle arrival to verify trip
                             </p>
                           </div>
-                          <div className="flex items-center tracking-[0.25em] font-mono text-2xl sm:text-3xl font-black text-amber-300 bg-white/10 px-4 py-2 rounded-xl border border-white/20 shadow-inner">
+                          <div className="inline-flex self-start sm:self-auto items-center tracking-[0.3em] font-mono text-2xl sm:text-3xl font-black text-amber-300 bg-white/10 px-5 py-2.5 rounded-2xl border border-white/15 shadow-inner backdrop-blur-md">
                             {tripStatus.pickupOtp.split("").join(" ")}
                           </div>
                         </div>
@@ -1504,27 +1520,27 @@ function CabRequestFormContent() {
 
                     {/* Cash to Pay Driver Card */}
                     {typeof tripStatus?.remainingCashAmount === "number" && (
-                      <div className="flex items-center justify-between rounded-xl bg-slate-50 border border-slate-200 p-3.5 text-xs">
-                        <div className="flex items-center gap-2.5">
-                          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 text-emerald-800">
-                            <Icon name="payments" className="text-base" />
+                      <div className="flex items-center justify-between rounded-2xl bg-[#F7FAF7] border border-[#E5E8E5] p-4 text-xs">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#14422D]/10 text-[#14422D]">
+                            <Icon name="payments" className="text-lg" />
                           </div>
                           <div>
-                            <span className="font-bold text-slate-800">Cash Due at Drop-off</span>
-                            <p className="text-[11px] text-[#57606A]">Pay directly to driver upon reaching destination</p>
+                            <span className="font-bold text-[#181C1B]">Cash Due at Drop-off</span>
+                            <p className="text-[11px] text-[#717973]">Pay directly to driver upon reaching destination</p>
                           </div>
                         </div>
-                        <span className="text-base sm:text-lg font-black text-emerald-900">
+                        <span className="text-base sm:text-lg font-extrabold text-[#14422D]">
                           {formatInr(tripStatus.remainingCashAmount)}
                         </span>
                       </div>
                     )}
 
                     {/* Mountain Safety Assurance Note */}
-                    <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/60 p-3 text-[11px] leading-relaxed text-emerald-950 flex items-start gap-2">
-                      <Icon name="check_circle" className="text-xs text-emerald-700 mt-0.5 shrink-0" />
+                    <div className="rounded-2xl border border-[#14422D]/15 bg-[#14422D]/5 p-3.5 text-[11px] leading-relaxed text-[#14422D] flex items-start gap-2.5">
+                      <Icon name="check_circle" className="text-xs text-[#14422D] mt-0.5 shrink-0" />
                       <span>
-                        <strong>Driver Allocated & Verified:</strong> Contact your driver directly for coordination or luggage adjustments. Mountain route assistance is monitored by StayCabs operations.
+                        <strong>Driver Allocated & Verified:</strong> Contact your driver directly for route coordination or luggage adjustments. Mountain route assistance is monitored by StayCabs operations.
                       </span>
                     </div>
                   </div>
@@ -1533,30 +1549,32 @@ function CabRequestFormContent() {
 
               {/* Guest Rating & Review Form (when COMPLETED) */}
               {tripStatus?.status === "COMPLETED" && (
-                <div className="rounded-2xl border border-[#D0D7DE] bg-white p-5 space-y-3">
+                <div className="rounded-3xl border border-[#E5E8E5] bg-white p-6 space-y-4 shadow-[0_8px_25px_-4px_rgba(20,66,45,0.05)]">
                   {tripStatus?.guestRating || ratingSuccess ? (
-                    <div className="text-center space-y-1">
-                      <p className="font-bold text-emerald-900 text-sm">Thank you for rating your trip!</p>
-                      <div className="flex items-center justify-center gap-1 text-amber-500 text-lg">
+                    <div className="text-center space-y-2 py-2">
+                      <p className="font-display font-bold text-[#14422D] text-base">Thank you for rating your trip!</p>
+                      <div className="flex items-center justify-center gap-1.5 text-amber-500 text-xl">
                         {[1, 2, 3, 4, 5].map((s) => (
-                          <span key={s} className={s <= (tripStatus?.guestRating?.stars || selectedRating) ? "text-amber-500" : "text-[#D0D7DE]"}>
+                          <span key={s} className={s <= (tripStatus?.guestRating?.stars || selectedRating) ? "text-amber-500" : "text-[#D8DBD7]"}>
                             ★
                           </span>
                         ))}
                       </div>
                       {(tripStatus?.guestRating?.comment || ratingComment) && (
-                        <p className="text-xs text-[#57606A] italic">&quot;{tripStatus?.guestRating?.comment || ratingComment}&quot;</p>
+                        <p className="text-xs text-[#717973] italic max-w-sm mx-auto">&quot;{tripStatus?.guestRating?.comment || ratingComment}&quot;</p>
                       )}
                     </div>
                   ) : (
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-sm text-[#1F2328]">Rate Your Mountain Ride</span>
-                        <span className="text-xs font-semibold text-emerald-700">{tripStatus?.driverName || "Driver"}</span>
+                    <div className="space-y-4">
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <span className="font-display font-bold text-base text-[#181C1B]">Rate Your Mountain Ride</span>
+                          <span className="text-xs font-semibold text-[#14422D] bg-[#14422D]/10 px-2.5 py-0.5 rounded-full">{tripStatus?.driverName || "Driver"}</span>
+                        </div>
+                        <p className="text-xs text-[#717973] mt-0.5">Your verified feedback ensures high mountain safety standards.</p>
                       </div>
-                      <p className="text-xs text-[#57606A]">Your verified feedback ensures high mountain safety standards.</p>
 
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1.5">
                         {[1, 2, 3, 4, 5].map((star) => (
                           <button
                             key={star}
@@ -1564,12 +1582,12 @@ function CabRequestFormContent() {
                             onClick={() => setSelectedRating(star)}
                             onMouseEnter={() => setHoverRating(star)}
                             onMouseLeave={() => setHoverRating(0)}
-                            className="text-2xl cursor-pointer p-0.5 focus:outline-none transition-transform hover:scale-125"
+                            className="text-2xl cursor-pointer p-1 focus:outline-none transition-transform hover:scale-125"
                           >
-                            <span className={star <= (hoverRating || selectedRating) ? "text-amber-500" : "text-[#D0D7DE]"}>★</span>
+                            <span className={star <= (hoverRating || selectedRating) ? "text-amber-500" : "text-[#D8DBD7]"}>★</span>
                           </button>
                         ))}
-                        <span className="ml-2 text-xs font-semibold text-[#1F2328]">
+                        <span className="ml-2 text-xs font-semibold text-[#181C1B]">
                           {selectedRating === 5 ? "Excellent" : selectedRating === 4 ? "Very Good" : selectedRating === 3 ? "Good" : selectedRating === 2 ? "Fair" : "Poor"}
                         </span>
                       </div>
@@ -1580,7 +1598,7 @@ function CabRequestFormContent() {
                         placeholder="Optional: share feedback on driving safety, cleanliness, punctuality..."
                         maxLength={300}
                         rows={2}
-                        className="w-full rounded-xl border border-[#D0D7DE] p-2.5 text-xs text-[#1F2328] focus:border-emerald-600 focus:outline-none"
+                        className="w-full rounded-2xl border border-[#D8DBD7] p-3 text-xs text-[#181C1B] focus:border-[#14422D] focus:ring-4 focus:ring-[#14422D]/10 focus:outline-none transition-all"
                       />
 
                       {ratingError && <p className="text-xs text-red-600 font-medium">{ratingError}</p>}
@@ -1589,7 +1607,7 @@ function CabRequestFormContent() {
                         type="button"
                         disabled={submittingRating}
                         onClick={handleSubmitRating}
-                        className="w-full rounded-xl bg-emerald-600 py-2.5 text-xs font-bold text-white shadow hover:bg-emerald-700 cursor-pointer disabled:opacity-50"
+                        className="w-full rounded-2xl bg-[#14422D] py-3 text-xs font-bold text-white shadow hover:bg-[#1C593E] cursor-pointer disabled:opacity-50 transition-all"
                       >
                         {submittingRating ? "Submitting..." : "Submit Driver Review"}
                       </button>
@@ -1606,7 +1624,7 @@ function CabRequestFormContent() {
                     setConfirmedTrip(null);
                     setCurrentStep(1);
                   }}
-                  className="w-full rounded-xl border border-[#D0D7DE] bg-white py-2.5 text-xs font-bold text-[#24292F] hover:bg-[#F6F8FA] cursor-pointer"
+                  className="w-full rounded-2xl border border-[#D8DBD7] bg-white py-3 text-xs font-semibold text-[#181C1B] hover:bg-[#F1F4F1] cursor-pointer transition-colors"
                 >
                   Book Another Cab
                 </button>
@@ -1617,16 +1635,18 @@ function CabRequestFormContent() {
           /* Multi-Step Booking Form */
           <div className="space-y-6">
             {/* Step Progress Stepper Bar */}
-            <div className="rounded-2xl border border-[#D0D7DE] bg-white p-2.5 sm:p-3 shadow-xs">
-              <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="mx-auto max-w-sm rounded-full bg-[#ECEFEB] p-1.5 shadow-2xs">
+              <div className="grid grid-cols-3 gap-1 text-center">
                 <button
                   type="button"
                   onClick={() => setCurrentStep(1)}
-                  className={`flex items-center justify-center gap-1.5 py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
-                    currentStep === 1 ? "bg-emerald-50 text-emerald-900 border border-emerald-200" : "text-[#57606A] hover:bg-[#F6F8FA]"
+                  className={`flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded-full transition-all cursor-pointer ${
+                    currentStep === 1
+                      ? "bg-[#14422D] text-white shadow-xs"
+                      : "text-[#414943] hover:text-[#181C1B]"
                   }`}
                 >
-                  <span className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] ${currentStep === 1 ? "bg-emerald-600 text-white" : "bg-[#D0D7DE] text-white"}`}>
+                  <span className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] ${currentStep === 1 ? "bg-white/20 text-white font-bold" : "bg-[#D8DBD7] text-white"}`}>
                     1
                   </span>
                   <span>Route</span>
@@ -1635,11 +1655,13 @@ function CabRequestFormContent() {
                 <button
                   type="button"
                   onClick={() => setCurrentStep(2)}
-                  className={`flex items-center justify-center gap-1.5 py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
-                    currentStep === 2 ? "bg-emerald-50 text-emerald-900 border border-emerald-200" : "text-[#57606A] hover:bg-[#F6F8FA]"
+                  className={`flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded-full transition-all cursor-pointer ${
+                    currentStep === 2
+                      ? "bg-[#14422D] text-white shadow-xs"
+                      : "text-[#414943] hover:text-[#181C1B]"
                   }`}
                 >
-                  <span className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] ${currentStep === 2 ? "bg-emerald-600 text-white" : "bg-[#D0D7DE] text-white"}`}>
+                  <span className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] ${currentStep === 2 ? "bg-white/20 text-white font-bold" : "bg-[#D8DBD7] text-white"}`}>
                     2
                   </span>
                   <span>Schedule</span>
@@ -1648,11 +1670,13 @@ function CabRequestFormContent() {
                 <button
                   type="button"
                   onClick={() => setCurrentStep(3)}
-                  className={`flex items-center justify-center gap-1.5 py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
-                    currentStep === 3 ? "bg-emerald-50 text-emerald-900 border border-emerald-200" : "text-[#57606A] hover:bg-[#F6F8FA]"
+                  className={`flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded-full transition-all cursor-pointer ${
+                    currentStep === 3
+                      ? "bg-[#14422D] text-white shadow-xs"
+                      : "text-[#414943] hover:text-[#181C1B]"
                   }`}
                 >
-                  <span className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] ${currentStep === 3 ? "bg-emerald-600 text-white" : "bg-[#D0D7DE] text-white"}`}>
+                  <span className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] ${currentStep === 3 ? "bg-white/20 text-white font-bold" : "bg-[#D8DBD7] text-white"}`}>
                     3
                   </span>
                   <span>Review</span>
@@ -1661,27 +1685,32 @@ function CabRequestFormContent() {
             </div>
 
             {errorMessage && (
-              <div className="rounded-xl border border-red-300 bg-red-50 p-3 text-xs text-red-800 font-medium">
+              <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-xs text-red-900 font-medium">
                 {errorMessage}
               </div>
             )}
 
             {/* STEP 1: ROUTE & ITINERARY */}
             {currentStep === 1 && (
-              <div className="space-y-5 rounded-2xl border border-[#D0D7DE] bg-white p-4 sm:p-6 shadow-xs">
+              <div className="space-y-6 rounded-3xl border border-[#E5E8E5] bg-white p-6 sm:p-8 shadow-[0_10px_35px_-4px_rgba(20,66,45,0.05)]">
+                <div>
+                  <h2 className="font-display text-2xl font-bold text-[#14422D]">Plan Your Mountain Route</h2>
+                  <p className="text-xs text-[#717973] mt-1">Select your pickup and destinations across Darjeeling, Sikkim, and the hills.</p>
+                </div>
+
                 {/* 2 Tabs: Custom Tour (Default) & Popular Mountain Routes */}
-                <div className="grid grid-cols-2 gap-1.5 p-1 bg-[#F6F8FA] border border-[#D0D7DE] rounded-xl">
+                <div className="grid grid-cols-2 gap-1.5 p-1.5 bg-[#ECEFEB] rounded-2xl">
                   <button
                     type="button"
                     onClick={() => setActiveTab("custom")}
-                    className={`flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                       activeTab === "custom"
-                        ? "bg-white text-emerald-950 shadow-xs border border-emerald-600/30 font-extrabold"
-                        : "text-[#57606A] hover:text-[#1F2328]"
+                        ? "bg-white text-[#14422D] shadow-sm font-bold"
+                        : "text-[#414943] hover:text-[#181C1B]"
                     }`}
                   >
-                    <Icon name="edit_road" className="text-sm text-emerald-700" />
-                    <span>Custom Tour</span>
+                    <Icon name="edit_road" className="text-sm text-[#14422D]" />
+                    <span>Custom Itinerary</span>
                   </button>
 
                   <button
@@ -1690,25 +1719,25 @@ function CabRequestFormContent() {
                       setActiveTab("popular");
                       handleSelectPopularRoute(selectedPopularRouteId || "homestay-to-bagdogra");
                     }}
-                    className={`flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                       activeTab === "popular"
-                        ? "bg-white text-emerald-950 shadow-xs border border-emerald-600/30 font-extrabold"
-                        : "text-[#57606A] hover:text-[#1F2328]"
+                        ? "bg-white text-[#14422D] shadow-sm font-bold"
+                        : "text-[#414943] hover:text-[#181C1B]"
                     }`}
                   >
-                    <Icon name="alt_route" className="text-sm text-emerald-700" />
-                    <span>Popular Mountain Routes</span>
+                    <Icon name="alt_route" className="text-sm text-[#14422D]" />
+                    <span>Popular Transfers</span>
                   </button>
                 </div>
 
                 {/* TAB 1: CUSTOM TOUR (Default Active) */}
                 {activeTab === "custom" && (
-                  <div className="space-y-4">
+                  <div className="space-y-5">
                     {/* Pickup Location Mode */}
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                       <div className="flex items-center justify-between">
-                        <label className="text-xs font-bold text-[#1F2328] flex items-center gap-1.5">
-                          <Icon name="location_on" className="text-xs text-emerald-700" />
+                        <label className="text-xs font-bold text-[#181C1B] flex items-center gap-1.5">
+                          <Icon name="location_on" className="text-sm text-[#14422D]" />
                           <span>Pickup Location</span>
                         </label>
                         <button
@@ -1720,7 +1749,7 @@ function CabRequestFormContent() {
                               initialAddress: getResolvedPickup(),
                             })
                           }
-                          className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 hover:text-emerald-900 transition-colors cursor-pointer"
+                          className="inline-flex items-center gap-1 text-[11px] font-bold text-[#14422D] hover:underline transition-colors cursor-pointer"
                           title="Pin on Map (Blinkit style)"
                         >
                           <Icon name="pin_drop" className="text-xs" />
@@ -1729,7 +1758,7 @@ function CabRequestFormContent() {
                       </div>
 
                       {/* 2-Option Pickup Selection: At Homestay vs Other Location */}
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-2 gap-3">
                         <button
                           type="button"
                           onClick={() => {
@@ -1741,13 +1770,13 @@ function CabRequestFormContent() {
                               : link?.homestayName || "Homestay gate";
                             setPickup(homestayLoc);
                           }}
-                          className={`flex items-center justify-center gap-2 py-2.5 px-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                          className={`flex items-center justify-center gap-2 py-3 px-3 rounded-2xl text-xs font-bold border transition-all cursor-pointer ${
                             !customPickup
-                              ? "bg-emerald-50/70 border-emerald-600 text-emerald-950 ring-1 ring-emerald-600 shadow-2xs"
-                              : "bg-[#F6F8FA] border-[#D0D7DE] text-[#57606A] hover:bg-[#E1E4E8]"
+                              ? "bg-[#14422D]/8 border-[#14422D] text-[#14422D] shadow-2xs"
+                              : "bg-[#F7FAF7] border-[#D8DBD7] text-[#414943] hover:bg-[#F1F4F1]"
                           }`}
                         >
-                          <Icon name="home" className="text-sm text-emerald-700" />
+                          <Icon name="home" className="text-base text-[#14422D]" />
                           <span>At Homestay</span>
                         </button>
 
@@ -1759,48 +1788,48 @@ function CabRequestFormContent() {
                               setPickup("");
                             }
                           }}
-                          className={`flex items-center justify-center gap-2 py-2.5 px-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                          className={`flex items-center justify-center gap-2 py-3 px-3 rounded-2xl text-xs font-bold border transition-all cursor-pointer ${
                             customPickup
-                              ? "bg-emerald-50/70 border-emerald-600 text-emerald-950 ring-1 ring-emerald-600 shadow-2xs"
-                              : "bg-[#F6F8FA] border-[#D0D7DE] text-[#57606A] hover:bg-[#E1E4E8]"
+                              ? "bg-[#14422D]/8 border-[#14422D] text-[#14422D] shadow-2xs"
+                              : "bg-[#F7FAF7] border-[#D8DBD7] text-[#414943] hover:bg-[#F1F4F1]"
                           }`}
                         >
-                          <Icon name="edit_location" className="text-sm text-emerald-700" />
+                          <Icon name="edit_location" className="text-base text-[#14422D]" />
                           <span>Other Location</span>
                         </button>
                       </div>
 
                       {!customPickup ? (
-                        <div className="space-y-1.5">
-                          <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-3 flex items-center justify-between">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-800">
-                                <Icon name="storefront" className="text-sm" />
+                        <div className="space-y-2">
+                          <div className="rounded-2xl border border-[#E5E8E5] bg-[#F7FAF7] p-4 flex items-center justify-between">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#14422D]/10 text-[#14422D]">
+                                <Icon name="storefront" className="text-lg" />
                               </span>
                               <div className="min-w-0">
-                                <p className="text-xs font-bold text-emerald-950 truncate">
+                                <p className="text-xs font-bold text-[#181C1B] truncate">
                                   {link?.homestayName || "Verified Partner Homestay"}
                                 </p>
-                                <p className="text-[11px] text-emerald-800/80 truncate">
+                                <p className="text-[11px] text-[#717973] truncate">
                                   Driver navigates straight to homestay gate
                                 </p>
                               </div>
                             </div>
-                            <span className="shrink-0 rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-900 uppercase">
+                            <span className="shrink-0 rounded-full bg-[#14422D]/10 px-2.5 py-0.5 text-[10px] font-bold text-[#14422D] uppercase tracking-wider">
                               Homestay
                             </span>
                           </div>
 
                           {pickupCoords && (
-                            <div className="flex items-center justify-between rounded-lg bg-emerald-50 px-2.5 py-1 text-[11px] text-emerald-900 border border-emerald-200">
+                            <div className="flex items-center justify-between rounded-xl bg-[#14422D]/5 px-3 py-1.5 text-[11px] text-[#14422D] border border-[#14422D]/15">
                               <span className="flex items-center gap-1 font-medium">
-                                <Icon name="my_location" className="text-xs text-emerald-700" />
+                                <Icon name="my_location" className="text-xs text-[#14422D]" />
                                 <span>GPS Pin: {pickupCoords.latitude.toFixed(5)}, {pickupCoords.longitude.toFixed(5)}</span>
                               </span>
                               <button
                                 type="button"
                                 onClick={() => setPickupCoords(null)}
-                                className="text-[10px] text-emerald-700 font-bold hover:underline"
+                                className="text-[10px] text-[#14422D] font-bold hover:underline"
                               >
                                 Reset Pin
                               </button>
@@ -1808,14 +1837,14 @@ function CabRequestFormContent() {
                           )}
                         </div>
                       ) : (
-                        <div className="space-y-2 pt-1">
-                          <div className="flex items-center gap-1.5">
+                        <div className="space-y-2.5 pt-1">
+                          <div className="flex items-center gap-2">
                             <input
                               type="text"
                               value={pickup}
                               onChange={(e) => setPickup(e.target.value)}
                               placeholder="Enter pickup address, landmark, or station"
-                              className="w-full rounded-xl border border-[#D0D7DE] bg-white px-3.5 py-2.5 text-xs text-[#1F2328] focus:border-emerald-600 focus:outline-none shadow-2xs"
+                              className="w-full rounded-2xl border border-[#D8DBD7] bg-white px-4 py-3 text-sm text-[#181C1B] placeholder:text-[#717973]/60 focus:border-[#14422D] focus:ring-4 focus:ring-[#14422D]/10 focus:outline-none transition-all shadow-2xs"
                             />
                             <button
                               type="button"
@@ -1826,40 +1855,40 @@ function CabRequestFormContent() {
                                   initialAddress: pickup,
                                 })
                               }
-                              className="inline-flex items-center gap-1 shrink-0 rounded-xl border border-emerald-600/40 bg-emerald-50/70 px-3 py-2.5 text-xs font-bold text-emerald-800 hover:bg-emerald-100 transition-colors cursor-pointer"
+                              className="inline-flex items-center gap-1.5 shrink-0 rounded-2xl border border-[#D8DBD7] bg-white px-3.5 py-3 text-xs font-bold text-[#14422D] hover:bg-[#F1F4F1] transition-colors cursor-pointer"
                               title="Move pin on map"
                             >
-                              <Icon name="pin_drop" className="text-sm text-emerald-700" />
+                              <Icon name="pin_drop" className="text-base text-[#14422D]" />
                               <span className="hidden sm:inline">Map Pin</span>
                             </button>
                           </div>
 
                           {pickupCoords && (
-                            <div className="flex items-center justify-between rounded-lg bg-emerald-50 px-2.5 py-1 text-[11px] text-emerald-900 border border-emerald-200">
+                            <div className="flex items-center justify-between rounded-xl bg-[#14422D]/5 px-3 py-1.5 text-[11px] text-[#14422D] border border-[#14422D]/15">
                               <span className="flex items-center gap-1 font-medium">
-                                <Icon name="my_location" className="text-xs text-emerald-700" />
+                                <Icon name="my_location" className="text-xs text-[#14422D]" />
                                 <span>GPS Pin: {pickupCoords.latitude.toFixed(5)}, {pickupCoords.longitude.toFixed(5)}</span>
                               </span>
                               <button
                                 type="button"
                                 onClick={() => setPickupCoords(null)}
-                                className="text-[10px] text-emerald-700 font-bold hover:underline"
+                                className="text-[10px] text-[#14422D] font-bold hover:underline"
                               >
                                 Clear Pin
                               </button>
                             </div>
                           )}
 
-                          <div className="flex flex-wrap gap-1.5">
+                          <div className="flex flex-wrap gap-1.5 pt-0.5">
                             {["Bagdogra Airport (IXB)", "NJP Railway Station", "Darjeeling Mall", "Siliguri Junction"].map((preset) => (
                               <button
                                 key={preset}
                                 type="button"
                                 onClick={() => setPickup(preset)}
-                                className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors cursor-pointer ${
+                                className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition-all cursor-pointer ${
                                   pickup === preset
-                                    ? "bg-emerald-100 border-emerald-400 text-emerald-900 font-bold"
-                                    : "bg-[#F6F8FA] border-[#D0D7DE] text-[#57606A] hover:bg-[#E1E4E8]"
+                                    ? "bg-[#14422D] border-[#14422D] text-white font-bold shadow-xs"
+                                    : "bg-white border-[#D8DBD7] text-[#414943] hover:border-[#14422D] hover:text-[#14422D]"
                                 }`}
                               >
                                 + {preset}
@@ -1871,16 +1900,16 @@ function CabRequestFormContent() {
                     </div>
 
                     {/* Drop Locations (Multiple stops + Suggestions) */}
-                    <div className="space-y-2.5 pt-1">
+                    <div className="space-y-3 pt-2">
                       <div className="flex items-center justify-between">
-                        <label className="text-xs font-bold text-[#1F2328] flex items-center gap-1.5">
-                          <Icon name="navigation" className="text-xs text-emerald-700" />
+                        <label className="text-xs font-bold text-[#181C1B] flex items-center gap-1.5">
+                          <Icon name="navigation" className="text-sm text-[#14422D]" />
                           <span>Drop Locations</span>
                         </label>
-                        <span className="text-[11px] text-[#57606A]">Add 1 or more stops</span>
+                        <span className="text-[11px] text-[#717973]">Add 1 or more stops</span>
                       </div>
 
-                      <div className="space-y-2.5">
+                      <div className="space-y-3">
                         {customDestinations.map((dest, idx) => {
                           const suggestions = getFilteredSuggestions(dest);
                           const isShowingSuggestions = activeSuggestIdx === idx;
@@ -1888,7 +1917,7 @@ function CabRequestFormContent() {
                           return (
                             <div key={idx} className="relative">
                               <div className="flex items-center gap-2">
-                                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#F6F8FA] border border-[#D0D7DE] text-[11px] font-bold text-[#57606A]">
+                                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#14422D]/8 text-xs font-bold text-[#14422D]">
                                   {idx + 1}
                                 </span>
                                 <div className="relative flex-1">
@@ -1903,7 +1932,7 @@ function CabRequestFormContent() {
                                       setActiveSuggestIdx(idx);
                                     }}
                                     placeholder={idx === 0 ? "Enter destination (e.g. Tiger Hill, Batasia Loop)" : `Destination ${idx + 1}`}
-                                    className="w-full rounded-xl border border-[#D0D7DE] bg-white px-3.5 py-2.5 text-xs text-[#1F2328] focus:border-emerald-600 focus:outline-none shadow-2xs pr-8"
+                                    className="w-full rounded-2xl border border-[#D8DBD7] bg-white px-4 py-3 text-sm text-[#181C1B] placeholder:text-[#717973]/60 focus:border-[#14422D] focus:ring-4 focus:ring-[#14422D]/10 focus:outline-none transition-all shadow-2xs pr-9"
                                   />
                                   {dest && (
                                     <button
@@ -1913,7 +1942,7 @@ function CabRequestFormContent() {
                                         copy[idx] = "";
                                         setCustomDestinations(copy);
                                       }}
-                                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8C959F] hover:text-[#1F2328] cursor-pointer"
+                                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#717973] hover:text-[#181C1B] cursor-pointer"
                                     >
                                       <Icon name="close" className="text-xs" />
                                     </button>
@@ -1930,10 +1959,10 @@ function CabRequestFormContent() {
                                       initialAddress: dest,
                                     })
                                   }
-                                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#D0D7DE] text-[#57606A] hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 transition-colors cursor-pointer"
+                                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[#D8DBD7] text-[#414943] hover:bg-[#14422D]/8 hover:text-[#14422D] hover:border-[#14422D] transition-colors cursor-pointer"
                                   title="Pick drop location on map"
                                 >
-                                  <Icon name="pin_drop" className="text-sm" />
+                                  <Icon name="pin_drop" className="text-base" />
                                 </button>
 
                                 {customDestinations.length > 1 && (
@@ -1944,30 +1973,30 @@ function CabRequestFormContent() {
                                       setCustomDestinations(copy.length > 0 ? copy : [""]);
                                       setActiveSuggestIdx(null);
                                     }}
-                                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#D0D7DE] text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-red-200 text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
                                     title="Remove this destination"
                                   >
-                                    <Icon name="delete" className="text-sm" />
+                                    <Icon name="delete" className="text-base" />
                                   </button>
                                 )}
                               </div>
 
                               {/* Interactive Autocomplete / Tourist Spots Popover */}
                               {isShowingSuggestions && (
-                                <div className="absolute z-20 left-9 right-0 mt-1 rounded-xl border border-[#D0D7DE] bg-white p-2 shadow-lg space-y-1">
-                                  <div className="flex items-center justify-between px-2 py-1 border-b border-[#F0F2F5]">
-                                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#57606A]">
-                                      Suggested Tourist Spots & Places
+                                <div className="absolute z-20 left-11 right-0 mt-2 rounded-2xl border border-[#E5E8E5] bg-white p-3 shadow-xl space-y-1.5 backdrop-blur-md">
+                                  <div className="flex items-center justify-between px-2 py-1 border-b border-[#ECEFEB]">
+                                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#717973]">
+                                      Suggested Hill Landmarks & Attractions
                                     </span>
                                     <button
                                       type="button"
                                       onClick={() => setActiveSuggestIdx(null)}
-                                      className="text-[10px] text-emerald-700 font-bold hover:underline cursor-pointer"
+                                      className="text-[10px] text-[#14422D] font-bold hover:underline cursor-pointer"
                                     >
                                       Done
                                     </button>
                                   </div>
-                                  <div className="max-h-48 overflow-y-auto divide-y divide-[#F6F8FA]">
+                                  <div className="max-h-52 overflow-y-auto divide-y divide-[#ECEFEB]/60">
                                     {suggestions.length > 0 ? (
                                       suggestions.map((place) => (
                                         <button
@@ -1975,14 +2004,14 @@ function CabRequestFormContent() {
                                           type="button"
                                           onMouseDown={(e) => e.preventDefault()}
                                           onClick={() => handleSelectSuggestion(place, idx)}
-                                          className="w-full text-left px-2.5 py-1.5 text-xs text-[#1F2328] hover:bg-emerald-50 hover:text-emerald-900 rounded-lg flex items-center justify-between transition-colors cursor-pointer"
+                                          className="w-full text-left px-3 py-2 text-xs font-medium text-[#181C1B] hover:bg-[#14422D]/8 hover:text-[#14422D] rounded-xl flex items-center justify-between transition-colors cursor-pointer"
                                         >
                                           <span className="truncate">{place}</span>
-                                          <Icon name="north_west" className="text-xs text-[#8C959F]" />
+                                          <Icon name="north_west" className="text-xs text-[#717973]" />
                                         </button>
                                       ))
                                     ) : (
-                                      <div className="px-2.5 py-2 text-xs text-[#57606A]">
+                                      <div className="px-3 py-2.5 text-xs text-[#717973]">
                                         Type a specific landmark or attraction
                                       </div>
                                     )}
@@ -2002,22 +2031,22 @@ function CabRequestFormContent() {
                             setCustomDestinations([...customDestinations, ""]);
                             setActiveSuggestIdx(customDestinations.length);
                           }}
-                          className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-emerald-600/60 bg-emerald-50/50 px-3.5 py-2 text-xs font-bold text-emerald-800 hover:bg-emerald-100/60 transition-colors cursor-pointer"
+                          className="inline-flex items-center gap-1.5 rounded-2xl border border-dashed border-[#14422D]/40 bg-[#14422D]/5 px-4 py-2.5 text-xs font-bold text-[#14422D] hover:bg-[#14422D]/10 transition-colors cursor-pointer"
                         >
-                          <Icon name="add" className="text-xs font-bold" />
-                          <span>Add Destination</span>
+                          <Icon name="add" className="text-sm font-bold" />
+                          <span>Add Destination Stop</span>
                         </button>
                       )}
                     </div>
 
                     {/* Round Trip Toggle (Requirement 5) */}
-                    <div className="rounded-xl border border-[#D0D7DE] bg-[#F6F8FA] p-3.5 flex items-center justify-between">
+                    <div className="rounded-2xl border border-[#E5E8E5] bg-[#F7FAF7] p-4 sm:p-5 flex items-center justify-between">
                       <div className="space-y-0.5 pr-2">
-                        <span className="text-xs font-bold text-[#1F2328] flex items-center gap-1.5">
-                          <Icon name="sync_alt" className="text-xs text-emerald-700" />
+                        <span className="text-xs font-bold text-[#181C1B] flex items-center gap-1.5">
+                          <Icon name="sync_alt" className="text-sm text-[#14422D]" />
                           <span>Return to Homestay</span>
                         </span>
-                        <p className="text-[11px] text-[#57606A]">
+                        <p className="text-[11px] text-[#717973]">
                           {isRoundTrip
                             ? "Round trip: Driver will wait and take you back to homestay."
                             : "One-way trip: Driver drops you off at the final destination."}
@@ -2029,7 +2058,7 @@ function CabRequestFormContent() {
                         aria-checked={isRoundTrip}
                         onClick={() => setIsRoundTrip(!isRoundTrip)}
                         className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                          isRoundTrip ? "bg-emerald-600" : "bg-[#D0D7DE]"
+                          isRoundTrip ? "bg-[#14422D]" : "bg-[#D8DBD7]"
                         }`}
                       >
                         <span
@@ -2046,11 +2075,11 @@ function CabRequestFormContent() {
                 {activeTab === "popular" && (
                   <div className="space-y-4">
                     <div>
-                      <h3 className="text-xs font-bold text-[#1F2328]">Select Transfer Route</h3>
-                      <p className="text-[11px] text-[#57606A]">Direct transfers between your homestay and major transit hubs.</p>
+                      <h3 className="text-xs font-bold text-[#181C1B]">Select Transfer Route</h3>
+                      <p className="text-[11px] text-[#717973]">Direct transfers between your homestay and major transit hubs.</p>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {POPULAR_TRANSFER_ROUTES.map((route) => {
                         const isSelected = selectedPopularRouteId === route.id;
                         return (
@@ -2058,30 +2087,30 @@ function CabRequestFormContent() {
                             key={route.id}
                             type="button"
                             onClick={() => handleSelectPopularRoute(route.id)}
-                            className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
+                            className={`p-4 rounded-2xl border text-left transition-all cursor-pointer ${
                               isSelected
-                                ? "border-emerald-600 bg-emerald-50/50 ring-1 ring-emerald-600 shadow-2xs"
-                                : "border-[#D0D7DE] bg-white hover:border-[#8C959F]"
+                                ? "border-[#14422D] bg-[#14422D]/8 shadow-sm"
+                                : "border-[#E5E8E5] bg-white hover:border-[#14422D]/40"
                             }`}
                           >
                             <div className="flex items-center justify-between gap-2">
-                              <div className="flex items-center gap-2">
-                                <span className={`flex h-8 w-8 items-center justify-center rounded-lg text-sm ${
-                                  isSelected ? "bg-emerald-600 text-white" : "bg-[#F6F8FA] text-emerald-800"
+                              <div className="flex items-center gap-3">
+                                <span className={`flex h-10 w-10 items-center justify-center rounded-xl text-base ${
+                                  isSelected ? "bg-[#14422D] text-white" : "bg-[#F7FAF7] text-[#14422D]"
                                 }`}>
-                                  <Icon name={route.direction === "outbound" ? "flight_takeoff" : "flight_land"} className="text-base" />
+                                  <Icon name={route.direction === "outbound" ? "flight_takeoff" : "flight_land"} className="text-lg" />
                                 </span>
                                 <div>
-                                  <span className="text-xs font-extrabold tracking-wide text-[#1F2328] block">
+                                  <span className="text-xs font-bold tracking-tight text-[#181C1B] block">
                                     {route.name}
                                   </span>
-                                  <span className="text-[11px] text-[#57606A]">
+                                  <span className="text-[11px] text-[#717973]">
                                     {route.direction === "outbound" ? "Homestay Drop to Hub" : "Hub Pickup to Homestay"}
                                   </span>
                                 </div>
                               </div>
                               {isSelected && (
-                                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
+                                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#14422D] text-white">
                                   <Icon name="check" className="text-xs" />
                                 </span>
                               )}
@@ -2092,13 +2121,13 @@ function CabRequestFormContent() {
                     </div>
 
                     {/* Round Trip Toggle for Transfer */}
-                    <div className="rounded-xl border border-[#D0D7DE] bg-[#F6F8FA] p-3.5 flex items-center justify-between">
+                    <div className="rounded-2xl border border-[#E5E8E5] bg-[#F7FAF7] p-4 sm:p-5 flex items-center justify-between">
                       <div className="space-y-0.5 pr-2">
-                        <span className="text-xs font-bold text-[#1F2328] flex items-center gap-1.5">
-                          <Icon name="sync_alt" className="text-xs text-emerald-700" />
+                        <span className="text-xs font-bold text-[#181C1B] flex items-center gap-1.5">
+                          <Icon name="sync_alt" className="text-sm text-[#14422D]" />
                           <span>Round Trip Transfer</span>
                         </span>
-                        <p className="text-[11px] text-[#57606A]">
+                        <p className="text-[11px] text-[#717973]">
                           {isRoundTrip
                             ? "Round trip: Includes return transfer."
                             : "One-way transfer."}
@@ -2110,7 +2139,7 @@ function CabRequestFormContent() {
                         aria-checked={isRoundTrip}
                         onClick={() => setIsRoundTrip(!isRoundTrip)}
                         className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                          isRoundTrip ? "bg-emerald-600" : "bg-[#D0D7DE]"
+                          isRoundTrip ? "bg-[#14422D]" : "bg-[#D8DBD7]"
                         }`}
                       >
                         <span
@@ -2141,7 +2170,7 @@ function CabRequestFormContent() {
                       setErrorMessage("");
                       setCurrentStep(2);
                     }}
-                    className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 transition-all cursor-pointer"
+                    className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-[#14422D] py-4 text-sm font-bold text-white shadow-[0_8px_25px_-3px_rgba(20,66,45,0.25)] hover:bg-[#1C593E] active:scale-[0.99] transition-all cursor-pointer"
                   >
                     <span>Continue to Schedule & Travelers</span>
                     <Icon name="arrow_forward" className="text-sm" />
@@ -2152,15 +2181,15 @@ function CabRequestFormContent() {
 
             {/* STEP 2: SCHEDULE & TRAVELERS */}
             {currentStep === 2 && (
-              <div className="space-y-5 rounded-2xl border border-[#D0D7DE] bg-white p-4 sm:p-6 shadow-xs">
+              <div className="space-y-6 rounded-3xl border border-[#E5E8E5] bg-white p-6 sm:p-8 shadow-[0_10px_35px_-4px_rgba(20,66,45,0.05)]">
                 <div>
-                  <h2 className="text-base font-bold text-[#1F2328]">When are you traveling?</h2>
-                  <p className="text-xs text-[#57606A]">Set your schedule and traveler count. Verified local drivers will receive your request.</p>
+                  <h2 className="font-display text-2xl font-bold text-[#14422D]">When are you traveling?</h2>
+                  <p className="text-xs text-[#717973] mt-1">Set your pickup time and passenger count. Local drivers will quote exact hill fares.</p>
                 </div>
 
                 {/* Date Selection */}
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-[#1F2328] block">Date of Travel</label>
+                  <label className="text-xs font-bold text-[#181C1B] block">Date of Travel</label>
                   <input
                     type="date"
                     value={date}
@@ -2172,24 +2201,24 @@ function CabRequestFormContent() {
                         setReturnDate(newDate);
                       }
                     }}
-                    className="w-full rounded-xl border border-[#D0D7DE] px-3.5 py-2.5 text-xs text-[#1F2328] focus:border-emerald-600 focus:outline-none bg-white shadow-2xs"
+                    className="w-full rounded-2xl border border-[#D8DBD7] px-4 py-3 text-sm font-semibold text-[#181C1B] focus:border-[#14422D] focus:ring-4 focus:ring-[#14422D]/10 focus:outline-none bg-white shadow-2xs transition-all"
                   />
                 </div>
 
                 {/* Time Selection */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-[#1F2328] block">Pickup Time</label>
-                    <span className="text-[11px] text-emerald-800 font-bold bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
-                      <Icon name="schedule" className="text-xs text-emerald-700" />
+                    <label className="text-xs font-bold text-[#181C1B] block">Pickup Time</label>
+                    <span className="text-[11px] text-[#14422D] font-bold bg-[#14422D]/8 border border-[#14422D]/15 px-3 py-1 rounded-full flex items-center gap-1.5 shadow-2xs">
+                      <Icon name="schedule" className="text-xs text-[#14422D]" />
                       <span>{time}</span>
                     </span>
                   </div>
 
                   {/* Native Clock Dialer / Time Picker */}
                   <div className="relative flex items-center">
-                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-emerald-700">
-                      <Icon name="alarm" className="text-base" />
+                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 text-[#14422D]">
+                      <Icon name="alarm" className="text-lg" />
                     </div>
                     <input
                       type="time"
@@ -2199,17 +2228,17 @@ function CabRequestFormContent() {
                           setTime(toTime12(e.target.value));
                         }
                       }}
-                      className="w-full rounded-xl border border-[#D0D7DE] bg-white py-2.5 pl-10 pr-3 sm:pr-24 text-sm font-bold text-[#1F2328] focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600 shadow-2xs cursor-pointer"
+                      className="w-full rounded-2xl border border-[#D8DBD7] bg-white py-3 pl-11 pr-3 sm:pr-24 text-sm font-bold text-[#181C1B] focus:border-[#14422D] focus:ring-4 focus:ring-[#14422D]/10 focus:outline-none shadow-2xs cursor-pointer transition-all"
                     />
-                    <div className="pointer-events-none absolute inset-y-0 right-0 hidden sm:flex items-center pr-3 text-[11px] text-[#57606A] font-medium">
+                    <div className="pointer-events-none absolute inset-y-0 right-0 hidden sm:flex items-center pr-4 text-[11px] text-[#717973] font-medium">
                       Tap for clock
                     </div>
                   </div>
 
                   {/* Quick Mountain Departure Shortcuts */}
-                  <div className="space-y-1.5 pt-1">
-                    <span className="text-[11px] text-[#57606A] font-medium">Popular Mountain Departures:</span>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                  <div className="space-y-2 pt-1">
+                    <span className="text-[11px] text-[#717973] font-semibold uppercase tracking-wider block">Popular Mountain Departures:</span>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                       {[
                         { label: "04:00 AM", sub: "Tiger Hill Sunrise" },
                         { label: "07:30 AM", sub: "Flight / Train Drop" },
@@ -2224,16 +2253,16 @@ function CabRequestFormContent() {
                             key={slot.label}
                             type="button"
                             onClick={() => setTime(slot.label)}
-                            className={`flex flex-col items-start px-2.5 py-2 rounded-xl text-left border transition-all cursor-pointer ${
+                            className={`flex flex-col items-start px-3 py-2.5 rounded-2xl text-left border transition-all cursor-pointer ${
                               isMatch
-                                ? "bg-emerald-600 text-white border-emerald-600 shadow-2xs ring-1 ring-emerald-600"
-                                : "bg-[#F6F8FA] border-[#D0D7DE] text-[#24292F] hover:bg-[#E1E4E8]"
+                                ? "bg-[#14422D] text-white border-[#14422D] shadow-xs"
+                                : "bg-[#F7FAF7] border-[#E5E8E5] text-[#181C1B] hover:bg-[#ECEFEB]"
                             }`}
                           >
-                            <span className={`text-xs font-bold leading-none ${isMatch ? "text-white" : "text-[#1F2328]"}`}>
+                            <span className={`text-xs font-bold leading-none ${isMatch ? "text-white" : "text-[#181C1B]"}`}>
                               {slot.label}
                             </span>
-                            <span className={`text-[10px] mt-1 line-clamp-1 ${isMatch ? "text-emerald-100" : "text-[#57606A]"}`}>
+                            <span className={`text-[10px] mt-1 line-clamp-1 ${isMatch ? "text-[#BCEECF]" : "text-[#717973]"}`}>
                               {slot.sub}
                             </span>
                           </button>
@@ -2245,11 +2274,11 @@ function CabRequestFormContent() {
 
                 {/* Round trip: flexible return banner */}
                 {isRoundTrip && (
-                  <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 text-xs text-emerald-900 flex items-start gap-2.5 shadow-2xs">
-                    <Icon name="schedule" className="text-sm text-emerald-700 mt-0.5 shrink-0" />
+                  <div className="rounded-2xl border border-[#14422D]/15 bg-[#14422D]/5 p-4 text-xs text-[#14422D] flex items-start gap-3 shadow-2xs">
+                    <Icon name="schedule" className="text-base text-[#14422D] mt-0.5 shrink-0" />
                     <div>
                       <span className="font-bold block">Flexible Return Schedule</span>
-                      <span className="text-[11px] text-emerald-800 leading-relaxed block">
+                      <span className="text-[11px] text-[#14422D]/90 leading-relaxed block mt-0.5">
                         Your driver will accompany you, wait during sightseeing or meetings, and drive you back to your homestay when you are ready.
                       </span>
                     </div>
@@ -2258,18 +2287,18 @@ function CabRequestFormContent() {
 
                 {/* Requirement 7: Passenger Count Only (No Vehicle Class Selection) */}
                 <div className="space-y-2 pt-1">
-                  <label className="text-xs font-bold text-[#1F2328] block">Number of Passengers</label>
-                  <div className="flex items-center justify-between rounded-xl border border-[#D0D7DE] p-4 bg-[#F6F8FA]">
+                  <label className="text-xs font-bold text-[#181C1B] block">Number of Passengers</label>
+                  <div className="flex items-center justify-between rounded-2xl border border-[#E5E8E5] p-5 bg-[#F7FAF7]">
                     <div>
-                      <span className="text-xs font-bold text-[#1F2328] block">Total Travelers</span>
-                      <span className="text-[11px] text-[#57606A]">Adults + Children traveling together</span>
+                      <span className="text-sm font-bold text-[#181C1B] block">Total Travelers</span>
+                      <span className="text-xs text-[#717973]">Adults + Children traveling together</span>
                     </div>
                     <div className="flex items-center gap-3">
                       <button
                         type="button"
                         disabled={passengers <= 1}
                         onClick={() => setPassengers(Math.max(1, passengers - 1))}
-                        className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#D0D7DE] bg-white font-bold text-base text-[#1F2328] hover:bg-[#F0F2F5] disabled:opacity-40 cursor-pointer transition-colors"
+                        className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[#D8DBD7] bg-white font-bold text-lg text-[#14422D] hover:bg-[#F1F4F1] disabled:opacity-40 cursor-pointer transition-all shadow-2xs"
                       >
                         –
                       </button>
@@ -2284,29 +2313,29 @@ function CabRequestFormContent() {
                             setPassengers(Math.min(20, val));
                           }
                         }}
-                        className="w-12 text-center font-bold text-sm text-[#1F2328] bg-transparent focus:outline-none"
+                        className="w-12 text-center font-bold text-lg text-[#14422D] bg-transparent focus:outline-none"
                       />
                       <button
                         type="button"
                         disabled={passengers >= 20}
                         onClick={() => setPassengers(Math.min(20, passengers + 1))}
-                        className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#D0D7DE] bg-white font-bold text-base text-[#1F2328] hover:bg-[#F0F2F5] disabled:opacity-40 cursor-pointer transition-colors"
+                        className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[#D8DBD7] bg-white font-bold text-lg text-[#14422D] hover:bg-[#F1F4F1] disabled:opacity-40 cursor-pointer transition-all shadow-2xs"
                       >
                         +
                       </button>
                     </div>
                   </div>
-                  <p className="text-[11px] text-[#57606A]">
+                  <p className="text-[11px] text-[#717973]">
                     Drivers with suitably-sized mountain vehicles will send you their quotes directly.
                   </p>
                 </div>
 
                 {/* Navigation Buttons */}
-                <div className="flex gap-2 pt-3">
+                <div className="flex gap-3 pt-3">
                   <button
                     type="button"
                     onClick={() => setCurrentStep(1)}
-                    className="w-1/3 rounded-xl border border-[#D0D7DE] bg-white py-3 text-xs font-bold text-[#24292F] hover:bg-[#F6F8FA] cursor-pointer"
+                    className="w-1/3 rounded-2xl border border-[#D8DBD7] bg-white py-3.5 text-xs font-bold text-[#181C1B] hover:bg-[#F1F4F1] cursor-pointer transition-colors"
                   >
                     Back
                   </button>
@@ -2329,7 +2358,7 @@ function CabRequestFormContent() {
                       setErrorMessage("");
                       setCurrentStep(3);
                     }}
-                    className="w-2/3 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 transition-all cursor-pointer"
+                    className="w-2/3 inline-flex items-center justify-center gap-2 rounded-2xl bg-[#14422D] py-3.5 text-xs font-bold text-white shadow-[0_8px_25px_-3px_rgba(20,66,45,0.25)] hover:bg-[#1C593E] transition-all cursor-pointer"
                   >
                     <span>Continue to Review</span>
                     <Icon name="arrow_forward" className="text-sm" />
@@ -2340,30 +2369,30 @@ function CabRequestFormContent() {
 
             {/* STEP 3: GUEST DETAILS & REVIEW */}
             {currentStep === 3 && (
-              <div className="space-y-5 rounded-2xl border border-[#D0D7DE] bg-white p-4 sm:p-6 shadow-xs">
+              <div className="space-y-6 rounded-3xl border border-[#E5E8E5] bg-white p-6 sm:p-8 shadow-[0_10px_35px_-4px_rgba(20,66,45,0.05)]">
                 <div>
-                  <h2 className="text-base font-bold text-[#1F2328]">Passenger Details & Trip Review</h2>
-                  <p className="text-xs text-[#57606A]">Enter your contact information and verify your itinerary before submitting.</p>
+                  <h2 className="font-display text-2xl font-bold text-[#14422D]">Passenger Details & Review</h2>
+                  <p className="text-xs text-[#717973] mt-1">Enter your WhatsApp details to receive direct hill driver quotes.</p>
                 </div>
 
-                <div className="space-y-3">
+                <div className="space-y-4">
                   <div>
-                    <label className="text-xs font-bold text-[#1F2328] block mb-1">Guest Full Name</label>
+                    <label className="text-xs font-bold text-[#181C1B] block mb-1.5">Guest Full Name</label>
                     <input
                       type="text"
                       value={guestName}
                       onChange={(e) => setGuestName(e.target.value)}
                       placeholder="e.g. Ankit Sharma"
-                      className="w-full rounded-xl border border-[#D0D7DE] px-3.5 py-2.5 text-xs text-[#1F2328] focus:border-emerald-600 focus:outline-none shadow-2xs"
+                      className="w-full rounded-2xl border border-[#D8DBD7] px-4 py-3 text-sm text-[#181C1B] focus:border-[#14422D] focus:ring-4 focus:ring-[#14422D]/10 focus:outline-none shadow-2xs transition-all"
                     />
                   </div>
 
                   <div>
-                    <label className="text-xs font-bold text-[#1F2328] block mb-1">
+                    <label className="text-xs font-bold text-[#181C1B] block mb-1.5">
                       WhatsApp Contact Number (10 Digits)
                     </label>
                     <div className="flex gap-2">
-                      <span className="flex items-center rounded-xl bg-[#F6F8FA] border border-[#D0D7DE] px-3 text-xs font-bold text-[#57606A]">
+                      <span className="flex items-center rounded-2xl bg-[#F7FAF7] border border-[#D8DBD7] px-3.5 text-xs font-bold text-[#414943]">
                         +91
                       </span>
                       <input
@@ -2371,16 +2400,16 @@ function CabRequestFormContent() {
                         value={guestPhone}
                         onChange={(e) => setGuestPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
                         placeholder="9876543210"
-                        className="w-full rounded-xl border border-[#D0D7DE] px-3.5 py-2.5 text-xs text-[#1F2328] focus:border-emerald-600 focus:outline-none shadow-2xs"
+                        className="w-full rounded-2xl border border-[#D8DBD7] px-4 py-3 text-sm text-[#181C1B] focus:border-[#14422D] focus:ring-4 focus:ring-[#14422D]/10 focus:outline-none shadow-2xs transition-all"
                       />
                     </div>
-                    <p className="mt-1 text-[11px] text-[#57606A]">
+                    <p className="mt-1 text-[11px] text-[#717973]">
                       Drivers will send their quotes and booking confirmation directly to this WhatsApp number.
                     </p>
                   </div>
 
                   <div>
-                    <label className="text-xs font-bold text-[#1F2328] block mb-1">
+                    <label className="text-xs font-bold text-[#181C1B] block mb-1.5">
                       Luggage or Special Requests (Optional)
                     </label>
                     <input
@@ -2388,57 +2417,57 @@ function CabRequestFormContent() {
                       value={notes}
                       onChange={(e) => setNotes(e.target.value)}
                       placeholder="e.g. 3 large bags, elderly passenger, luggage roof rack needed"
-                      className="w-full rounded-xl border border-[#D0D7DE] px-3.5 py-2.5 text-xs text-[#1F2328] focus:border-emerald-600 focus:outline-none shadow-2xs"
+                      className="w-full rounded-2xl border border-[#D8DBD7] px-4 py-3 text-sm text-[#181C1B] focus:border-[#14422D] focus:ring-4 focus:ring-[#14422D]/10 focus:outline-none shadow-2xs transition-all"
                     />
                   </div>
 
                   {/* Target Budget (Optional, ₹ - InDrive style) */}
                   <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-xs font-bold text-[#1F2328]">Target Budget (Optional, ₹)</label>
-                      <span className="text-[10px] text-[#57606A]">Guest price expectation</span>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-bold text-[#181C1B]">Target Budget (Optional, ₹)</label>
+                      <span className="text-[10px] text-[#717973]">Guest price expectation</span>
                     </div>
                     <div className="relative flex items-center">
-                      <span className="absolute left-3.5 text-xs font-bold text-[#57606A]">₹</span>
+                      <span className="absolute left-4 text-sm font-bold text-[#717973]">₹</span>
                       <input
                         type="text"
                         inputMode="numeric"
                         value={guestBudget}
                         onChange={(e) => setGuestBudget(e.target.value.replace(/\D/g, ""))}
                         placeholder="e.g. 2500"
-                        className="w-full rounded-xl border border-[#D0D7DE] pl-7 pr-3.5 py-2.5 text-xs text-[#1F2328] focus:border-emerald-600 focus:outline-none shadow-2xs bg-white"
+                        className="w-full rounded-2xl border border-[#D8DBD7] pl-8 pr-4 py-3 text-sm text-[#181C1B] focus:border-[#14422D] focus:ring-4 focus:ring-[#14422D]/10 focus:outline-none shadow-2xs bg-white transition-all"
                       />
                     </div>
-                    <p className="mt-1 text-[11px] text-[#57606A]">
+                    <p className="mt-1 text-[11px] text-[#717973]">
                       Local verified drivers will see your target budget when submitting their quotes on WhatsApp.
                     </p>
                   </div>
                 </div>
 
                 {/* Trip Review Summary Card (Zero Prices) */}
-                <div className="rounded-xl border border-[#D0D7DE] bg-[#F6F8FA] p-4 space-y-3 text-xs">
-                  <div className="flex items-center justify-between border-b border-[#E1E4E8] pb-2">
-                    <span className="font-bold text-[#1F2328] text-xs">Trip Summary</span>
-                    <span className="rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-900">
+                <div className="rounded-2xl border border-[#E5E8E5] bg-[#F7FAF7] p-5 space-y-3.5 text-xs">
+                  <div className="flex items-center justify-between border-b border-[#E5E8E5] pb-2.5">
+                    <span className="font-bold text-[#181C1B] text-xs">Trip Summary</span>
+                    <span className="rounded-full bg-[#14422D]/10 px-2.5 py-0.5 text-[10px] font-bold text-[#14422D]">
                       {isRoundTrip ? "Round Trip" : "One-Way"}
                     </span>
                   </div>
 
-                  <div className="space-y-2">
+                  <div className="space-y-2.5">
                     <div className="flex items-start justify-between gap-2">
-                      <span className="text-[#57606A] shrink-0 font-medium">Pickup:</span>
-                      <span className="font-bold text-[#1F2328] text-right truncate">
+                      <span className="text-[#717973] shrink-0 font-medium">Pickup:</span>
+                      <span className="font-bold text-[#181C1B] text-right truncate">
                         {getResolvedPickup()}
                       </span>
                     </div>
 
                     <div className="flex items-start justify-between gap-2">
-                      <span className="text-[#57606A] shrink-0 font-medium">
+                      <span className="text-[#717973] shrink-0 font-medium">
                         {getResolvedDestinations().length > 1 ? "Drop Locations:" : "Drop Location:"}
                       </span>
                       <div className="text-right">
                         {getResolvedDestinations().map((d, i) => (
-                          <div key={i} className="font-bold text-[#1F2328]">
+                          <div key={i} className="font-bold text-[#181C1B]">
                             {getResolvedDestinations().length > 1 ? `${i + 1}. ${d}` : d}
                           </div>
                         ))}
@@ -2446,55 +2475,55 @@ function CabRequestFormContent() {
                     </div>
 
                     <div className="flex items-start justify-between gap-2">
-                      <span className="text-[#57606A] shrink-0 font-medium">Return to Homestay:</span>
-                      <span className="font-bold text-[#1F2328]">
+                      <span className="text-[#717973] shrink-0 font-medium">Return to Homestay:</span>
+                      <span className="font-bold text-[#181C1B]">
                         {isRoundTrip ? "Yes (Driver waits & returns)" : "No (One-way drop)"}
                       </span>
                     </div>
 
                     <div className="flex items-start justify-between gap-2">
-                      <span className="text-[#57606A] shrink-0 font-medium">Schedule:</span>
-                      <span className="font-semibold text-[#1F2328]">{date} at {time}</span>
+                      <span className="text-[#717973] shrink-0 font-medium">Schedule:</span>
+                      <span className="font-semibold text-[#181C1B]">{date} at {time}</span>
                     </div>
 
                     {isRoundTrip && (
                       <div className="flex items-start justify-between gap-2">
-                        <span className="text-[#57606A] shrink-0 font-medium">Return:</span>
-                        <span className="font-semibold text-emerald-700">Flexible (Same Day / Driver Waits)</span>
+                        <span className="text-[#717973] shrink-0 font-medium">Return:</span>
+                        <span className="font-semibold text-[#14422D]">Flexible (Same Day / Driver Waits)</span>
                       </div>
                     )}
 
                     <div className="flex items-start justify-between gap-2">
-                      <span className="text-[#57606A] shrink-0 font-medium">Passengers:</span>
-                      <span className="font-semibold text-[#1F2328]">{passengers} {passengers === 1 ? "Passenger" : "Passengers"}</span>
+                      <span className="text-[#717973] shrink-0 font-medium">Passengers:</span>
+                      <span className="font-semibold text-[#181C1B]">{passengers} {passengers === 1 ? "Passenger" : "Passengers"}</span>
                     </div>
 
                     {pickupCoords && (
                       <div className="flex items-start justify-between gap-2">
-                        <span className="text-[#57606A] shrink-0 font-medium">GPS Pin:</span>
-                        <span className="font-mono text-[11px] text-[#57606A]">{pickupCoords.latitude.toFixed(4)}, {pickupCoords.longitude.toFixed(4)}</span>
+                        <span className="text-[#717973] shrink-0 font-medium">GPS Pin:</span>
+                        <span className="font-mono text-[11px] text-[#717973]">{pickupCoords.latitude.toFixed(4)}, {pickupCoords.longitude.toFixed(4)}</span>
                       </div>
                     )}
 
                     {guestBudget && (
-                      <div className="flex items-start justify-between gap-2 border-t border-[#E1E4E8] pt-2">
-                        <span className="text-[#57606A] shrink-0 font-medium">Target Budget:</span>
-                        <span className="font-bold text-emerald-800">₹{Number(guestBudget).toLocaleString("en-IN")}</span>
+                      <div className="flex items-start justify-between gap-2 border-t border-[#E5E8E5] pt-2">
+                        <span className="text-[#717973] shrink-0 font-medium">Target Budget:</span>
+                        <span className="font-bold text-[#14422D]">₹{Number(guestBudget).toLocaleString("en-IN")}</span>
                       </div>
                     )}
 
                     {guestName && (
-                      <div className="flex items-start justify-between gap-2 border-t border-[#E1E4E8] pt-2">
-                        <span className="text-[#57606A] shrink-0 font-medium">Guest:</span>
-                        <span className="font-semibold text-[#1F2328]">{guestName} {guestPhone ? `(+91 ${guestPhone})` : ""}</span>
+                      <div className="flex items-start justify-between gap-2 border-t border-[#E5E8E5] pt-2">
+                        <span className="text-[#717973] shrink-0 font-medium">Guest:</span>
+                        <span className="font-semibold text-[#181C1B]">{guestName} {guestPhone ? `(+91 ${guestPhone})` : ""}</span>
                       </div>
                     )}
                   </div>
 
-                  <div className="rounded-lg bg-emerald-50/70 border border-emerald-200 p-2.5 text-[11px] text-emerald-900 leading-snug">
-                    <p className="font-semibold">💡 No immediate payment required.</p>
-                    <p className="text-emerald-800/90 mt-0.5">
-                      Drivers will quote their competitive prices based on your exact route and passengers. You can choose the best quote.
+                  <div className="rounded-xl bg-[#14422D]/5 border border-[#14422D]/15 p-3 text-[11px] text-[#14422D] leading-snug">
+                    <p className="font-bold">💡 No upfront payment required to request.</p>
+                    <p className="text-[#14422D]/90 mt-0.5">
+                      Verified local drivers will quote their competitive hill rates based on your itinerary. You choose the best driver.
                     </p>
                   </div>
 
@@ -2505,15 +2534,15 @@ function CabRequestFormContent() {
                       id="dpdp-consent"
                       checked={agreedToTerms}
                       onChange={(e) => setAgreedToTerms(e.target.checked)}
-                      className="mt-0.5 h-4 w-4 rounded border-[#D0D7DE] text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                      className="mt-0.5 h-4 w-4 rounded border-[#D8DBD7] text-[#14422D] focus:ring-[#14422D] cursor-pointer"
                     />
-                    <label htmlFor="dpdp-consent" className="text-[11px] leading-relaxed text-[#57606A] cursor-pointer">
+                    <label htmlFor="dpdp-consent" className="text-[11px] leading-relaxed text-[#717973] cursor-pointer">
                       I agree to the{" "}
-                      <Link href="/legal/terms" target="_blank" className="font-semibold text-emerald-700 underline hover:text-emerald-800">
+                      <Link href="/legal/terms" target="_blank" className="font-semibold text-[#14422D] underline hover:text-[#1C593E]">
                         Terms of Service
                       </Link>{" "}
                       and{" "}
-                      <Link href="/legal/privacy" target="_blank" className="font-semibold text-emerald-700 underline hover:text-emerald-800">
+                      <Link href="/legal/privacy" target="_blank" className="font-semibold text-[#14422D] underline hover:text-[#1C593E]">
                         Privacy Policy
                       </Link>
                       . My contact info will be used solely for verified driver coordination.
@@ -2522,11 +2551,11 @@ function CabRequestFormContent() {
                 </div>
 
                 {/* Submit Action */}
-                <div className="flex gap-2 pt-2">
+                <div className="flex gap-3 pt-2">
                   <button
                     type="button"
                     onClick={() => setCurrentStep(2)}
-                    className="w-1/3 rounded-xl border border-[#D0D7DE] bg-white py-3 text-xs font-bold text-[#24292F] hover:bg-[#F6F8FA] cursor-pointer"
+                    className="w-1/3 rounded-2xl border border-[#D8DBD7] bg-white py-3.5 text-xs font-bold text-[#181C1B] hover:bg-[#F1F4F1] cursor-pointer transition-colors"
                   >
                     Back
                   </button>
@@ -2534,7 +2563,7 @@ function CabRequestFormContent() {
                     type="button"
                     disabled={submitting || !agreedToTerms}
                     onClick={handleFormSubmit}
-                    className="w-2/3 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 transition-all cursor-pointer disabled:opacity-50"
+                    className="w-2/3 inline-flex items-center justify-center gap-2 rounded-2xl bg-[#14422D] py-3.5 text-xs font-bold text-white shadow-[0_8px_25px_-3px_rgba(20,66,45,0.3)] hover:bg-[#1C593E] transition-all cursor-pointer disabled:opacity-50"
                   >
                     {submitting ? (
                       <span className="inline-flex items-center gap-2">

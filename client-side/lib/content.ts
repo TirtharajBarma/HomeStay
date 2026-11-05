@@ -17,9 +17,9 @@ export const hosts = {
 };
 
 export const breakfast = {
-  title: "Complimentary Hill Breakfast",
+  title: "Authentic Hill Breakfast",
   badge: "Included Daily",
-  body: "Every morning between 7:30 AM and 10:00 AM: hot churpi, chhurpi and clover-seed parathas off the tawa, steamed momos from Anuradha's mother's recipe, aamra (mango pickle) andachar from the kitchen garden, local white cheese, and a pot of second-flush Darjeeling tea cut on the Ging terraces the day before. Served in your room, on the terrace, or on the solarium deck — whichever the weather allows.",
+  body: "Wake up to freshly prepared mountain breakfasts made with fresh local ingredients: hot parathas off the tawa, steamed momos, farm-fresh eggs, handmade pickles, and hot cups of authentic Darjeeling tea prepared with care by your host family.",
 };
 
 export const amenityGroups = [
@@ -27,30 +27,30 @@ export const amenityGroups = [
     icon: "shower",
     title: "Bed & Bath",
     items: [
-      "Handloom cotton linen bedding & feather pillows",
-      "High-altitude Himalayan bath salts",
-      "Handwoven local wool throws & shawls",
-      "Heated stone tile ensuite floor",
+      "Fresh cotton linen bedding & warm blankets",
+      "Running hot water & geysers in all rooms",
+      "Clean private attached bathrooms",
+      "Warm Himalayan wool throws for cool evenings",
     ],
   },
   {
     icon: "fireplace",
     title: "Hearth & Comfort",
     items: [
-      "Seasoned khadi wood replenished daily",
-      "Traditional cast iron kettle & local herbal teas",
-      "Retro Bluetooth speaker for quiet evenings",
-      "Wool slippers & cotton robes provided",
+      "Comfortable room heating / warm mountain bedding",
+      "Traditional kettle & authentic local teas",
+      "Cozy seating areas for peaceful evenings",
+      "Quiet mountain surroundings for restful sleep",
     ],
   },
   {
     icon: "coffee",
-    title: "Pantry & Kitchen",
+    title: "Dining & Refreshment",
     items: [
-      "Chilled spring water & glass-front refrigerator",
-      "Estate tea bar with pour-over & kettles",
-      "Hand-thrown clay mugs from a Garga village potter",
-      "Evening chha (tea) & spiced cashew bowls",
+      "Fresh mountain spring drinking water",
+      "Freshly brewed Darjeeling & Sikkim teas",
+      "Home-cooked local meals on request",
+      "Evening snacks & masala chai",
     ],
   },
 ];
@@ -58,87 +58,87 @@ export const amenityGroups = [
 export const grounds = [
   {
     icon: "forest",
-    title: "Ging Tea Terraces",
-    body: "Walk out onto our own second-flush plucking rows, with the clippers still working. Pickings are yours to watch, and your morning cup is cut after breakfast.",
+    title: "Tea Gardens & Pine Trails",
+    body: "Step out onto serene walking paths, tea estate trails, and fragrant pine ridge loops right outside your homestay.",
   },
   {
     icon: "water",
-    title: "Rhododendron & Reserve Trail",
-    body: "A 2 km private forest loop that starts at the veranda step, climbing into the reserve for red blooms from March to May and cloud-forest birds year round.",
+    title: "Panoramic Valley Views",
+    body: "Unobstructed views of the Kanchenjunga peaks, rolling green valleys, and misty Himalayan horizons.",
   },
   {
     icon: "local_fire_department",
-    title: "The Ridge Firepit",
-    body: "Evening gathering around a bonfire on the upper meadow, with Tenzin's masala chai, dry wood, and the Gorkha ridge going dark behind you.",
+    title: "Evening Bonfire & Chai",
+    body: "Gather around an evening wood fire on the outdoor terrace with freshly brewed masala chai and cool mountain breezes.",
   },
   {
     icon: "menu_book",
-    title: "Estate Library & Solarium",
-    body: "A small library of Himalayan field guides and Nepali fiction, wool armchairs, and a glass-walled reading room that keeps the whole ridge in view.",
+    title: "Verified Local Hospitality",
+    body: "Stay with verified local families who take pride in sharing authentic Gorkha and Himalayan culture and home cooking.",
   },
 ];
 
 export const houseRules = [
   {
     icon: "schedule",
-    text: "Check-in: 2:00 PM – 8:00 PM • Check-out: 11:00 AM",
+    text: "Check-in: 12:00 PM – 8:00 PM • Check-out: 11:00 AM",
   },
   {
     icon: "volume_off",
-    text: "Quiet Hours: 10:00 PM – 7:30 AM — the valley is a listening place",
+    text: "Quiet Hours: 10:00 PM – 7:00 AM — preserve the peaceful mountain quiet",
   },
   {
     icon: "steps",
-    text: "Footwear: slippers provided; outdoor shoes off at the veranda",
+    text: "Footwear: Outdoor shoes off at entrance verandas where requested",
   },
   {
     icon: "smoke_free",
-    text: "Smoke-free estate: all buildings and the terrace are smoke-free",
+    text: "Smoke-free rooms: designated outdoor smoking areas available",
   },
 ];
 
 export const experiences = [
   {
     icon: "egg_alt",
-    title: "Tea Garden Breakfast",
-    body: "Every morning begins with parathas and momos off the tawa, local white cheese and honey, pickles out of the kitchen garden, and first-flush Darjeeling brewed from leaves cut on our own Ging terraces.",
-    footnote: { icon: "schedule", label: "Served 7:30 AM – 10:00 AM" },
+    title: "Home-Cooked Mountain Meals",
+    body: "Wholesome, hot home-cooked meals prepared by your host family using fresh local vegetables, authentic spices, and traditional recipes.",
+    footnote: { icon: "schedule", label: "Breakfast & Dinner Available" },
   },
   {
     icon: "hiking",
-    title: "Tiger Hill Sunrise",
-    body: "We arrange the 4 am pickup to Tiger Hill so you are standing on the summit road as the sun comes over Singalila, Kanchenjunga, Everest and Lhotse together. Back for breakfast, always.",
-    footnote: { icon: "map", label: "Route Cards & Car Guides" },
+    title: "Tiger Hill & Sunrise Sightseeing",
+    body: "Door-to-door cab pickups arranged early morning for Kanchenjunga sunrise over Tiger Hill, Batasia Loop, and Ghoom Monastery.",
+    footnote: { icon: "map", label: "Experienced Hill Drivers" },
   },
   {
     icon: "spa",
-    title: "Quiet Sanctuary",
-    body: "Bukhari stoves are laid before you arrive with seasoned khadi wood and kindling, and the cedar herbal steam room next to the meadow loft is open to every guest on the estate, free, all day.",
-    footnote: { icon: "fireplace", label: "Wood Restocked Daily" },
+    title: "Door-to-Door Mountain Transfers",
+    body: "Direct transfers between Bagdogra Airport (IXB), NJP Railway Station, Darjeeling, Kalimpong, Gangtok, and Pelling with zero hassle.",
+    footnote: { icon: "local_taxi", label: "Fixed Transparent Fares" },
   },
 ];
 
 export const testimonials = [
   {
-    initials: "RB",
-    name: "Rhea & Nikhil Barman",
-    stay: "Stayed in Ging Tea Cottage • April 2025",
+    initials: "AS",
+    name: "Amit & Priya Sen",
+    stay: "Bagdogra Airport ➔ Darjeeling Homestay",
     quote:
-      "Anuradha poured us first-flush before the fog lifted off the Ging rows. Our own family has been buying tea from this garden for years — staying on it was a strange, lovely thing.",
+      "Booked our airport transfer and homestay through StayCabs. Our driver was waiting right at the arrival gate and the homestay host welcomed us with hot tea. Seamless experience from start to finish.",
   },
   {
-    initials: "AM",
-    name: "Aditi Malhotra",
-    stay: "Stayed in Rangit Rose Loft • March 2025",
+    initials: "RM",
+    name: "Rahul Mukherjee",
+    stay: "NJP Station ➔ Gangtok Transit",
     quote:
-      "The dormer window at six in the morning, Kanchenjunga right there, and nobody else awake. Three nights became six.",
+      "Finding a reliable hill cab without excessive bargaining used to be stressful. StayCabs gave an honest fare upfront and the driver navigated the mountain roads with absolute skill.",
   },
   {
-    initials: "NF",
-    name: "The Nandi Family",
-    stay: "Stayed in Namring Cabin • December 2024",
+    initials: "SS",
+    name: "Sunita & Vikram Sharma",
+    stay: "Darjeeling Sightseeing & Homestay Stay",
     quote:
-      "Three generations, one cabin, and the sunrise deck to ourselves. Tenzin laid the bonfire, we watched the sun come up, and nobody reached for a phone.",
+      "A peaceful stay overlooking the tea gardens and a spotless vehicle for our Tiger Hill and Mirik day trips. Will definitely recommend StayCabs to anyone visiting North Bengal.",
   },
 ];
 

@@ -358,10 +358,13 @@ function DriverQuoteContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#F8F9FA] flex items-center justify-center p-6">
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-600 border-t-transparent" />
-          <p className="text-xs font-medium text-[#57606A]">Loading Trip Details…</p>
+      <div className="min-h-screen bg-[#F7FAF7] flex items-center justify-center p-6 font-body">
+        <div className="flex flex-col items-center gap-4 text-center">
+          <div className="h-10 w-10 animate-spin rounded-full border-3 border-[#14422D] border-t-transparent" />
+          <div>
+            <p className="text-sm font-bold text-[#14422D]">Loading Mountain Trip Console…</p>
+            <p className="text-xs text-[#717973] mt-0.5">StayCabs Driver Portal</p>
+          </div>
         </div>
       </div>
     );
@@ -369,13 +372,13 @@ function DriverQuoteContent() {
 
   if (error || !view) {
     return (
-      <div className="min-h-screen bg-[#F8F9FA] flex items-center justify-center p-6">
-        <div className="mx-auto max-w-md w-full rounded-2xl border border-[#D0D7DE] bg-white p-8 text-center space-y-3 shadow-xs">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-50 text-red-600">
+      <div className="min-h-screen bg-[#F7FAF7] flex items-center justify-center p-6 font-body">
+        <div className="mx-auto max-w-md w-full rounded-3xl border border-[#E5E8E5] bg-white p-8 sm:p-10 text-center space-y-4 shadow-[0_12px_40px_-6px_rgba(20,66,45,0.08)]">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-red-50 text-red-600 border border-red-100">
             <Icon name="error_outline" className="text-2xl" />
           </div>
-          <h1 className="text-base font-bold text-[#1F2328]">Trip Link Not Available</h1>
-          <p className="text-xs text-[#57606A]">{error || "This trip request has expired or was already assigned."}</p>
+          <h1 className="font-display text-xl font-bold text-[#181C1B]">Trip Link Not Available</h1>
+          <p className="text-xs text-[#717973] leading-relaxed">{error || "This trip request has expired or was already assigned."}</p>
         </div>
       </div>
     );
@@ -387,33 +390,33 @@ function DriverQuoteContent() {
 
   // Counter-offer: the server accepts it even while quoting is off
   const counterOffer = counter ? (
-                  <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">Homestay Counter-Offer</span>
-                      <span className="text-[10px] bg-emerald-200 text-emerald-900 font-bold px-2 py-0.5 rounded-full">New Rate</span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 bg-white rounded-lg p-2.5 border border-emerald-200 text-center">
-                      <div>
-                        <span className="text-[10px] text-[#57606A] block">Your Quote</span>
-                        <span className="text-xs font-bold line-through text-[#57606A]">{q ? inr(q.quotedFare) : "—"}</span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-emerald-700 font-semibold block">Counter-Offer</span>
-                        <span className="text-sm font-extrabold text-emerald-700">{inr(counter)}</span>
-                      </div>
-                    </div>
-                    <p className="text-xs text-[#1F2328]">
-                      The homestay offers <strong className="text-emerald-900 font-extrabold">{inr(counter)}</strong>. Accepting confirms this trip immediately.
-                    </p>
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => send("accept")}
-                      className="w-full rounded-xl bg-emerald-600 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 cursor-pointer disabled:opacity-50"
-                    >
-                      {busy ? "Accepting…" : `Accept ${inr(counter)} & Confirm Trip`}
-                    </button>
-                  </div>
+    <div className="rounded-2xl border border-emerald-300 bg-emerald-50/80 p-5 space-y-3.5 shadow-2xs">
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-bold uppercase tracking-wider text-[#14422D]">Homestay Counter-Offer</span>
+        <span className="text-[10px] bg-[#14422D] text-white font-bold px-2.5 py-0.5 rounded-full">New Rate</span>
+      </div>
+      <div className="grid grid-cols-2 gap-2 bg-white rounded-xl p-3 border border-emerald-200 text-center">
+        <div>
+          <span className="text-[10px] text-[#717973] block">Your Quote</span>
+          <span className="text-xs font-bold line-through text-[#717973]">{q ? inr(q.quotedFare) : "—"}</span>
+        </div>
+        <div>
+          <span className="text-[10px] text-[#14422D] font-semibold block">Counter-Offer</span>
+          <span className="text-sm font-extrabold text-[#14422D]">{inr(counter)}</span>
+        </div>
+      </div>
+      <p className="text-xs text-[#181C1B]">
+        The homestay offers <strong className="text-[#14422D] font-extrabold">{inr(counter)}</strong>. Accepting confirms this trip immediately.
+      </p>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => send("accept")}
+        className="w-full rounded-2xl bg-[#14422D] py-3 text-xs font-bold text-white shadow-sm hover:bg-[#1C593E] cursor-pointer disabled:opacity-50 transition-all"
+      >
+        {busy ? "Accepting…" : `Accept ${inr(counter)} & Confirm Trip`}
+      </button>
+    </div>
   ) : null;
 
   // Live Calculations (Zero hardcoding - driven by admin settings)
@@ -433,69 +436,71 @@ function DriverQuoteContent() {
   const calculatedTotalEarnings = calculatedCashToCollect + calculatedWalletExcess;
 
   return (
-    <div className="min-h-screen bg-[#F8F9FA] text-[#1F2328] antialiased">
+    <div className="min-h-screen bg-[#F7FAF7] text-[#181C1B] antialiased selection:bg-[#14422D]/15 selection:text-[#14422D]">
       {/* Driver Header */}
-      <header className="sticky top-0 z-30 border-b border-[#E1E4E8] bg-white/95 backdrop-blur-md px-4 py-3 shadow-xs">
+      <header className="sticky top-0 z-30 border-b border-[#E5E8E5]/80 bg-white/85 backdrop-blur-xl px-4 py-3 shadow-[0_4px_20px_-4px_rgba(20,66,45,0.03)]">
         <div className="mx-auto flex max-w-md items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 text-white font-bold text-xs">
-              SR
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-[#14422D] text-white font-serif font-black text-xs shadow-xs">
+              SC
             </div>
             <div>
               <div className="flex items-center gap-1.5">
-                <span className="font-bold text-xs text-[#1F2328]">{siteConfig.appName} Driver Portal</span>
-                <span className="rounded bg-emerald-50 px-1 py-0.2 text-[9px] font-bold text-emerald-800 border border-emerald-200">
+                <span className="font-serif font-bold text-xs text-[#181C1B] tracking-tight">{siteConfig.appName} Driver Portal</span>
+                <span className="rounded-full bg-[#14422D]/8 px-2 py-0.5 text-[9px] font-bold text-[#14422D] border border-[#14422D]/15">
                   Verified
                 </span>
               </div>
-              <p className="text-[10px] text-[#57606A] font-mono">Trip #{view.reference}</p>
+              <p className="text-[11px] text-[#717973] font-mono tracking-wide">Trip #{view.reference}</p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
             {view.driverName && (
-              <span className="text-xs font-semibold text-[#57606A] bg-[#F6F8FA] border border-[#D0D7DE] rounded-full px-2.5 py-1">
+              <span className="text-xs font-semibold text-[#14422D] bg-[#ECEFEB] border border-[#E5E8E5] rounded-full px-3 py-1">
                 {view.driverName}
               </span>
             )}
           </div>
         </div>
 
-        {/* Tab Switcher */}
-        <div className="mx-auto max-w-md mt-2.5 pt-2 border-t border-[#E1E4E8] flex gap-2">
-          <button
-            type="button"
-            onClick={() => setActiveTab("trip")}
-            className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-              activeTab === "trip"
-                ? "bg-emerald-600 text-white shadow-xs"
-                : "bg-[#F6F8FA] text-[#57606A] hover:bg-[#E1E4E8]"
-            }`}
-          >
-            <Icon name="local_taxi" className="text-xs" /> Trip Console
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab("wallet");
-              fetchWallet();
-            }}
-            className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-              activeTab === "wallet"
-                ? "bg-emerald-600 text-white shadow-xs"
-                : "bg-[#F6F8FA] text-[#57606A] hover:bg-[#E1E4E8]"
-            }`}
-          >
-            <Icon name="account_balance_wallet" className="text-xs" />
-            <span>Wallet</span>
-            {wallet && wallet.available > 0 && (
-              <span className={`px-1.5 py-0.2 text-[10px] font-extrabold rounded-full ${
-                activeTab === "wallet" ? "bg-white text-emerald-800" : "bg-emerald-600 text-white"
-              }`}>
-                {inr(wallet.available)}
-              </span>
-            )}
-          </button>
+        {/* Segmented Tab Switcher */}
+        <div className="mx-auto max-w-md mt-3 pt-2.5 border-t border-[#ECEFEB]">
+          <div className="flex rounded-2xl bg-[#ECEFEB] p-1 gap-1">
+            <button
+              type="button"
+              onClick={() => setActiveTab("trip")}
+              className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                activeTab === "trip"
+                  ? "bg-[#14422D] text-white shadow-xs"
+                  : "text-[#717973] hover:text-[#181C1B]"
+              }`}
+            >
+              <Icon name="local_taxi" className="text-sm" /> Trip Console
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("wallet");
+                fetchWallet();
+              }}
+              className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                activeTab === "wallet"
+                  ? "bg-[#14422D] text-white shadow-xs"
+                  : "text-[#717973] hover:text-[#181C1B]"
+              }`}
+            >
+              <Icon name="account_balance_wallet" className="text-sm" />
+              <span>Wallet</span>
+              {wallet && wallet.available > 0 && (
+                <span className={`px-2 py-0.5 text-[10px] font-extrabold rounded-full ${
+                  activeTab === "wallet" ? "bg-white/20 text-white" : "bg-[#14422D] text-white"
+                }`}>
+                  {inr(wallet.available)}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
       </header>
 
@@ -503,54 +508,54 @@ function DriverQuoteContent() {
         {activeTab === "wallet" ? (
           /* SOVEREIGN DRIVER WALLET & UPI PAYOUT CONSOLE */
           <div className="space-y-4">
-            <div className="rounded-2xl border border-emerald-300 bg-gradient-to-br from-emerald-50 via-white to-emerald-50/30 p-5 shadow-xs space-y-4">
+            <div className="rounded-3xl border border-[#14422D]/15 bg-gradient-to-br from-[#14422D]/8 via-white to-[#14422D]/4 p-6 shadow-[0_10px_30px_-4px_rgba(20,66,45,0.06)] space-y-5">
               <div className="flex items-center justify-between">
                 <div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">Available Driver Balance</span>
-                  <div className="text-3xl font-black text-emerald-900 mt-0.5">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-[#14422D]">Available Driver Balance</span>
+                  <div className="text-4xl font-serif font-bold text-[#14422D] mt-1 tracking-tight">
                     {walletLoading ? "…" : inr(wallet?.available ?? 0)}
                   </div>
                 </div>
-                <div className="h-12 w-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-xs">
+                <div className="h-13 w-13 rounded-2xl bg-[#14422D] text-white flex items-center justify-center shadow-md">
                   <Icon name="account_balance_wallet" className="text-2xl" />
                 </div>
               </div>
 
-              <div className="p-2.5 rounded-xl bg-white/80 border border-emerald-200 text-xs text-[#57606A] space-y-1">
+              <div className="p-3.5 rounded-2xl bg-white/95 border border-[#E5E8E5] text-xs text-[#717973] space-y-2">
                 <div className="flex justify-between items-center">
                   <span>Completed Eligible Trips:</span>
-                  <span className="font-bold text-[#1F2328]">{wallet?.eligibleTrips ?? 0}</span>
+                  <span className="font-bold text-[#181C1B]">{wallet?.eligibleTrips ?? 0}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span>Minimum Payout Threshold:</span>
-                  <span className="font-semibold text-[#1F2328]">{inr(minThreshold)}</span>
+                  <span className="font-semibold text-[#181C1B]">{inr(minThreshold)}</span>
                 </div>
               </div>
 
               {/* Pending Payout Banner */}
               {wallet?.pendingPayout ? (
-                <div className="rounded-xl border border-amber-300 bg-amber-50 p-3.5 space-y-1.5">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-amber-900">
-                    <Icon name="hourglass_empty" className="text-sm animate-pulse" /> Payout Request Under Processing
+                <div className="rounded-2xl border border-amber-300/80 bg-amber-50/80 p-4 space-y-2">
+                  <div className="flex items-center gap-2 text-xs font-bold text-amber-950">
+                    <Icon name="hourglass_empty" className="text-sm animate-pulse text-amber-700" /> Payout Request Under Processing
                   </div>
-                  <p className="text-xs text-amber-950 font-extrabold">
+                  <p className="text-xs text-amber-950 font-serif font-bold">
                     Amount: {inr(wallet.pendingPayout.amount)}
                   </p>
-                  <p className="text-[11px] text-amber-800 leading-tight">
+                  <p className="text-[11px] text-amber-800 leading-relaxed">
                     Admin has received your request. The amount will be transferred directly to your UPI ID and the bank UTR will be recorded.
                   </p>
                 </div>
               ) : (
                 /* Withdrawal: paid only to the driver's saved UPI / bank */
-                <div className="space-y-2.5 pt-1 border-t border-emerald-200">
-                  <label className="text-xs font-bold text-[#1F2328] block">
+                <div className="space-y-3 pt-2 border-t border-[#14422D]/10">
+                  <label className="text-xs font-bold text-[#181C1B] block">
                     Withdraw to Saved UPI
                   </label>
                   {!hasSavedMethod ? (
-                    <p className="text-[11px] text-[#57606A]">{noSavedMethodText}</p>
+                    <p className="text-xs text-[#717973] leading-relaxed">{noSavedMethodText}</p>
                   ) : (
                   <>
-                  <p className="text-[11px] text-[#57606A]">
+                  <p className="text-xs text-[#717973] leading-relaxed">
                     Paid to {savedPayout?.upiId ? `your UPI ${savedPayout.upiId}` : "your saved bank account"}. Funds are transferred manually by {siteConfig.appName} Admin.
                   </p>
 
@@ -558,7 +563,7 @@ function DriverQuoteContent() {
                     type="button"
                     disabled={payoutBusy || (wallet?.available ?? 0) < minThreshold}
                     onClick={requestPayout}
-                    className="w-full rounded-xl bg-emerald-600 py-3 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
+                    className="w-full rounded-2xl bg-[#14422D] py-3.5 text-xs font-bold text-white shadow-[0_8px_20px_-4px_rgba(20,66,45,0.25)] hover:bg-[#0B2519] cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 transition-all"
                   >
                     <Icon name="bolt" className="text-sm" />
                     <span>
@@ -575,52 +580,52 @@ function DriverQuoteContent() {
               )}
 
               {payoutMessage && (
-                <div className="rounded-xl bg-emerald-100 border border-emerald-300 p-2.5 text-center text-xs font-semibold text-emerald-950">
+                <div className="rounded-2xl bg-emerald-50 border border-[#14422D]/20 p-3 text-center text-xs font-semibold text-[#14422D]">
                   {payoutMessage}
                 </div>
               )}
             </div>
 
             {/* Payout Settlement History */}
-            <div className="rounded-2xl border border-[#D0D7DE] bg-white p-4 shadow-xs space-y-3">
-              <h4 className="text-xs font-bold text-[#1F2328] flex items-center gap-1.5">
-                <Icon name="history" className="text-sm text-[#57606A]" /> Payout & Settlement History
+            <div className="rounded-3xl border border-[#E5E8E5] bg-white p-5 shadow-[0_4px_20px_-4px_rgba(20,66,45,0.04)] space-y-3.5">
+              <h4 className="text-xs font-bold text-[#181C1B] flex items-center gap-2">
+                <Icon name="history" className="text-sm text-[#717973]" /> Payout & Settlement History
               </h4>
 
               {wallet?.history && wallet.history.length > 0 ? (
-                <div className="space-y-2">
+                <div className="space-y-2.5">
                   {wallet.history.map((item) => (
                     <div
                       key={item.id}
-                      className="p-3 rounded-xl border border-[#E1E4E8] bg-[#F6F8FA] space-y-1 text-xs"
+                      className="p-3.5 rounded-2xl border border-[#ECEFEB] bg-[#F7FAF7] space-y-1.5 text-xs"
                     >
                       <div className="flex justify-between items-center">
-                        <span className="font-extrabold text-[#1F2328]">{inr(item.amount)}</span>
+                        <span className="font-serif font-bold text-sm text-[#181C1B]">{inr(item.amount)}</span>
                         <span
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
                             item.status === "SETTLED"
-                              ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                              ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
                               : item.status === "REJECTED"
-                              ? "bg-red-100 text-red-800 border border-red-200"
-                              : "bg-amber-100 text-amber-800 border border-amber-200"
+                              ? "bg-red-50 text-red-800 border border-red-200"
+                              : "bg-amber-50 text-amber-900 border border-amber-200"
                           }`}
                         >
                           {item.status}
                         </span>
                       </div>
-                      <div className="text-[11px] text-[#57606A] flex justify-between">
+                      <div className="text-[11px] text-[#717973] flex justify-between">
                         <span>UPI: {item.upiId || "Bank"}</span>
                         <span>
                           {item.requestedAt ? istDate(item.requestedAt) : ""}
                         </span>
                       </div>
                       {item.settlementReference && (
-                        <div className="pt-1 border-t border-[#E1E4E8] text-[10px] text-emerald-800 font-mono flex items-center gap-1">
+                        <div className="pt-1.5 border-t border-[#E5E8E5] text-[11px] text-[#14422D] font-mono flex items-center gap-1.5 font-bold">
                           <Icon name="check_circle" className="text-xs" /> UTR / Ref: {item.settlementReference}
                         </div>
                       )}
                       {item.rejectionReason && (
-                        <div className="pt-1 border-t border-red-200 text-[10px] text-red-800">
+                        <div className="pt-1.5 border-t border-red-200 text-[11px] text-red-800">
                           Reason: {item.rejectionReason}
                         </div>
                       )}
@@ -628,29 +633,29 @@ function DriverQuoteContent() {
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-[#57606A] text-center py-4">No payout requests yet.</p>
+                <p className="text-xs text-[#717973] text-center py-4">No payout requests yet.</p>
               )}
             </div>
 
             {/* Eligible Trips Breakdown */}
             {wallet?.trips && wallet.trips.length > 0 && (
-              <div className="rounded-2xl border border-[#D0D7DE] bg-white p-4 shadow-xs space-y-2.5">
-                <h4 className="text-xs font-bold text-[#1F2328] flex items-center gap-1.5">
-                  <Icon name="receipt_long" className="text-sm text-[#57606A]" /> Trips Credited to Wallet
+              <div className="rounded-3xl border border-[#E5E8E5] bg-white p-5 shadow-[0_4px_20px_-4px_rgba(20,66,45,0.04)] space-y-3">
+                <h4 className="text-xs font-bold text-[#181C1B] flex items-center gap-2">
+                  <Icon name="receipt_long" className="text-sm text-[#717973]" /> Trips Credited to Wallet
                 </h4>
-                <div className="space-y-1.5">
+                <div className="space-y-2">
                   {wallet.trips.map((t) => (
                     <div
                       key={t.reference}
-                      className="flex justify-between items-center p-2 rounded-lg bg-[#F8F9FA] border border-[#E1E4E8] text-xs"
+                      className="flex justify-between items-center p-3 rounded-2xl bg-[#F7FAF7] border border-[#ECEFEB] text-xs"
                     >
                       <div>
-                        <span className="font-bold text-[#1F2328]">Trip #{t.reference}</span>
-                        <span className="text-[10px] text-[#57606A] block">
+                        <span className="font-bold text-[#181C1B]">Trip #{t.reference}</span>
+                        <span className="text-[10px] text-[#717973] block">
                           {istDate(Number(t.date))}
                         </span>
                       </div>
-                      <span className="font-extrabold text-emerald-700">+{inr(t.amount)}</span>
+                      <span className="font-serif font-bold text-sm text-[#14422D]">+{inr(t.amount)}</span>
                     </div>
                   ))}
                 </div>
@@ -661,14 +666,16 @@ function DriverQuoteContent() {
           /* ACTIVE TRIP CONSOLE */
           <div className="space-y-4">
             {/* Live GPS Return Match Banner */}
-            <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50/80 p-3 text-xs">
-              <div className="flex items-center gap-2">
-                <Icon name="my_location" className="text-emerald-700 text-base shrink-0" />
+            <div className="flex items-center justify-between rounded-3xl border border-[#14422D]/15 bg-gradient-to-r from-emerald-50/90 via-white to-[#14422D]/5 p-4 shadow-xs text-xs">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-2xl bg-[#14422D]/10 text-[#14422D] flex items-center justify-center shrink-0">
+                  <Icon name="my_location" className="text-xl" />
+                </div>
                 <div>
-                  <p className="font-bold text-emerald-950">
+                  <p className="font-bold text-[#14422D]">
                     {gpsStatus || "Live Return Match Ready"}
                   </p>
-                  <p className="text-[10px] text-emerald-800">
+                  <p className="text-[11px] text-[#717973] leading-tight">
                     Auto-matches return rides when you reach NJP, Bagdogra, or Darjeeling
                   </p>
                 </div>
@@ -679,51 +686,54 @@ function DriverQuoteContent() {
                   sendLocationPing();
                   setGpsStatus("Updating GPS…");
                 }}
-                className="rounded-lg bg-emerald-700 px-2.5 py-1 text-[11px] font-bold text-white shadow-xs hover:bg-emerald-800 cursor-pointer shrink-0"
+                className="rounded-xl bg-[#14422D] px-3.5 py-2 text-xs font-bold text-white shadow-xs hover:bg-[#0B2519] cursor-pointer shrink-0 transition-all"
               >
                 Share GPS
               </button>
             </div>
 
             {/* Trip Overview Card */}
-            <div className="rounded-2xl border border-[#D0D7DE] bg-white p-5 shadow-xs space-y-3.5">
-              <div className="flex items-center justify-between border-b border-[#E1E4E8] pb-3">
+            <div className="rounded-3xl border border-[#E5E8E5] bg-white p-6 shadow-[0_10px_30px_-4px_rgba(20,66,45,0.05)] space-y-4">
+              <div className="flex items-center justify-between border-b border-[#ECEFEB] pb-3.5">
                 <div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#57606A]">Homestay Origin</span>
-                  <h2 className="text-sm font-bold text-[#1F2328]">{view.homestayName || "Partner Homestay"}</h2>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#717973]">Homestay Origin</span>
+                  <h2 className="text-base font-serif font-bold text-[#181C1B]">{view.homestayName || "Partner Homestay"}</h2>
                 </div>
-                <span className="rounded-full bg-blue-50 border border-blue-200 px-2 py-0.5 text-[10px] font-bold text-blue-800">
+                <span className="rounded-full bg-[#14422D]/8 border border-[#14422D]/15 px-3 py-1 text-xs font-semibold text-[#14422D]">
                   {view.vehicleType} · {view.passengers} Pax
                 </span>
               </div>
 
-              <div className="space-y-2 text-xs">
-                <div className="flex items-start gap-2">
-                  <Icon name="my_location" className="text-xs text-emerald-700 mt-0.5 shrink-0" />
-                  <div>
-                    <span className="text-[#57606A] block text-[10px]">Pickup:</span>
-                    <span className="font-semibold text-[#1F2328]">{view.pickup}</span>
+              {/* Route Timeline */}
+              <div className="space-y-3 text-xs">
+                <div className="flex items-start gap-3">
+                  <div className="flex flex-col items-center mt-1">
+                    <div className="h-3 w-3 rounded-full bg-[#14422D]" />
+                    <div className="h-8 w-0.5 bg-[#E5E8E5] my-0.5" />
+                    <div className="h-3 w-3 rounded-full bg-red-600" />
+                  </div>
+                  <div className="flex-1 space-y-3">
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-[#717973]">Pickup Location</span>
+                      <p className="font-semibold text-xs text-[#181C1B]">{view.pickup}</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-[#717973]">Drop Destination</span>
+                      <p className="font-semibold text-xs text-[#181C1B]">{view.destination}</p>
+                    </div>
                   </div>
                 </div>
 
-                <div className="flex items-start gap-2">
-                  <Icon name="location_on" className="text-xs text-red-600 mt-0.5 shrink-0" />
+                <div className="pt-2 border-t border-[#ECEFEB] flex items-center gap-2.5">
+                  <Icon name="calendar_today" className="text-sm text-[#717973] shrink-0" />
                   <div>
-                    <span className="text-[#57606A] block text-[10px]">Destination:</span>
-                    <span className="font-semibold text-[#1F2328]">{view.destination}</span>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-2">
-                  <Icon name="calendar_today" className="text-xs text-[#57606A] mt-0.5 shrink-0" />
-                  <div>
-                    <span className="text-[#57606A] block text-[10px]">Pickup Schedule:</span>
-                    <span className="font-semibold text-[#1F2328]">{when}</span>
+                    <span className="text-[10px] font-medium text-[#717973]">Pickup Schedule: </span>
+                    <span className="font-semibold text-xs text-[#181C1B]">{when}</span>
                   </div>
                 </div>
 
                 {view.isRoundTrip && (
-                  <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-2 text-emerald-900 font-semibold text-[11px]">
+                  <div className="rounded-2xl bg-[#14422D]/6 border border-[#14422D]/15 p-3 text-[#14422D] font-semibold text-xs">
                     Round trip return scheduled: {view.returnDate ? `${new Date(Number(view.returnDate)).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short" })}${view.returnTime ? ` at ${view.returnTime}` : ""}` : ""}
                   </div>
                 )}
@@ -732,45 +742,45 @@ function DriverQuoteContent() {
 
             {/* State Handlers */}
             {view.driverView === "TAKEN" && view.status !== "CANCELLED" ? (
-              <div className="rounded-xl border border-[#D0D7DE] bg-[#F6F8FA] p-4 text-xs text-[#57606A] font-medium">
+              <div className="rounded-3xl border border-[#E5E8E5] bg-[#F7FAF7] p-5 text-xs text-[#717973] font-medium text-center">
                 This trip went to another driver.
               </div>
             ) : view.driverView === "REASSIGNED" ? (
-              <div className="rounded-xl border border-[#D0D7DE] bg-[#F6F8FA] p-4 text-xs text-[#57606A] font-medium">
+              <div className="rounded-3xl border border-[#E5E8E5] bg-[#F7FAF7] p-5 text-xs text-[#717973] font-medium text-center">
                 This trip was given to another driver.
               </div>
             ) : view.driverView === "EXPIRED" || view.status === "EXPIRED" ? (
-              <div className="rounded-xl border border-[#D0D7DE] bg-[#F6F8FA] p-4 text-xs text-[#57606A] font-medium">
+              <div className="rounded-3xl border border-[#E5E8E5] bg-[#F7FAF7] p-5 text-xs text-[#717973] font-medium text-center">
                 Pickup time passed.
               </div>
             ) : view.status === "CANCELLED" || view.driverView === "CANCELLED" ? (
-              <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-xs text-red-800 font-medium">
+              <div className="rounded-3xl border border-red-200 bg-red-50 p-5 text-xs text-red-800 font-medium">
                 {view.cancellationReason ? `This trip was cancelled: ${view.cancellationReason}` : "This trip request was cancelled."}
               </div>
             ) : view.assignedToMe && view.advancePaid ? (
               /* CONFIRMED TRIP MANAGEMENT CONSOLE */
-              <div className="rounded-2xl border border-emerald-300 bg-white p-5 shadow-xs space-y-4">
-                <div className="flex items-center justify-between border-b border-[#E1E4E8] pb-3">
-                  <span className="inline-flex items-center gap-1 rounded bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-900">
+              <div className="rounded-3xl border border-[#14422D]/25 bg-white p-6 shadow-[0_12px_36px_-6px_rgba(20,66,45,0.07)] space-y-5">
+                <div className="flex items-center justify-between border-b border-[#ECEFEB] pb-3.5">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-[#14422D]/10 px-3 py-1 text-xs font-bold text-[#14422D] border border-[#14422D]/20">
                     <Icon name="check_circle" className="text-xs" /> Trip Confirmed With You
                   </span>
-                  <span className="rounded-full bg-[#F6F8FA] border border-[#D0D7DE] px-2.5 py-0.5 text-[10px] font-bold text-[#57606A]">
+                  <span className="rounded-full bg-[#ECEFEB] border border-[#E5E8E5] px-3 py-1 text-xs font-semibold text-[#717973]">
                     {view.status === "COMPLETED" ? "Completed" : view.status === "TRIP_STARTED" ? "Ride in Progress" : "Ready for Pickup"}
                   </span>
                 </div>
 
                 {/* Passenger Contact Card */}
                 {view.guestName && (
-                  <div className="rounded-xl bg-[#F6F8FA] border border-[#D0D7DE] p-3.5 space-y-2.5">
+                  <div className="rounded-2xl bg-[#F7FAF7] border border-[#E5E8E5] p-4 space-y-3">
                     <div>
-                      <span className="text-[10px] text-[#57606A] font-medium block">Passenger Name</span>
-                      <p className="font-bold text-sm text-[#1F2328]">{view.guestName}</p>
+                      <span className="text-[10px] text-[#717973] font-bold uppercase tracking-wider block">Passenger Name</span>
+                      <p className="font-serif font-bold text-base text-[#181C1B]">{view.guestName}</p>
                     </div>
                     {view.phone && (
-                      <div className="flex gap-2 pt-1">
+                      <div className="flex gap-2.5 pt-1">
                         <a
                           href={`tel:${view.phone}`}
-                          className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700"
+                          className="flex-1 inline-flex items-center justify-center gap-2 rounded-2xl bg-[#14422D] py-3 text-xs font-bold text-white shadow-xs hover:bg-[#0B2519] transition-all"
                         >
                           <Icon name="phone" className="text-xs" /> Call Passenger
                         </a>
@@ -778,7 +788,7 @@ function DriverQuoteContent() {
                           href={`https://wa.me/${waNumber(view.phone)}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#25D366] py-2.5 text-xs font-bold text-white shadow-xs hover:opacity-90"
+                          className="flex-1 inline-flex items-center justify-center gap-2 rounded-2xl bg-[#25D366] py-3 text-xs font-bold text-white shadow-xs hover:opacity-90 transition-all"
                         >
                           <Icon name="chat" className="text-xs" /> WhatsApp
                         </a>
@@ -794,7 +804,7 @@ function DriverQuoteContent() {
                     : `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(view.pickup)}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-blue-700"
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600/95 py-3 text-xs font-bold text-white shadow-xs hover:bg-blue-700 transition-all"
                 >
                   <Icon name="navigation" className="text-sm" />
                   <span>🗺️ Navigate to Pickup</span>
@@ -802,12 +812,12 @@ function DriverQuoteContent() {
 
                 {/* Cash Collection Banner */}
                 {typeof view.remainingCashAmount === "number" && view.remainingCashAmount > 0 && (
-                  <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 space-y-1">
-                    <span className="text-[10px] font-bold text-amber-900 uppercase tracking-wide">
+                  <div className="rounded-2xl border border-amber-300/80 bg-gradient-to-br from-amber-50 to-orange-50/40 p-5 space-y-1.5">
+                    <span className="text-[11px] font-bold text-amber-950 uppercase tracking-wide">
                       Cash to Collect at Drop-Off
                     </span>
-                    <p className="text-2xl font-black text-amber-900">{inr(view.remainingCashAmount)}</p>
-                    <p className="text-[10px] text-amber-800">
+                    <p className="text-3xl font-serif font-bold text-amber-950">{inr(view.remainingCashAmount)}</p>
+                    <p className="text-xs text-amber-800 leading-relaxed">
                       Collect directly from passenger in cash or personal UPI. The rest is already credited to your wallet.
                     </p>
                   </div>
@@ -815,25 +825,25 @@ function DriverQuoteContent() {
 
                 {/* Start Ride / Complete Ride Actions */}
                 {view.status !== "COMPLETED" && (
-                  <div className="space-y-2 pt-1">
+                  <div className="space-y-2.5 pt-1">
                     {view.status !== "TRIP_STARTED" && (
                       <>
                         {showOtpModal ? (
-                          <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-3.5 space-y-2">
+                          <div className="rounded-2xl border border-[#14422D]/30 bg-emerald-50/70 p-4 space-y-3">
                             <div className="flex items-center justify-between">
-                              <span className="text-xs font-bold text-emerald-950">Enter Passenger Boarding PIN:</span>
+                              <span className="text-xs font-bold text-[#14422D]">Enter Passenger Boarding PIN:</span>
                               <button
                                 type="button"
                                 onClick={() => { setShowOtpModal(false); setOtpDigits(["","","",""]); }}
-                                className="text-xs text-[#57606A] hover:underline"
+                                className="text-xs text-[#717973] hover:underline cursor-pointer"
                               >
                                 Cancel
                               </button>
                             </div>
-                            <p className="text-[11px] text-[#57606A]">
+                            <p className="text-xs text-[#717973] leading-relaxed">
                               Ask passenger for the 4-digit PIN displayed on their booking confirmation.
                             </p>
-                            <div className="flex gap-2 justify-center">
+                            <div className="flex gap-2.5 justify-center">
                               {[0, 1, 2, 3].map((i) => (
                                 <input
                                   key={i}
@@ -849,7 +859,7 @@ function DriverQuoteContent() {
                                       if (prev) (prev as HTMLInputElement).focus();
                                     }
                                   }}
-                                  className="w-12 h-12 font-mono text-center text-xl font-bold rounded-xl border-2 border-[#D0D7DE] bg-white text-[#1F2328] focus:border-emerald-600 focus:outline-none"
+                                  className="w-12 h-14 font-mono text-center text-2xl font-bold rounded-2xl border-2 border-[#E5E8E5] bg-white text-[#181C1B] focus:border-[#14422D] focus:ring-2 focus:ring-[#14422D]/15 focus:outline-none transition-all"
                                 />
                               ))}
                             </div>
@@ -857,7 +867,7 @@ function DriverQuoteContent() {
                               type="button"
                               disabled={busy || otp.length < 4}
                               onClick={() => handleTripAction("start", otp)}
-                              className="w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50 cursor-pointer"
+                              className="w-full rounded-2xl bg-[#14422D] px-4 py-3 text-xs font-bold text-white shadow-xs hover:bg-[#0B2519] disabled:opacity-50 cursor-pointer transition-all"
                             >
                               {busy ? "Verifying…" : "Verify & Start Ride"}
                             </button>
@@ -873,9 +883,9 @@ function DriverQuoteContent() {
                                 handleTripAction("start");
                               }
                             }}
-                            className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl border border-[#D0D7DE] bg-white py-2.5 text-xs font-bold text-[#1F2328] hover:bg-[#F6F8FA] cursor-pointer disabled:opacity-50"
+                            className="w-full inline-flex items-center justify-center gap-2 rounded-2xl border border-[#E5E8E5] bg-white py-3 text-xs font-bold text-[#181C1B] hover:bg-[#ECEFEB] cursor-pointer disabled:opacity-50 transition-all shadow-xs"
                           >
-                            <Icon name="play_arrow" className="text-sm text-emerald-700" />
+                            <Icon name="play_arrow" className="text-sm text-[#14422D]" />
                             <span>{busy ? "Updating…" : "Start Ride"}</span>
                           </button>
                         )}
@@ -883,19 +893,19 @@ function DriverQuoteContent() {
                     )}
 
                     {showCompleteConfirm ? (
-                      <div className="rounded-xl border-2 border-emerald-500 bg-emerald-50 p-4 space-y-3">
+                      <div className="rounded-2xl border-2 border-[#14422D] bg-emerald-50/80 p-5 space-y-3">
                         <div className="flex items-center gap-2">
-                          <Icon name="check_circle" className="text-emerald-700 text-lg" />
-                          <span className="text-xs font-bold text-emerald-950">Confirm Ride Completion & Cash Collection</span>
+                          <Icon name="check_circle" className="text-[#14422D] text-lg" />
+                          <span className="text-xs font-bold text-[#14422D]">Confirm Ride Completion & Cash Collection</span>
                         </div>
-                        <p className="text-xs text-emerald-900 leading-relaxed">
+                        <p className="text-xs text-[#181C1B] leading-relaxed">
                           Did you drop off the passenger and collect{" "}
-                          <strong className="font-extrabold text-emerald-950">
+                          <strong className="font-extrabold text-[#14422D]">
                             {view.remainingCashAmount ? inr(view.remainingCashAmount) : "cash balance"}
                           </strong>
                           ?
                         </p>
-                        <div className="flex gap-2 pt-1">
+                        <div className="flex gap-2.5 pt-1">
                           <button
                             type="button"
                             disabled={busy}
@@ -903,14 +913,14 @@ function DriverQuoteContent() {
                               setShowCompleteConfirm(false);
                               handleTripAction("complete");
                             }}
-                            className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50 cursor-pointer"
+                            className="flex-1 rounded-2xl bg-[#14422D] py-3 text-xs font-bold text-white shadow-xs hover:bg-[#0B2519] disabled:opacity-50 cursor-pointer transition-all"
                           >
                             {busy ? "Completing…" : "Yes, Completed & Collected"}
                           </button>
                           <button
                             type="button"
                             onClick={() => setShowCompleteConfirm(false)}
-                            className="rounded-xl border border-[#D0D7DE] bg-white px-3 py-2.5 text-xs font-semibold text-[#57606A] hover:bg-[#F6F8FA] cursor-pointer"
+                            className="rounded-2xl border border-[#E5E8E5] bg-white px-4 py-3 text-xs font-semibold text-[#717973] hover:bg-[#ECEFEB] cursor-pointer transition-all"
                           >
                             Cancel
                           </button>
@@ -921,7 +931,7 @@ function DriverQuoteContent() {
                         type="button"
                         disabled={busy}
                         onClick={() => setShowCompleteConfirm(true)}
-                        className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 py-3 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 cursor-pointer disabled:opacity-50"
+                        className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-[#14422D] py-3.5 text-xs font-bold text-white shadow-[0_8px_20px_-4px_rgba(20,66,45,0.25)] hover:bg-[#0B2519] cursor-pointer disabled:opacity-50 transition-all"
                       >
                         <Icon name="done_all" className="text-sm" />
                         <span>{busy ? "Completing…" : "Complete Ride & Confirm Cash"}</span>
@@ -932,20 +942,20 @@ function DriverQuoteContent() {
 
                 {/* Standby Vehicle Swap (for Syndicate Standby / Breakdown Replacement) */}
                 {view.status !== "COMPLETED" && (
-                  <div className="pt-2 border-t border-[#D0D7DE]">
+                  <div className="pt-3 border-t border-[#ECEFEB]">
                     {showPlateModal ? (
-                      <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-3 space-y-2">
+                      <div className="rounded-2xl border border-blue-200 bg-blue-50/70 p-4 space-y-2.5">
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-bold text-blue-950">Update Standby Vehicle Plate:</span>
                           <button
                             type="button"
                             onClick={() => { setShowPlateModal(false); setStandbyPlate(""); }}
-                            className="text-xs text-[#57606A] hover:underline cursor-pointer"
+                            className="text-xs text-[#717973] hover:underline cursor-pointer"
                           >
                             Cancel
                           </button>
                         </div>
-                        <p className="text-[11px] text-[#57606A]">
+                        <p className="text-[11px] text-[#717973] leading-relaxed">
                           If sending a different union cab or substitute car today, enter the new plate number. An automated WhatsApp alert will update the passenger.
                         </p>
                         <input
@@ -953,13 +963,13 @@ function DriverQuoteContent() {
                           value={standbyPlate}
                           onChange={(e) => setStandbyPlate(e.target.value.toUpperCase())}
                           placeholder="e.g. WB74E5555"
-                          className="w-full rounded-xl border border-[#D0D7DE] bg-white px-3 py-2 text-xs font-semibold uppercase text-[#1F2328] focus:border-blue-600 focus:outline-none"
+                          className="w-full rounded-2xl border border-[#E5E8E5] bg-white px-3.5 py-2.5 text-xs font-semibold uppercase text-[#181C1B] focus:border-blue-600 focus:outline-none"
                         />
                         <button
                           type="button"
                           disabled={plateBusy || !standbyPlate.trim()}
                           onClick={updateStandbyVehicle}
-                          className="w-full rounded-xl bg-blue-600 py-2 text-xs font-bold text-white shadow-xs hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
+                          className="w-full rounded-2xl bg-blue-600 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-blue-700 disabled:opacity-50 cursor-pointer transition-all"
                         >
                           {plateBusy ? "Updating Plate…" : "Save Plate & Alert Passenger"}
                         </button>
@@ -968,80 +978,80 @@ function DriverQuoteContent() {
                       <button
                         type="button"
                         onClick={() => setShowPlateModal(true)}
-                        className="text-[11px] font-semibold text-blue-700 hover:text-blue-900 hover:underline inline-flex items-center gap-1 cursor-pointer"
+                        className="text-xs font-semibold text-blue-700 hover:text-blue-900 hover:underline inline-flex items-center gap-1.5 cursor-pointer"
                       >
                         <Icon name="local_taxi" className="text-sm" />
                         <span>Substitute / Standby Vehicle Plate Swap</span>
                       </button>
                     )}
                     {plateMessage && (
-                      <p className="mt-1 text-[11px] font-medium text-blue-800">{plateMessage}</p>
+                      <p className="mt-1 text-xs font-medium text-blue-800">{plateMessage}</p>
                     )}
                   </div>
                 )}
 
                 {view.status === "COMPLETED" && (
-                  <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-3.5 text-center text-xs font-semibold text-emerald-900">
+                  <div className="rounded-2xl bg-emerald-50 border border-[#14422D]/20 p-4 text-center text-xs font-semibold text-[#14422D]">
                     Trip completed and settled. Thank you for providing safe mountain transit!
                   </div>
                 )}
               </div>
             ) : view.assignedToMe ? (
-              <div className="rounded-2xl border border-amber-300 bg-amber-50/60 p-5 text-xs text-amber-900 space-y-1">
-                <span className="font-bold block">Trip Awarded to You</span>
-                <p>Waiting for guest advance payment. Passenger contact and cash collection will unlock here immediately upon payment.</p>
+              <div className="rounded-3xl border border-amber-300/80 bg-amber-50/70 p-6 text-xs text-amber-950 space-y-1.5">
+                <span className="font-serif font-bold text-sm block">Trip Awarded to You</span>
+                <p className="text-[#717973] leading-relaxed">Waiting for guest advance payment. Passenger contact and cash collection will unlock here immediately upon payment.</p>
               </div>
             ) : !view.canQuote ? (
               counterOffer || (
-                <div className="rounded-2xl border border-[#D0D7DE] bg-white p-5 text-center text-xs text-[#57606A]">
+                <div className="rounded-3xl border border-[#E5E8E5] bg-white p-6 text-center text-xs text-[#717973]">
                   This trip request is no longer taking quotes.
                 </div>
               )
             ) : (
               /* FARE QUOTATION FORM WITH ALL-INCLUSIVE MATHEMATICAL BREAKDOWN */
-              <div className="rounded-2xl border border-[#D0D7DE] bg-white p-5 shadow-xs space-y-4">
+              <div className="rounded-3xl border border-[#E5E8E5] bg-white p-6 shadow-[0_10px_30px_-4px_rgba(20,66,45,0.05)] space-y-5">
                 <div>
-                  <h3 className="font-bold text-sm text-[#1F2328]">Submit Your Total Fare Quote</h3>
-                  <p className="text-xs text-[#57606A]">Quote the total fare. Guest pays flat all-inclusive rate with zero extra booking fee.</p>
+                  <h3 className="font-serif font-bold text-base text-[#181C1B]">Submit Your Total Fare Quote</h3>
+                  <p className="text-xs text-[#717973] mt-0.5">Quote the total fare. Guest pays flat all-inclusive rate with zero extra booking fee.</p>
                 </div>
 
                 {view.guestBudget && (
-                  <div className="rounded-xl border border-blue-200 bg-blue-50 p-2.5 text-xs text-blue-900 font-medium flex items-center justify-between">
+                  <div className="rounded-2xl border border-blue-200/80 bg-blue-50/80 p-3 text-xs text-blue-950 font-medium flex items-center justify-between">
                     <span>Passenger Target Budget:</span>
-                    <strong className="font-bold text-blue-950">{inr(view.guestBudget)}</strong>
+                    <strong className="font-serif font-bold text-sm text-blue-950">{inr(view.guestBudget)}</strong>
                   </div>
                 )}
 
                 {counterOffer}
 
                 {q && !counter && (
-                  <div className="rounded-xl bg-[#F6F8FA] border border-[#D0D7DE] p-3 text-xs text-[#57606A] space-y-1.5">
+                  <div className="rounded-2xl bg-[#F7FAF7] border border-[#E5E8E5] p-4 text-xs text-[#717973] space-y-1.5">
                     <div className="flex justify-between items-center">
                       <span className="font-medium">Your Quoted Fare:</span>
-                      <strong className="text-emerald-700 text-sm font-extrabold">{inr(q.quotedFare)}</strong>
+                      <strong className="font-serif font-bold text-base text-[#14422D]">{inr(q.quotedFare)}</strong>
                     </div>
-                    <div className="text-[10px] text-[#57606A] flex justify-between">
+                    <div className="text-[11px] text-[#717973] flex justify-between">
                       <span>Status:</span>
-                      <span className="font-semibold text-[#1F2328]">{q.status === "PENDING" ? "Waiting for window close" : q.status}</span>
+                      <span className="font-semibold text-[#181C1B]">{q.status === "PENDING" ? "Waiting for window close" : q.status}</span>
                     </div>
                   </div>
                 )}
 
                 {/* Quick Fare Shortcut Pills */}
-                <div className="space-y-1.5">
-                  <span className="text-[11px] font-semibold text-[#57606A] block">
+                <div className="space-y-2">
+                  <span className="text-xs font-semibold text-[#717973] block">
                     Quick-Select Total Fare:
                   </span>
-                  <div className="flex flex-wrap gap-1.5">
+                  <div className="flex flex-wrap gap-2">
                     {[1800, 2200, 2600, 3000, 3400, 3800].map((amount) => (
                       <button
                         key={amount}
                         type="button"
                         onClick={() => setFare(String(amount))}
-                        className={`rounded-lg px-2.5 py-1 text-xs font-bold transition-all cursor-pointer ${
+                        className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
                           fare === String(amount)
-                            ? "bg-emerald-600 text-white shadow-xs"
-                            : "bg-[#F6F8FA] border border-[#D0D7DE] text-[#24292F] hover:bg-[#E1E4E8]"
+                            ? "bg-[#14422D] text-white shadow-xs"
+                            : "bg-[#ECEFEB] border border-[#E5E8E5] text-[#181C1B] hover:bg-[#E5E8E5]"
                         }`}
                       >
                         {inr(amount)}
@@ -1051,15 +1061,15 @@ function DriverQuoteContent() {
                 </div>
 
                 {/* Custom Fare Input */}
-                <div>
-                  <label className="text-xs font-semibold text-[#57606A] block mb-0.5">
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-[#181C1B] block">
                     Total Ride Fare (₹) *
                   </label>
-                  <span className="text-[10px] text-[#57606A] block mb-1.5">
+                  <span className="text-[11px] text-[#717973] block">
                     Enter the total price. Guest pays {advPct}% (min {inr(minAdv)}) online advance, the rest in cash directly to you.
                   </span>
-                  <div className="flex gap-2">
-                    <span className="flex items-center rounded-xl bg-[#F6F8FA] border border-[#D0D7DE] px-3 text-xs font-bold text-[#57606A]">
+                  <div className="flex gap-2.5">
+                    <span className="flex items-center rounded-2xl bg-[#ECEFEB] border border-[#E5E8E5] px-4 text-sm font-serif font-bold text-[#14422D]">
                       ₹
                     </span>
                     <input
@@ -1068,37 +1078,37 @@ function DriverQuoteContent() {
                       value={fare}
                       onChange={(e) => setFare(e.target.value.replace(/\D/g, ""))}
                       placeholder="e.g. 3000"
-                      className="w-full rounded-xl border border-[#D0D7DE] px-3.5 py-2.5 text-xs font-bold text-[#1F2328] focus:border-emerald-600 focus:outline-none"
+                      className="w-full rounded-2xl border border-[#E5E8E5] px-4 py-3 text-sm font-bold text-[#181C1B] focus:border-[#14422D] focus:ring-2 focus:ring-[#14422D]/15 focus:outline-none transition-all"
                     />
                   </div>
 
                   {/* Real-time Math Breakdown */}
                   {enteredFare > 0 && (
-                    <div className="mt-3 rounded-xl bg-gradient-to-br from-emerald-50 to-emerald-100/50 border border-emerald-300 p-3.5 space-y-2 text-xs">
-                      <div className="flex justify-between items-center text-[#1F2328] pb-1.5 border-b border-emerald-200">
+                    <div className="mt-3 rounded-2xl bg-gradient-to-br from-[#14422D]/6 via-[#14422D]/3 to-transparent border border-[#14422D]/20 p-4 space-y-2.5 text-xs">
+                      <div className="flex justify-between items-center text-[#181C1B] pb-2 border-b border-[#14422D]/15">
                         <span className="font-bold">Total Fare Quoted (All-Inclusive):</span>
-                        <strong className="text-sm font-black text-emerald-900">{inr(enteredFare)}</strong>
+                        <strong className="text-base font-serif font-bold text-[#14422D]">{inr(enteredFare)}</strong>
                       </div>
 
-                      <div className="space-y-1.5 text-[11px] text-[#333]">
+                      <div className="space-y-2 text-[11px] text-[#181C1B]">
                         <div className="flex justify-between items-center">
-                          <span className="flex items-center gap-1">
+                          <span className="flex items-center gap-1.5">
                             <Icon name="payments" className="text-xs text-amber-600" />
                             <span>1. Cash you collect in car at drop-off:</span>
                           </span>
-                          <strong className="font-extrabold text-[#1F2328]">{inr(calculatedCashToCollect)}</strong>
+                          <strong className="font-extrabold text-[#181C1B]">{inr(calculatedCashToCollect)}</strong>
                         </div>
 
                         <div className="flex justify-between items-center">
-                          <span className="flex items-center gap-1">
-                            <Icon name="account_balance_wallet" className="text-xs text-emerald-700" />
+                          <span className="flex items-center gap-1.5">
+                            <Icon name="account_balance_wallet" className="text-xs text-[#14422D]" />
                             <span>2. Credited to your platform wallet:</span>
                           </span>
-                          <strong className="font-extrabold text-emerald-700">+{inr(calculatedWalletExcess)}</strong>
+                          <strong className="font-extrabold text-[#14422D]">+{inr(calculatedWalletExcess)}</strong>
                         </div>
 
-                        <div className="flex justify-between items-center text-[#57606A]">
-                          <span className="flex items-center gap-1">
+                        <div className="flex justify-between items-center text-[#717973]">
+                          <span className="flex items-center gap-1.5">
                             <Icon name="percent" className="text-xs" />
                             <span>Platform & Homestay Commission ({commPct}%):</span>
                           </span>
@@ -1106,25 +1116,25 @@ function DriverQuoteContent() {
                         </div>
                       </div>
 
-                      <div className="pt-2 border-t border-emerald-200 flex justify-between items-center">
-                        <span className="font-extrabold text-emerald-950 text-xs">Your Net Total In-Hand:</span>
-                        <span className="text-base font-black text-emerald-800">
+                      <div className="pt-2 border-t border-[#14422D]/15 flex justify-between items-center">
+                        <span className="font-extrabold text-[#181C1B] text-xs">Your Net Total In-Hand:</span>
+                        <span className="text-lg font-serif font-bold text-[#14422D]">
                           {inr(calculatedTotalEarnings)} ({100 - commPct}%)
                         </span>
                       </div>
 
-                      <p className="pt-1 text-[10px] text-emerald-800 leading-tight">
+                      <p className="pt-1 text-[11px] text-[#14422D] leading-relaxed">
                         🛡️ Zero extra fee on top. The guest sees flat {inr(enteredFare)}. You collect {inr(calculatedCashToCollect)} cash, and {inr(calculatedWalletExcess)} is in your wallet for 1-tap UPI withdrawal.
                       </p>
                     </div>
                   )}
                 </div>
 
-                <div>
-                  <label className="text-xs font-semibold text-[#57606A] block mb-0.5">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-[#181C1B] block">
                     Vehicle Number Plate (Optional)
                   </label>
-                  <span className="text-[10px] text-[#57606A] block mb-1">
+                  <span className="text-[11px] text-[#717973] block">
                     If driving a syndicate/union cab or different vehicle today (e.g. WB 74 B 1234)
                   </span>
                   <input
@@ -1132,12 +1142,12 @@ function DriverQuoteContent() {
                     value={vehiclePlate}
                     onChange={(e) => setVehiclePlate(e.target.value.toUpperCase())}
                     placeholder="e.g. WB74B1234 (Auto-uses your profile plate if blank)"
-                    className="w-full rounded-xl border border-[#D0D7DE] px-3.5 py-2 text-xs font-semibold text-[#1F2328] uppercase focus:border-emerald-600 focus:outline-none"
+                    className="w-full rounded-2xl border border-[#E5E8E5] px-4 py-2.5 text-xs font-semibold text-[#181C1B] uppercase focus:border-[#14422D] focus:ring-2 focus:ring-[#14422D]/15 focus:outline-none transition-all"
                   />
                 </div>
 
-                <div>
-                  <label className="text-xs font-semibold text-[#57606A] block mb-1">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-[#181C1B] block">
                     Vehicle Notes (Optional, no phone numbers)
                   </label>
                   <input
@@ -1145,7 +1155,7 @@ function DriverQuoteContent() {
                     value={notes}
                     onChange={(e) => setNotes(e.target.value.slice(0, 300))}
                     placeholder="e.g. Bolero 4WD, luggage carrier on roof, clean seats"
-                    className="w-full rounded-xl border border-[#D0D7DE] px-3.5 py-2 text-xs text-[#1F2328] focus:border-emerald-600 focus:outline-none"
+                    className="w-full rounded-2xl border border-[#E5E8E5] px-4 py-2.5 text-xs text-[#181C1B] focus:border-[#14422D] focus:ring-2 focus:ring-[#14422D]/15 focus:outline-none transition-all"
                   />
                 </div>
 
@@ -1153,7 +1163,7 @@ function DriverQuoteContent() {
                   type="button"
                   disabled={busy || !(enteredFare > 0)}
                   onClick={() => send("quote")}
-                  className="w-full rounded-xl bg-emerald-600 py-3 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 cursor-pointer disabled:opacity-50"
+                  className="w-full rounded-2xl bg-[#14422D] py-3.5 text-xs font-bold text-white shadow-[0_8px_20px_-4px_rgba(20,66,45,0.25)] hover:bg-[#0B2519] cursor-pointer disabled:opacity-50 transition-all"
                 >
                   {busy ? "Submitting…" : q ? "Update Fare Quote" : "Submit Fare Quote"}
                 </button>
@@ -1161,7 +1171,7 @@ function DriverQuoteContent() {
             )}
 
             {message && (
-              <div className="rounded-xl bg-blue-50 border border-blue-200 p-3 text-center text-xs font-semibold text-blue-900">
+              <div className="rounded-2xl bg-blue-50 border border-blue-200/80 p-3.5 text-center text-xs font-semibold text-blue-950">
                 {message}
               </div>
             )}

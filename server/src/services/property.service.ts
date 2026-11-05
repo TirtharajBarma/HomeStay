@@ -4,6 +4,9 @@ import { initialProperty } from "../data/seeds/profile.seed.js";
 import { getStayRideTenantModel } from "../stayride/store.js";
 import { tenantRoomView } from "./room.service.js";
 
+const DEMO_EMAILS = ["ananya@gumtreevalley.in", "owner@estate.com"];
+const DEMO_SLUGS = ["gumtree-valley", "demo-estate"];
+
 export class PropertyService {
   static async getProfile(ownerId?: string): Promise<IProperty> {
     const filter = ownerId ? { ownerId } : {};
@@ -28,7 +31,7 @@ export class PropertyService {
           ownerId,
         });
       } else {
-        prop = await Property.findOne();
+        prop = await Property.findOne({ email: { $nin: DEMO_EMAILS } });
         if (!prop) {
           prop = await Property.create(initialProperty);
         }
@@ -52,7 +55,8 @@ export class PropertyService {
   static async getAllProperties(): Promise<any[]> {
     const properties: any[] = await Property.find({
       status: { $ne: "suspended" as any },
-      email: { $not: /@stayride\.test$/i },
+      email: { $nin: DEMO_EMAILS, $not: /@stayride\.test$/i },
+      slug: { $nin: DEMO_SLUGS },
     }).sort({ createdAt: -1 }).lean();
     return await Promise.all(
       properties.map(async (prop: any) => {
@@ -82,7 +86,8 @@ export class PropertyService {
 
   static async getPropertyBySlug(slug: string): Promise<any | null> {
     const clean = String(slug || "").trim().toLowerCase();
-    let prop = await Property.findOne({ slug: clean }).lean();
+    if (DEMO_SLUGS.includes(clean) || DEMO_EMAILS.includes(clean)) return null;
+    let prop = await Property.findOne({ slug: clean, email: { $nin: DEMO_EMAILS } }).lean();
     if (!prop && clean.includes("@")) {
       prop = await Property.findOne({ email: clean }).lean();
     }

@@ -175,15 +175,24 @@ function propertyToStay(p: Raw): Stay {
   };
 }
 
-/** Filter out test/audit properties generated during test runs */
+/** Filter out test/audit properties and demo seed entities */
 function isTestEntity(e: Raw): boolean {
   const em = str(e.email).toLowerCase();
-  const slug = str(e.slug).toLowerCase();
+  const slug = str(e.slug || e.code).toLowerCase();
   return (
     em.includes("@stayride.test") ||
     em.includes("host.audit") ||
     em.includes("audit.host") ||
-    slug.startsWith("test-")
+    em === "ananya@gumtreevalley.in" ||
+    em === "owner@estate.com" ||
+    slug === "gumtree-valley" ||
+    slug.startsWith("test-") ||
+    slug.startsWith("demo-") ||
+    slug === "ging-tea-cottage" ||
+    slug === "chowrasta-studio" ||
+    slug === "rangit-rose-loft" ||
+    slug === "kurseong-meadow-loft" ||
+    slug === "hatimanally-cabin"
   );
 }
 

@@ -32,39 +32,38 @@ apiRouter.use("/upload", uploadRoutes);
 apiRouter.use("/telemetry", telemetryRoutes);
 
 
-// Legacy guest-website API: public listings/bookings/drivers. Off unless LEGACY_API_ENABLED=true.
-if (config.legacyApiEnabled) {
-  apiRouter.use("/properties", propertyRoutes);
-  apiRouter.use("/rooms", roomRoutes);
-  apiRouter.use("/stays", roomRoutes); // Alias for client-side
-  apiRouter.use("/bookings", bookingRoutes);
-  apiRouter.use("/reservations", bookingRoutes); // Alias for client-side
-  apiRouter.use("/guests", guestRoutes);
-  apiRouter.use("/drivers", driverRoutes);
-  apiRouter.use("/cabs", driverRoutes); // Alias for client-side
-  apiRouter.use("/analytics", analyticsRoutes);
-  apiRouter.get("/ical/export/:codeOrSlug", IcalController.exportIcal);
-  // Inbound sync mutates bookings and makes the server fetch an attacker-supplied URL, so it must be
-  // an authenticated owner/admin action (matches POST /rooms/:codeOrSlug/sync-ical).
-  apiRouter.post("/ical/sync/:codeOrSlug", verifyToken, requireRole("owner", "admin"), IcalController.syncInboundIcal);
+// Guest-website marketplace APIs: public listings, rooms, stays, bookings & transit
+apiRouter.use("/properties", propertyRoutes);
+apiRouter.use("/rooms", roomRoutes);
+apiRouter.use("/stays", roomRoutes); // Alias for client-side
+apiRouter.use("/bookings", bookingRoutes);
+apiRouter.use("/reservations", bookingRoutes); // Alias for client-side
+apiRouter.use("/guests", guestRoutes);
+apiRouter.use("/drivers", driverRoutes);
+apiRouter.use("/cabs", driverRoutes); // Alias for client-side
+apiRouter.use("/analytics", analyticsRoutes);
+apiRouter.get("/ical/export/:codeOrSlug", IcalController.exportIcal);
 
-  // Newsletter subscription endpoint
-  apiRouter.post("/newsletter/subscribe", requireRecaptcha("newsletter_subscribe"), async (req, res) => {
-    const { email } = req.body;
-    if (!email || typeof email !== "string" || !email.includes("@")) {
-      return res.status(400).json({ success: false, error: "Valid email required" });
-    }
-    try {
-      await Newsletter.findOneAndUpdate(
-        { email: email.toLowerCase().trim() },
-        { email: email.toLowerCase().trim() },
-        { upsert: true, returnDocument: "after" }
-      );
-      res.json({ success: true, message: "Subscribed to seasonal estate letters successfully" });
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message || "Failed to subscribe" });
-    }
-  });
-}
+// Inbound sync mutates bookings and makes the server fetch an attacker-supplied URL, so it must be
+// an authenticated owner/admin action (matches POST /rooms/:codeOrSlug/sync-ical).
+apiRouter.post("/ical/sync/:codeOrSlug", verifyToken, requireRole("owner", "admin"), IcalController.syncInboundIcal);
+
+// Newsletter subscription endpoint
+apiRouter.post("/newsletter/subscribe", requireRecaptcha("newsletter_subscribe"), async (req, res) => {
+  const { email } = req.body;
+  if (!email || typeof email !== "string" || !email.includes("@")) {
+    return res.status(400).json({ success: false, error: "Valid email required" });
+  }
+  try {
+    await Newsletter.findOneAndUpdate(
+      { email: email.toLowerCase().trim() },
+      { email: email.toLowerCase().trim() },
+      { upsert: true, returnDocument: "after" }
+    );
+    res.json({ success: true, message: "Subscribed to seasonal estate letters successfully" });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || "Failed to subscribe" });
+  }
+});
 
 export default apiRouter;

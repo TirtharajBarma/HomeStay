@@ -84,6 +84,18 @@ export class RoomService {
       query.maxGuests = { $gte: Number(filters.guests) };
     }
 
+    // Exclude demo/seed estate rooms
+    const demoProps = await Property.find({
+      $or: [
+        { email: { $in: ["ananya@gumtreevalley.in", "owner@estate.com"] } },
+        { slug: { $in: ["gumtree-valley", "demo-estate"] } },
+      ],
+    }).select("_id").lean();
+    const demoPropIds = demoProps.map((p) => (p as any)._id);
+    if (demoPropIds.length > 0) {
+      query.propertyId = { $nin: demoPropIds };
+    }
+
     const rooms: any[] = await Room.find(query).sort({ code: 1 }).lean();
 
     // If query is broad (not filtered by a specific legacy property/owner), also include real rooms created by mobile app hosts
@@ -91,7 +103,8 @@ export class RoomService {
       try {
         const liveProps: any[] = await Property.find({
           status: { $ne: "suspended" as any },
-          email: { $not: /@stayride\.test$/i },
+          email: { $nin: ["ananya@gumtreevalley.in", "owner@estate.com"], $not: /@stayride\.test$/i },
+          slug: { $nin: ["gumtree-valley", "demo-estate"] },
         }).lean();
         const TenantModel = getStayRideTenantModel(false);
         for (const lp of liveProps) {
