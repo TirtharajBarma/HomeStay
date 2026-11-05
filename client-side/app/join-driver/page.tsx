@@ -272,37 +272,40 @@ export default function JoinDriverPage() {
                 </div>
 
                 {/* WhatsApp Chat Bubble */}
-                <div className="rounded-2xl bg-[#E7F8ED] border border-[#BCEECF] p-4 text-xs space-y-2 text-[#181C1B]">
-                  <div className="flex items-center justify-between">
+                <div className="rounded-2xl bg-[#E7F8ED] border border-[#BCEECF] p-4 text-xs space-y-2.5 text-[#181C1B]">
+                  <div className="flex items-center justify-between border-b border-[#BCEECF]/70 pb-2">
                     <span className="font-bold text-[11px] text-[#14422D] uppercase tracking-wide">
-                      🏔️ New Homestay Trip Available
+                      New Trip Request
                     </span>
                     <span className="text-[10px] text-[#717973]">Just now</span>
                   </div>
 
                   <div className="space-y-1 text-xs">
                     <p>
-                      <strong className="text-[#14422D]">Pickup:</strong> Cedar Inn Homestay, Jalapahar, Darjeeling
+                      <strong>From:</strong> Cedar Inn, Darjeeling
                     </p>
                     <p>
-                      <strong className="text-[#14422D]">Destination:</strong> Bagdogra Airport (IXB)
+                      <strong>Route:</strong> Cedar Inn → Bagdogra Airport (IXB)
                     </p>
                     <p>
-                      <strong className="text-[#14422D]">Schedule:</strong> Tomorrow at 07:30 AM (4 Passengers)
+                      <strong>Pickup:</strong> Tomorrow at 07:30 AM
+                    </p>
+                    <p>
+                      <strong>Vehicle:</strong> Mountain SUV (4 Passengers)
                     </p>
                   </div>
 
-                  <div className="pt-2 border-t border-[#BCEECF] flex items-center justify-between">
-                    <span className="text-[11px] text-[#717973] font-medium">Guest awaiting your fare</span>
-                    <span className="inline-flex items-center gap-1 rounded-xl bg-[#14422D] text-white px-3 py-1 text-[11px] font-bold">
-                      <span>Quote Your Rate</span>
+                  <div className="pt-2 border-t border-[#BCEECF]/70 flex items-center justify-between">
+                    <span className="text-[11px] text-[#717973] font-medium">Guest awaiting your quote</span>
+                    <span className="inline-flex items-center gap-1.5 rounded-xl bg-[#14422D] text-white px-3 py-1.5 text-[11px] font-bold shadow-2xs">
+                      <span>Submit Fare Quote</span>
                       <Icon name="arrow_forward" className="text-[10px]" />
                     </span>
                   </div>
                 </div>
 
                 <p className="text-[11px] text-[#717973] italic">
-                  💡 No battery-draining GPS tracking app running all day. Ride requests arrive directly on your phone via WhatsApp.
+                  No battery-draining GPS tracking app required. Ride requests arrive directly on your phone via WhatsApp.
                 </p>
               </div>
 
