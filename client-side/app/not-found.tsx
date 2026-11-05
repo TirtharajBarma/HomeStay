@@ -19,10 +19,12 @@ export default function NotFound() {
         </p>
         <Link
           href="/#accommodations"
-          className="mt-8 inline-flex items-center gap-2 rounded-xl bg-primary-container px-4 sm:px-6 py-3.5 text-title-md text-on-primary transition-colors hover:bg-primary"
+          className="mt-8 inline-flex items-center gap-2 rounded-xl bg-primary-container px-4 sm:px-6 py-3.5 text-title-md text-on-primary transition-colors hover:bg-primary group"
         >
-          <Icon name="arrow_back" className="text-base" />
-          Back to Accommodations
+          <svg className="h-4 w-4 shrink-0 transition-transform group-hover:-translate-x-0.5" fill="none" viewBox="0 0 24 24" strokeWidth="2.2" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+          </svg>
+          <span>Back to Accommodations</span>
         </Link>
       </div>
     </main>
