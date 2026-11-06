@@ -890,7 +890,7 @@ stayrideV1Router.post('/auth/clerk-sync', async (req: Request, res: Response) =>
 // Shared helpers
 // ==========================================
 const DAY_MS = 86400000;
-const VEHICLE_TYPES = ['SUV', 'Sedan', '7-seater', '9-seater'];
+export const VEHICLE_TYPES = ['SUV', 'Sedan', '7-seater', '9-seater'];
 
 // Pickup time helpers (istDateTime) live in platform.ts (also used for request expiry).
 export function validateSchedule(body: any, cfgOrHorizon: PlatformConfig | number = 365): string | null {
@@ -927,8 +927,8 @@ export function validateSchedule(body: any, cfgOrHorizon: PlatformConfig | numbe
   return null;
 }
 
-const newReference = () => `REQ-${crypto.randomBytes(5).toString('hex').toUpperCase()}`;
-const str =(v: unknown, max: number) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+export const newReference = () => `REQ-${crypto.randomBytes(5).toString('hex').toUpperCase()}`;
+export const str = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 const authOf = (req: Request) => (req as any).stayrideUser as StayRideAuthPayload;
 const tenantOf = (req: Request) => {
   const u = authOf(req);
@@ -941,7 +941,7 @@ const tenantOf = (req: Request) => {
  * If the request write fails, both sides are compensated (best effort); overlayTrips tolerates and
  * repairs either side missing. Returns the trip that won (a concurrent retry may have won).
  */
-async function createPlatformTrip(
+export async function createPlatformTrip(
   tenantKey: string,
   isDemo: boolean,
   make: (s: StayRideMemoryStore) => any,
@@ -990,6 +990,7 @@ async function createPlatformTrip(
       propertyId: tenantKey,
       tripId: trip.id,
       clientRequestId: crid,
+      bookingId: trip.bookingId ?? null,
       homestayName,
       guestId: trip.guestId ?? null,
       guestName: trip.guestName,
@@ -1045,7 +1046,7 @@ async function createPlatformTrip(
 }
 
 /** Normalize trip input coming from owner app / guest page. Never accepts money fields. */
-function tripInput(b: any) {
+export function tripInput(b: any) {
   const destinations = Array.isArray(b.destinations)
     ? b.destinations.map((d: unknown) => str(typeof d === 'object' && d ? (d as any).address : d, 200)).filter(Boolean).slice(0, 6)
     : [];
@@ -2502,11 +2503,11 @@ stayrideV1Router.post('/trips', async (req: Request, res: Response) => {
   res.status(201).json(await overlayOne(req, trip));
 });
 
-const vehicleError = (cfg: PlatformConfig, type: string) =>
+export const vehicleError = (cfg: PlatformConfig, type: string) =>
   cfg.vehicles[type as keyof PlatformConfig['vehicles']]?.enabled === false ? 'This vehicle type is not available right now.' : null;
 
 /** Display estimate from the admin's vehicle settings (the real fare always comes from a quote). */
-const withEstimate = (cfg: PlatformConfig, t: any) => {
+export const withEstimate = (cfg: PlatformConfig, t: any) => {
   const est = cfg.vehicles[t.vehicleType as keyof PlatformConfig['vehicles']]?.estFare;
   if (typeof est === 'number') t.estFare = est;
   return t;

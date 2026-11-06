@@ -16,6 +16,8 @@ import {
 } from "../stayride/platform.js";
 import { getGuestLinkModel } from "../models/guest-link.model.js";
 import { toWhatsAppNumber } from "../services/whatsapp.service.js";
+import { createPlatformTrip, tripInput, validateSchedule, vehicleError, withEstimate, str } from "../stayride/routes.js";
+import { pushOwner } from "../stayride/platform.js";
 import { httpError } from "../middlewares/error-handler.js";
 import { config } from "../config/env.js";
 
@@ -477,6 +479,50 @@ router.post("/cab-requests/:id/complete", cabAction((d, id, req) => completeTrip
 router.post("/cab-requests/:id/unmatched-refunded", cabAction((d, id, req) => adminRefundUnmatched(d, id, req.body.paymentId, req.body.reference, actor(req)), "Unmatched payment marked refunded."));
 router.post("/cab-requests/:id/no-pin-review", cabAction((d, id, req) => adminReviewNoPin(d, id, req.body.decision, req.body.reason, actor(req)), "Review recorded."));
 router.post("/cab-requests/:id/driver-settled", cabAction((d, id, req) => adminSettleDriver(d, id, req.body.reference, actor(req)), "Driver settlement recorded."));
+
+// Admin creates a cab request on behalf of a guest (same flow as guest/owner: validates, creates tenant trip + CabRequest, dispatches/notifies).
+router.post("/stayride/tenants/:tenantKey/cab-requests", async (req, res) => {
+  const demo = isDemo(req);
+  const key = normKey(req.params.tenantKey);
+  if (!(await getStayRideTenantModel(demo).exists({ tenantId: key }))) throw httpError(404, "Homestay not found.");
+  const input = tripInput(req.body);
+  if (!input.guestName || !input.phone) throw httpError(400, "Guest name and phone are required.");
+  if (!input.pickup) throw httpError(400, "Pickup location is required.");
+  if (input.destinations.length < 1) throw httpError(400, "Add at least one destination.");
+  const cfg = await CommissionService.getPlatformConfig(demo);
+  const inputError = vehicleError(cfg, input.vehicleType) || validateSchedule(input, cfg);
+  if (inputError) throw httpError(400, inputError);
+  const dispatchNow = req.body.dispatchNow !== false; // default: send to drivers now (same as platform dispatch)
+  const clientRequestId = str(req.body.clientRequestId, 64) || `admin:${crypto.randomUUID()}`;
+  const existing: any = await cabModel(demo).findOne({ clientRequestId, propertyId: key }).lean();
+  if (existing) return ok(res, existing, "Cab request already exists.");
+  const extra: Record<string, any> = {
+    guestNotes: str(req.body.notes ?? req.body.guestNotes, 500),
+    ...(req.body.guestBudget ? { guestBudget: Number(req.body.guestBudget) } : {}),
+    ...(dispatchNow ? {} : { dispatched: false }),
+  };
+  const { trip, doc } = await createPlatformTrip(
+    key,
+    demo,
+    (store) => withEstimate(cfg, store.createTrip({ ...input, pickup: input.pickup || store.homestay.location || store.homestay.name }, 'ADMIN_DISPATCH')),
+    'ADMIN_DISPATCH',
+    clientRequestId,
+    extra
+  );
+  await Promise.allSettled([
+    pushOwner(demo, key, {
+      title: "Cab request created by admin",
+      body: `${input.guestName} requested a cab (${doc.reference}).`,
+      data: { type: "NEW_REQUEST", reference: doc.reference, tripId: doc.tripId },
+    }),
+    audit(actor(req), "cab.admin_create", "CabRequest", String(doc._id), {
+      tenantKey: key, reference: doc.reference, guestName: input.guestName, phone: maskPhone(input.phone),
+      dispatched: doc.dispatched !== false, bookingId: input.bookingId ?? null, source: "ADMIN_DISPATCH",
+    }, demo, { tenantId: key, actorRole: "ADMIN" }),
+  ]);
+  ok(res, { ...doc, tripId: trip?.id ?? doc.tripId }, "Cab request created.");
+});
+
 
 // ---------------------------------------------------------------------------
 // Homestay & Driver payouts

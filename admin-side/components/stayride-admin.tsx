@@ -1175,11 +1175,150 @@ const CAB_FILTERS: Record<string, { label: string; query?: Any; pending?: boolea
 const statusTone = (s: string) =>
   s === "COMPLETED" || s === "CONFIRMED" ? "green" : s === "CANCELLED" ? "red" : s === "TRIP_STARTED" ? "blue" : s === "EXPIRED" ? "slate" : "amber";
 
+const VEHICLE_OPTIONS = ["SUV", "Sedan", "7-seater", "9-seater"];
+
+function CreateCabRequestForm({ demo, defaultTenantKey, onDone, onCancel }: { demo: boolean; defaultTenantKey: string; onDone: () => void; onCancel: () => void }) {
+  useEditLock(true);
+  const [tenantKey, setTenantKey] = useState(defaultTenantKey);
+  const [guestName, setGuestName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [pickup, setPickup] = useState("");
+  const [destinations, setDestinations] = useState("Airport, Railway Station");
+  const [date, setDate] = useState(() => {
+    const d = new Date(); d.setDate(d.getDate() + 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  });
+  const [time, setTime] = useState("09:00 AM");
+  const [passengers, setPassengers] = useState("2");
+  const [vehicleType, setVehicleType] = useState("SUV");
+  const [isRoundTrip, setIsRoundTrip] = useState(false);
+  const [returnDate, setReturnDate] = useState("");
+  const [returnTime, setReturnTime] = useState("06:00 PM");
+  const [notes, setNotes] = useState("");
+  const [guestBudget, setGuestBudget] = useState("");
+  const [bookingId, setBookingId] = useState("");
+  const [dispatchNow, setDispatchNow] = useState(true);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const tk = tenantKey.trim().toLowerCase();
+    if (!tk) return alert("Homestay key (owner email / tenant key) is required.");
+    if (!guestName.trim() || !phone.trim()) return alert("Guest name and phone are required.");
+    if (!pickup.trim()) return alert("Pickup location is required.");
+    const dests = destinations.split(/[\n,]+/).map((d) => d.trim()).filter(Boolean).slice(0, 6);
+    if (!dests.length) return alert("Add at least one destination (comma or line separated).");
+    const day = new Date(`${date}T12:00:00`);
+    if (Number.isNaN(day.getTime())) return alert("Valid pickup date is required.");
+    const body: Any = {
+      guestName: guestName.trim(),
+      phone: phone.trim(),
+      pickup: pickup.trim(),
+      destinations: dests,
+      date: day.getTime(),
+      time: time.trim(),
+      passengers: Math.max(1, Number(passengers) || 1),
+      vehicleType,
+      isRoundTrip,
+      notes: notes.trim() || undefined,
+      guestBudget: guestBudget ? Number(guestBudget) : undefined,
+      bookingId: bookingId ? Number(bookingId) : undefined,
+      dispatchNow,
+      clientRequestId: typeof crypto !== "undefined" && crypto.randomUUID ? `admin:${crypto.randomUUID()}` : `admin:${Date.now()}`,
+    };
+    if (isRoundTrip) {
+      const rd = returnDate ? new Date(`${returnDate}T12:00:00`).getTime() : NaN;
+      if (!Number.isFinite(rd) || !returnTime.trim()) return alert("Round trip needs return date and time.");
+      body.returnDate = rd;
+      body.returnTime = returnTime.trim();
+    }
+    if (!window.confirm(`Create cab request for ${guestName.trim()} (${tk}) and ${dispatchNow ? "send to drivers now" : "hold for owner"}?`)) return;
+    setBusy(true);
+    await act(() => adminApi(`/stayride/tenants/${encodeURIComponent(tk)}/cab-requests`, { method: "POST", body, demo }), onDone);
+    setBusy(false);
+  }
+
+  return (
+    <form onSubmit={submit} className="rounded-xl border border-emerald-900/40 bg-emerald-950/10 p-4 space-y-3">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <p className="text-sm font-bold text-white">Create cab request for guest</p>
+          <p className="text-[11px] text-slate-400">Uses the same creation flow as guest/owner requests (validation, tenant trip + CabRequest, notifications/dispatch).</p>
+        </div>
+        <button type="button" className={btn.ghost} onClick={onCancel}>Close</button>
+      </div>
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+        <label className="block text-[11px] text-slate-400">Homestay tenant key (owner email) *
+          <input className={`${input} mt-1 w-full`} value={tenantKey} onChange={(e) => setTenantKey(e.target.value)} placeholder="owner@example.com" required />
+        </label>
+        <label className="block text-[11px] text-slate-400">Guest name *
+          <input className={`${input} mt-1 w-full`} value={guestName} onChange={(e) => setGuestName(e.target.value)} required />
+        </label>
+        <label className="block text-[11px] text-slate-400">Guest phone (WhatsApp) *
+          <input className={`${input} mt-1 w-full`} value={phone} onChange={(e) => setPhone(e.target.value)} required />
+        </label>
+        <label className="block text-[11px] text-slate-400 md:col-span-2">Pickup location *
+          <input className={`${input} mt-1 w-full`} value={pickup} onChange={(e) => setPickup(e.target.value)} required />
+        </label>
+        <label className="block text-[11px] text-slate-400">Booking ID (optional)
+          <input className={`${input} mt-1 w-full`} type="number" value={bookingId} onChange={(e) => setBookingId(e.target.value)} placeholder="linked booking" />
+        </label>
+        <label className="block text-[11px] text-slate-400 md:col-span-3">Destinations * (comma or new line, up to 6)
+          <textarea className={`${input} mt-1 w-full min-h-[64px]`} value={destinations} onChange={(e) => setDestinations(e.target.value)} required />
+        </label>
+        <label className="block text-[11px] text-slate-400">Pickup date *
+          <input className={`${input} mt-1 w-full`} type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+        </label>
+        <label className="block text-[11px] text-slate-400">Pickup time *
+          <input className={`${input} mt-1 w-full`} value={time} onChange={(e) => setTime(e.target.value)} placeholder="09:00 AM" required />
+        </label>
+        <label className="block text-[11px] text-slate-400">Passengers
+          <input className={`${input} mt-1 w-full`} type="number" min="1" max="20" value={passengers} onChange={(e) => setPassengers(e.target.value)} />
+        </label>
+        <label className="block text-[11px] text-slate-400">Vehicle
+          <select className={`${input} mt-1 w-full`} value={vehicleType} onChange={(e) => setVehicleType(e.target.value)}>
+            {VEHICLE_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
+          </select>
+        </label>
+        <label className="block text-[11px] text-slate-400">Target budget ₹ (optional)
+          <input className={`${input} mt-1 w-full`} type="number" min="0" value={guestBudget} onChange={(e) => setGuestBudget(e.target.value)} />
+        </label>
+        <label className="flex items-center gap-2 text-[11px] text-slate-300 mt-5">
+          <input type="checkbox" checked={isRoundTrip} onChange={(e) => setIsRoundTrip(e.target.checked)} />
+          Round trip
+        </label>
+        {isRoundTrip && (
+          <>
+            <label className="block text-[11px] text-slate-400">Return date *
+              <input className={`${input} mt-1 w-full`} type="date" value={returnDate} onChange={(e) => setReturnDate(e.target.value)} required={isRoundTrip} />
+            </label>
+            <label className="block text-[11px] text-slate-400">Return time *
+              <input className={`${input} mt-1 w-full`} value={returnTime} onChange={(e) => setReturnTime(e.target.value)} placeholder="06:00 PM" required={isRoundTrip} />
+            </label>
+          </>
+        )}
+        <label className="block text-[11px] text-slate-400 md:col-span-3">Notes (optional)
+          <input className={`${input} mt-1 w-full`} value={notes} onChange={(e) => setNotes(e.target.value)} />
+        </label>
+        <label className="flex items-center gap-2 text-[11px] text-slate-300 md:col-span-3">
+          <input type="checkbox" checked={dispatchNow} onChange={(e) => setDispatchNow(e.target.checked)} />
+          Send to drivers now (dispatch/notify). Uncheck to hold for owner.
+        </label>
+      </div>
+      <div className="flex gap-2">
+        <button className={btn.primary} disabled={busy}>{busy ? "Creating..." : "Create request"}</button>
+        <button type="button" className={btn.ghost} onClick={onCancel}>Cancel</button>
+      </div>
+    </form>
+  );
+}
+
 export function CabRequestsTab({ demo, initialTenantKey, initialFilter }: TabProps & { initialTenantKey?: string; initialFilter?: string }) {
   const [filter, setFilter] = useState(initialFilter && CAB_FILTERS[initialFilter] ? initialFilter : initialTenantKey ? "all" : "open");
   const [tenantKey, setTenantKey] = useState(initialTenantKey || "");
   const [tenantQuery, setTenantQuery] = useState(initialTenantKey || "");
   const [page, setPage] = useState(0);
+  const [creating, setCreating] = useState(false);
   const f = CAB_FILTERS[filter];
   const { data, error, loading, reload, updatedAt } = useLoad(async () => {
     const r = toPage(await adminApi(f.pending ? "/cab-requests/pending" : "/cab-requests", { demo, query: { ...f.query, tenantKey: tenantQuery, ...pq(page) } }));
@@ -1190,18 +1329,22 @@ export function CabRequestsTab({ demo, initialTenantKey, initialFilter }: TabPro
   return (
     <Panel
       title="Cab requests"
-      subtitle="Full request lifecycle: assign, payment, trip, refunds and driver settlement."
+      subtitle="Full request lifecycle: assign, payment, trip, refunds and driver settlement. Admins can also create requests for guests."
       onRefresh={reload}
       error={error}
       loading={loading}
       updatedAt={updatedAt}
       right={
-        <form onSubmit={(e) => { e.preventDefault(); setPage(0); setTenantQuery(tenantKey.trim().toLowerCase()); }} className="flex gap-2">
-          <input className={input} placeholder="Homestay key (email)" value={tenantKey} onChange={(e) => setTenantKey(e.target.value)} />
-          <button className={btn.primary}>Filter</button>
-        </form>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className={btn.ok} onClick={() => setCreating((v) => !v)}>{creating ? "Hide create form" : "Create for guest"}</button>
+          <form onSubmit={(e) => { e.preventDefault(); setPage(0); setTenantQuery(tenantKey.trim().toLowerCase()); }} className="flex gap-2">
+            <input className={input} placeholder="Homestay key (email)" value={tenantKey} onChange={(e) => setTenantKey(e.target.value)} />
+            <button className={btn.primary}>Filter</button>
+          </form>
+        </div>
       }
     >
+      {creating && <CreateCabRequestForm demo={demo} defaultTenantKey={tenantQuery || tenantKey} onCancel={() => setCreating(false)} onDone={() => { setCreating(false); setPage(0); reload(); }} />}
       <div className="flex flex-wrap gap-2">
         {Object.entries(CAB_FILTERS).map(([key, v]) => (
           <button key={key} onClick={() => { setFilter(key); setPage(0); }} className={chip(filter === key)}>

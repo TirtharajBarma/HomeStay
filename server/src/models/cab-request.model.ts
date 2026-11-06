@@ -51,6 +51,7 @@ export interface ICabRequest extends Document {
   reference: string; // random, e.g. REQ-9F2A61C04B
   propertyId: Schema.Types.ObjectId | string; // StayRide tenant key (owner email)
   tripId?: number; // id of the mirrored trip in the tenant store
+  bookingId?: number | null;
   clientRequestId?: string;
   homestayName: string;
   guestId?: number | string;
@@ -233,6 +234,7 @@ const CabRequestSchema = new Schema<ICabRequest>(
     reference: { type: String, required: true, unique: true, index: true },
     propertyId: { type: Schema.Types.Mixed, required: true, index: true },
     tripId: { type: Number, default: null },
+    bookingId: { type: Number, default: null },
     clientRequestId: { type: String },
     homestayName: { type: String, required: true },
     guestId: { type: Schema.Types.Mixed, default: null },
