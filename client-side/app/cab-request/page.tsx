@@ -1703,7 +1703,7 @@ function CabRequestFormContent() {
                 <button
                   type="button"
                   onClick={() => setCurrentStep(1)}
-                  className={`flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded-full transition-all cursor-pointer ${
+                  className={`flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded-full transition-all cursor-pointer tap-spring active:scale-95 ${
                     currentStep === 1
                       ? "bg-[#14422D] text-white shadow-xs"
                       : "text-[#414943] hover:text-[#181C1B]"
@@ -1718,7 +1718,7 @@ function CabRequestFormContent() {
                 <button
                   type="button"
                   onClick={() => setCurrentStep(2)}
-                  className={`flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded-full transition-all cursor-pointer ${
+                  className={`flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded-full transition-all cursor-pointer tap-spring active:scale-95 ${
                     currentStep === 2
                       ? "bg-[#14422D] text-white shadow-xs"
                       : "text-[#414943] hover:text-[#181C1B]"
@@ -1733,7 +1733,7 @@ function CabRequestFormContent() {
                 <button
                   type="button"
                   onClick={() => setCurrentStep(3)}
-                  className={`flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded-full transition-all cursor-pointer ${
+                  className={`flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded-full transition-all cursor-pointer tap-spring active:scale-95 ${
                     currentStep === 3
                       ? "bg-[#14422D] text-white shadow-xs"
                       : "text-[#414943] hover:text-[#181C1B]"
@@ -2149,7 +2149,7 @@ function CabRequestFormContent() {
                       setErrorMessage("");
                       setCurrentStep(2);
                     }}
-                    className="w-full flex items-center justify-center gap-2 rounded-2xl bg-[#14422D] py-4 text-sm font-bold text-white shadow-[0_8px_20px_-4px_rgba(20,66,45,0.25)] hover:bg-[#0B2519] active:scale-[0.99] cursor-pointer transition-all"
+                    className="w-full flex items-center justify-center gap-2 rounded-2xl bg-[#14422D] py-4 text-sm font-bold text-white shadow-[0_8px_20px_-4px_rgba(20,66,45,0.25)] hover:bg-[#0B2519] tap-spring active:scale-95 cursor-pointer transition-all"
                   >
                     <span>Continue to Schedule & Travelers</span>
                     <Icon name="arrow_forward" className="text-base" />
@@ -2488,7 +2488,7 @@ function CabRequestFormContent() {
                       setErrorMessage("");
                       setCurrentStep(3);
                     }}
-                    className="w-2/3 inline-flex items-center justify-center gap-2 rounded-2xl bg-[#14422D] py-3.5 text-xs font-bold text-white shadow-[0_8px_25px_-3px_rgba(20,66,45,0.25)] hover:bg-[#0B2519] active:scale-[0.99] transition-all cursor-pointer"
+                    className="w-2/3 inline-flex items-center justify-center gap-2 rounded-2xl bg-[#14422D] py-3.5 text-xs font-bold text-white shadow-[0_8px_25px_-3px_rgba(20,66,45,0.25)] hover:bg-[#0B2519] tap-spring active:scale-95 transition-all cursor-pointer"
                   >
                     <span>Continue to Review</span>
                     <Icon name="arrow_forward" className="text-sm" />
@@ -2733,7 +2733,7 @@ function CabRequestFormContent() {
                   <button
                     type="button"
                     onClick={() => setCurrentStep(2)}
-                    className="w-1/3 inline-flex items-center justify-center gap-1.5 rounded-2xl border border-[#D8DBD7] bg-white py-3.5 text-xs font-bold text-[#181C1B] hover:bg-[#F1F4F1] active:scale-[0.98] cursor-pointer transition-all"
+                    className="w-1/3 inline-flex items-center justify-center gap-1.5 rounded-2xl border border-[#D8DBD7] bg-white py-3.5 text-xs font-bold text-[#181C1B] hover:bg-[#F1F4F1] tap-spring active:scale-95 cursor-pointer transition-all"
                   >
                     <svg
                       className="h-4 w-4 shrink-0"
@@ -2750,7 +2750,7 @@ function CabRequestFormContent() {
                     type="button"
                     disabled={submitting || !agreedToTerms}
                     onClick={handleFormSubmit}
-                    className="w-2/3 inline-flex items-center justify-center gap-2 rounded-2xl bg-[#14422D] py-3.5 text-xs font-bold text-white shadow-[0_8px_25px_-3px_rgba(20,66,45,0.3)] hover:bg-[#0B2519] active:scale-[0.99] transition-all cursor-pointer disabled:opacity-50"
+                    className="w-2/3 inline-flex items-center justify-center gap-2 rounded-2xl bg-[#14422D] py-3.5 text-xs font-bold text-white shadow-[0_8px_25px_-3px_rgba(20,66,45,0.3)] hover:bg-[#0B2519] tap-spring active:scale-95 transition-all cursor-pointer disabled:opacity-50"
                   >
                     {submitting ? (
                       <span className="inline-flex items-center gap-2">

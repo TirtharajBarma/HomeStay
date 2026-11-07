@@ -76,12 +76,12 @@ export default async function StayPage({ params, searchParams }: PageProps<"/sta
           <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center lg:text-right">
             <div className="inline-flex max-w-full flex-wrap items-center gap-2 rounded-full border border-outline-variant/30 bg-surface-container px-3.5 py-1.5 text-label-md text-on-surface">
               <Icon name="shield_person" className="text-base text-secondary" />
-              Hosted by {hosts.names}
+              <span>Verified Local Host</span>
             </div>
             <div className="inline-flex max-w-full flex-wrap items-center gap-2 rounded-full bg-primary-fixed/30 px-3 py-1.5 text-label-md text-primary">
               <Stars rating={stay.rating} count={stay.reviewCount} />
               <span className="mx-1 text-outline-variant">•</span>
-              <span className="font-medium text-on-surface">{hosts.location}</span>
+              <span className="font-medium text-on-surface">{stay.wing}</span>
             </div>
           </div>
         </div>
@@ -184,16 +184,26 @@ export default async function StayPage({ params, searchParams }: PageProps<"/sta
                   ...booking,
                   guests: Math.min(booking.guests, other.maxGuests),
                 })}
-                className="group flex min-h-16 items-center justify-between gap-3 rounded-xl border border-outline-variant/40 bg-surface-container-lowest p-4 sunlit-card-shadow sunlit-card-hover"
+                className="group flex items-center justify-between gap-4 rounded-xl border border-outline-variant/40 bg-surface-container-lowest p-4 sunlit-card-shadow transition-all duration-200 hover:border-primary/40 hover:shadow-md active:scale-[0.99]"
               >
-                <span>
-                  <span className="block text-label-sm text-outline">{other.wing}</span>
-                  <span className="font-display text-headline-sm text-primary group-hover:text-secondary">
+                <div className="flex flex-col min-w-0 pr-2">
+                  <span className="text-label-xs uppercase tracking-wider text-outline mb-0.5 truncate">{other.wing}</span>
+                  <span className="font-display text-title-md font-semibold text-primary transition-colors duration-200 group-hover:text-secondary truncate">
                     {other.name}
                   </span>
-                  <span className="text-body-sm text-on-surface-variant">{other.occupancy}</span>
-                </span>
-                <span className="text-title-md font-bold text-primary">{formatNightly(other.price)}</span>
+                  <span className="mt-1 inline-flex items-center gap-1 text-xs text-on-surface-variant">
+                    <Icon name="cottage" className="text-[13px] text-outline" />
+                    <span>{other.occupancy}</span>
+                  </span>
+                </div>
+                <div className="shrink-0 text-right">
+                  <span className="block font-display text-title-md font-bold text-primary">
+                    {formatNightly(other.price)}
+                  </span>
+                  {other.price > 0 ? (
+                    <span className="block text-[11px] text-on-surface-variant">/ night</span>
+                  ) : null}
+                </div>
               </Link>
             ))}
         </div>

@@ -79,7 +79,7 @@ export default async function DedicatedHomestayPage({
             <div className="flex flex-wrap items-center gap-3">
               <a
                 href="#cab-transfers"
-                className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-on-primary shadow transition hover:opacity-95"
+                className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-on-primary shadow transition hover:opacity-95 tap-spring active:scale-95"
               >
                 <Icon name="directions_car" className="text-lg" />
                 <span>Book Cab Transfer</span>
@@ -89,7 +89,7 @@ export default async function DedicatedHomestayPage({
                   href={`https://wa.me/${cleanPhone}?text=${encodeURIComponent(`Hello! I have a confirmed booking at ${stay.name}.`)}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex items-center gap-2 rounded-xl border border-outline-variant/60 bg-surface px-4 py-2.5 text-sm font-semibold text-on-surface hover:bg-surface-container"
+                  className="flex items-center gap-2 rounded-xl border border-outline-variant/60 bg-surface px-4 py-2.5 text-sm font-semibold text-on-surface hover:bg-surface-container tap-spring active:scale-95"
                 >
                   <Icon name="chat" className="text-lg text-secondary" />
                   <span>{hasHostDirectPhone ? "Message Host" : `Message ${siteConfig.appName} Desk`}</span>
@@ -97,7 +97,7 @@ export default async function DedicatedHomestayPage({
               ) : (
                 <a
                   href={`mailto:${contactEmail}?subject=${encodeURIComponent(`Confirmed Booking Inquiry - ${stay.name}`)}`}
-                  className="flex items-center gap-2 rounded-xl border border-outline-variant/60 bg-surface px-4 py-2.5 text-sm font-semibold text-on-surface hover:bg-surface-container"
+                  className="flex items-center gap-2 rounded-xl border border-outline-variant/60 bg-surface px-4 py-2.5 text-sm font-semibold text-on-surface hover:bg-surface-container tap-spring active:scale-95"
                 >
                   <Icon name="mail" className="text-lg text-secondary" />
                   <span>Email Host</span>
@@ -211,22 +211,15 @@ export default async function DedicatedHomestayPage({
                     )}
                   </div>
 
-                  <div className="mt-6 flex flex-col gap-2 pt-4 border-t border-outline-variant/30">
+                  <div className="mt-5 pt-3 border-t border-outline-variant/30">
                     <a
                       href={waUrl}
                       target={cleanPhone ? "_blank" : undefined}
                       rel={cleanPhone ? "noreferrer" : undefined}
-                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-xs font-semibold text-on-primary shadow transition hover:opacity-95"
+                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 py-2.5 text-xs font-semibold text-white shadow transition tap-spring active:scale-95"
                     >
                       <Icon name={cleanPhone ? "chat" : "mail"} className="text-base" />
-                      <span>{cleanPhone ? "Book on WhatsApp" : "Inquire via Email"}</span>
-                    </a>
-                    <a
-                      href={`/cab-request?homestay=${encodeURIComponent(stay.slug)}`}
-                      className="flex w-full items-center justify-center gap-2 rounded-xl border border-outline-variant/60 bg-surface py-2 text-xs font-semibold text-on-surface hover:bg-surface-container"
-                    >
-                      <Icon name="local_taxi" className="text-base text-secondary" />
-                      <span>Arrange Hill Cab Transfer</span>
+                      <span>{cleanPhone ? "Inquire on WhatsApp" : "Inquire via Email"}</span>
                     </a>
                   </div>
                 </div>

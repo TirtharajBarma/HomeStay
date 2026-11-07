@@ -85,28 +85,18 @@ export async function confirmReservation(
   const phone = text(formData, "phone");
 
   const errors: Record<string, string> = {};
-  if (!firstName) errors.firstName = "Required for your door PIN.";
-  if (!lastName) errors.lastName = "Required for your reservation voucher.";
-  if (!EMAIL.test(email)) errors.email = "Enter a valid email so we can send your directions.";
-  if (phone.replace(/\D/g, "").length < 7) errors.phone = "Enter a reachable phone number.";
+  if (!firstName) errors.firstName = "First name is required for your booking voucher.";
+  if (!lastName) errors.lastName = "Last name is required for your booking voucher.";
+  if (!EMAIL.test(email)) errors.email = "Enter a valid email address for confirmation & invoice.";
+  if (phone.replace(/\D/g, "").length < 7) errors.phone = "Enter a reachable WhatsApp or mobile number.";
   if (formData.get("terms") !== "on") {
-    errors.terms = "Please accept the house rules and guest terms to continue.";
+    errors.terms = "Please accept the guest terms and house rules to continue.";
   }
-
-  Object.assign(
-    errors,
-    validateCard({
-      cardName: text(formData, "cardName"),
-      cardNumber: text(formData, "cardNumber"),
-      expiry: text(formData, "expiry"),
-      cvc: text(formData, "cvc"),
-    }),
-  );
 
   if (Object.keys(errors).length > 0) {
     return {
       status: "error",
-      message: "A few details still need your attention before we can confirm the stay.",
+      message: "Please complete all required fields before confirming your reservation.",
       errors,
     };
   }

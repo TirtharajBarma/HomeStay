@@ -145,29 +145,29 @@ export default function JoinDriverPage() {
   };
 
   return (
-    <main className="min-h-screen bg-[#F7FAF7] py-6 sm:py-10 px-4 sm:px-6 font-sans text-[#181C1B] antialiased">
+    <main className="min-h-screen bg-[#F7FAF7] pt-8 pb-16 sm:pt-12 sm:pb-20 px-4 sm:px-6 font-sans text-[#181C1B] antialiased">
       <div className="mx-auto max-w-6xl">
         {/* Top Header Bar */}
-        <header className="mb-8 flex items-center justify-between">
+        <header className="mb-6 sm:mb-10 flex items-center justify-between gap-3">
           <Link
             href="/"
-            className="group inline-flex items-center gap-2 text-xs font-bold text-[#14422D] hover:text-[#0B2519] bg-white border border-[#D8DBD7] px-3.5 py-2 rounded-2xl shadow-2xs hover:shadow-xs active:scale-95 transition-all"
+            className="group inline-flex items-center gap-1.5 text-xs font-bold text-[#14422D] hover:text-[#0B2519] bg-white border border-[#D8DBD7] px-3.5 py-2 sm:px-4 sm:py-2 rounded-full shadow-2xs hover:shadow-xs tap-spring active:scale-95 transition-all"
           >
             <svg
-              className="h-4 w-4 shrink-0 transition-transform group-hover:-translate-x-0.5"
+              className="h-3.5 w-3.5 shrink-0 transition-transform group-hover:-translate-x-0.5"
               fill="none"
               viewBox="0 0 24 24"
-              strokeWidth="2.2"
+              strokeWidth="2.4"
               stroke="currentColor"
             >
               <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
             </svg>
-            <span>Back to {siteConfig.appName}</span>
+            <span>Back</span>
           </Link>
 
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-[#14422D]/8 border border-[#14422D]/15 px-3 py-1 text-xs font-bold text-[#14422D]">
-            <span className="h-2 w-2 rounded-full bg-[#14422D] animate-pulse" />
-            <span>Driver Onboarding · Zero Daily Recharges</span>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-[#14422D]/8 border border-[#14422D]/15 px-3 py-1.5 text-xs font-bold text-[#14422D]">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#14422D] animate-pulse" />
+            <span className="hidden xs:inline">Driver Onboarding · </span>Zero Daily Fee
           </span>
         </header>
 
@@ -236,12 +236,25 @@ export default function JoinDriverPage() {
             </Link>
           </div>
         ) : (
-          /* Split 2-Column Responsive Layout */
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 lg:items-center">
-            {/* LEFT COLUMN: Value Proposition, WhatsApp Alert Mockup & Honest Pillars (7 Cols) */}
-            <div className="lg:col-span-7 space-y-6">
-              {/* Headline */}
-              <div className="space-y-2.5">
+          /* Split 2-Column Responsive Layout: Vertically balanced on desktop, Form FIRST on mobile */
+          <div className="flex flex-col lg:grid lg:grid-cols-12 gap-8 lg:gap-14 lg:items-center">
+            {/* Mobile-only Intro Header */}
+            <div className="lg:hidden space-y-2 mb-3 pt-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#14422D] bg-[#14422D]/8 px-2.5 py-0.5 rounded-full border border-[#14422D]/15 inline-block">
+                Verified Mountain Cab Network
+              </span>
+              <h1 className="font-display text-2xl font-bold tracking-tight text-[#14422D] leading-tight">
+                Direct Homestay Trips. Your Fare. 100% Cash.
+              </h1>
+              <p className="text-xs text-[#717973] leading-relaxed">
+                Connect directly with tourists staying at partner homestays in Darjeeling, Kalimpong, Kurseong, Siliguri, and Sikkim.
+              </p>
+            </div>
+
+            {/* LEFT COLUMN: Value Proposition, WhatsApp Alert Mockup & Honest Pillars (Order 2 on Mobile, 7 Cols on Desktop) */}
+            <div className="order-2 lg:order-1 lg:col-span-7 space-y-6">
+              {/* Desktop Headline */}
+              <div className="hidden lg:block space-y-2.5">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-[#14422D] bg-[#14422D]/8 px-3 py-1 rounded-full border border-[#14422D]/15 inline-block">
                   Verified Mountain Cab Network
                 </span>
@@ -254,8 +267,8 @@ export default function JoinDriverPage() {
                 </p>
               </div>
 
-              {/* Realistic WhatsApp Ride Request Mockup */}
-              <div className="rounded-3xl border border-[#14422D]/20 bg-white p-5 sm:p-6 shadow-[0_8px_30px_-4px_rgba(20,66,45,0.06)] space-y-3.5">
+              {/* Realistic WhatsApp Ride Request Mockup (Desktop only — hidden on mobile so no odd demo clutters the phone screen!) */}
+              <div className="hidden lg:block rounded-3xl border border-[#14422D]/20 bg-white p-5 sm:p-6 shadow-[0_8px_30px_-4px_rgba(20,66,45,0.06)] space-y-3.5">
                 <div className="flex items-center justify-between border-b border-[#ECEFEB] pb-3">
                   <div className="flex items-center gap-2.5">
                     <div className="h-8 w-8 rounded-full bg-[#25D366] text-white flex items-center justify-center font-bold text-sm shadow-xs">
@@ -309,53 +322,53 @@ export default function JoinDriverPage() {
                 </p>
               </div>
 
-              {/* 4 Truthful Operational Pillars (No fake claims) */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div className="rounded-2xl border border-[#E5E8E5] bg-white p-4 space-y-1 shadow-2xs">
-                  <div className="flex items-center gap-2 text-xs font-bold text-[#14422D]">
-                    <Icon name="tune" className="text-base text-[#14422D]" />
-                    <span>You Set The Fare</span>
+              {/* 4 Truthful Operational Pillars (App Dashboard 2-Column Grid on Mobile) */}
+              <div className="grid grid-cols-2 gap-2.5 sm:gap-3.5">
+                <div className="rounded-2xl border border-[#E5E8E5] bg-white p-3.5 sm:p-4 space-y-1 shadow-2xs">
+                  <div className="flex items-center gap-1.5 sm:gap-2 text-xs font-bold text-[#14422D]">
+                    <Icon name="tune" className="text-sm sm:text-base text-[#14422D]" />
+                    <span className="truncate">You Set Fare</span>
                   </div>
-                  <p className="text-[11px] text-[#717973] leading-relaxed">
-                    You know hill road conditions, ghat timing, and weather. Submit your price directly for each trip.
+                  <p className="text-[10px] sm:text-[11px] text-[#717973] leading-relaxed line-clamp-2 sm:line-clamp-none">
+                    You know hill conditions &amp; ghat timing. Submit your price directly for each trip.
                   </p>
                 </div>
 
-                <div className="rounded-2xl border border-[#E5E8E5] bg-white p-4 space-y-1 shadow-2xs">
-                  <div className="flex items-center gap-2 text-xs font-bold text-[#14422D]">
-                    <Icon name="payments" className="text-base text-[#14422D]" />
-                    <span>100% Cash At Destination</span>
+                <div className="rounded-2xl border border-[#E5E8E5] bg-white p-3.5 sm:p-4 space-y-1 shadow-2xs">
+                  <div className="flex items-center gap-1.5 sm:gap-2 text-xs font-bold text-[#14422D]">
+                    <Icon name="payments" className="text-sm sm:text-base text-[#14422D]" />
+                    <span className="truncate">100% Cash</span>
                   </div>
-                  <p className="text-[11px] text-[#717973] leading-relaxed">
-                    Passenger pays you full agreed cash upon reaching their drop. Zero 7-day payout waiting.
+                  <p className="text-[10px] sm:text-[11px] text-[#717973] leading-relaxed line-clamp-2 sm:line-clamp-none">
+                    Passenger pays full cash upon reaching drop. Zero 7-day payout waiting.
                   </p>
                 </div>
 
-                <div className="rounded-2xl border border-[#E5E8E5] bg-white p-4 space-y-1 shadow-2xs">
-                  <div className="flex items-center gap-2 text-xs font-bold text-[#14422D]">
-                    <Icon name="block" className="text-base text-[#14422D]" />
-                    <span>Zero Daily Recharges</span>
+                <div className="rounded-2xl border border-[#E5E8E5] bg-white p-3.5 sm:p-4 space-y-1 shadow-2xs">
+                  <div className="flex items-center gap-1.5 sm:gap-2 text-xs font-bold text-[#14422D]">
+                    <Icon name="block" className="text-sm sm:text-base text-[#14422D]" />
+                    <span className="truncate">Zero Recharges</span>
                   </div>
-                  <p className="text-[11px] text-[#717973] leading-relaxed">
-                    No compulsory daily app balance recharge or subscription deductions to keep receiving ride alerts.
+                  <p className="text-[10px] sm:text-[11px] text-[#717973] leading-relaxed line-clamp-2 sm:line-clamp-none">
+                    No compulsory daily balance recharge or deductions to keep receiving ride alerts.
                   </p>
                 </div>
 
-                <div className="rounded-2xl border border-[#E5E8E5] bg-white p-4 space-y-1 shadow-2xs">
-                  <div className="flex items-center gap-2 text-xs font-bold text-[#14422D]">
-                    <Icon name="groups" className="text-base text-[#14422D]" />
-                    <span>Taxi Stand Friendly</span>
+                <div className="rounded-2xl border border-[#E5E8E5] bg-white p-3.5 sm:p-4 space-y-1 shadow-2xs">
+                  <div className="flex items-center gap-1.5 sm:gap-2 text-xs font-bold text-[#14422D]">
+                    <Icon name="groups" className="text-sm sm:text-base text-[#14422D]" />
+                    <span className="truncate">Taxi Stand Friendly</span>
                   </div>
-                  <p className="text-[11px] text-[#717973] leading-relaxed">
-                    Individual taxi owners and Syndicate / Stand fleets (Clubside, Motor Syndicate, SNT) can both register.
+                  <p className="text-[10px] sm:text-[11px] text-[#717973] leading-relaxed line-clamp-2 sm:line-clamp-none">
+                    Individual taxi owners and Syndicate / Stand fleets can both register.
                   </p>
                 </div>
               </div>
             </div>
 
-            {/* RIGHT COLUMN: Progressive 2-Step Onboarding Form (5 Cols) */}
-            <div className="lg:col-span-5">
-              <div className="sticky top-6 rounded-3xl border border-[#E5E8E5] bg-white p-6 sm:p-7 shadow-[0_12px_40px_-6px_rgba(20,66,45,0.06)] space-y-5">
+            {/* FORM COLUMN: Order 1 on mobile (sits right at top!), 5 cols on desktop, vertically centered! */}
+            <div className="order-1 lg:order-2 lg:col-span-5 w-full lg:self-center lg:mt-4">
+              <div className="rounded-3xl border border-[#E5E8E5] bg-white p-5 sm:p-7 shadow-[0_12px_40px_-6px_rgba(20,66,45,0.06)] space-y-4 sm:space-y-5">
                 {/* Stepper Progress Pill */}
                 <div className="flex items-center justify-between border-b border-[#ECEFEB] pb-4">
                   {step === 2 ? (
@@ -522,7 +535,7 @@ export default function JoinDriverPage() {
                             setStep(2);
                           }
                         }}
-                        className="w-full rounded-2xl bg-[#14422D] py-3.5 text-xs font-bold text-white shadow-[0_8px_20px_-4px_rgba(20,66,45,0.25)] hover:bg-[#0B2519] active:scale-[0.99] transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                        className="w-full rounded-2xl bg-[#14422D] py-3.5 text-xs font-bold text-white shadow-[0_8px_20px_-4px_rgba(20,66,45,0.25)] hover:bg-[#0B2519] tap-spring active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-1.5"
                       >
                         <span>Continue to Vehicle Details</span>
                         <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth="2.2" stroke="currentColor">
@@ -547,7 +560,7 @@ export default function JoinDriverPage() {
                             <label className="text-xs font-bold text-[#181C1B] block mb-1.5">
                               Vehicle Class *
                             </label>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            <div className="grid grid-cols-2 gap-2 sm:gap-2.5">
                               {VEHICLE_TIERS.map((tier) => {
                                 const selected = vehicleType === tier.value;
                                 return (
@@ -555,19 +568,19 @@ export default function JoinDriverPage() {
                                     key={tier.value}
                                     type="button"
                                     onClick={() => setVehicleType(tier.value)}
-                                    className={`text-left p-3.5 rounded-2xl border transition-all cursor-pointer relative ${
+                                    className={`text-left p-2.5 sm:p-3.5 rounded-2xl border transition-all cursor-pointer relative tap-spring active:scale-95 ${
                                       selected
                                         ? "border-[#14422D] bg-[#14422D]/5 shadow-xs ring-1.5 ring-[#14422D]"
                                         : "border-[#D8DBD7] bg-white hover:bg-[#F7FAF7] hover:border-[#14422D]/40"
                                     }`}
                                   >
-                                    <div className="flex items-center justify-between gap-1.5 mb-1">
-                                      <span className="text-xs font-bold text-[#181C1B] truncate">{tier.label}</span>
-                                      <span className="shrink-0 whitespace-nowrap text-[10px] font-bold text-[#14422D] bg-[#14422D]/10 px-2 py-0.5 rounded-full">
+                                    <div className="flex items-center justify-between gap-1 mb-0.5 sm:mb-1">
+                                      <span className="text-[11px] sm:text-xs font-bold text-[#181C1B] truncate">{tier.label}</span>
+                                      <span className="shrink-0 whitespace-nowrap text-[9px] sm:text-[10px] font-bold text-[#14422D] bg-[#14422D]/10 px-1.5 py-0.5 rounded-full">
                                         {tier.seats} Seats
                                       </span>
                                     </div>
-                                    <p className="text-[10px] text-[#717973] truncate">{tier.desc}</p>
+                                    <p className="text-[9px] sm:text-[10px] text-[#717973] truncate">{tier.desc}</p>
                                   </button>
                                 );
                               })}
@@ -648,14 +661,14 @@ export default function JoinDriverPage() {
                         <button
                           type="button"
                           onClick={() => setStep(1)}
-                          className="w-1/3 rounded-2xl border border-[#D8DBD7] bg-white py-3.5 text-xs font-bold text-[#181C1B] hover:bg-[#F1F4F1] cursor-pointer transition-colors"
+                          className="w-1/3 rounded-2xl border border-[#D8DBD7] bg-white py-3.5 text-xs font-bold text-[#181C1B] hover:bg-[#F1F4F1] cursor-pointer tap-spring active:scale-95 transition-all"
                         >
                           Back
                         </button>
                         <button
                           type="submit"
                           disabled={busy || !acceptedTerms}
-                          className="w-2/3 rounded-2xl bg-[#14422D] py-3.5 text-xs font-bold text-white shadow-[0_8px_20px_-4px_rgba(20,66,45,0.25)] hover:bg-[#0B2519] active:scale-[0.99] transition-all cursor-pointer disabled:opacity-50"
+                          className="w-2/3 rounded-2xl bg-[#14422D] py-3.5 text-xs font-bold text-white shadow-[0_8px_20px_-4px_rgba(20,66,45,0.25)] hover:bg-[#0B2519] tap-spring active:scale-95 transition-all cursor-pointer disabled:opacity-50"
                         >
                           {busy ? "Submitting Registration…" : "Complete Driver Registration"}
                         </button>

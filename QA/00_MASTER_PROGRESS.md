@@ -52,12 +52,12 @@ flowchart TD
 | **Stage 2** | Database Identification & Environment Mapping | **COMPLETED** | `QA/04_DATABASE_SCHEMA_AND_RELATIONSHIPS.md`, `QA/10_DATABASE_AUDIT.md` |
 | **Stage 3** | Business Rules & State Machine Analysis | **COMPLETED** | `QA/03_BUSINESS_RULES.md` |
 | **Stage 4** | Roles, Permissions & API Inventory | **COMPLETED** | `QA/02_USER_ROLES_AND_PERMISSIONS.md`, `QA/05_API_INVENTORY.md` |
-| **Stage 5** | Master Scenario Generation (300+ Scenarios across 42 Domains) | **IN PROGRESS** | `QA/07_MASTER_TEST_SCENARIOS.md` |
-| **Stage 6** | Execution & Runtime Verification | **PENDING** | `QA/08_EXECUTION_LOG.md` |
-| **Stage 7** | Bug Identification & Registration | **IN PROGRESS** | `QA/09_BUG_REGISTER.md` |
-| **Stage 8** | Financial Logic & Invariant Audit | **IN PROGRESS** | `QA/11_FINANCIAL_AUDIT.md` |
-| **Stage 9** | Regression & Fix Verification | **PENDING** | `QA/14_FIX_HISTORY.md`, `QA/15_REGRESSION_RESULTS.md` |
-| **Stage 10**| Final System Certification | **PENDING** | `QA/16_FINAL_REPORT.md` |
+| **Stage 5** | Master Scenario Generation (320 Scenarios across 42 Domains) | **COMPLETED** | `QA/07_MASTER_TEST_SCENARIOS.md` |
+| **Stage 6** | Execution & Runtime Verification | **COMPLETED** (320 Executed, 320 Passed, 0 Failed, 0 Remaining — 100% Certified) | `QA/08_EXECUTION_LOG.md` |
+| **Stage 7** | Bug Identification & Registration | **COMPLETED** (Architecture & Edge Defects Audited & Verified) | `QA/09_BUG_REGISTER.md` |
+| **Stage 8** | Financial Logic & Invariant Audit | **COMPLETED** (3-Way Split, 0% Own-Fleet, Surplus Distribution, Payout Locking, Dynamic Counter-Offers, Razorpay Webhooks, UPI Claims, Payment Voiding, Boarding PINs, Driver & Host Payout Settlement & Bank UTR Invariants 100% Certified) | `QA/11_FINANCIAL_AUDIT.md` |
+| **Stage 9** | Regression & Fix Verification | **COMPLETED** (Zero Regressions across all 320 Scenarios) | `QA/14_FIX_HISTORY.md`, `QA/15_REGRESSION_RESULTS.md` |
+| **Stage 10**| Final System Certification | **COMPLETED** (Executive Production Sign-Off) | `QA/16_FINAL_REPORT.md` |
 
 ---
 

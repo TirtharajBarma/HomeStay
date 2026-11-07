@@ -8,7 +8,7 @@ import { kindFilters, type Stay } from "@/lib/stays";
 import { Icon } from "./icon";
 
 const baseChip =
-  "inline-flex min-h-11 items-center justify-center whitespace-nowrap rounded-full px-4 text-label-md transition-colors duration-150 md:min-h-0 md:py-2";
+  "inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-full px-3.5 py-2 md:px-4 md:py-2 text-xs md:text-label-md transition-all duration-150 tap-spring active:scale-95 cursor-pointer";
 
 export function StayFilters({
   booking,
@@ -30,8 +30,9 @@ export function StayFilters({
   }
 
   return (
-    <div className="flex w-full flex-col gap-3 md:w-auto md:items-end">
-      <div className="-mx-1 flex flex-wrap items-center gap-2 px-1">
+    <div className="flex w-full flex-col gap-2 md:gap-3 md:w-auto md:items-end">
+      {/* Horizontal Swipeable Segmented Chips on Mobile / Wrapped on Desktop */}
+      <div className="-mx-4 px-4 sm:-mx-6 sm:px-6 md:mx-0 md:px-0 flex flex-nowrap md:flex-wrap items-center gap-2 overflow-x-auto no-scrollbar scroll-smooth py-1">
         {kindFilters.map((filter) => {
           const active = filters.kind === filter.kind;
 
@@ -43,11 +44,12 @@ export function StayFilters({
               aria-pressed={active}
               className={
                 active
-                  ? `${baseChip} bg-primary text-on-primary shadow-sm`
-                  : `${baseChip} border border-outline-variant/40 bg-surface-container text-on-surface-variant hover:bg-surface-container-high`
+                  ? `${baseChip} bg-primary text-on-primary shadow-xs font-semibold`
+                  : `${baseChip} border border-outline-variant/40 bg-surface-container-high/60 text-on-surface-variant hover:bg-surface-container-high`
               }
             >
-              {filter.label} ({counts[filter.kind]})
+              <span>{filter.label}</span>
+              <span className="ml-1 opacity-80 text-[11px]">({counts[filter.kind]})</span>
             </button>
           );
         })}
@@ -58,17 +60,17 @@ export function StayFilters({
           aria-pressed={filters.petFriendly}
           className={
             filters.petFriendly
-              ? `${baseChip} items-center gap-1.5 bg-secondary-fixed text-on-secondary-fixed`
-              : `${baseChip} items-center gap-1.5 border border-outline-variant/40 bg-surface-container text-on-surface-variant hover:bg-surface-container-high`
+              ? `${baseChip} items-center gap-1.5 bg-secondary-fixed text-on-secondary-fixed font-semibold shadow-xs`
+              : `${baseChip} items-center gap-1.5 border border-outline-variant/40 bg-surface-container-high/60 text-on-surface-variant hover:bg-surface-container-high`
           }
         >
-          <Icon name="pets" className="text-[14px]" />
+          <Icon name="pets" className="text-[13px]" />
           <span>Pet Friendly</span>
-          <span className="opacity-70">({stays.filter((stay) => stay.petFriendly).length})</span>
+          <span className="opacity-80 text-[11px]">({stays.filter((stay) => stay.petFriendly).length})</span>
         </button>
       </div>
 
-      <p aria-live="polite" className="px-1 text-label-sm text-outline md:text-right">
+      <p aria-live="polite" className="px-1 text-[11px] md:text-label-sm text-outline md:text-right">
         {matching} of {stays.length} stays shown
       </p>
     </div>

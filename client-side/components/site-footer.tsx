@@ -7,7 +7,7 @@ import { Icon } from "./icon";
 import { NewsletterForm } from "./newsletter-form";
 
 const linkClass =
-  "inline-flex min-h-11 items-center text-body-sm text-on-surface-variant transition-colors duration-150 hover:text-primary";
+  "inline-flex py-1 text-xs sm:text-body-sm text-on-surface-variant transition-colors duration-150 hover:text-primary active:opacity-75";
 
 const supportPhone = siteConfig.supportPhone || process.env.NEXT_PUBLIC_SUPPORT_PHONE?.trim() || "";
 const cleanPhone = waNumber(supportPhone);
@@ -33,7 +33,7 @@ const columns = [
     links: [
       { href: "/cab-request", label: "Hill Cabs & Transfers" },
       { href: "/join-driver", label: "Drive with Us (Driver Sign-Up)" },
-      { href: "/#contact", label: "Local Pickup Locations" },
+      // { href: "/#contact", label: "Local Pickup Locations" },
     ],
   },
   {
@@ -50,29 +50,29 @@ const columns = [
 export function SiteFooter() {
   return (
     <footer className="mt-auto w-full border-t border-outline-variant/50 bg-surface-container">
-      <div className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-8 px-4 py-12 sm:px-6 md:flex-row">
+      <div className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-8 px-4 pt-8 pb-20 sm:px-6 sm:py-8 md:py-12 md:flex-row">
         <div className="w-full max-w-md">
-          <div className="mb-3 flex items-center gap-3">
+          <div className="mb-3 flex items-center gap-2.5">
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-on-primary">
               <Icon name="local_taxi" className="text-[18px]" />
             </span>
-            <span className="font-display text-headline-md font-semibold text-primary">
+            <span className="font-display text-headline-sm sm:text-headline-md font-semibold text-primary">
               {siteConfig.appName}
             </span>
           </div>
-          <p className="mb-4 text-body-sm text-on-surface-variant">
+          <p className="mb-4 text-xs sm:text-body-sm text-on-surface-variant leading-relaxed">
             Authentic Himalayan homestays, local host hospitality, and verified door-to-door hill transfers across Darjeeling, Kalimpong, and Sikkim.
           </p>
           <NewsletterForm />
-          <p className="mt-4 text-body-sm text-outline">
+          <p className="mt-4 text-[11px] sm:text-body-sm text-outline">
             © {new Date().getFullYear()} {siteConfig.appName} Network. Connecting travelers with authentic hosts and local drivers.
           </p>
         </div>
 
-        <div className="grid w-full grid-cols-1 gap-8 xs:grid-cols-2 md:w-auto md:gap-10 lg:grid-cols-3 lg:gap-12">
-          {columns.map((column) => (
-            <div key={column.title}>
-              <span className="mb-1 block text-label-md font-bold uppercase tracking-wider text-primary">
+        <div className="grid w-full grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 sm:gap-8 md:w-auto md:gap-10 lg:gap-12">
+          {columns.map((column, index) => (
+            <div key={column.title} className={index === 2 ? "col-span-2 sm:col-span-1" : "col-span-1"}>
+              <span className="mb-1.5 block text-label-xs sm:text-label-md font-bold uppercase tracking-wider text-primary">
                 {column.title}
               </span>
               <ul className="space-y-0.5 text-body-sm">

@@ -247,11 +247,13 @@ const rupeeFormat = new Intl.NumberFormat("en-IN", {
 
 /** Whole rupees with Indian digit grouping (₹2,42,000). No paise — nobody quotes them. */
 export function formatMoney(amount: number): string {
+  if (typeof amount !== "number" || isNaN(amount) || !Number.isFinite(amount)) return "₹0";
   return rupeeFormat.format(Math.round(amount)).replace(/\u00a0/g, "");
 }
 
 /** A stay's nightly price; 0 means the host has not set one (rooms on "Price on request"). */
-export const formatNightly = (price: number) => (price > 0 ? formatMoney(price) : "Price on request");
+export const formatNightly = (price: number) =>
+  typeof price === "number" && Number.isFinite(price) && price > 0 ? formatMoney(price) : "Price on request";
 
 
 export function cancellationDeadline(checkIn: string): string {

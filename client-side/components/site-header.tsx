@@ -78,12 +78,12 @@ export function SiteHeader() {
           ))}
         </nav>
 
-        <div className="flex shrink-0 items-center gap-1 sm:gap-2.5">
+        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2.5">
           <Link
             href="/join-driver"
-            className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-amber-600/30 bg-amber-50 px-3 text-label-md font-semibold text-amber-900 shadow-sm transition-all duration-200 hover:bg-amber-100 active:scale-[0.98] sm:px-3.5"
+            className="inline-flex items-center gap-1.5 rounded-full border border-[#14422D]/20 bg-[#14422D]/8 px-3 py-1.5 text-xs font-bold text-[#14422D] shadow-2xs hover:bg-[#14422D]/12 tap-spring active:scale-95 transition-all"
           >
-            <Icon name="local_taxi" className="text-[18px] text-amber-700" />
+            <Icon name="local_taxi" className="text-[16px] text-[#14422D]" />
             <span>Cab Join</span>
           </Link>
           <Link

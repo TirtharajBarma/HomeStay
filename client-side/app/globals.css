@@ -126,6 +126,38 @@ html {
   /* Keeps in-page anchors clear of the sticky header */
   scroll-padding-top: 6rem;
   scroll-behavior: smooth;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Hide scrollbar for clean horizontal swipe rows (Airbnb / App Store style) */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Water-like continuous reviews marquee scroll */
+@keyframes marquee-scroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee-water {
+  display: flex;
+  width: max-content;
+  animation: marquee-scroll 38s linear infinite;
+  will-change: transform;
+}
+
+.animate-marquee-water:hover,
+.animate-marquee-water:active {
+  animation-play-state: paused;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -135,6 +167,17 @@ html {
 }
 
 @layer components {
+  /* Native-feel tactile touch physics (Apple HIG / modern mobile apps) */
+  .tap-spring {
+    transition: transform 120ms cubic-bezier(0.34, 1.56, 0.64, 1), filter 120ms ease, background-color 150ms ease;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+  }
+  .tap-spring:active {
+    transform: scale(0.965);
+    filter: brightness(0.94);
+  }
+
   .sunlit-card-shadow {
     box-shadow: var(--shadow-ambient);
   }

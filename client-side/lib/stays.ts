@@ -108,6 +108,8 @@ function toStay(r: Raw): Stay | null {
     facts: Array.isArray(r.facts) ? r.facts : [],
     story: Array.isArray(r.story) ? r.story : [],
     reviews: Array.isArray(r.reviews) ? r.reviews : [],
+    phone: str(r.phone) || "",
+    email: str(r.email) || "",
   } as Stay;
 }
 
@@ -179,12 +181,19 @@ function propertyToStay(p: Raw): Stay {
 function isTestEntity(e: Raw): boolean {
   const em = str(e.email).toLowerCase();
   const slug = str(e.slug || e.code).toLowerCase();
+  const name = str(e.name || e.title).toLowerCase();
   return (
     em.includes("@stayride.test") ||
+    em.includes("@staycabs.test") ||
+    em.includes(".test") ||
+    em.startsWith("qa_") ||
     em.includes("host.audit") ||
     em.includes("audit.host") ||
     em === "ananya@gumtreevalley.in" ||
     em === "owner@estate.com" ||
+    name.includes(" qa ") ||
+    name.startsWith("qa ") ||
+    slug.includes("-qa-") ||
     slug === "gumtree-valley" ||
     slug.startsWith("test-") ||
     slug.startsWith("demo-") ||

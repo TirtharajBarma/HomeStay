@@ -39,6 +39,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
+      suppressHydrationWarning
       data-scroll-behavior="smooth"
       className={`${playfair.variable} ${jakarta.variable} h-full antialiased`}
     >
@@ -49,7 +50,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
         />
       </head>
-      <body className="flex min-h-full flex-col bg-surface font-body text-body-md text-on-surface selection:bg-primary-fixed selection:text-primary">
+      <body
+        suppressHydrationWarning
+        className="flex min-h-full flex-col bg-surface font-body text-body-md text-on-surface selection:bg-primary-fixed selection:text-primary"
+      >
         {children}
       </body>
     </html>

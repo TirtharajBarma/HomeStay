@@ -103,3 +103,32 @@ stateDiagram-v2
 1. **Negative Debt Prevention**: The advance amount collected from the guest is guaranteed to be $\ge \text{Total Commission}$. Drivers are NEVER placed into negative debt or forced to pay commission out of pocket.
 2. **Snapshot Immutability**: All rates, split amounts, and payout shares are frozen in `financialSnapshot` upon quote acceptance. Admin updates to global settings never alter past bookings.
 3. **Traceability**: All financial mutations (advances, claims, voids, payout requests, settlements, rejections) generate immutable entries in `auditlogs`.
+
+---
+
+## 6. Live Runtime Verification Evidence (2026-11-06)
+
+The financial invariants and state machines have been verified through end-to-end integration execution (`scripts/run-e2e-financial-lifecycle.ts`):
+
+| Test Case | Operational Step | Expected State | Persisted DB State | Verdict |
+| :--- | :--- | :--- | :--- | :---: |
+| **FIN-VERIF-01** | Initial Wallet Check | Available balance = ₹0 | `available: 0`, `eligibleTrips: 0` | `PASS` ✅ |
+| **FIN-VERIF-02** | Zero-Balance Payout Attempt | Blocked with 400 Bad Request | Threw 400: "You have no eligible earnings to withdraw yet" | `PASS` ✅ |
+| **FIN-VERIF-03** | Advance Surplus Accrual | ₹200 surplus credited post-trip | `financialSnapshot.driverShareOfAdvance: 200`, `available: 200` | `PASS` ✅ |
+| **FIN-VERIF-04** | Payout Atomic Stamping | `driverPayoutId` locks to payout ID | `CabRequest.driverPayoutId === PayoutRequest._id` | `PASS` ✅ |
+| **FIN-VERIF-05** | Double-Spend Prevention | Concurrent 2nd request blocked | Partial unique index returned 409 Conflict | `PASS` ✅ |
+| **FIN-VERIF-06** | Admin Rejection Recovery | Trip lock cleared, balance restored | `driverPayoutId === null`, `available: 200` restored | `PASS` ✅ |
+| **FIN-VERIF-07** | Admin Settlement Closeout | UTR stamped, funds permanently archived | `status: 'SETTLED'`, `utrNumber: 'UTR_SETTLE_...'` | `PASS` ✅ |
+| **FIN-VERIF-08** | No-PIN Completion Quarantine | Withheld by `PAYOUT_HOLD` | `completedWithoutPin: true`, available balance remained ₹0 | `PASS` ✅ |
+| **FIN-VERIF-09** | Admin No-PIN Review Release | Admin `APPROVE` lifts quarantine | `noPinReviewedAt` stamped, ₹240 surplus instantly released | `PASS` ✅ |
+| **FIN-VERIF-10** | Cash-in-Hand Invariant | Passenger pays remaining balance in cash | `remainingCashAmount = ₹2,500` (`₹3,000 - ₹500 advance`) | `PASS` ✅ |
+| **FIN-VERIF-11** | Multi-Trip Wallet Aggregation | 2 completed trips aggregate available funds | `available: 400`, `eligibleTrips: 2` (Trip 1 ₹200 + Trip 5 ₹200) | `PASS` ✅ |
+| **FIN-VERIF-12** | No-Show Advance Refund & Revocation | Admin marks fraudulent trip as `NO_SHOW` | `noShow: true`, `refundStatus: 'PENDING'`, `driverSettlementStatus: 'NONE'` | `PASS` ✅ |
+| **FIN-VERIF-13** | Bank UTR Settlement & Archival | Admin settles payout with bank UTR | `utrNumber: '992288331122'`, `driverSettlementStatus: 'SETTLED'` across locked trips | `PASS` ✅ |
+| **FIN-VERIF-14** | Host Commission Ledger Aggregation | 2 completed trips aggregate host earnings | `available: 300`, `eligibleTrips: 2` (Trip 1 ₹150 + Trip 2 ₹150) | `PASS` ✅ |
+| **FIN-VERIF-15** | Host Payout Atomic Stamping & Lock | `hostPayoutId` locks to payout ID | `CabRequest.hostPayoutId === PayoutRequest._id`, available balance becomes 0 | `PASS` ✅ |
+| **FIN-VERIF-16** | Host Payout Rejection & Recovery | Rejection clears lock and restores balance | `hostPayoutId: null`, available balance restored to ₹300 | `PASS` ✅ |
+| **FIN-VERIF-17** | Host Settlement with Bank UTR | Admin settles host payout with UTR | `status: 'SETTLED'`, `utrNumber: '998877665544'`, trips locked | `PASS` ✅ |
+| **FIN-VERIF-18** | Own-Fleet 0% Host Commission Invariant | Private driver assigned by host | `homestayCommissionRate = 0`, `homestayCommissionAmount = 0`, remaining cash = ₹2,400 | `PASS` ✅ |
+| **FIN-VERIF-19** | Post-Confirmation Advance Refund Recording | Admin records refund for cancelled trip | `refundStatus: 'REFUNDED'`, `refundUtr: 'REFQA11223344'`, advance ₹500 refunded | `PASS` ✅ |
+| **FIN-VERIF-20** | Passenger No-Show Advance Refund | Admin refunds advance on passenger no-show | `refundStatus: 'REFUNDED'`, `refundUtr: 'REFNOSHOW998877'`, driver payout revoked | `PASS` ✅ |

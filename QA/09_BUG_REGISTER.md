@@ -12,9 +12,9 @@
 | :--- | :---: | :---: | :---: | :---: |
 | **CRITICAL** (Loss of funds, security breach, total outage) | 0 | 0 | 0 | **0** |
 | **HIGH** (Business rule violation, partial lock, data drift) | 1 | 0 | 0 | **1** |
-| **MEDIUM** (Edge-case inconsistency, UI layout flaw, rate limit skew) | 3 | 0 | 0 | **3** |
+| **MEDIUM** (Edge-case inconsistency, UI layout flaw, rate limit skew) | 4 | 0 | 0 | **4** |
 | **LOW** (Minor visual flaw, missing translation, cosmetic) | 1 | 0 | 0 | **1** |
-| **TOTAL** | **5** | **0** | **0** | **5** |
+| **TOTAL** | **6** | **0** | **0** | **6** |
 
 ---
 
@@ -74,4 +74,16 @@
 - **Description:** `stayride-expo/.env` specifies `EXPO_PUBLIC_API_URL = https://api.staycabs.in/v1`, whereas web clients specify `NEXT_PUBLIC_API_URL = https://api.staycabs.in/api/v1`. While `app.ts` provides backward-compatible routing by mounting both `/v1` and `/api/v1/stayride`, new developers or audit scripts may face path confusion when testing endpoints.
 - **Root Cause:** Evolutionary API versioning where mobile adapted `/v1` and web marketplace used `/api/v1`.
 - **Recommended Remediation:** Document route mount aliases in architecture guide and ensure all future API integration tests test both mounting prefixes.
+- **Status:** `OPEN` / `DOCUMENTED`
+
+---
+
+### BUG-006 | PathNotViable (Code 28) on applyAdvancePayment when financialSnapshot is null
+- **Severity:** `MEDIUM`
+- **Impact Area:** Payment Recording & Webhook Processing
+- **Affected Components:** `server/src/stayride/platform.ts:applyAdvancePayment()`
+- **Discovery Note:** Triggered during live Razorpay webhook and payment claim testing when processing trips where `financialSnapshot` was null.
+- **Description:** In `applyAdvancePayment`, the update operation executes `$set: { 'financialSnapshot.advancePaid': true }`. If a trip document was created or updated with `financialSnapshot: null`, MongoDB query execution fails with `MongoServerError: Plan executor error during findAndModify :: caused by :: Cannot create field 'advancePaid' in element {financialSnapshot: null} (Code 28, PathNotViable)`. This results in an unhandled 500 server error on payment webhooks or admin record-payment calls.
+- **Root Cause:** Attempting to set a sub-property on a field whose current value is `null`.
+- **Recommended Remediation:** In `applyAdvancePayment`, either ensure `financialSnapshot` is initialized or guard the update so it sets `financialSnapshot.advancePaid` only when `financialSnapshot` exists (or recomputes the snapshot on the fly).
 - **Status:** `OPEN` / `DOCUMENTED`

@@ -470,7 +470,7 @@ function DriverQuoteContent() {
             <button
               type="button"
               onClick={() => setActiveTab("trip")}
-              className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+              className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer tap-spring active:scale-95 ${
                 activeTab === "trip"
                   ? "bg-[#14422D] text-white shadow-xs"
                   : "text-[#717973] hover:text-[#181C1B]"
@@ -484,7 +484,7 @@ function DriverQuoteContent() {
                 setActiveTab("wallet");
                 fetchWallet();
               }}
-              className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+              className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer tap-spring active:scale-95 ${
                 activeTab === "wallet"
                   ? "bg-[#14422D] text-white shadow-xs"
                   : "text-[#717973] hover:text-[#181C1B]"
