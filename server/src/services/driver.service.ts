@@ -119,6 +119,14 @@ export const CURATED_CAB_PLACES = [
     note: "Road trip country, 2 hrs across the ridge",
   },
   {
+    id: "courtyard-marriott-siliguri",
+    name: "Courtyard by Marriott Siliguri",
+    area: "Pradhan Nagar / Mallaguri, Siliguri",
+    lat: 26.7300,
+    lng: 88.4128,
+    note: "Luxury hotel & transit hub in Pradhan Nagar, Siliguri",
+  },
+  {
     id: "siliguri",
     name: "Siliguri Junction",
     area: "Siliguri",

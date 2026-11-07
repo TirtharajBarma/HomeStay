@@ -70,7 +70,7 @@ export interface ICabRequest extends Document {
   time: string; // e.g. "07:30 AM"
   passengers: number;
   vehicleType: "SUV" | "Sedan" | "7-seater" | "9-seater";
-  requestSource: "MANUAL_OWNER" | "NEARBY_BROADCAST" | "GUEST_WEB_LINK" | "ADMIN_DISPATCH";
+  requestSource: "MANUAL_OWNER" | "NEARBY_BROADCAST" | "GUEST_WEB_LINK" | "ADMIN_DISPATCH" | "HOMESTAY_WEB_PORTAL" | "ADMIN_DESK";
   // Done by one of the homestay's own drivers (tenant driver id); StayRide charges its own-fleet fee
   ownFleet?: boolean;
   ownDriverId?: number | null;
@@ -258,7 +258,7 @@ const CabRequestSchema = new Schema<ICabRequest>(
     },
     requestSource: {
       type: String,
-      enum: ["MANUAL_OWNER", "NEARBY_BROADCAST", "GUEST_WEB_LINK", "ADMIN_DISPATCH"],
+      enum: ["MANUAL_OWNER", "NEARBY_BROADCAST", "GUEST_WEB_LINK", "ADMIN_DISPATCH", "HOMESTAY_WEB_PORTAL", "ADMIN_DESK"],
       default: "MANUAL_OWNER",
       index: true,
     },
@@ -393,6 +393,10 @@ CabRequestSchema.index({ createdAt: -1 }, { name: "created_at_desc" });
 CabRequestSchema.index({ driverSettlementStatus: 1, createdAt: -1 }, { name: "driver_settlement_status" });
 CabRequestSchema.index({ refundStatus: 1, createdAt: -1 }, { name: "refund_status" });
 CabRequestSchema.index({ needsReassignment: 1 }, { name: "needs_reassignment", partialFilterExpression: { needsReassignment: true } });
+CabRequestSchema.index({ dispatched: 1, nearbyNotifyAt: 1 }, { name: "dispatched_nearby_notify" });
+CabRequestSchema.index({ dispatched: 1, biddingClosesAt: 1 }, { name: "dispatched_bidding_closes" });
+CabRequestSchema.index({ propertyId: 1, guestPhone: 1, status: 1 }, { name: "property_guest_status" });
+CabRequestSchema.index({ "unmatchedPayments.paymentId": 1 }, { name: "unmatched_payment_id", sparse: true });
 // Idempotency keys are per homestay (the old global unique "clientRequestId_1" is dropped by scripts/migrate-indexes.ts).
 CabRequestSchema.index(
   { propertyId: 1, clientRequestId: 1 },

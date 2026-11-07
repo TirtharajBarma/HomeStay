@@ -9,7 +9,11 @@ interface Props {
 // Modal backdrops that hold inputs: lifts the card above the keyboard on both platforms.
 // Android is edge-to-edge now, so the system will not resize the window for us.
 export const KeyboardAwareOverlay: React.FC<Props> = ({ style, children }) => (
-  <KeyboardAvoidingView style={style} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+  <KeyboardAvoidingView
+    style={style}
+    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
+  >
     {children}
   </KeyboardAvoidingView>
 );

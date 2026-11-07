@@ -23,10 +23,12 @@ import { FormScroll } from '../components/FormScroll';
 import { Guest, PaymentMethod, Room } from '../types';
 
 const SOURCE_OPTIONS = [
-  { label: 'Public Web Booking Link', value: 'Direct link', icon: 'globe-outline' as const },
+  { label: 'Airbnb', value: 'Airbnb', icon: 'home-outline' as const },
+  { label: 'MakeMyTrip / Goibibo', value: 'MakeMyTrip', icon: 'airplane-outline' as const },
+  { label: 'Booking.com', value: 'Booking.com', icon: 'business-outline' as const },
+  { label: 'Phone Call / WhatsApp', value: 'Phone / WhatsApp', icon: 'call-outline' as const },
   { label: 'Walk-in Direct', value: 'Walk-in', icon: 'walk-outline' as const },
-  { label: 'Phone Call', value: 'Phone', icon: 'call-outline' as const },
-  { label: 'WhatsApp Chat', value: 'WhatsApp', icon: 'chatbubble-ellipses-outline' as const },
+  { label: 'Homestay Website / Link', value: 'Website link', icon: 'globe-outline' as const },
   { label: 'Repeat Returning Guest', value: 'Repeat booking', icon: 'repeat-outline' as const },
 ];
 
@@ -56,7 +58,7 @@ export const NewBookingScreen: React.FC = () => {
 
   // Opened from the occupancy calendar: that room and night are preselected
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(() => initialRoom);
-  const [source, setSource] = useState('Direct link');
+  const [source, setSource] = useState('Airbnb');
   const [guestsCount, setGuestsCount] = useState('1');
 
   // Dates: default checkIn = today midnight, checkOut = in 2 days

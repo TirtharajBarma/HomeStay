@@ -308,7 +308,7 @@ export const LoginScreen: React.FC = () => {
     pendingProfile.current = forProfile;
     setGoogleLoading(true);
     try {
-      const redirectUrl = Linking.createURL('/dashboard', { scheme: process.env.EXPO_PUBLIC_SCHEME || 'partner-app' });
+      const redirectUrl = Linking.createURL('/dashboard', { scheme: process.env.EXPO_PUBLIC_SCHEME || 'staycabs' });
       const { createdSessionId, setActive: setOAuthActive } = await startOAuthFlow({ redirectUrl });
       const activate = setOAuthActive || setActive;
       if (createdSessionId && activate) await activate({ session: createdSessionId }); // finishSignIn runs next
@@ -815,11 +815,11 @@ export const LoginScreen: React.FC = () => {
                     </>
                   ) : (
                     <>
-                      {consentRow}
                       <GoogleButton label="Sign up with Google" onPress={signUpWithGoogle} busy={busy} loading={googleLoading} />
                       {divider('or use email')}
                       {field('mail-outline', { placeholder: 'Email', value: email, onChangeText: setEmail, keyboardType: 'email-address', autoCapitalize: 'none', autoComplete: 'email' })}
                       {field('lock-closed-outline', { placeholder: 'Password (8+ characters)', value: password, onChangeText: setPassword, secureTextEntry: !showPassword }, passwordEye)}
+                      {consentRow}
                       <PrimaryButton label="Create account" onPress={emailSignUp} busy={busy} loading={loading} />
                     </>
                   )}
@@ -845,14 +845,12 @@ export const LoginScreen: React.FC = () => {
       </ScrollView>
 
       {!finishVisible && legalSheet}
-      {/* Create account (email/Google): the picker opens over the screen */}
-      <LocationPicker visible={mapVisible && !finishVisible} title="Pin your homestay" initial={coords} onConfirm={handlePicked} onClose={() => setMapVisible(false)} />
+      {/* Homestay location picker kept at top-level so iOS modal doesn't clash */}
+      <LocationPicker visible={mapVisible} title="Pin your homestay" initial={coords} onConfirm={handlePicked} onClose={() => setMapVisible(false)} />
 
       {/* Google account without a StayRide account: register with a role, details and consent */}
-      <Modal visible={finishVisible} animationType="slide" onRequestClose={cancelFinishSetup}>
+      <Modal visible={finishVisible && !mapVisible} animationType="slide" onRequestClose={cancelFinishSetup}>
         <View style={[styles.sheet, { paddingTop: Math.max(insets.top, 16) }]}>
-          {/* iOS shows one modal at a time: the map opens inside this sheet */}
-          <LocationPicker visible={mapVisible && finishVisible} title="Pin your homestay" initial={coords} onConfirm={handlePicked} onClose={() => setMapVisible(false)} />
           {finishVisible && legalSheet}
           <View style={styles.sheetHeader}>
             <Text style={styles.title}>Finish setting up</Text>

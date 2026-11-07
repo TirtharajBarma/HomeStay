@@ -12,9 +12,11 @@ import {
   OPEN_STATUSES, cabModel, payoutModel, userModel, parseFare, cancelRequest, startTrip, completeTrip,
   adminAssignDriver, adminRecordPayment, adminRejectPaymentClaim, adminVoidPayment, adminMarkRefunded, adminSettleDriver, adminReviewNoPin,
   settlePayout, rejectPayout, expireStaleRequests, overlayTrips, onDriverStatusChange, releaseDriverTrips, adminRefundUnmatched, maskPhone,
-  sendAskCab, autoAskCab, askCabConfirmText, askCabLine, stayOrder, last10,
+  sendAskCab, autoAskCab, askCabConfirmText, askCabLine, stayOrder, last10, dispatchFields, notifyNewRequest,
 } from "../stayride/platform.js";
+import { logger } from "../utils/logger.js";
 import { getGuestLinkModel } from "../models/guest-link.model.js";
+import { Property } from "../models/property.model.js";
 import { toWhatsAppNumber } from "../services/whatsapp.service.js";
 import { httpError } from "../middlewares/error-handler.js";
 import { config } from "../config/env.js";
@@ -57,7 +59,7 @@ const userItem = (demo: boolean) => (u: any) => ({
   role: u.role,
   accountStatus: u.accountStatus || (u.role === "driver" ? "PENDING_APPROVAL" : "ACTIVE"),
   statusReason: u.statusReason || "",
-  tenantKey: u.email,
+  tenantKey: u.role === "owner" && u.propertyId ? String(u.propertyId) : (u.role === "owner" ? u.email : ""),
   isDemo: demo,
   createdAt: u.createdAt,
   deletedAt: u.deletedAt ?? null,
@@ -303,7 +305,7 @@ router.get("/stayride/drivers", async (req, res) => {
     const regex = new RegExp(escapeRegex(q), "i");
     filter.$or = [{ name: regex }, { email: regex }, { phone: regex }, { "vehicle.plate": regex }];
   }
-  await sendPage(req, res, userModel(demo), filter, { createdAt: -1 }, "name email phone accountStatus statusReason vehicle createdAt deletedAt ratingSum ratingCount isAvailable",
+  await sendPage(req, res, userModel(demo), filter, { createdAt: -1 }, "name email phone accountStatus statusReason vehicle createdAt deletedAt ratingSum ratingCount isAvailable driverCategory unionName",
     ({ ratingSum, ...d }: any) => ({ ...d, id: String(d._id), rating: ratingOf({ ratingSum, ratingCount: d.ratingCount }), ratingCount: d.ratingCount || 0 }));
 });
 
@@ -391,6 +393,8 @@ router.post("/stayride/drivers", async (req, res) => {
   const plate = String(req.body?.plate || "").trim();
   const seats = Number(req.body?.seats) || 4;
   const area = String(req.body?.area || "").trim();
+  const driverCategory = req.body?.driverCategory === "UNION" ? "UNION" : "INDIVIDUAL";
+  const unionName = String(req.body?.unionName || "").trim();
 
   const User = userModel(demo);
   let existing = await User.findOne({ $or: [{ phone: cleanPhone }, { email: cleanEmail }] });
@@ -399,9 +403,11 @@ router.post("/stayride/drivers", async (req, res) => {
     existing.name = name;
     existing.accountStatus = "ACTIVE";
     existing.vehicle = { type: vehicleType, model, plate, seats, area };
+    existing.driverCategory = driverCategory;
+    existing.unionName = unionName;
     await existing.save();
-    await audit(actor(req), "driver.update", "User", String(existing._id), { targetName: name, targetPhone: maskPhone(cleanPhone), vehicle: existing.vehicle }, demo, { actorRole: "ADMIN", driverId: String(existing._id) });
-    return ok(res, { id: String(existing._id), name: existing.name, phone: existing.phone, vehicle: existing.vehicle, accountStatus: existing.accountStatus }, "Driver updated and active.");
+    await audit(actor(req), "driver.update", "User", String(existing._id), { targetName: name, targetPhone: maskPhone(cleanPhone), vehicle: existing.vehicle, driverCategory, unionName }, demo, { actorRole: "ADMIN", driverId: String(existing._id) });
+    return ok(res, { id: String(existing._id), name: existing.name, phone: existing.phone, vehicle: existing.vehicle, driverCategory: existing.driverCategory, unionName: existing.unionName, accountStatus: existing.accountStatus }, "Driver updated and active.");
   }
 
   const created = await User.create({
@@ -413,11 +419,13 @@ router.post("/stayride/drivers", async (req, res) => {
     accountStatus: "ACTIVE",
     isAvailable: true,
     whatsappAlerts: true,
+    driverCategory,
+    unionName,
     vehicle: { type: vehicleType, model, plate, seats, area },
   });
 
-  await audit(actor(req), "driver.create", "User", String(created._id), { targetName: name, targetPhone: maskPhone(cleanPhone), vehicle: created.vehicle }, demo, { actorRole: "ADMIN", driverId: String(created._id) });
-  return ok(res, { id: String(created._id), name: created.name, phone: created.phone, vehicle: created.vehicle, accountStatus: created.accountStatus }, "Driver registered and active.");
+  await audit(actor(req), "driver.create", "User", String(created._id), { targetName: name, targetPhone: maskPhone(cleanPhone), vehicle: created.vehicle, driverCategory, unionName }, demo, { actorRole: "ADMIN", driverId: String(created._id) });
+  return ok(res, { id: String(created._id), name: created.name, phone: created.phone, vehicle: created.vehicle, driverCategory: created.driverCategory, unionName: created.unionName, accountStatus: created.accountStatus }, "Driver registered and active.");
 });
 
 // ---------------------------------------------------------------------------
@@ -442,7 +450,14 @@ router.get("/cab-requests", async (req, res) => {
   const demo = isDemo(req);
   await expireStaleRequests(demo);
   const filter: any = {};
-  if (req.query.status) filter.status = String(req.query.status);
+  if (req.query.status) {
+    const statusStr = String(req.query.status);
+    if (statusStr.includes(",")) {
+      filter.status = { $in: statusStr.split(",").map((s) => s.trim()).filter(Boolean) };
+    } else {
+      filter.status = statusStr;
+    }
+  }
   if (req.query.tenantKey) filter.propertyId = String(req.query.tenantKey);
   if (req.query.refundStatus) filter.refundStatus = String(req.query.refundStatus);
   if (req.query.driverSettlementStatus) filter.driverSettlementStatus = String(req.query.driverSettlementStatus);
@@ -477,6 +492,130 @@ router.post("/cab-requests/:id/complete", cabAction((d, id, req) => completeTrip
 router.post("/cab-requests/:id/unmatched-refunded", cabAction((d, id, req) => adminRefundUnmatched(d, id, req.body.paymentId, req.body.reference, actor(req)), "Unmatched payment marked refunded."));
 router.post("/cab-requests/:id/no-pin-review", cabAction((d, id, req) => adminReviewNoPin(d, id, req.body.decision, req.body.reason, actor(req)), "Review recorded."));
 router.post("/cab-requests/:id/driver-settled", cabAction((d, id, req) => adminSettleDriver(d, id, req.body.reference, actor(req)), "Driver settlement recorded."));
+
+router.post("/cab-requests/create", async (req: Request, res: Response) => {
+  const demo = isDemo(req);
+  const {
+    tenantKey,
+    guestName,
+    guestPhone,
+    pickup,
+    destination,
+    destinations,
+    date,
+    time,
+    passengers,
+    vehicleType,
+    isRoundTrip,
+    notes,
+    guestBudget,
+  } = req.body;
+
+  if (!guestName || !guestPhone) throw httpError(400, "Guest name and phone number are required.");
+  if (!pickup) throw httpError(400, "Pickup location is required.");
+
+  let targetTenant = String(tenantKey || "").trim().toLowerCase();
+  let homestayName = "Platform Stay";
+
+  if (targetTenant) {
+    const tenantBlob = await getStayRideTenantModel(demo).findOne({ tenantId: targetTenant }).lean();
+    if (tenantBlob?.data?.homestay?.name) {
+      homestayName = tenantBlob.data.homestay.name;
+    } else {
+      const prop: any = await Property.findOne({ email: targetTenant }).lean();
+      if (prop) homestayName = prop.name || homestayName;
+    }
+  } else {
+    const defaultProp: any = await Property.findOne({ status: "active" }).lean();
+    if (defaultProp) {
+      targetTenant = defaultProp.email;
+      homestayName = defaultProp.name || homestayName;
+    } else {
+      targetTenant = demo ? "demo@stayride.in" : "admin@staycabs.in";
+    }
+  }
+
+  const reference = `REQ-${crypto.randomBytes(5).toString("hex").toUpperCase()}`;
+  const clientRequestId = `admin:${Date.now()}:${reference}`;
+  const Cab = cabModel(demo);
+
+  const destList = Array.isArray(destinations) && destinations.length > 0
+    ? destinations.map((d: any, i: number) => (typeof d === "string" ? { address: d, order: i } : d))
+    : [{ address: destination || "Destination", order: 0 }];
+
+  const tripDate = typeof date === "number" ? date : new Date(date || Date.now()).getTime();
+  const returnTimestamp = req.body.returnDate ? (typeof req.body.returnDate === "number" ? req.body.returnDate : new Date(req.body.returnDate).getTime()) : undefined;
+  const dispatch = await dispatchFields(targetTenant, demo, tripDate, time || "10:00 AM");
+
+  const doc = await Cab.create({
+    reference,
+    propertyId: targetTenant,
+    tripId: Math.floor(100000 + Math.random() * 900000),
+    clientRequestId,
+    homestayName,
+    guestName: String(guestName).trim(),
+    guestPhone: String(guestPhone).trim(),
+    pickupLocation: { address: String(pickup).trim() },
+    destinations: destList,
+    isRoundTrip: Boolean(isRoundTrip),
+    returnDate: returnTimestamp,
+    returnTime: req.body.returnTime ? String(req.body.returnTime).trim() : undefined,
+    date: tripDate,
+    time: String(time || "10:00 AM").trim(),
+    passengers: Number(passengers) || 1,
+    vehicleType: String(vehicleType || "SUV"),
+    requestSource: "ADMIN_DESK",
+    guestNotes: String(notes || "Booked by Platform Admin").trim(),
+    guestBudget: guestBudget ? Number(guestBudget) : null,
+    status: "FINDING_DRIVER",
+    ...dispatch,
+  });
+
+  // Mirror in tenant store to prevent cancelOrphanRequests from cancelling it after 2 minutes
+  try {
+    await tenantManager.mutate(targetTenant, (s) => {
+      const t = s.createTrip({
+        guestName: String(guestName).trim(),
+        phone: String(guestPhone).trim(),
+        pickup: String(pickup).trim(),
+        destination: destList.map((d: any) => d.address).join(" ➔ "),
+        destinations: destList,
+        date: tripDate,
+        time: String(time || "10:00 AM").trim(),
+        vehicleType: (vehicleType as any) || "SUV",
+        passengers: Number(passengers) || 1,
+        isRoundTrip: Boolean(isRoundTrip),
+      }, 'ADMIN_DISPATCH');
+      t.reference = reference;
+      t.dispatchMode = 'PLATFORM';
+      return t;
+    });
+  } catch (err: any) {
+    logger.warn(`[Admin Cab] Tenant trip mirror notice: ${err?.message}`);
+  }
+
+  // Trigger dispatch broadcast to own fleet and nearby mountain drivers
+  await notifyNewRequest(demo, doc).catch((err: any) => logger.warn(`[Admin Cab] Driver notification error: ${err?.message}`));
+
+  await audit(
+    actor(req),
+    "cab.create_by_admin",
+    "CabRequest",
+    String(doc._id),
+    {
+      reference,
+      guestName,
+      guestPhone: maskPhone(guestPhone),
+      pickup,
+      destination: destList.map((d: any) => d.address).join(", "),
+      tenantKey: targetTenant,
+    },
+    demo,
+    { tenantId: targetTenant }
+  );
+
+  ok(res, doc, "Cab request created successfully on behalf of guest.");
+});
 
 // ---------------------------------------------------------------------------
 // Homestay & Driver payouts
@@ -571,7 +710,10 @@ router.get("/stayride/summary", async (req, res) => {
         _id: null,
         open: { $sum: { $cond: [{ $in: ["$status", OPEN_STATUSES] }, 1, 0] } },
         awaitingPayment: { $sum: { $cond: [{ $eq: ["$status", "AWAITING_ADVANCE_PAYMENT"] }, 1, 0] } },
+        activeTrips: { $sum: { $cond: [{ $in: ["$status", ["CONFIRMED", "EN_ROUTE_PICKUP", "ARRIVED_HOMESTAY", "TRIP_STARTED"]] }, 1, 0] } },
         completed: { $sum: { $cond: [{ $eq: ["$status", "COMPLETED"] }, 1, 0] } },
+        needsReassignment: { $sum: { $cond: [{ $eq: ["$needsReassignment", true] }, 1, 0] } },
+        pendingClaims: { $sum: { $cond: [{ $eq: ["$paymentClaim.status", "PENDING"] }, 1, 0] } },
         gmv: { $sum: { $cond: [{ $and: [{ $eq: ["$status", "COMPLETED"] }, { $ne: ["$noShow", true] }] }, "$agreedFare", 0] } },
         // Cancelled / no-show paid advances are owed back (see refundsPending / refunded), not money kept
         advanceCollected: { $sum: { $cond: [{ $and: ["$advancePaid", { $ne: ["$status", "CANCELLED"] }, { $ne: ["$noShow", true] }] }, "$advanceAmount", 0] } },
@@ -583,6 +725,7 @@ router.get("/stayride/summary", async (req, res) => {
         },
         noPinToReview: { $sum: { $cond: [{ $and: [{ $eq: ["$status", "COMPLETED"] }, { $eq: ["$completedWithoutPin", true] }, { $not: ["$noPinReviewedAt"] }] }, 1, 0] } },
         refundsPending: { $sum: { $cond: [{ $eq: ["$refundStatus", "PENDING"] }, "$advanceAmount", 0] } },
+        refundsCount: { $sum: { $cond: [{ $eq: ["$refundStatus", "PENDING"] }, 1, 0] } },
         driverDuesPending: {
           $sum: {
             $cond: [
@@ -595,7 +738,10 @@ router.get("/stayride/summary", async (req, res) => {
       },
     },
   ]);
-  const payouts = await payoutModel(demo).aggregate([{ $group: { _id: "$status", amount: { $sum: "$amount" }, count: { $sum: 1 } } }]);
+  const [hostPayouts, driverPayouts] = await Promise.all([
+    payoutModel(demo).aggregate([{ $match: { recipientType: { $ne: "DRIVER" } } }, { $group: { _id: "$status", amount: { $sum: "$amount" }, count: { $sum: 1 } } }]),
+    payoutModel(demo).aggregate([{ $match: { recipientType: "DRIVER" } }, { $group: { _id: "$status", amount: { $sum: "$amount" }, count: { $sum: 1 } } }]),
+  ]);
   // Gateway money that matched no request (old link, paid twice, after a cancel): must be refunded in Razorpay
   const [unmatched] = await cabModel(demo).aggregate([
     { $match: { "unmatchedPayments.0": { $exists: true } } },
@@ -603,7 +749,7 @@ router.get("/stayride/summary", async (req, res) => {
     { $match: { "unmatchedPayments.refundedAt": null } },
     { $group: { _id: null, amount: { $sum: "$unmatchedPayments.amount" }, count: { $sum: 1 } } },
   ]);
-  ok(res, { cab: { ...(cab || {}), unmatchedPending: unmatched?.amount ?? 0, unmatchedCount: unmatched?.count ?? 0 }, payouts });
+  ok(res, { cab: { ...(cab || {}), unmatchedPending: unmatched?.amount ?? 0, unmatchedCount: unmatched?.count ?? 0 }, payouts: hostPayouts, hostPayouts, driverPayouts });
 });
 
 router.get("/audit-log", async (req, res) => {

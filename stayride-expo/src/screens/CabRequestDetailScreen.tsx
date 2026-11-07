@@ -67,6 +67,9 @@ export const CabRequestDetailScreen: React.FC = () => {
   const [ownFare, setOwnFare] = useState('');
   const [stars, setStars] = useState(0);
   const insets = useSafeAreaInsets();
+  // Every server write below awaits the response and reports failures
+  // A ref, not the busy state, so two taps in the same frame can't both get through
+  const busyRef = useRef(false);
 
   // Leaving the screen ends this rating "form": a later rating attempt gets a fresh Idempotency-Key
   useEffect(() => () => api.clearIdempotencyKeys(`/trips/${tripId}/rate`), [tripId]);
@@ -161,9 +164,6 @@ export const CabRequestDetailScreen: React.FC = () => {
     setSearchMode('network');
   };
 
-  // Every server write below awaits the response and reports failures
-  // A ref, not the busy state, so two taps in the same frame can't both get through
-  const busyRef = useRef(false);
   const run = async (fn: () => Promise<ActionOutcome | void>) => {
     if (busyRef.current) return;
     busyRef.current = true;

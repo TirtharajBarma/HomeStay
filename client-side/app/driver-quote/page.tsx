@@ -34,6 +34,7 @@ type QuoteView = {
   cancellationReason?: string | null;
   assignedToMe?: boolean;
   guestName?: string;
+  guestNotes?: string;
   phone?: string;
   fare?: number;
   advanceAmount?: number;
@@ -758,6 +759,13 @@ function DriverQuoteContent() {
                     <p className="text-[11px] font-semibold text-[#14422D]">
                       💡 Quote your TOTAL fare including both legs and waiting time.
                     </p>
+                  </div>
+                )}
+
+                {view.guestNotes && (
+                  <div className="rounded-2xl bg-amber-500/10 border border-amber-500/20 p-3 text-xs text-amber-950 space-y-0.5">
+                    <span className="font-bold text-[10px] uppercase tracking-wider text-amber-800 block">Trip / Tour Notes</span>
+                    <p className="text-xs font-medium text-amber-900 leading-relaxed">{view.guestNotes}</p>
                   </div>
                 )}
               </div>

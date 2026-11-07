@@ -317,21 +317,22 @@ export const HomestayProfileScreen: React.FC = () => {
         onClose={() => setPinVisible(false)}
       />
 
+      {/* Map picker for editing details (kept at top-level so iOS modal doesn't clash) */}
+      <LocationPicker
+        visible={editPinVisible}
+        title="Pin your homestay"
+        initial={pinDraft}
+        onConfirm={(loc) => {
+          setPinDraft({ latitude: loc.latitude, longitude: loc.longitude });
+          if (loc.address) setAddress(loc.address);
+          setEditPinVisible(false);
+        }}
+        onClose={() => setEditPinVisible(false)}
+      />
+
       {/* Edit details: full-screen form with grouped fields */}
-      <Modal visible={editVisible} animationType="slide" onRequestClose={() => setEditVisible(false)}>
+      <Modal visible={editVisible && !editPinVisible} animationType="slide" onRequestClose={() => setEditVisible(false)}>
         <View style={[styles.sheet, { paddingTop: insets.top }]}>
-          {/* iOS shows one modal at a time: the map opens inside this sheet */}
-          <LocationPicker
-            visible={editPinVisible}
-            title="Pin your homestay"
-            initial={pinDraft}
-            onConfirm={(loc) => {
-              setPinDraft({ latitude: loc.latitude, longitude: loc.longitude });
-              if (loc.address) setAddress(loc.address);
-              setEditPinVisible(false);
-            }}
-            onClose={() => setEditPinVisible(false)}
-          />
           <View style={styles.sheetHeader}>
             <TouchableOpacity onPress={() => setEditVisible(false)} hitSlop={10} accessibilityLabel="Close">
               <Ionicons name="close" size={24} color={Colors.textPrimary} />

@@ -49,12 +49,27 @@ export const API_ENDPOINTS = {
       `${API_BASE_URL}/stayride/public/guest-links/${encodeURIComponent(token)}/cab-requests`,
     bySlugSubmit: (slug: string) =>
       `${API_BASE_URL}/stayride/public/properties/${encodeURIComponent(slug)}/cab-requests`,
-    status: (reference: string, token?: string) =>
-      `${API_BASE_URL}/stayride/public/cab-requests/${encodeURIComponent(reference)}${token ? `?t=${encodeURIComponent(token)}` : ""}`,
-    rate: (reference: string, token?: string) =>
-      `${API_BASE_URL}/stayride/public/cab-requests/${encodeURIComponent(reference)}/rate${token ? `?t=${encodeURIComponent(token)}` : ""}`,
-    paymentClaim: (reference: string, token?: string) =>
-      `${API_BASE_URL}/stayride/public/cab-requests/${encodeURIComponent(reference)}/payment-claim${token ? `?t=${encodeURIComponent(token)}` : ""}`,
+    status: (reference: string, token?: string, phone?: string) => {
+      const q = new URLSearchParams();
+      if (token) q.set("t", token);
+      if (phone) q.set("phone", phone);
+      const qs = q.toString();
+      return `${API_BASE_URL}/stayride/public/cab-requests/${encodeURIComponent(reference)}${qs ? `?${qs}` : ""}`;
+    },
+    rate: (reference: string, token?: string, phone?: string) => {
+      const q = new URLSearchParams();
+      if (token) q.set("t", token);
+      if (phone) q.set("phone", phone);
+      const qs = q.toString();
+      return `${API_BASE_URL}/stayride/public/cab-requests/${encodeURIComponent(reference)}/rate${qs ? `?${qs}` : ""}`;
+    },
+    paymentClaim: (reference: string, token?: string, phone?: string) => {
+      const q = new URLSearchParams();
+      if (token) q.set("t", token);
+      if (phone) q.set("phone", phone);
+      const qs = q.toString();
+      return `${API_BASE_URL}/stayride/public/cab-requests/${encodeURIComponent(reference)}/payment-claim${qs ? `?${qs}` : ""}`;
+    },
   },
   platform: {
     publicConfig: () => `${API_BASE_URL}/stayride/public/config`,

@@ -265,6 +265,31 @@ const STATUS_FRIENDLY_LABELS: Record<string, string> = {
 const toLocalYmd = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
+const toDisplayDate = (ymdOrMs: string | number | null | undefined): string => {
+  if (!ymdOrMs) return "—";
+  if (typeof ymdOrMs === "string" && /^\d{4}-\d{2}-\d{2}$/.test(ymdOrMs)) {
+    const [y, m, d] = ymdOrMs.split("-");
+    return `${d}/${m}/${y}`;
+  }
+  const dateObj = new Date(ymdOrMs);
+  if (isNaN(dateObj.getTime())) return String(ymdOrMs);
+  const d = String(dateObj.getDate()).padStart(2, "0");
+  const m = String(dateObj.getMonth() + 1).padStart(2, "0");
+  const y = dateObj.getFullYear();
+  return `${d}/${m}/${y}`;
+};
+
+const calcReturnYmd = (startDateYmd: string, days: number): string => {
+  if (!startDateYmd) return startDateYmd;
+  const [y, m, d] = startDateYmd.split("-").map(Number);
+  const dtObj = new Date(y, m - 1, d);
+  dtObj.setDate(dtObj.getDate() + Math.max(0, days - 1));
+  const ry = dtObj.getFullYear();
+  const rm = String(dtObj.getMonth() + 1).padStart(2, "0");
+  const rd = String(dtObj.getDate()).padStart(2, "0");
+  return `${ry}-${rm}-${rd}`;
+};
+
 const toTime24 = (t12: string) => {
   if (!t12) return "09:00";
   const match = t12.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
@@ -335,6 +360,7 @@ function CabRequestFormContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get("t") || "";
   const refParam = searchParams.get("ref") || "";
+  const phoneParam = searchParams.get("phone") || searchParams.get("p") || "";
   const homestayParam = searchParams.get("h") || searchParams.get("homestay") || "";
   const isNoLink = !token && !refParam && !homestayParam;
 
@@ -350,8 +376,10 @@ function CabRequestFormContent() {
   const [activeTab, setActiveTab] = useState<"custom" | "popular">("custom");
   const [selectedPopularRouteId, setSelectedPopularRouteId] = useState<string>("homestay-to-bagdogra");
 
-  // Round Trip preference (Requirement 5)
-  const [isRoundTrip, setIsRoundTrip] = useState<boolean>(false);
+  // Trip Type: Multi-Day Tour (Default & 1st) vs Round Trip vs One-Way Drop
+  const [tripType, setTripType] = useState<"multiday" | "roundtrip" | "oneway">("multiday");
+  const [tourDays, setTourDays] = useState<number>(3);
+  const [isRoundTrip, setIsRoundTrip] = useState<boolean>(true);
 
   // Pickup & Drop locations
   const [pickup, setPickup] = useState("");
@@ -443,10 +471,11 @@ function CabRequestFormContent() {
 
   // Fetch curated places for tourist suggestions
   useEffect(() => {
-    apiFetch<{ data?: Array<{ name?: string }> }>(API_ENDPOINTS.cabs.places())
+    apiFetch<any>(API_ENDPOINTS.cabs.places())
       .then((res) => {
-        if (res?.data && Array.isArray(res.data)) {
-          setPlacesList(res.data.map((p) => p.name || "").filter(Boolean));
+        const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
+        if (list.length > 0) {
+          setPlacesList(list.map((p: any) => p?.name || (typeof p === "string" ? p : "")).filter(Boolean));
         }
       })
       .catch(() => {});
@@ -526,7 +555,7 @@ function CabRequestFormContent() {
   const fetchStatus = async (reference: string) => {
     setStatusLoading(true);
     try {
-      const data = await apiFetch<CabRequestStatus>(API_ENDPOINTS.cabRequests.status(reference, token));
+      const data = await apiFetch<CabRequestStatus>(API_ENDPOINTS.cabRequests.status(reference, token, guestPhone.trim() || phoneParam));
       setTripStatus(data);
     } catch (e) {
       if (isNotFound(e)) setBookingNotFound(true);
@@ -541,7 +570,7 @@ function CabRequestFormContent() {
     let cancelled = false;
     if (!token) {
       if (refParam) {
-        apiFetch<CabRequestStatus>(API_ENDPOINTS.cabRequests.status(refParam, token))
+        apiFetch<CabRequestStatus>(API_ENDPOINTS.cabRequests.status(refParam, token, phoneParam))
           .then((data) => {
             if (!cancelled) {
               setTripStatus(data);
@@ -642,7 +671,7 @@ function CabRequestFormContent() {
           setLinkState("invalid");
           return;
         }
-        apiFetch<CabRequestStatus>(API_ENDPOINTS.cabRequests.status(refParam, token))
+        apiFetch<CabRequestStatus>(API_ENDPOINTS.cabRequests.status(refParam, token, phoneParam))
           .then((data) => {
             if (cancelled) return;
             setTripStatus(data);
@@ -656,7 +685,7 @@ function CabRequestFormContent() {
     return () => {
       cancelled = true;
     };
-  }, [token, refParam, homestayParam]);
+  }, [token, refParam, homestayParam, phoneParam]);
 
   // Status polling every 10 seconds while active
   useEffect(() => {
@@ -666,7 +695,7 @@ function CabRequestFormContent() {
     if (tripStatus?.status && finalStatuses.includes(tripStatus.status)) return;
 
     const interval = setInterval(() => {
-      apiFetch<CabRequestStatus>(API_ENDPOINTS.cabRequests.status(activeRef, token))
+      apiFetch<CabRequestStatus>(API_ENDPOINTS.cabRequests.status(activeRef, token, guestPhone.trim() || phoneParam))
         .then((data) => {
           if (data?.status) setTripStatus(data);
         })
@@ -801,13 +830,20 @@ function CabRequestFormContent() {
         passengers,
         vehicleType: autoVehicleType,
         isRoundTrip,
-        returnDate: sendSpecificReturn && selectedReturnDateObj ? selectedReturnDateObj.getTime() : undefined,
+        returnDate:
+          sendSpecificReturn && selectedReturnDateObj
+            ? selectedReturnDateObj.getTime()
+            : tripType === "multiday"
+              ? selectedDateObj.getTime() + (Math.max(1, tourDays) - 1) * 86400000
+              : undefined,
         returnTime: sendSpecificReturn ? returnTime : undefined,
         guestName: guestName.trim(),
         phone: cleanPhone,
-        notes: isRoundTrip && returnTimingMode === "flexible"
-          ? `${notes.trim() ? `${notes.trim()} ` : ""}[Round Trip: Return schedule flexible / driver waits]`.trim()
-          : notes.trim(),
+        notes: (
+          (tripType === "multiday" ? `[Multi-Day Tour: ${tourDays} Days Package] ` : "") +
+          (tripType === "roundtrip" && returnTimingMode === "flexible" ? `[Round Trip: Return schedule flexible / driver waits] ` : "") +
+          notes.trim()
+        ).trim(),
         clientRequestId,
         recaptchaToken,
       };
@@ -828,6 +864,12 @@ function CabRequestFormContent() {
       );
 
       setConfirmedTrip({ reference: res.reference, status: res.status });
+      if (typeof window !== "undefined") {
+        const url = new URL(window.location.href);
+        url.searchParams.set("ref", res.reference);
+        if (cleanPhone) url.searchParams.set("phone", cleanPhone);
+        window.history.replaceState(null, "", url.toString());
+      }
       await fetchStatus(res.reference);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to submit request. Please try again.";
@@ -1763,24 +1805,31 @@ function CabRequestFormContent() {
                     <p className="text-xs text-[#717973] mt-0.5">Verified local drivers · Fair rates · Door-to-door hill transfers</p>
                   </div>
 
-                  {/* Top-Level Trip Type Segmented Pill: One-Way vs Round Trip */}
+                  {/* Top-Level Trip Type Segmented Pill: Multi-Day Tour vs Round Trip vs One-Way */}
                   <div className="inline-flex items-center p-1 bg-[#ECEFEB] rounded-full self-start sm:self-auto shadow-inner">
                     <button
                       type="button"
-                      onClick={() => setIsRoundTrip(false)}
-                      className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
-                        !isRoundTrip
-                          ? "bg-white text-[#14422D] shadow-xs"
+                      onClick={() => {
+                        setTripType("multiday");
+                        setIsRoundTrip(true);
+                      }}
+                      className={`inline-flex items-center gap-1 px-3 sm:px-4 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                        tripType === "multiday"
+                          ? "bg-[#14422D] text-white shadow-xs"
                           : "text-[#717973] hover:text-[#181C1B]"
                       }`}
                     >
-                      One-Way
+                      <Icon name="explore" className="text-xs" />
+                      <span>Multi-Day Tour</span>
                     </button>
                     <button
                       type="button"
-                      onClick={() => setIsRoundTrip(true)}
-                      className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
-                        isRoundTrip
+                      onClick={() => {
+                        setTripType("roundtrip");
+                        setIsRoundTrip(true);
+                      }}
+                      className={`inline-flex items-center gap-1 px-3 sm:px-4 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                        tripType === "roundtrip"
                           ? "bg-[#14422D] text-white shadow-xs"
                           : "text-[#717973] hover:text-[#181C1B]"
                       }`}
@@ -1788,8 +1837,61 @@ function CabRequestFormContent() {
                       <Icon name="sync_alt" className="text-xs" />
                       <span>Round Trip</span>
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTripType("oneway");
+                        setIsRoundTrip(false);
+                      }}
+                      className={`px-3 sm:px-4 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                        tripType === "oneway"
+                          ? "bg-[#14422D] text-white shadow-xs"
+                          : "text-[#717973] hover:text-[#181C1B]"
+                      }`}
+                    >
+                      One-Way Drop
+                    </button>
                   </div>
                 </div>
+
+                {/* Multi-Day Tour Package Banner & Duration */}
+                {tripType === "multiday" && (
+                  <div className="rounded-2xl border border-[#14422D]/20 bg-[#14422D]/5 p-3.5 sm:p-4 text-xs text-[#14422D] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+                    <div className="flex items-center gap-2.5">
+                      <div className="h-8 w-8 rounded-xl bg-[#14422D] text-white flex items-center justify-center shrink-0">
+                        <Icon name="verified" className="text-base" />
+                      </div>
+                      <div>
+                        <span className="font-bold text-xs block text-[#14422D]">Dedicated Cab &amp; Driver for Entire Tour</span>
+                        <span className="text-[11px] text-[#717973]">Driver stays with you for all sightseeing, viewpoints, and multi-day travel.</span>
+                      </div>
+                    </div>
+                    <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2 self-end sm:self-center shrink-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-bold text-[#14422D]">Tour Duration:</span>
+                        <select
+                          value={tourDays}
+                          onChange={(e) => {
+                            const count = Number(e.target.value);
+                            setTourDays(count);
+                            setReturnDate(calcReturnYmd(date, count));
+                          }}
+                          className="rounded-xl border border-[#D8DBD7] bg-white px-2.5 py-1 text-xs font-bold text-[#14422D] focus:outline-none cursor-pointer"
+                        >
+                          <option value={2}>2 Days / 1 Night</option>
+                          <option value={3}>3 Days / 2 Nights</option>
+                          <option value={4}>4 Days / 3 Nights</option>
+                          <option value={5}>5 Days / 4 Nights</option>
+                          <option value={6}>6 Days / 5 Nights</option>
+                          <option value={7}>7+ Days Full Tour</option>
+                        </select>
+                      </div>
+                      <span className="text-[10px] font-mono font-bold bg-[#14422D]/10 px-2 py-0.5 rounded text-[#14422D]">
+                        {toDisplayDate(date)} ➔ {toDisplayDate(calcReturnYmd(date, tourDays))}
+                      </span>
+                    </div>
+                  </div>
+                )}
 
                 {/* Unified Connected Route Card */}
                 <div className="rounded-2xl border border-[#D8DBD7] bg-[#F7FAF7]/60 p-4 sm:p-5 shadow-2xs space-y-3.5">
@@ -1822,14 +1924,21 @@ function CabRequestFormContent() {
                             <input
                               type="text"
                               value={pickup}
+                              onClick={() =>
+                                setMapTarget({
+                                  type: "pickup",
+                                  title: "Pin Pickup Location on Map",
+                                  initialAddress: getResolvedPickup(),
+                                })
+                              }
                               onFocus={() => setActiveSuggestIdx("pickup")}
                               onChange={(e) => {
                                 setPickup(e.target.value);
                                 setCustomPickup(true);
                                 setActiveSuggestIdx("pickup");
                               }}
-                              placeholder="Enter pickup address, homestay, station, or airport"
-                              className="w-full rounded-2xl border border-[#D8DBD7] bg-white pl-4 pr-24 py-2.5 text-xs font-semibold text-[#181C1B] placeholder:text-[#717973]/60 focus:border-[#14422D] focus:ring-2 focus:ring-[#14422D]/10 focus:outline-none transition-all shadow-2xs"
+                              placeholder="Tap to pick on map or search pickup location"
+                              className="w-full rounded-2xl border border-[#D8DBD7] bg-white pl-4 pr-24 py-2.5 text-xs font-semibold text-[#181C1B] placeholder:text-[#717973]/60 focus:border-[#14422D] focus:ring-2 focus:ring-[#14422D]/10 focus:outline-none transition-all shadow-2xs cursor-pointer"
                             />
                             <div className="absolute right-2.5 flex items-center gap-1.5">
                               {pickup && (
@@ -1955,6 +2064,14 @@ function CabRequestFormContent() {
                                 <input
                                   type="text"
                                   value={dest}
+                                  onClick={() =>
+                                    setMapTarget({
+                                      type: "drop",
+                                      index: idx,
+                                      title: customDestinations.length > 1 ? `Pin Stop ${idx + 1} on Map` : "Pin Destination on Map",
+                                      initialAddress: dest,
+                                    })
+                                  }
                                   onFocus={() => setActiveSuggestIdx(idx)}
                                   onChange={(e) => {
                                     const copy = [...customDestinations];
@@ -1962,8 +2079,8 @@ function CabRequestFormContent() {
                                     setCustomDestinations(copy);
                                     setActiveSuggestIdx(idx);
                                   }}
-                                  placeholder={idx === 0 ? "Enter destination (e.g. Bagdogra Airport, Tiger Hill)" : `Destination stop ${idx + 1}`}
-                                  className={`w-full rounded-2xl border border-[#D8DBD7] bg-white pl-4 py-2.5 text-xs font-semibold text-[#181C1B] placeholder:text-[#717973]/60 focus:border-[#14422D] focus:ring-2 focus:ring-[#14422D]/10 focus:outline-none transition-all shadow-2xs ${
+                                  placeholder={idx === 0 ? "Tap to pick on map or search destination" : `Destination stop ${idx + 1} (tap for map)`}
+                                  className={`w-full rounded-2xl border border-[#D8DBD7] bg-white pl-4 py-2.5 text-xs font-semibold text-[#181C1B] placeholder:text-[#717973]/60 focus:border-[#14422D] focus:ring-2 focus:ring-[#14422D]/10 focus:outline-none transition-all shadow-2xs cursor-pointer ${
                                     customDestinations.length > 1 ? "pr-32" : "pr-24"
                                   }`}
                                 />
@@ -2232,7 +2349,9 @@ function CabRequestFormContent() {
                     onChange={(e) => {
                       const newDate = e.target.value;
                       setDate(newDate);
-                      if (returnDate && returnDate < newDate) {
+                      if (tripType === "multiday") {
+                        setReturnDate(calcReturnYmd(newDate, tourDays));
+                      } else if (returnDate && returnDate < newDate) {
                         setReturnDate(newDate);
                       }
                     }}
@@ -2263,42 +2382,6 @@ function CabRequestFormContent() {
                     />
                     <div className="pointer-events-none absolute inset-y-0 right-0 hidden sm:flex items-center pr-4 text-[11px] text-[#717973] font-medium">
                       Tap for clock
-                    </div>
-                  </div>
-
-                  {/* Quick Mountain Departure Shortcuts */}
-                  <div className="space-y-2 pt-1">
-                    <span className="text-[11px] text-[#717973] font-semibold uppercase tracking-wider block">Popular Mountain Departures:</span>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                      {[
-                        { label: "04:00 AM", sub: "Tiger Hill Sunrise" },
-                        { label: "07:30 AM", sub: "Flight / Train Drop" },
-                        { label: "09:30 AM", sub: "Check-out Transfer" },
-                        { label: "10:30 AM", sub: "Day Sightseeing" },
-                        { label: "02:00 PM", sub: "Afternoon Tour" },
-                        { label: "06:00 PM", sub: "Dinner / Mall Road" },
-                      ].map((slot) => {
-                        const isMatch = time === slot.label;
-                        return (
-                          <button
-                            key={slot.label}
-                            type="button"
-                            onClick={() => setTime(slot.label)}
-                            className={`flex flex-col items-start px-3 py-2.5 rounded-2xl text-left border transition-all cursor-pointer ${
-                              isMatch
-                                ? "bg-[#14422D] text-white border-[#14422D] shadow-xs"
-                                : "bg-[#F7FAF7] border-[#E5E8E5] text-[#181C1B] hover:bg-[#ECEFEB]"
-                            }`}
-                          >
-                            <span className={`text-xs font-bold leading-none ${isMatch ? "text-white" : "text-[#181C1B]"}`}>
-                              {slot.label}
-                            </span>
-                            <span className={`text-[10px] mt-1 line-clamp-1 ${isMatch ? "text-[#BCEECF]" : "text-[#717973]"}`}>
-                              {slot.sub}
-                            </span>
-                          </button>
-                        );
-                      })}
                     </div>
                   </div>
                 </div>
@@ -2383,7 +2466,6 @@ function CabRequestFormContent() {
                 <div className="space-y-2 pt-1">
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-bold text-[#181C1B] block">Number of Passengers</label>
-                    <span className="text-[11px] text-[#717973] font-medium">Mountain vehicles up to 20 pax</span>
                   </div>
                   <div className="flex items-center justify-between rounded-2xl border border-[#E5E8E5] p-5 bg-[#F7FAF7]">
                     <div>
@@ -2421,30 +2503,6 @@ function CabRequestFormContent() {
                         +
                       </button>
                     </div>
-                  </div>
-
-                  {/* Quick Pax Badges */}
-                  <div className="flex items-center gap-1.5 pt-1">
-                    {[
-                      { label: "Solo (1)", count: 1 },
-                      { label: "Couple (2)", count: 2 },
-                      { label: "Family (4)", count: 4 },
-                      { label: "Group (6)", count: 6 },
-                      { label: "Large (8)", count: 8 },
-                    ].map((badge) => (
-                      <button
-                        key={badge.label}
-                        type="button"
-                        onClick={() => setPassengers(badge.count)}
-                        className={`rounded-full px-2.5 py-1 text-[10px] font-bold transition-all cursor-pointer ${
-                          passengers === badge.count
-                            ? "bg-[#14422D] text-white shadow-xs"
-                            : "bg-white border border-[#D8DBD7] text-[#414943] hover:border-[#14422D]"
-                        }`}
-                      >
-                        {badge.label}
-                      </button>
-                    ))}
                   </div>
                   <p className="text-[11px] text-[#717973] pt-0.5">
                     Drivers with suitably-sized mountain vehicles (Hatchbacks, Boleros, Innovas, or Travellers) will quote you directly.
@@ -2607,7 +2665,7 @@ function CabRequestFormContent() {
                       <span className="font-display font-bold text-[#14422D] text-sm">Trip Summary</span>
                     </div>
                     <span className="rounded-full bg-[#14422D]/10 border border-[#14422D]/15 px-3 py-1 text-[10px] font-bold text-[#14422D]">
-                      {isRoundTrip ? "🔄 Round Trip" : "One-Way Transfer"}
+                      {tripType === "multiday" ? `🏔️ Multi-Day Tour (${tourDays} Days)` : isRoundTrip ? "🔄 Round Trip" : "One-Way Transfer"}
                     </span>
                   </div>
 
@@ -2653,15 +2711,17 @@ function CabRequestFormContent() {
                         {isRoundTrip && (
                           <div className="pt-1">
                             <span className="text-[10px] font-bold uppercase tracking-wider text-[#14422D] block">
-                              Return Journey (Round Trip)
+                              {tripType === "multiday" ? `Multi-Day Tour Return (${tourDays} Days)` : "Return Journey (Round Trip)"}
                             </span>
                             <p className="font-bold text-[#14422D] text-xs mt-0.5">
                               Return drop back to {getResolvedPickup()}
                             </p>
                             <span className="text-[11px] text-[#717973]">
                               {returnTimingMode === "specific" && returnTime
-                                ? `Specific Return: ${returnDate === date ? "Same Day" : returnDate} at ${returnTime}`
-                                : "Flexible Return: Driver waits during your sightseeing/visit"}
+                                ? `Specific Return: ${returnDate === date ? "Same Day" : toDisplayDate(returnDate)} at ${returnTime}`
+                                : tripType === "multiday"
+                                  ? `Tour Return: ${toDisplayDate(returnDate || calcReturnYmd(date, tourDays))} at drop-off`
+                                  : "Flexible Return: Driver waits during your sightseeing/visit"}
                             </span>
                           </div>
                         )}
@@ -2672,8 +2732,8 @@ function CabRequestFormContent() {
                   {/* Trip Spec Chips Grid */}
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
                     <div className="rounded-2xl border border-[#ECEFEB] bg-white p-3">
-                      <span className="text-[10px] text-[#717973] block font-medium">Schedule</span>
-                      <span className="font-bold text-[#181C1B] block mt-0.5">{date}</span>
+                      <span className="text-[10px] text-[#717973] block font-medium">Departure Date</span>
+                      <span className="font-bold text-[#181C1B] block mt-0.5">{toDisplayDate(date)}</span>
                       <span className="text-[11px] text-[#14422D] font-bold block">{time}</span>
                     </div>
 

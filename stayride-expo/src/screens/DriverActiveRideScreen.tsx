@@ -276,7 +276,17 @@ export const DriverActiveRideScreen: React.FC = () => {
             {/* Start Ride Button: when trip is CONFIRMED and waiting to start */}
             {activeRide.status === 'CONFIRMED' && (
               <>
-                {!pinModalVisible ? (
+                {!activeRide.advancePaid ? (
+                  <View style={styles.waitingAdvanceCard}>
+                    <Ionicons name="time-outline" size={24} color="#D97706" />
+                    <View style={{ flex: 1, marginLeft: 10 }}>
+                      <Text style={styles.waitingAdvanceTitle}>Awaiting Guest Advance Payment</Text>
+                      <Text style={styles.waitingAdvanceSub}>
+                        Passenger must complete their advance payment ({typeof activeRide.advanceAmount === 'number' ? formatINR(activeRide.advanceAmount) : 'online'}) before boarding PIN can be verified.
+                      </Text>
+                    </View>
+                  </View>
+                ) : !pinModalVisible ? (
                   <TouchableOpacity
                     style={[styles.startBtn]}
                     onPress={() => setPinModalVisible(true)}
@@ -643,6 +653,27 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 11,
     color: '#92400E',
+    lineHeight: 16,
+  },
+  waitingAdvanceCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1.5,
+    borderColor: '#F59E0B',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 12,
+  },
+  waitingAdvanceTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#92400E',
+    marginBottom: 2,
+  },
+  waitingAdvanceSub: {
+    fontSize: 12,
+    color: '#B45309',
     lineHeight: 16,
   },
   // Fix 8: Start ride — outline green

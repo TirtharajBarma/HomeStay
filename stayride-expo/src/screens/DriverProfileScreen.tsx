@@ -71,16 +71,26 @@ export const DriverProfileScreen: React.FC = () => {
   const handleSaveVehicle = async () => {
     setSavingVehicle(true);
     try {
+      const model = vehicleModel.trim();
+      const plate = vehiclePlate.trim().toUpperCase();
+      const area = vehicleArea.trim();
+      await api.patch('/driver/profile', { model, plate, area });
       if (session?.driver) {
-        session.driver.vehicle = vehicleModel.trim() || session.driver.vehicle;
-        session.driver.plate = vehiclePlate.trim().toUpperCase() || session.driver.plate;
-        session.driver.area = vehicleArea.trim() || session.driver.area;
-        await api.saveSession(session);
+        const nextSession: UserSession = {
+          ...session,
+          driver: {
+            ...session.driver,
+            vehicle: model || session.driver.vehicle,
+            plate: plate || session.driver.plate,
+            area: area || session.driver.area,
+          },
+        };
+        await api.saveSession(nextSession);
       }
       setIsEditingVehicle(false);
       Alert.alert('Vehicle Updated', 'Your vehicle and operating details have been updated.');
-    } catch {
-      setIsEditingVehicle(false);
+    } catch (err: any) {
+      Alert.alert('Save Failed', err?.message || 'Could not update vehicle details on the server.');
     } finally {
       setSavingVehicle(false);
     }

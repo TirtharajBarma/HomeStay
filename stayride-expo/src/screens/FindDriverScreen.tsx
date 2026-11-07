@@ -373,11 +373,11 @@ export const FindDriverScreen: React.FC = () => {
                   placeholderTextColor={Colors.textTertiary}
                 />
               ) : (
-                <TouchableOpacity onPress={() => setEditPickup(true)} accessibilityRole="button" accessibilityLabel="Change pickup">
+                <TouchableOpacity onPress={() => setPickupMapVisible(true)} accessibilityRole="button" accessibilityLabel="Change pickup on map">
                   <Text style={styles.routeValue} numberOfLines={2}>
                     {homestayPickup}
                   </Text>
-                  <Text style={styles.routeHint}>Your homestay · tap to change</Text>
+                  <Text style={styles.routeHint}>Your homestay · tap to search or pick on map</Text>
                 </TouchableOpacity>
               )}
               {pickupIsCustom ? (

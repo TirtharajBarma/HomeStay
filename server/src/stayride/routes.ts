@@ -1986,6 +1986,27 @@ stayrideV1Router.patch('/driver/whatsapp-alerts', driverGate, async (req: Reques
   res.json({ success: true, whatsappAlerts: enabled });
 });
 
+stayrideV1Router.patch('/driver/profile', driverGate, async (req: Request, res: Response) => {
+  const isDemo = isDemoKey(authOf(req).tenantKey);
+  const model = typeof req.body?.model === 'string' ? req.body.model.trim() : undefined;
+  const plate = typeof req.body?.plate === 'string' ? req.body.plate.trim().toUpperCase() : undefined;
+  const area = typeof req.body?.area === 'string' ? req.body.area.trim() : undefined;
+  const type = typeof req.body?.type === 'string' ? req.body.type.trim() : undefined;
+
+  if (!isDemo) {
+    const update: Record<string, any> = {};
+    if (model !== undefined) update['vehicle.model'] = model;
+    if (plate !== undefined) update['vehicle.plate'] = plate;
+    if (area !== undefined) update['vehicle.area'] = area;
+    if (type !== undefined) update['vehicle.type'] = type;
+
+    if (Object.keys(update).length > 0) {
+      await getUserModel(false).updateOne({ _id: (req as any).driver._id }, { $set: update });
+    }
+  }
+  res.json({ success: true, vehicle: { model, plate, area, type } });
+});
+
 // Driver app reports where the driver is, so "nearby" requests are really nearby.
 stayrideV1Router.patch('/driver/location', driverGate, async (req: Request, res: Response) => {
   const lat = Number(req.body?.lat);

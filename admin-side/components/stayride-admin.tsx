@@ -38,6 +38,18 @@ const formatDate = (v: unknown) => {
   const d = parseDateObj(v);
   return d ? d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" }) : String(v || "—");
 };
+const formatDDMMYYYY = (v: unknown) => {
+  if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v)) {
+    const [y, m, d] = v.split("-");
+    return `${d}/${m}/${y}`;
+  }
+  const d = parseDateObj(v);
+  if (!d) return String(v || "—");
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
+};
 /** Id of a server record: new API objects use `id`, older ones `_id`. */
 const rid = (r: Any | null | undefined) => String(r?.id ?? r?._id ?? "");
 
@@ -198,13 +210,15 @@ function Panel({ title, subtitle, onRefresh, error, loading, children, right, up
   );
 }
 
-function Badge({ children, tone = "slate" }: { children: ReactNode; tone?: "slate" | "green" | "amber" | "red" | "blue" }) {
+function Badge({ children, tone = "slate" }: { children: ReactNode; tone?: "slate" | "green" | "amber" | "red" | "blue" | "cyan" | "purple" }) {
   const tones = {
     slate: "bg-slate-800 text-slate-300 border-slate-700",
     green: "bg-emerald-950 text-emerald-400 border-emerald-800/40",
     amber: "bg-amber-950 text-amber-400 border-amber-800/40",
     red: "bg-red-950 text-red-400 border-red-800/40",
     blue: "bg-blue-950 text-blue-300 border-blue-800/40",
+    cyan: "bg-cyan-950 text-cyan-300 border-cyan-800/40",
+    purple: "bg-purple-950 text-purple-300 border-purple-800/40",
   };
   return <span className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-bold ${tones[tone]}`}>{children}</span>;
 }
@@ -427,31 +441,54 @@ export function UsersTab({ demo }: TabProps) {
                 {items.map((u) => (
                   <tr key={rid(u)} className="align-top hover:bg-slate-900/40">
                     <td className="p-3">
-                      <p className="font-semibold text-white">
-                        {u.name || "—"} {u.isDemo && <Badge tone="amber">demo</Badge>} {u.deletedAt && <Badge tone="red">deleted</Badge>}
-                      </p>
-                      <p className="text-slate-500">{u.email || "—"} • {u.phone || "—"}</p>
-                      {u.tenantKey && <p className="font-mono text-[10px] text-slate-500">{u.tenantKey}</p>}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-semibold text-white">{u.name || "—"}</span>
+                        {u.isDemo && <Badge tone="amber">demo</Badge>}
+                        {u.deletedAt && <Badge tone="red">deleted</Badge>}
+                      </div>
+                      <p className="text-slate-400 text-xs">{u.email || "—"}</p>
+                      <p className="text-slate-500 text-[11px]">{u.phone || "No phone"}</p>
+                      {u.tenantKey && u.tenantKey !== u.email && (
+                        <span className="inline-flex items-center gap-1 mt-0.5 rounded bg-slate-800/80 px-1.5 py-0.5 font-mono text-[10px] text-slate-400 border border-slate-700/60">
+                          Property: {u.tenantKey}
+                        </span>
+                      )}
                     </td>
                     <td className="p-3"><Badge tone={u.role === "admin" ? "blue" : "slate"}>{u.role}</Badge></td>
                     <td className="p-3">
                       {statusBadge(u.accountStatus)}
-                      {u.statusReason && <p className="mt-1 text-[10px] text-slate-500">{u.statusReason}</p>}
+                      {u.statusReason && u.accountStatus !== "ACTIVE" && (
+                        <p className="mt-1 text-[10px] text-amber-400/90 font-mono">Reason: {u.statusReason}</p>
+                      )}
                     </td>
                     <td className="p-3 text-slate-300">
                       {u.role === "driver" ? ratingText(u) : "—"}
-                      {u.vehicle && <p className="text-[10px] text-slate-500">{u.vehicle.model || u.vehicle.type || ""} • {u.vehicle.plate || "—"}</p>}
+                      {u.vehicle && (
+                        <div className="flex flex-wrap items-center gap-1 mt-1">
+                          <span className="rounded bg-slate-800 px-1.5 py-0.2 text-[10px] text-slate-300">{u.vehicle.model || u.vehicle.type || "Vehicle"}</span>
+                          <span className="rounded bg-slate-900 px-1.5 py-0.2 font-mono text-[10px] text-amber-400 border border-amber-900/30">{u.vehicle.plate || "—"}</span>
+                        </div>
+                      )}
                     </td>
-                    <td className="p-3 text-slate-400">{dt(u.createdAt)}</td>
+                    <td className="p-3 text-slate-400 whitespace-nowrap">{dt(u.createdAt)}</td>
                     <td className="p-3 text-right">
-                      <div className="flex flex-wrap justify-end gap-1">
-                        {u.accountStatus === "PENDING_APPROVAL" && !u.deletedAt && <button className={btn.ok} onClick={() => setDialog({ u, kind: "approve" })}>Approve</button>}
-                        {u.accountStatus === "BLOCKED" && !u.deletedAt && <button className={btn.ok} onClick={() => setDialog({ u, kind: "unblock" })}>Unblock</button>}
-                        {u.accountStatus !== "BLOCKED" && <button className={btn.danger} onClick={() => setDialog({ u, kind: "block" })}>Block</button>}
-                        {u.accountStatus === "ACTIVE" && u.role === "driver" && <button className={btn.ghost} onClick={() => setDialog({ u, kind: "pending" })}>Set pending</button>}
-                        {!u.deletedAt && <button className={btn.ghost} onClick={() => setDialog({ u, kind: "role" })}>Role</button>}
-                        <button className={btn.ghost} onClick={() => setDialog({ u, kind: "revoke" })}>Revoke sessions</button>
-                        {!u.deletedAt && <button className={btn.danger} onClick={() => setDialog({ u, kind: "delete" })}>Delete</button>}
+                      <div className="flex items-center justify-end gap-1.5">
+                        {u.accountStatus === "PENDING_APPROVAL" && !u.deletedAt && (
+                          <button className={btn.ok} onClick={() => setDialog({ u, kind: "approve" })}>Approve</button>
+                        )}
+                        {u.accountStatus === "BLOCKED" && !u.deletedAt && (
+                          <button className={btn.ok} onClick={() => setDialog({ u, kind: "unblock" })}>Unblock</button>
+                        )}
+                        {u.accountStatus !== "BLOCKED" && !u.deletedAt && (
+                          <button className={btn.danger} onClick={() => setDialog({ u, kind: "block" })}>Block</button>
+                        )}
+                        {!u.deletedAt && (
+                          <button className={btn.ghost} title="Change Role" onClick={() => setDialog({ u, kind: "role" })}>Role</button>
+                        )}
+                        <button className={btn.ghost} title="Revoke all active logins" onClick={() => setDialog({ u, kind: "revoke" })}>Sign out</button>
+                        {!u.deletedAt && (
+                          <button className="rounded border border-red-900/50 bg-red-950/40 px-2 py-1 text-[11px] font-semibold text-red-300 hover:bg-red-900/60 transition" onClick={() => setDialog({ u, kind: "delete" })}>Delete</button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -504,6 +541,8 @@ export function HomestaysTab({ demo, onOpenCabRequests }: HomestaysProps) {
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(0);
   const [viewing, setViewing] = useState<Any | null>(null);
+  const [configuring, setConfiguring] = useState<Any | null>(null);
+  const [bookingForGuest, setBookingForGuest] = useState<{ tenantKey: string; guestName?: string; guestPhone?: string; pickup?: string } | null>(null);
   const { data, error, loading, reload, updatedAt } = useLoad(
     () => adminApi("/stayride/tenants", { demo, query: { q: query, search: query, ...pq(page) } }).then(toPage),
     [demo, query, page],
@@ -513,19 +552,50 @@ export function HomestaysTab({ demo, onOpenCabRequests }: HomestaysProps) {
   return (
     <Panel
       title="Homestays"
-      subtitle="Block access, override features per homestay, set commission overrides and open a homestay's data."
+      subtitle="Operational fleet homestays. View booking & trip data, configure custom commission overrides, and manage feature permissions."
       onRefresh={reload}
       error={error}
       loading={loading}
       updatedAt={updatedAt}
       right={
         <form onSubmit={(e) => { e.preventDefault(); setPage(0); setQuery(search.trim()); }} className="flex gap-2">
-          <input className={input} placeholder="Search name or email" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <input className={input} placeholder="Search name, owner, or email" value={search} onChange={(e) => setSearch(e.target.value)} />
           <button className={btn.primary}>Search</button>
         </form>
       }
     >
-      {data && (items.length ? items.map((t) => <HomestayRow key={t.tenantKey} t={t} demo={demo} onChanged={reload} onOpen={() => setViewing(t)} />) : <Empty>No homestays found.</Empty>)}
+      {data && (
+        items.length ? (
+          <div className="overflow-x-auto rounded-xl border border-slate-800">
+            <table className="w-full text-left text-xs">
+              <thead className="border-b border-slate-800 bg-slate-900/60 text-slate-400 font-semibold uppercase tracking-wider">
+                <tr>
+                  <th className="p-3">Homestay & Location</th>
+                  <th className="p-3">Owner Contact</th>
+                  <th className="p-3">Status</th>
+                  <th className="p-3">Cab Activity & GMV</th>
+                  <th className="p-3">Overrides</th>
+                  <th className="p-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60">
+                {items.map((t) => (
+                  <HomestayRow
+                    key={t.tenantKey}
+                    t={t}
+                    demo={demo}
+                    onChanged={reload}
+                    onOpen={() => setViewing(t)}
+                    onConfigure={() => setConfiguring(t)}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <Empty>No homestays found.</Empty>
+        )
+      )}
       <Pager page={page} setPage={setPage} total={data?.total ?? null} count={items.length} />
       {viewing && (
         <TenantDataViewer
@@ -533,31 +603,140 @@ export function HomestaysTab({ demo, onOpenCabRequests }: HomestaysProps) {
           demo={demo}
           onClose={() => { setViewing(null); reload(); }}
           onOpenCabRequests={onOpenCabRequests ? (k) => { setViewing(null); onOpenCabRequests(k); } : undefined}
+          onBookCabForGuest={(params) => { setViewing(null); setBookingForGuest(params); }}
+        />
+      )}
+      {bookingForGuest && (
+        <AdminBookCabModal
+          demo={demo}
+          initialTenantKey={bookingForGuest.tenantKey}
+          initialGuestName={bookingForGuest.guestName}
+          initialGuestPhone={bookingForGuest.guestPhone}
+          initialPickup={bookingForGuest.pickup}
+          onClose={() => setBookingForGuest(null)}
+          onSuccess={() => { setBookingForGuest(null); reload(); }}
+        />
+      )}
+      {configuring && (
+        <HomestayConfigModal
+          t={configuring}
+          demo={demo}
+          onClose={() => setConfiguring(null)}
+          onChanged={() => { setConfiguring(null); reload(); }}
         />
       )}
     </Panel>
   );
 }
 
-function HomestayRow({ t, demo, onChanged, onOpen }: { t: Any; demo: boolean; onChanged: () => void; onOpen: () => void }) {
+function HomestayRow({
+  t,
+  demo,
+  onChanged,
+  onOpen,
+  onConfigure,
+}: {
+  t: Any;
+  demo: boolean;
+  onChanged: () => void;
+  onOpen: () => void;
+  onConfigure: () => void;
+}) {
   const o = t.commissionOverride;
-  const [pf, setPf] = useState("");
-  const [hc, setHc] = useState("");
-  const [adv, setAdv] = useState("");
+  const stats: Any = t.stats || {};
+  const overrides: Any = t.featureOverrides || {};
+  const activeCustomFlags = Object.values(overrides).filter((v) => v !== null && v !== undefined).length;
+
+  return (
+    <tr className="align-top hover:bg-slate-900/40 transition">
+      <td className="p-3">
+        <p className="font-bold text-white text-sm">{t.homestayName || t.tenantKey}</p>
+        <p className="text-slate-400 text-xs">{t.location || "Location not set"}</p>
+        <p className="text-[10px] text-slate-500 font-mono mt-0.5">{t.tenantKey}</p>
+      </td>
+      <td className="p-3">
+        <p className="font-semibold text-slate-200">{t.ownerName || "—"}</p>
+        <p className="text-slate-400 text-xs">{t.email || "—"}</p>
+        <p className="text-slate-500 text-[11px]">{t.phone || "No phone"}</p>
+      </td>
+      <td className="p-3">
+        {t.blocked ? (
+          <div>
+            <Badge tone="red">Suspended</Badge>
+            {t.blockReason && <p className="text-[10px] text-red-400 mt-1 max-w-[140px] truncate" title={t.blockReason}>{t.blockReason}</p>}
+          </div>
+        ) : (
+          <Badge tone="green">Active</Badge>
+        )}
+      </td>
+      <td className="p-3 text-slate-300">
+        <div className="font-semibold text-white">{stats.completed ?? 0} <span className="text-slate-400 font-normal">completed ({stats.requests ?? 0} total)</span></div>
+        <div className="font-mono text-emerald-400 font-bold text-xs mt-0.5">GMV: {inr(stats.gmv ?? 0)}</div>
+        <div className="text-[10px] text-slate-500 mt-0.5">Joined {dt(t.createdAt)}</div>
+      </td>
+      <td className="p-3">
+        <div className="flex flex-col gap-1 items-start">
+          {o ? (
+            <span className="rounded bg-blue-950/80 px-2 py-0.5 text-[10px] font-mono text-blue-300 border border-blue-800/60">
+              PF {o.pfPercent}% • HC {o.hcPercent}% • Adv {o.advancePercent}%
+            </span>
+          ) : (
+            <span className="rounded bg-slate-800/80 px-2 py-0.5 text-[10px] text-slate-400 border border-slate-700/60">
+              Global commission
+            </span>
+          )}
+          {activeCustomFlags > 0 ? (
+            <span className="rounded bg-amber-950/80 px-2 py-0.5 text-[10px] font-semibold text-amber-300 border border-amber-800/60">
+              {activeCustomFlags} custom feature flag(s)
+            </span>
+          ) : (
+            <span className="text-[10px] text-slate-500">Standard features</span>
+          )}
+        </div>
+      </td>
+      <td className="p-3 text-right">
+        <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+          <button className={btn.primary} onClick={onOpen}>Open Data</button>
+          <button className={btn.ghost} onClick={onConfigure} title="Feature flags and custom commission rates">
+            ⚙️ Overrides
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function HomestayConfigModal({
+  t,
+  demo,
+  onClose,
+  onChanged,
+}: {
+  t: Any;
+  demo: boolean;
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const o = t.commissionOverride;
+  const [pf, setPf] = useState(o?.pfPercent != null ? String(o.pfPercent) : "");
+  const [hc, setHc] = useState(o?.hcPercent != null ? String(o.hcPercent) : "");
+  const [adv, setAdv] = useState(o?.advancePercent != null ? String(o.advancePercent) : "");
   const [busy, setBusy] = useState(false);
-  // Re-sync the inputs whenever the saved override changes (after save / clear / refresh).
-  const oPf = o?.pfPercent, oHc = o?.hcPercent, oAdv = o?.advancePercent, hasO = !!o;
-  useEffect(() => {
-    setPf(hasO && oPf != null ? String(oPf) : "");
-    setHc(hasO && oHc != null ? String(oHc) : "");
-    setAdv(hasO && oAdv != null ? String(oAdv) : "");
-  }, [hasO, oPf, oHc, oAdv]);
+  const [tab, setTab] = useState<"features" | "commission" | "account">("features");
+  const overrides: Any = t.featureOverrides || {};
+  const effective: Any = t.effectiveFeatures || {};
 
   async function save(body: Any, confirmText?: string) {
     if (confirmText && !window.confirm(confirmText)) return;
     setBusy(true);
-    await act(() => adminApi(`/stayride/tenants/${encodeURIComponent(t.tenantKey)}/controls`, { method: "PUT", body, demo }), onChanged);
-    setBusy(false);
+    try {
+      await adminApi(`/stayride/tenants/${encodeURIComponent(t.tenantKey)}/controls`, { method: "PUT", body, demo });
+      onChanged();
+    } catch (e: any) {
+      alert(e?.message || "Failed to update homestay controls.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   function toggleBlock() {
@@ -574,85 +753,136 @@ function HomestayRow({ t, demo, onChanged, onOpen }: { t: Any; demo: boolean; on
     );
   }
 
-  const overrides: Any = t.featureOverrides || {};
-  const effective: Any = t.effectiveFeatures || {};
-  const stats: Any = t.stats || {};
-
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 space-y-3">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-bold text-white">
-            {t.homestayName || t.tenantKey} {t.blocked ? <Badge tone="red">Blocked</Badge> : <Badge tone="green">Active</Badge>}
-          </p>
-          <p className="text-xs text-slate-400">
-            {t.ownerName || "—"} • {t.email || t.tenantKey} • {t.phone || "—"} • {t.location || "—"}
-          </p>
-          <p className="text-[11px] text-slate-500">
-            Joined {dt(t.createdAt)} • Last active {dt(t.lastActiveAt)} • {stats.requests ?? "—"} requests • {stats.completed ?? "—"} completed • GMV {inr(stats.gmv)}
-          </p>
-          {t.blocked && t.blockReason && <p className="text-[11px] text-red-400">Reason: {t.blockReason}</p>}
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-xs">
+      <div className="w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl text-xs space-y-4">
+        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+          <div>
+            <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <span>{t.homestayName || t.tenantKey}</span>
+              {t.blocked ? <Badge tone="red">Suspended</Badge> : <Badge tone="green">Active</Badge>}
+            </h3>
+            <p className="text-slate-400 text-xs">Configure granular access, feature permissions, and custom fee schedules.</p>
+          </div>
+          <button type="button" className="text-slate-400 hover:text-white text-lg font-bold" onClick={onClose}>✕</button>
         </div>
-        <div className="flex gap-2">
-          <button className={btn.primary} onClick={onOpen}>Open data</button>
-          <button disabled={busy} onClick={toggleBlock} className={t.blocked ? btn.ok : btn.danger}>
-            {t.blocked ? "Unblock" : "Block"}
+
+        <div className="flex gap-2 border-b border-slate-800 pb-2">
+          <button
+            type="button"
+            onClick={() => setTab("features")}
+            className={`px-3 py-1.5 rounded-lg font-semibold transition ${tab === "features" ? "bg-blue-600 text-white" : "text-slate-400 hover:text-white"}`}
+          >
+            Feature Switches
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("commission")}
+            className={`px-3 py-1.5 rounded-lg font-semibold transition ${tab === "commission" ? "bg-blue-600 text-white" : "text-slate-400 hover:text-white"}`}
+          >
+            Commission Overrides {o && <span className="ml-1 text-[10px] bg-blue-900 px-1.5 rounded">Active</span>}
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("account")}
+            className={`px-3 py-1.5 rounded-lg font-semibold transition ${tab === "account" ? "bg-blue-600 text-white" : "text-slate-400 hover:text-white"}`}
+          >
+            Account Access
           </button>
         </div>
-      </div>
 
-      <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
-        {HOMESTAY_FEATURE_KEYS.map((k) => {
-          const ov = overrides[k];
-          const value = ov === true ? "on" : ov === false ? "off" : "default";
-          return (
-            <label key={k} className="text-[11px] text-slate-400">
-              <span className="block font-semibold text-slate-300">
-                {FEATURE_LABELS[k]} {effective[k] ? <Badge tone="green">ON</Badge> : <Badge>OFF</Badge>}
-              </span>
-              <select
-                disabled={busy}
-                value={value}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  save({ features: { [k]: v === "on" ? true : v === "off" ? false : null } });
-                }}
-                className={`${input} mt-1 w-full`}
-              >
-                <option value="default">Default</option>
-                <option value="on">On</option>
-                <option value="off">Off</option>
-              </select>
-            </label>
-          );
-        })}
-      </div>
+        {tab === "features" && (
+          <div className="space-y-3">
+            <p className="text-slate-400">Override specific features for this homestay. Selecting "Default" inherits the platform-wide configuration.</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {HOMESTAY_FEATURE_KEYS.map((k) => {
+                const ov = overrides[k];
+                const value = ov === true ? "on" : ov === false ? "off" : "default";
+                return (
+                  <div key={k} className="p-3 rounded-xl border border-slate-800 bg-slate-950/60 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-slate-200">{FEATURE_LABELS[k]}</span>
+                      {effective[k] ? <Badge tone="green">ON</Badge> : <Badge>OFF</Badge>}
+                    </div>
+                    <select
+                      disabled={busy}
+                      value={value}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        save({ features: { [k]: v === "on" ? true : v === "off" ? false : null } });
+                      }}
+                      className={`${input} w-full`}
+                    >
+                      <option value="default">Default (Inherit Global)</option>
+                      <option value="on">Force Enable (On)</option>
+                      <option value="off">Force Disable (Off)</option>
+                    </select>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
-      <div className="mt-3 pt-3 border-t border-slate-800/80">
-        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-          <span className="text-xs font-semibold text-slate-300">
-            Commission override {o ? <Badge tone="blue">Active</Badge> : <Badge>Using global</Badge>}
-          </span>
-          {o && (
-            <button disabled={busy} className={btn.ghost} onClick={() => save({ commissionOverride: null }, `Clear commission override for ${t.homestayName}?`)}>
-              Clear override
-            </button>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-2.5">
-          <div className="flex items-center gap-1.5">
-            <span className="text-[11px] text-slate-400">Platform:</span>
-            <input className={`${input} w-24`} type="number" min="0" step="0.5" placeholder="5%" value={pf} onChange={(e) => setPf(e.target.value)} />
+        {tab === "commission" && (
+          <div className="space-y-4">
+            <div className="p-3 rounded-xl border border-blue-900/50 bg-blue-950/30 text-slate-300 space-y-1">
+              <span className="font-semibold text-blue-200">Custom Fee Schedule</span>
+              <p className="text-[11px] text-slate-400">By default, all homestays use platform global rates. Setting an override here locks custom rates for all rides booked through this property.</p>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="block text-[11px] text-slate-400 mb-1">Platform Fee %</label>
+                <input className={`${input} w-full`} type="number" min="0" step="0.5" placeholder="5" value={pf} onChange={(e) => setPf(e.target.value)} />
+              </div>
+              <div>
+                <label className="block text-[11px] text-slate-400 mb-1">Host Comm %</label>
+                <input className={`${input} w-full`} type="number" min="0" step="0.5" placeholder="10" value={hc} onChange={(e) => setHc(e.target.value)} />
+              </div>
+              <div>
+                <label className="block text-[11px] text-slate-400 mb-1">Guest Advance %</label>
+                <input className={`${input} w-full`} type="number" min="0" step="0.5" placeholder="15" value={adv} onChange={(e) => setAdv(e.target.value)} />
+              </div>
+            </div>
+            <div className="flex items-center justify-between pt-2">
+              {o ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  className="text-red-400 hover:text-red-300 text-xs font-semibold cursor-pointer"
+                  onClick={() => save({ commissionOverride: null }, `Remove custom commission override and revert to platform global rates?`)}
+                >
+                  Revert to Global Rates
+                </button>
+              ) : <span className="text-slate-500 text-xs">Currently using global rates</span>}
+              <button disabled={busy} className={btn.primary} onClick={saveOverride}>
+                {busy ? "Saving..." : "Save Custom Override"}
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-1.5">
-            <span className="text-[11px] text-slate-400">Homestay:</span>
-            <input className={`${input} w-24`} type="number" min="0" step="0.5" placeholder="10%" value={hc} onChange={(e) => setHc(e.target.value)} />
+        )}
+
+        {tab === "account" && (
+          <div className="p-4 rounded-xl border border-slate-800 bg-slate-950 space-y-3">
+            <h4 className="font-bold text-slate-200">Account Access & Suspension</h4>
+            <p className="text-slate-400 text-xs">
+              Suspending a homestay prevents it from dispatching rides or receiving bookings. It does not delete data history.
+            </p>
+            {t.blocked && t.blockReason && (
+              <p className="p-2 rounded bg-red-950/40 border border-red-900/60 text-red-300 font-mono text-xs">
+                Current suspension reason: "{t.blockReason}"
+              </p>
+            )}
+            <div>
+              <button disabled={busy} onClick={toggleBlock} className={t.blocked ? btn.ok : btn.danger}>
+                {t.blocked ? "Unblock Homestay Account" : "Suspend Homestay Account"}
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-1.5">
-            <span className="text-[11px] text-slate-400">Advance:</span>
-            <input className={`${input} w-24`} type="number" min="0" step="0.5" placeholder="15%" value={adv} onChange={(e) => setAdv(e.target.value)} />
-          </div>
-          <button disabled={busy} className={btn.primary} onClick={saveOverride}>Save override</button>
+        )}
+
+        <div className="border-t border-slate-800 pt-3 text-right">
+          <button type="button" className={btn.ghost} onClick={onClose}>Close</button>
         </div>
       </div>
     </div>
@@ -666,77 +896,404 @@ const COLLECTION_LABELS: Record<string, string> = {
 };
 const READONLY_FIELDS = new Set(["id", "_id", "createdAt", "updatedAt", "tenantKey", "dispatchMode"]);
 
-function TenantDataViewer({ t, demo, onClose, onOpenCabRequests }: { t: Any; demo: boolean; onClose: () => void; onOpenCabRequests?: (tenantKey: string) => void }) {
+function TenantDataViewer({
+  t,
+  demo,
+  onClose,
+  onOpenCabRequests,
+  onBookCabForGuest,
+}: {
+  t: Any;
+  demo: boolean;
+  onClose: () => void;
+  onOpenCabRequests?: (tenantKey: string) => void;
+  onBookCabForGuest?: (params: { tenantKey: string; guestName?: string; guestPhone?: string; pickup?: string }) => void;
+}) {
   useEditLock(true);
   const key = encodeURIComponent(t.tenantKey);
-  const [tab, setTab] = useState<string>("profile");
+  const [tab, setTab] = useState<"drivers" | "guests" | "trips" | "rooms" | "profile" | "raw">("drivers");
+  const [rawKey, setRawKey] = useState<string>("rooms");
   const { data, error, loading, reload } = useLoad(() => adminApi(`/stayride/tenants/${key}/data`, { demo }).then((r) => (r?.data ?? r) as Any), [key, demo]);
-  const list: Any[] = tab !== "profile" && Array.isArray(data?.[tab]) ? data![tab] : [];
+
+  const drivers: Any[] = Array.isArray(data?.drivers) ? data.drivers : [];
+  const guests: Any[] = Array.isArray(data?.guests) ? data.guests : [];
+  const bookings: Any[] = Array.isArray(data?.bookings) ? data.bookings : [];
+  const trips: Any[] = Array.isArray(data?.trips) ? data.trips : [];
+  const rooms: Any[] = Array.isArray(data?.rooms) ? data.rooms : [];
+  const homestay = data?.homestay || {};
+
+  // Combine guests with their bookings for a rich guest sheet
+  const activeGuests = (guests.length > 0 ? guests : bookings).map((g: Any) => {
+    const booking = bookings.find((b: Any) => b.guestId === g.id || b.phone === g.phone);
+    return {
+      name: g.name || g.guestName || "Guest",
+      phone: g.phone || booking?.phone || "No phone",
+      room: g.room || booking?.room || booking?.roomName || "Room",
+      checkIn: g.checkIn || booking?.checkIn,
+      checkOut: g.checkOut || booking?.checkOut,
+      channel: g.channel || booking?.channel || "Direct Booking",
+    };
+  });
+
+  const rawList: Any[] = rawKey !== "profile" && Array.isArray(data?.[rawKey]) ? data![rawKey] : [];
 
   return (
-    <div className="fixed inset-0 z-40 overflow-y-auto bg-black/80 p-4">
-      <div className="mx-auto max-w-6xl">
-        <Panel
-          title={<>{t.homestayName || t.tenantKey} — data {demo && <Badge tone="amber">DEMO dataset</Badge>}</>}
-          subtitle={`${t.tenantKey}${data?.version != null ? ` • version ${data.version}` : ""} • every change is audited`}
-          onRefresh={reload}
-          error={error}
-          loading={loading}
-          right={<button className={btn.ghost} onClick={onClose}>Close</button>}
-        >
-          <div className="flex flex-wrap gap-2">
-            {["profile", ...COLLECTIONS].map((k) => (
-              <button key={k} className={chip(tab === k)} onClick={() => setTab(k)}>
-                {COLLECTION_LABELS[k]}{k !== "profile" && Array.isArray(data?.[k]) ? ` (${data![k].length})` : ""}
-              </button>
-            ))}
+    <div className="fixed inset-0 z-40 overflow-y-auto bg-black/85 p-4 backdrop-blur-xs flex items-center justify-center">
+      <div className="w-full max-w-5xl max-h-[92vh] flex flex-col rounded-2xl border border-slate-800 bg-slate-950 shadow-2xl overflow-hidden">
+        {/* Drawer Header */}
+        <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b border-slate-800 bg-slate-900/70">
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-base font-bold text-white">{t.homestayName || t.tenantKey}</h3>
+              {demo ? <Badge tone="amber">DEMO</Badge> : <Badge tone="green">PRODUCTION</Badge>}
+            </div>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Account: <span className="font-mono text-slate-300">{t.tenantKey}</span> • Location: {t.location || "Darjeeling"}
+            </p>
           </div>
-          {data && tab === "profile" &&
-            (data.homestay ? (
-              <RecordEditor
-                rec={data.homestay}
-                title="Homestay profile"
-                startOpen
-                onSave={(changes) => adminApi(`/stayride/tenants/${key}/homestay`, { method: "PATCH", body: changes, demo })}
-                onChanged={reload}
-              />
-            ) : (
-              <Empty>No homestay profile.</Empty>
-            ))}
-          {data && tab !== "profile" &&
-            (list.length ? (
-              list.map((r, i) => {
-                const id = rid(r);
-                const platform = tab === "trips" && Boolean(r.platform || r.reference || r.dispatchMode === "PLATFORM");
-                const path = `/stayride/tenants/${key}/${tab}/${encodeURIComponent(id)}`;
-                return (
-                  <RecordEditor
-                    key={id || i}
-                    rec={r}
-                    title={String(r.name || r.guestName || r.title || r.reference || r.number || id || `#${i + 1}`)}
-                    readOnly={platform || !id}
-                    note={
-                      platform ? (
-                        <span className="flex flex-wrap items-center gap-2">
-                          <Badge tone="blue">Platform trip — read-only</Badge>
-                          {onOpenCabRequests && <button className={btn.ghost} onClick={() => onOpenCabRequests(t.tenantKey)}>Manage in Cab requests</button>}
-                        </span>
-                      ) : undefined
-                    }
-                    onSave={(changes) => adminApi(path, { method: "PATCH", body: changes, demo })}
-                    onDelete={() => adminApi(path, { method: "DELETE", demo })}
-                    onChanged={reload}
-                  />
-                );
-              })
-            ) : (
-              <Empty>No {COLLECTION_LABELS[tab].toLowerCase()}.</Empty>
-            ))}
-        </Panel>
+          <div className="flex items-center gap-2">
+            {onBookCabForGuest && (
+              <button
+                type="button"
+                onClick={() => onBookCabForGuest({ tenantKey: t.tenantKey, pickup: t.location || t.homestayName })}
+                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm transition"
+              >
+                + Book Cab for Host
+              </button>
+            )}
+            <button className={btn.ghost} onClick={reload} disabled={loading}>
+              {loading ? "Refreshing..." : "Refresh"}
+            </button>
+            <button className={btn.ghost} onClick={onClose}>
+              Close
+            </button>
+          </div>
+        </div>
+
+        {/* Sub-Navigation Tabs */}
+        <div className="flex flex-wrap items-center gap-1.5 px-6 py-2.5 border-b border-slate-800/80 bg-slate-900/40 text-xs">
+          {[
+            { id: "drivers", label: "Own Fleet Drivers", count: drivers.length },
+            { id: "guests", label: "In-House Guests", count: activeGuests.length },
+            { id: "trips", label: "Cab Requests", count: trips.length },
+            { id: "rooms", label: "Rooms & Units", count: rooms.length },
+            { id: "profile", label: "Property Profile" },
+            { id: "raw", label: "Raw Records" },
+          ].map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setTab(item.id as any)}
+              className={`px-3 py-1.5 rounded-xl font-semibold transition ${
+                tab === item.id
+                  ? "bg-blue-600 text-white shadow-sm"
+                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-850"
+              }`}
+            >
+              <span>{item.label}</span>
+              {typeof item.count === "number" && (
+                <span className={`ml-1.5 px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                  tab === item.id ? "bg-blue-800 text-white" : "bg-slate-800 text-slate-400"
+                }`}>
+                  {item.count}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Content Area */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-4 text-xs">
+          {error && <div className="rounded-xl border border-red-800/60 bg-red-950/40 p-3 text-red-300 font-semibold">{error}</div>}
+
+          {/* TAB 1: OWN FLEET DRIVERS */}
+          {tab === "drivers" && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                <div>
+                  <h4 className="text-sm font-bold text-white">Dedicated Own-Fleet Drivers</h4>
+                  <p className="text-[11px] text-slate-400">Drivers attached directly to this homestay. Trips assigned to them incur the 5% own-fleet fee.</p>
+                </div>
+              </div>
+
+              {drivers.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {drivers.map((d: Any) => (
+                    <div key={d.id || d.name} className="p-3.5 rounded-xl border border-slate-800 bg-slate-900/50 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-white text-sm">{d.name}</span>
+                        <Badge tone={d.active !== false ? "green" : "slate"}>
+                          {d.active !== false ? "Active" : "Inactive"}
+                        </Badge>
+                      </div>
+                      <div className="text-slate-300 space-y-0.5">
+                        <p className="text-xs">📞 {d.phone || "No phone"}</p>
+                        <p className="text-xs text-slate-400">
+                          🚕 {d.vehicleType || "SUV"} • Plate: <span className="font-mono text-slate-200">{d.vehicleNumber || d.plate || "Not set"}</span>
+                        </p>
+                      </div>
+                      {d.phone && (
+                        <div className="pt-2 border-t border-slate-800 flex justify-end">
+                          <a
+                            href={`tel:${d.phone}`}
+                            className="px-2.5 py-1 rounded bg-blue-900/50 hover:bg-blue-800 text-blue-200 text-[11px] font-semibold"
+                          >
+                            Call Driver
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-8 text-center rounded-xl border border-slate-800 bg-slate-900/30 text-slate-500">
+                  No own-fleet drivers registered for this homestay. The owner can add their own drivers in the StayRide mobile app.
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 2: IN-HOUSE GUESTS */}
+          {tab === "guests" && (
+            <div className="space-y-4">
+              <div className="border-b border-slate-800 pb-2">
+                <h4 className="text-sm font-bold text-white">In-House Guests & Calendar Bookings</h4>
+                <p className="text-[11px] text-slate-400">Imported from Airbnb, Booking.com, MakeMyTrip, or direct owner bookings. Click "Book Cab" to dispatch immediately.</p>
+              </div>
+
+              {activeGuests.length > 0 ? (
+                <div className="overflow-x-auto rounded-xl border border-slate-800">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-900/80 border-b border-slate-800 text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
+                      <tr>
+                        <th className="p-3">Guest Name & Contact</th>
+                        <th className="p-3">Room / Unit</th>
+                        <th className="p-3">Stay Dates</th>
+                        <th className="p-3">Booking Channel</th>
+                        <th className="p-3 text-right">Instant Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60">
+                      {activeGuests.map((g, idx) => (
+                        <tr key={idx} className="hover:bg-slate-900/40 transition">
+                          <td className="p-3">
+                            <p className="font-bold text-white">{g.name}</p>
+                            <p className="text-slate-400 font-mono text-[11px]">{g.phone}</p>
+                          </td>
+                          <td className="p-3 font-semibold text-slate-300">{g.room}</td>
+                          <td className="p-3 text-slate-400">
+                            {formatDate(g.checkIn)} ➔ {formatDate(g.checkOut)}
+                          </td>
+                          <td className="p-3">
+                            <span className="px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-300 text-[10px] font-semibold">
+                              {g.channel}
+                            </span>
+                          </td>
+                          <td className="p-3 text-right">
+                            {onBookCabForGuest && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  onBookCabForGuest({
+                                    tenantKey: t.tenantKey,
+                                    guestName: g.name,
+                                    guestPhone: g.phone !== "No phone" ? g.phone : undefined,
+                                    pickup: t.location || t.homestayName,
+                                  })
+                                }
+                                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm transition"
+                              >
+                                Book Cab for Guest
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="p-8 text-center rounded-xl border border-slate-800 bg-slate-900/30 text-slate-500">
+                  No guest bookings currently imported for this homestay. Check that their iCal link is configured.
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 3: TRIPS / CAB REQUESTS */}
+          {tab === "trips" && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                <div>
+                  <h4 className="text-sm font-bold text-white">Homestay Cab Requests History</h4>
+                  <p className="text-[11px] text-slate-400">All trips requested by or booked for this homestay.</p>
+                </div>
+                {onOpenCabRequests && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenCabRequests(t.tenantKey)}
+                    className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs"
+                  >
+                    View in Cab Requests Desk
+                  </button>
+                )}
+              </div>
+
+              {trips.length > 0 ? (
+                <div className="overflow-x-auto rounded-xl border border-slate-800">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-900/80 border-b border-slate-800 text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
+                      <tr>
+                        <th className="p-3">Reference & Guest</th>
+                        <th className="p-3">Route (Pickup ➔ Drop)</th>
+                        <th className="p-3">Pickup Date</th>
+                        <th className="p-3">Driver</th>
+                        <th className="p-3">Agreed Fare</th>
+                        <th className="p-3 text-right">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60">
+                      {trips.map((tr: Any, idx: number) => (
+                        <tr key={tr.id || tr.reference || idx} className="hover:bg-slate-900/40 transition">
+                          <td className="p-3">
+                            <span className="font-mono font-bold text-white block">#{tr.reference || tr.id}</span>
+                            <span className="text-slate-400 text-[11px]">{tr.guestName}</span>
+                          </td>
+                          <td className="p-3 font-semibold text-slate-200">
+                            {tr.pickup} ➔ {tr.destination}
+                          </td>
+                          <td className="p-3 text-slate-400">
+                            {formatDate(tr.date)} • {tr.time}
+                          </td>
+                          <td className="p-3 text-slate-300">
+                            {tr.assignedDriverName || tr.driverName || <span className="text-slate-500">Unassigned</span>}
+                          </td>
+                          <td className="p-3 font-mono font-bold text-emerald-400">
+                            {tr.agreedFare ? inr(tr.agreedFare) : "—"}
+                          </td>
+                          <td className="p-3 text-right">
+                            <Badge tone={statusTone(tr.status)}>{tr.status}</Badge>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="p-8 text-center rounded-xl border border-slate-800 bg-slate-900/30 text-slate-500">
+                  No cab requests recorded for this homestay yet.
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 4: ROOMS */}
+          {tab === "rooms" && (
+            <div className="space-y-4">
+              <div className="border-b border-slate-800 pb-2">
+                <h4 className="text-sm font-bold text-white">Rooms & Inventory</h4>
+                <p className="text-[11px] text-slate-400">Listing rooms configured by the host.</p>
+              </div>
+
+              {rooms.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                  {rooms.map((rm: Any, i: number) => (
+                    <div key={rm.id || i} className="p-3.5 rounded-xl border border-slate-800 bg-slate-900/50 space-y-1.5">
+                      <span className="font-bold text-white text-sm block">{rm.name}</span>
+                      <p className="text-xs text-slate-400">Type: {rm.type || "Room"} • Capacity: {rm.capacity || 2} Guests</p>
+                      <p className="text-xs font-mono font-bold text-emerald-400">₹{rm.price || rm.baseRate || "—"} / night</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-8 text-center rounded-xl border border-slate-800 bg-slate-900/30 text-slate-500">
+                  No rooms configured yet.
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 5: PROFILE */}
+          {tab === "profile" && (
+            <div className="space-y-4">
+              <div className="border-b border-slate-800 pb-2">
+                <h4 className="text-sm font-bold text-white">Homestay Property Profile</h4>
+                <p className="text-[11px] text-slate-400">Core registration and physical address information.</p>
+              </div>
+
+              <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/50 space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <span className="text-[10px] text-slate-500 uppercase font-semibold">Homestay Name</span>
+                    <p className="text-sm font-bold text-white">{homestay.name || t.homestayName}</p>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-500 uppercase font-semibold">Owner Name</span>
+                    <p className="text-sm font-bold text-white">{homestay.ownerName || t.ownerName || "—"}</p>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-500 uppercase font-semibold">Phone</span>
+                    <p className="text-sm font-mono text-slate-200">{homestay.phone || t.phone || "—"}</p>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-500 uppercase font-semibold">Address / Location</span>
+                    <p className="text-sm text-slate-200">{homestay.address || t.location || "—"}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 6: RAW RECORD EDITOR (FOR EXPERT LOW-LEVEL EDITS) */}
+          {tab === "raw" && (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between border-b border-slate-800 pb-2">
+                <div>
+                  <h4 className="text-sm font-bold text-white">Expert Low-Level Record Editor</h4>
+                  <p className="text-[11px] text-slate-400">Directly inspect and mutate raw database entities.</p>
+                </div>
+                <div className="flex gap-1.5">
+                  {COLLECTIONS.map((k) => (
+                    <button
+                      key={k}
+                      type="button"
+                      onClick={() => setRawKey(k)}
+                      className={`px-2 py-1 rounded text-xs font-semibold ${
+                        rawKey === k ? "bg-slate-700 text-white" : "text-slate-400 hover:text-white"
+                      }`}
+                    >
+                      {COLLECTION_LABELS[k]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {rawList.length ? (
+                rawList.map((r, i) => {
+                  const id = rid(r);
+                  const path = `/stayride/tenants/${key}/${rawKey}/${encodeURIComponent(id)}`;
+                  return (
+                    <RecordEditor
+                      key={id || i}
+                      rec={r}
+                      title={String(r.name || r.guestName || r.title || r.reference || r.number || id || `#${i + 1}`)}
+                      readOnly={!id}
+                      onSave={(changes) => adminApi(path, { method: "PATCH", body: changes, demo })}
+                      onDelete={() => adminApi(path, { method: "DELETE", demo })}
+                      onChanged={reload}
+                    />
+                  );
+                })
+              ) : (
+                <Empty>No raw records in {rawKey}.</Empty>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
 }
+
 
 const shortVal = (v: unknown) => {
   if (v === null || v === undefined || v === "") return "—";
@@ -868,18 +1425,23 @@ function RecordEditor({ rec, title, readOnly, note, startOpen, onSave, onDelete,
 // ---------------------------------------------------------------------------
 // 4. Drivers
 // ---------------------------------------------------------------------------
-function AddDriverModal({ demo, onClose, onAdded }: { demo: boolean; onClose: () => void; onAdded: () => void }) {
+function AddDriverModal({ demo, initialDriver, onClose, onAdded }: { demo: boolean; initialDriver?: Any | null; onClose: () => void; onAdded: () => void }) {
   useEditLock(true);
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [email, setEmail] = useState("");
-  const [vehicleType, setVehicleType] = useState("SUV");
-  const [model, setModel] = useState("");
-  const [plate, setPlate] = useState("");
-  const [seats, setSeats] = useState("6");
-  const [area, setArea] = useState("Darjeeling");
-  const [driverCategory, setDriverCategory] = useState<"INDIVIDUAL" | "UNION">("INDIVIDUAL");
-  const [unionName, setUnionName] = useState("");
+  const isEditing = Boolean(initialDriver);
+  const [name, setName] = useState(initialDriver?.name || "");
+  const [phone, setPhone] = useState(initialDriver?.phone || "");
+  const [email, setEmail] = useState(initialDriver?.email || "");
+  const [vehicleType, setVehicleType] = useState(initialDriver?.vehicle?.type || "SUV");
+  const [model, setModel] = useState(initialDriver?.vehicle?.model || "");
+  const [plate, setPlate] = useState(initialDriver?.vehicle?.plate || "");
+  const [seats, setSeats] = useState(String(initialDriver?.vehicle?.seats || "6"));
+  const [area, setArea] = useState(initialDriver?.vehicle?.area || "Darjeeling");
+  const [driverCategory, setDriverCategory] = useState<"INDIVIDUAL" | "UNION">(
+    initialDriver?.driverCategory === "UNION" || initialDriver?.vehicle?.type === "Fleet" || initialDriver?.vehicle?.plate === "UNION-FLEET" || initialDriver?.unionName
+      ? "UNION"
+      : "INDIVIDUAL"
+  );
+  const [unionName, setUnionName] = useState(initialDriver?.unionName || (initialDriver?.vehicle?.type === "Fleet" ? initialDriver?.vehicle?.model : "") || "");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
@@ -913,7 +1475,7 @@ function AddDriverModal({ demo, onClose, onAdded }: { demo: boolean; onClose: ()
       onAdded();
       onClose();
     } catch (e: any) {
-      setErr(e?.message || "Failed to add driver.");
+      setErr(e?.message || "Failed to save driver.");
     } finally {
       setBusy(false);
     }
@@ -924,8 +1486,8 @@ function AddDriverModal({ demo, onClose, onAdded }: { demo: boolean; onClose: ()
       <div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl text-xs space-y-4">
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
           <div>
-            <h3 className="text-base font-bold text-white">Add New Platform Driver</h3>
-            <p className="text-slate-400">Create an active driver account directly from the admin desk.</p>
+            <h3 className="text-base font-bold text-white">{isEditing ? `Edit Driver: ${initialDriver?.name}` : "Add New Platform Driver"}</h3>
+            <p className="text-slate-400">{isEditing ? "Update driver credentials, vehicle fleet, or taxi syndicate affiliation." : "Create an active driver account directly from the admin desk."}</p>
           </div>
           <button type="button" className="text-slate-400 hover:text-white text-lg font-bold" onClick={onClose}>✕</button>
         </div>
@@ -952,19 +1514,19 @@ function AddDriverModal({ demo, onClose, onAdded }: { demo: boolean; onClose: ()
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
-              <label className="text-slate-400 block mb-1 font-semibold">{driverCategory === "UNION" ? "Contact Person Name *" : "Driver Full Name *"}</label>
+              <label className="text-slate-400 block mb-1 font-semibold">{driverCategory === "UNION" ? "Contact Person / Operator Name *" : "Driver Full Name *"}</label>
               <input className={`${input} w-full`} required placeholder="e.g. Pemba Sherpa" value={name} onChange={(e) => setName(e.target.value)} />
             </div>
             <div>
               <label className="text-slate-400 block mb-1 font-semibold">10-Digit WhatsApp Mobile *</label>
-              <input className={`${input} w-full`} required placeholder="e.g. 9876543210" value={phone} onChange={(e) => setPhone(e.target.value)} />
+              <input className={`${input} w-full`} required placeholder="e.g. 9876543210" value={phone} onChange={(e) => setPhone(e.target.value)} disabled={isEditing} />
             </div>
           </div>
 
           {driverCategory === "UNION" ? (
             <div>
-              <label className="text-slate-400 block mb-1 font-semibold">Taxi Union / Stand Name *</label>
-              <input className={`${input} w-full`} required placeholder="e.g. Darjeeling Motor Syndicate" value={unionName} onChange={(e) => setUnionName(e.target.value)} />
+              <label className="text-slate-400 block mb-1 font-semibold">Taxi Union / Stand / Syndicate Name *</label>
+              <input className={`${input} w-full`} required placeholder="e.g. Guru Fleet Service or Darjeeling Motor Syndicate" value={unionName} onChange={(e) => setUnionName(e.target.value)} />
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
@@ -1010,7 +1572,7 @@ function AddDriverModal({ demo, onClose, onAdded }: { demo: boolean; onClose: ()
 
           <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
             <button type="button" className={btn.ghost} onClick={onClose} disabled={busy}>Cancel</button>
-            <button type="submit" className={btn.primary} disabled={busy}>{busy ? "Adding..." : "Add Driver"}</button>
+            <button type="submit" className={btn.primary} disabled={busy}>{busy ? "Saving..." : isEditing ? "Save Changes" : "Register Driver"}</button>
           </div>
         </form>
       </div>
@@ -1020,24 +1582,36 @@ function AddDriverModal({ demo, onClose, onAdded }: { demo: boolean; onClose: ()
 
 export function DriversTab({ demo }: TabProps) {
   const [status, setStatus] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<"ALL" | "INDIVIDUAL" | "UNION">("ALL");
   const [search, setSearch] = useState("");
   const [q, setQ] = useState("");
   const [page, setPage] = useState(0);
   const [showAdd, setShowAdd] = useState(false);
+  const [editingDriver, setEditingDriver] = useState<Any | null>(null);
   const { data, error, loading, reload, updatedAt } = useLoad(
     () => adminApi("/stayride/drivers", { demo, query: { status, q, search: q, ...pq(page) } }).then(toPage),
     [demo, status, q, page],
     true
   );
-  const items = data?.items || [];
+
+  const isUnionDriver = (d: Any) =>
+    d.driverCategory === "UNION" ||
+    d.vehicle?.type === "Fleet" ||
+    d.vehicle?.plate === "UNION-FLEET" ||
+    Boolean(d.unionName);
+
+  const rawItems = data?.items || [];
+  const items = categoryFilter === "ALL"
+    ? rawItems
+    : rawItems.filter((d) => (categoryFilter === "UNION" ? isUnionDriver(d) : !isUnionDriver(d)));
 
   function setDriverStatus(d: Any, next: "ACTIVE" | "PENDING_APPROVAL" | "BLOCKED") {
     let reason = "";
     if (next === "BLOCKED") {
-      const r = ask(`Reason for blocking ${d.name}:`);
+      const r = ask(`Reason for blocking driver ${d.name}:`);
       if (!r) return;
       reason = r;
-    } else if (!window.confirm(`${next === "ACTIVE" ? "Approve" : "Set to pending"} ${d.name}?`)) return;
+    } else if (!window.confirm(`${next === "ACTIVE" ? "Approve" : "Set to pending"} driver ${d.name}?`)) return;
     act(() => adminApi(`/stayride/drivers/${rid(d)}/status`, { method: "PATCH", body: { status: next, reason }, demo }), reload);
   }
 
@@ -1049,13 +1623,13 @@ export function DriversTab({ demo }: TabProps) {
   return (
     <Panel
       title="Drivers"
-      subtitle="Approve platform drivers, block them or set them back to pending."
+      subtitle="Fleet & network drivers. Approve verified drivers, categorize taxi syndicates vs independent drivers, and manage credentials."
       onRefresh={reload}
       error={error}
       loading={loading}
       updatedAt={updatedAt}
       right={
-        <>
+        <div className="flex items-center gap-2">
           <button
             type="button"
             className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-500 flex items-center gap-1 shadow-sm shrink-0"
@@ -1073,19 +1647,47 @@ export function DriversTab({ demo }: TabProps) {
             <input className={input} placeholder="Name, email or phone" value={search} onChange={(e) => setSearch(e.target.value)} />
             <button className={btn.primary}>Search</button>
           </form>
-        </>
+        </div>
       }
     >
       {showAdd && <AddDriverModal demo={demo} onClose={() => setShowAdd(false)} onAdded={reload} />}
+      {editingDriver && <AddDriverModal demo={demo} initialDriver={editingDriver} onClose={() => setEditingDriver(null)} onAdded={reload} />}
+
+      <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+        <span className="text-xs font-semibold text-slate-400">Category:</span>
+        <div className="flex gap-1.5">
+          <button
+            type="button"
+            onClick={() => setCategoryFilter("ALL")}
+            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition ${categoryFilter === "ALL" ? "bg-slate-700 text-white font-bold" : "text-slate-400 hover:text-white"}`}
+          >
+            All Categories ({rawItems.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setCategoryFilter("INDIVIDUAL")}
+            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition ${categoryFilter === "INDIVIDUAL" ? "bg-emerald-950 border border-emerald-700/60 text-emerald-300 font-bold" : "text-slate-400 hover:text-white"}`}
+          >
+            Independent Network
+          </button>
+          <button
+            type="button"
+            onClick={() => setCategoryFilter("UNION")}
+            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition ${categoryFilter === "UNION" ? "bg-blue-950 border border-blue-700/60 text-blue-300 font-bold" : "text-slate-400 hover:text-white"}`}
+          >
+            Taxi Syndicate / Union
+          </button>
+        </div>
+      </div>
 
       {data &&
         (items.length ? (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto rounded-xl border border-slate-800">
             <table className="w-full text-left text-xs">
               <thead className="border-b border-slate-800 bg-slate-900/60 text-slate-400 font-semibold uppercase tracking-wider">
                 <tr>
-                  <th className="p-3">Driver</th>
-                  <th className="p-3">Vehicle</th>
+                  <th className="p-3">Driver & Category</th>
+                  <th className="p-3">Vehicle Details</th>
                   <th className="p-3">Rating</th>
                   <th className="p-3">Status</th>
                   <th className="p-3">Joined</th>
@@ -1094,32 +1696,52 @@ export function DriversTab({ demo }: TabProps) {
               </thead>
               <tbody className="divide-y divide-slate-800/60">
                 {items.map((d) => (
-                  <tr key={rid(d)} className="hover:bg-slate-900/40">
+                  <tr key={rid(d)} className="hover:bg-slate-900/40 transition">
                     <td className="p-3">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <p className="font-semibold text-white">{d.name}</p>
                         {d.deletedAt && <Badge tone="red">deleted</Badge>}
-                        {d.driverCategory === "UNION" ? (
-                          <span className="rounded bg-blue-900/60 text-blue-300 border border-blue-700/50 px-1.5 py-0.2 text-[10px] font-bold">
-                            Union: {d.unionName || "Syndicate"}
+                        {isUnionDriver(d) ? (
+                          <span className="rounded bg-blue-900/70 text-blue-200 border border-blue-700/60 px-2 py-0.5 text-[10px] font-bold">
+                            Union: {d.unionName || (d.vehicle?.type === "Fleet" ? d.vehicle?.model : "") || "Taxi Syndicate"}
                           </span>
                         ) : (
-                          <span className="rounded bg-slate-800 text-slate-400 border border-slate-700 px-1.5 py-0.2 text-[10px] font-medium">
-                            Independent
+                          <span className="rounded bg-emerald-950/70 text-emerald-300 border border-emerald-800/60 px-2 py-0.5 text-[10px] font-semibold">
+                            Independent Driver
                           </span>
                         )}
                       </div>
-                      <p className="text-slate-500">{d.email} • {d.phone || "—"}</p>
+                      <p className="text-slate-400 text-xs mt-0.5">{d.email}</p>
+                      <p className="text-slate-500 text-[11px] font-mono">{d.phone || "No phone"}</p>
                     </td>
                     <td className="p-3 text-slate-300">
-                      {d.vehicle ? `${d.vehicle.type || ""} ${d.vehicle.model || ""} • ${d.vehicle.plate || "—"} • ${d.vehicle.seats ?? "—"} seats • ${d.vehicle.area || "—"}` : "—"}
+                      {d.vehicle ? (
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="rounded bg-slate-800 px-2 py-0.5 font-semibold text-slate-200 border border-slate-700/80">
+                            {d.vehicle.type || ""} {d.vehicle.model || ""}
+                          </span>
+                          <span className="rounded bg-slate-900 px-1.5 py-0.5 font-mono text-[11px] text-amber-300 border border-amber-900/40">
+                            {d.vehicle.plate || "—"}
+                          </span>
+                          <span className="rounded bg-slate-900 px-1.5 py-0.5 text-[11px] text-slate-400 border border-slate-800">
+                            {d.vehicle.seats ?? "—"} seats
+                          </span>
+                          {d.vehicle.area && (
+                            <span className="rounded bg-blue-950/40 px-1.5 py-0.5 text-[11px] text-blue-300 border border-blue-900/40">
+                              {d.vehicle.area}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-slate-600">—</span>
+                      )}
                     </td>
                     <td className="p-3 text-slate-300">{ratingText(d)}</td>
                     <td className="p-3">
                       {statusBadge(d.accountStatus)}
-                      {d.statusReason && <p className="mt-1 text-[10px] text-slate-500">{d.statusReason}</p>}
+                      {d.statusReason && <p className="mt-1 text-[10px] text-amber-400/90 font-mono">Reason: {d.statusReason}</p>}
                     </td>
-                    <td className="p-3 text-slate-400">{dt(d.createdAt)}</td>
+                    <td className="p-3 text-slate-400 whitespace-nowrap">{dt(d.createdAt)}</td>
                     <td className="p-3 text-right space-x-1 whitespace-nowrap">
                       {d.deletedAt ? (
                         <span className="text-[11px] text-slate-500">Deleted account</span>
@@ -1130,7 +1752,15 @@ export function DriversTab({ demo }: TabProps) {
                           {d.accountStatus !== "PENDING_APPROVAL" && <button className={btn.ghost} onClick={() => setDriverStatus(d, "PENDING_APPROVAL")}>Set pending</button>}
                           <button
                             type="button"
-                            className="rounded border border-red-800 bg-red-950/60 px-2 py-1 text-red-300 hover:bg-red-900/80 hover:text-white"
+                            className="rounded border border-blue-800 bg-blue-950/60 px-2 py-1 text-blue-300 hover:bg-blue-900/80 hover:text-white transition"
+                            onClick={() => setEditingDriver(d)}
+                            title="Edit driver category, taxi union, or vehicle details"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded border border-red-800 bg-red-950/60 px-2 py-1 text-red-300 hover:bg-red-900/80 hover:text-white transition"
                             onClick={() => deleteDriver(d)}
                             title="Permanently delete driver from platform"
                           >
@@ -1156,63 +1786,1009 @@ export function DriversTab({ demo }: TabProps) {
 // 5. Cab requests
 // ---------------------------------------------------------------------------
 const CAB_FILTERS: Record<string, { label: string; query?: Any; pending?: boolean; keep?: (c: Any) => boolean }> = {
-  open: { label: "Pending (open + awaiting payment)", pending: true },
+  stage_open: { label: "1. Open & Bidding", query: { status: "PENDING_REVIEW,FINDING_DRIVER,QUOTE_RECEIVED" } },
+  stage_awaiting: { label: "2. Awaiting Advance", query: { status: "AWAITING_ADVANCE_PAYMENT" } },
+  stage_active: { label: "3. Live & In Transit", query: { status: "CONFIRMED,EN_ROUTE_PICKUP,ARRIVED_HOMESTAY,TRIP_STARTED" } },
+  stage_completed: { label: "4. Completed", query: { status: "COMPLETED" } },
   needs: { label: "Needs driver", query: { needsReassignment: "true" }, keep: (c) => !!c.needsReassignment },
-  awaiting: { label: "Awaiting payment", query: { status: "AWAITING_ADVANCE_PAYMENT" } },
-  claims: { label: "Guest says paid", query: { claim: "pending" } },
-  confirmed: { label: "Confirmed", query: { status: "CONFIRMED" } },
-  started: { label: "In progress", query: { status: "TRIP_STARTED" } },
-  completed: { label: "Completed", query: { status: "COMPLETED" } },
-  cancelled: { label: "Cancelled", query: { status: "CANCELLED" } },
-  expired: { label: "Expired", query: { status: "EXPIRED" } },
+  claims: { label: "Guest payment claims", query: { claim: "pending" } },
+  nopin: { label: "No-PIN review", query: { noPin: "review" } },
   refunds: { label: "Refunds pending", query: { refundStatus: "PENDING" } },
-  dues: { label: "Driver dues pending", query: { driverSettlementStatus: "PENDING" } },
-  nopin: { label: "Completed without PIN — to review", query: { noPin: "review" } },
   unmatched: { label: "Unmatched to refund", query: { unmatched: "true" } },
-  all: { label: "All" },
+  cancelled: { label: "Cancelled", query: { status: "CANCELLED" } },
+  all: { label: "All requests", query: {} },
 };
 
 const statusTone = (s: string) =>
-  s === "COMPLETED" || s === "CONFIRMED" ? "green" : s === "CANCELLED" ? "red" : s === "TRIP_STARTED" ? "blue" : s === "EXPIRED" ? "slate" : "amber";
+  s === "COMPLETED" || s === "CONFIRMED" ? "green" :
+  s === "CANCELLED" ? "red" :
+  s === "TRIP_STARTED" || s === "EN_ROUTE_PICKUP" || s === "ARRIVED_HOMESTAY" ? "blue" :
+  s === "EXPIRED" ? "slate" :
+  s === "AWAITING_ADVANCE_PAYMENT" ? "amber" : "cyan";
+
+function AdminBookCabModal({
+  demo,
+  initialTenantKey,
+  initialGuestName,
+  initialGuestPhone,
+  initialPickup,
+  onClose,
+  onSuccess,
+}: {
+  demo: boolean;
+  initialTenantKey?: string;
+  initialGuestName?: string;
+  initialGuestPhone?: string;
+  initialPickup?: string;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [tenantKey, setTenantKey] = useState(initialTenantKey || "");
+  const [guestName, setGuestName] = useState(initialGuestName || "");
+  const [guestPhone, setGuestPhone] = useState(initialGuestPhone || "");
+  const [pickup, setPickup] = useState(initialPickup || "");
+  const [destination, setDestination] = useState("");
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [time, setTime] = useState("10:00 AM");
+  const [tripType, setTripType] = useState<"oneway" | "roundtrip" | "multiday">("oneway");
+  const [tourDays, setTourDays] = useState(3);
+  const [isRoundTrip, setIsRoundTrip] = useState(false);
+  const [returnDate, setReturnDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [returnTime, setReturnTime] = useState("05:00 PM");
+  const [passengers, setPassengers] = useState(1);
+  const [vehicleType, setVehicleType] = useState("SUV");
+  const [notes, setNotes] = useState("");
+  const [guestBudget, setGuestBudget] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  function calcReturnYmd(startDateYmd: string, days: number): string {
+    if (!startDateYmd) return startDateYmd;
+    const [y, m, d] = startDateYmd.split("-").map(Number);
+    const dtObj = new Date(y, m - 1, d);
+    dtObj.setDate(dtObj.getDate() + Math.max(0, days - 1));
+    const ry = dtObj.getFullYear();
+    const rm = String(dtObj.getMonth() + 1).padStart(2, "0");
+    const rd = String(dtObj.getDate()).padStart(2, "0");
+    return `${ry}-${rm}-${rd}`;
+  }
+
+  // Dynamically load homestays from the database
+  const { data: tenantsData } = useLoad(
+    () => adminApi("/stayride/tenants", { demo, query: { limit: 100 } }).then(toPage),
+    [demo]
+  );
+  const homestays = tenantsData?.items || [];
+
+  // When a homestay is selected, dynamically load its in-house guests from calendar sync
+  const { data: tenantDetails } = useLoad(
+    () => {
+      if (!tenantKey) return Promise.resolve(null);
+      return adminApi(`/stayride/tenants/${encodeURIComponent(tenantKey)}/data`, { demo })
+        .then((r) => (r?.data ?? r) as Any)
+        .catch(() => null);
+    },
+    [tenantKey, demo]
+  );
+
+  const inHouseGuests: { name: string; phone: string; room?: string }[] = [];
+  if (tenantDetails) {
+    const rawGuests = Array.isArray(tenantDetails.guests) ? tenantDetails.guests : [];
+    const rawBookings = Array.isArray(tenantDetails.bookings) ? tenantDetails.bookings : [];
+    const pool = rawGuests.length > 0 ? rawGuests : rawBookings;
+    for (const g of pool) {
+      const gName = g.name || g.guestName;
+      const gPhone = g.phone;
+      if (gName) {
+        inHouseGuests.push({
+          name: gName,
+          phone: gPhone || "",
+          room: g.room || g.roomName || "",
+        });
+      }
+    }
+  }
+
+  // When admin selects a homestay, auto-set pickup to property address
+  const handleSelectHomestay = (keyVal: string) => {
+    setTenantKey(keyVal);
+    if (!keyVal) {
+      if (pickup === initialPickup) setPickup("");
+      return;
+    }
+    const chosen = homestays.find((h) => h.tenantKey === keyVal || h.tenantId === keyVal || h.email === keyVal);
+    if (chosen) {
+      const loc = chosen.location || chosen.homestayName || "";
+      if (loc) setPickup(loc);
+    }
+  };
+
+  const DESTINATION_SUGGESTIONS = [
+    "Bagdogra Airport (IXB)",
+    "NJP Railway Station",
+    "Tiger Hill Sunrise Point",
+    "Darjeeling Mall Road",
+    "Mirik Lake",
+    "Lamahatta Eco Park",
+    "Courtyard by Marriott Siliguri",
+    "Kalimpong Town",
+    "Gangtok (Sikkim)",
+  ];
+
+  const QUICK_TIMES = ["03:30 AM", "06:00 AM", "08:30 AM", "10:00 AM", "12:00 PM", "02:00 PM", "04:30 PM", "07:00 PM"];
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!guestName.trim() || !guestPhone.trim()) {
+      setErr("Guest name and WhatsApp phone number are required.");
+      return;
+    }
+    if (!pickup.trim() || !destination.trim()) {
+      setErr("Pickup and destination locations are required.");
+      return;
+    }
+    setBusy(true);
+    setErr("");
+    try {
+      await adminApi("/cab-requests/create", {
+        method: "POST",
+        demo,
+        body: {
+          tenantKey: tenantKey.trim(),
+          guestName: guestName.trim(),
+          guestPhone: guestPhone.trim(),
+          pickup: pickup.trim(),
+          destination: destination.trim(),
+          date,
+          time,
+          passengers,
+          vehicleType,
+          isRoundTrip: isRoundTrip || tripType === "multiday",
+          returnDate: (isRoundTrip || tripType === "multiday") ? returnDate : undefined,
+          returnTime: (isRoundTrip || tripType === "multiday") ? returnTime : undefined,
+          notes: (
+            (tripType === "multiday" ? `[Multi-Day Tour: ${tourDays} Days Package] ` : "") +
+            notes.trim()
+          ).trim(),
+          guestBudget: guestBudget ? Number(guestBudget) : null,
+        },
+      });
+      onSuccess();
+      onClose();
+    } catch (e: any) {
+      setErr(e?.message || "Failed to dispatch cab request.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-2xl max-h-[92vh] flex flex-col rounded-2xl border border-slate-800 bg-slate-950 shadow-2xl overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900/60">
+          <div>
+            <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <span>Book Cab on Behalf of Guest</span>
+              {demo ? <Badge tone="amber">DEMO</Badge> : <Badge tone="green">PRODUCTION</Badge>}
+            </h3>
+            <p className="text-xs text-slate-400 mt-0.5">Direct dispatch from admin desk. Select homestay host, guest, and travel route.</p>
+          </div>
+          <button
+            type="button"
+            className="rounded-lg p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            onClick={onClose}
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Form Body */}
+        <form onSubmit={submit} className="flex-1 overflow-y-auto p-6 space-y-4 text-xs">
+          {err && (
+            <div className="rounded-xl bg-red-950/80 border border-red-800/80 px-3.5 py-2.5 text-red-300 font-semibold">
+              {err}
+            </div>
+          )}
+
+          {/* 1. Dynamic Homestay Selector */}
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-bold uppercase tracking-wider text-slate-300 block">
+              1. Homestay Host Attribution
+            </label>
+            <select
+              className="w-full h-10 rounded-xl border border-slate-700 bg-slate-900 px-3 text-xs text-white focus:border-blue-500 focus:outline-none"
+              value={tenantKey}
+              onChange={(e) => handleSelectHomestay(e.target.value)}
+            >
+              <option value="">Platform Direct Booking (No Homestay Host)</option>
+              {homestays.map((h) => (
+                <option key={h.tenantKey || h.tenantId} value={h.tenantKey || h.tenantId}>
+                  {h.homestayName || h.tenantKey} ({h.location || "Darjeeling"})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Auto-detected In-House Guests Dropdown (if homestay has active bookings) */}
+          {tenantKey && inHouseGuests.length > 0 && (
+            <div className="p-3 rounded-xl border border-blue-900/50 bg-blue-950/30 space-y-2">
+              <div className="flex items-center justify-between text-blue-300">
+                <span className="font-bold text-xs">In-House Guests at this Property ({inHouseGuests.length})</span>
+                <span className="text-[10px] text-blue-400">Click to auto-fill guest details</span>
+              </div>
+              <select
+                className="w-full h-9 rounded-lg border border-blue-800/80 bg-slate-900 px-3 text-xs text-white focus:outline-none"
+                onChange={(e) => {
+                  const idx = Number(e.target.value);
+                  if (idx >= 0 && inHouseGuests[idx]) {
+                    setGuestName(inHouseGuests[idx].name);
+                    if (inHouseGuests[idx].phone) setGuestPhone(inHouseGuests[idx].phone);
+                  }
+                }}
+                defaultValue="-1"
+              >
+                <option value="-1">-- Auto-fill from in-house guest list (or type manually below) --</option>
+                {inHouseGuests.map((g, idx) => (
+                  <option key={idx} value={idx}>
+                    {g.name} {g.phone ? `(${g.phone})` : ""} {g.room ? `• Room: ${g.room}` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* 2. Passenger Details */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-[11px] font-semibold text-slate-300 block mb-1">Guest Full Name *</label>
+              <input
+                className="w-full h-9 rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white focus:border-blue-500 focus:outline-none"
+                required
+                placeholder="e.g. Ananya Sharma"
+                value={guestName}
+                onChange={(e) => setGuestName(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold text-slate-300 block mb-1">Guest WhatsApp Phone *</label>
+              <input
+                className="w-full h-9 rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white focus:border-blue-500 focus:outline-none font-mono"
+                required
+                placeholder="+91 98000 12345"
+                value={guestPhone}
+                onChange={(e) => setGuestPhone(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* 3. Pickup & Destination Locations */}
+          <div className="space-y-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-[11px] font-semibold text-slate-300 block mb-1">Pickup Location *</label>
+                <input
+                  className="w-full h-9 rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white focus:border-blue-500 focus:outline-none"
+                  required
+                  placeholder="e.g. Courtyard by Marriott Siliguri or Homestay"
+                  value={pickup}
+                  onChange={(e) => setPickup(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold text-slate-300 block mb-1">Destination / Tour Stops *</label>
+                <input
+                  className="w-full h-9 rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white focus:border-blue-500 focus:outline-none"
+                  required
+                  placeholder="e.g. Darjeeling Mall Road or Tiger Hill"
+                  value={destination}
+                  onChange={(e) => setDestination(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {/* Optional Destination Suggestions Chips */}
+            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+              <span className="text-[10px] text-slate-500 font-semibold uppercase">Popular:</span>
+              {DESTINATION_SUGGESTIONS.map((s, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => setDestination(s)}
+                  className="px-2 py-0.5 rounded-md bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:border-slate-700 text-[10px] transition"
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 4. Schedule & Tour Format */}
+          <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/50 p-4">
+            <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-slate-300 block">
+                4. Schedule & Tour Format
+              </label>
+              <span className="text-[11px] font-mono text-emerald-400 font-bold">
+                Departure: {formatDDMMYYYY(date)}
+              </span>
+            </div>
+
+            {/* Departure Date & Time Inputs */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-[11px] font-semibold text-slate-300 block mb-1">
+                  Departure Date * <span className="text-[10px] text-slate-500 font-mono">({formatDDMMYYYY(date)})</span>
+                </label>
+                <input
+                  type="date"
+                  className="w-full h-9 rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white focus:border-blue-500 focus:outline-none"
+                  value={date}
+                  onChange={(e) => {
+                    const newDate = e.target.value;
+                    setDate(newDate);
+                    if (tripType === "multiday") {
+                      setReturnDate(calcReturnYmd(newDate, tourDays));
+                    } else if (tripType === "roundtrip") {
+                      setReturnDate(newDate);
+                    }
+                  }}
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold text-slate-300 block mb-1">Departure Time *</label>
+                <div className="flex gap-1.5">
+                  <input
+                    className="w-32 h-9 rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white focus:border-blue-500 focus:outline-none"
+                    value={time}
+                    onChange={(e) => setTime(e.target.value)}
+                  />
+                  <select
+                    className="flex-1 h-9 rounded-lg border border-slate-700 bg-slate-900 px-2 text-[11px] text-slate-300 focus:outline-none"
+                    onChange={(e) => e.target.value && setTime(e.target.value)}
+                    defaultValue=""
+                  >
+                    <option value="" disabled>Presets...</option>
+                    {QUICK_TIMES.map((qt) => (
+                      <option key={qt} value={qt}>{qt}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Trip Format Switcher */}
+            <div className="space-y-1.5 pt-1">
+              <label className="text-[11px] font-semibold text-slate-400 block">
+                Trip Format
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTripType("oneway");
+                    setIsRoundTrip(false);
+                  }}
+                  className={`p-2.5 rounded-xl border text-left transition-all ${
+                    tripType === "oneway"
+                      ? "bg-blue-600/20 border-blue-500 text-white shadow-sm ring-1 ring-blue-500/40"
+                      : "bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200"
+                  }`}
+                >
+                  <p className="font-bold text-xs">One-Way</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Single point drop</p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTripType("roundtrip");
+                    setIsRoundTrip(true);
+                    setReturnDate(date);
+                  }}
+                  className={`p-2.5 rounded-xl border text-left transition-all ${
+                    tripType === "roundtrip"
+                      ? "bg-blue-600/20 border-blue-500 text-white shadow-sm ring-1 ring-blue-500/40"
+                      : "bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200"
+                  }`}
+                >
+                  <p className="font-bold text-xs">Round Trip</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Same-day return</p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTripType("multiday");
+                    setIsRoundTrip(true);
+                    setReturnDate(calcReturnYmd(date, tourDays));
+                  }}
+                  className={`p-2.5 rounded-xl border text-left transition-all ${
+                    tripType === "multiday"
+                      ? "bg-blue-600/20 border-blue-500 text-white shadow-sm ring-1 ring-blue-500/40"
+                      : "bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200"
+                  }`}
+                >
+                  <p className="font-bold text-xs">Multi-Day Tour</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Dedicated hill tour</p>
+                </button>
+              </div>
+            </div>
+
+            {/* If Multi-Day Tour: Duration Selector */}
+            {tripType === "multiday" && (
+              <div className="rounded-xl border border-blue-900/40 bg-blue-950/30 p-3 space-y-3">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                  <span className="text-xs font-bold text-blue-300">Package Duration:</span>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {[2, 3, 4, 5, 6, 7].map((dCount) => (
+                      <button
+                        key={dCount}
+                        type="button"
+                        onClick={() => {
+                          setTourDays(dCount);
+                          setReturnDate(calcReturnYmd(date, dCount));
+                        }}
+                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                          tourDays === dCount
+                            ? "bg-blue-600 text-white shadow-sm ring-1 ring-blue-400"
+                            : "bg-slate-900 border border-slate-700 text-slate-300 hover:bg-slate-800"
+                        }`}
+                      >
+                        {dCount} Days
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Tour Schedule Banner with exact DD/MM/YYYY */}
+                <div className="rounded-lg bg-blue-900/30 border border-blue-700/50 p-2.5 flex items-center justify-between flex-wrap gap-2 text-xs">
+                  <div className="flex items-center gap-1.5 text-blue-200 font-semibold">
+                    <span>🗓️ Tour Schedule:</span>
+                    <span className="font-mono font-bold text-white bg-slate-900/80 px-2 py-0.5 rounded border border-blue-600/60">
+                      {formatDDMMYYYY(date)} (Day 1)
+                    </span>
+                    <span>➔</span>
+                    <span className="font-mono font-bold text-emerald-300 bg-slate-900/80 px-2 py-0.5 rounded border border-emerald-600/60">
+                      {formatDDMMYYYY(returnDate)} (Day {tourDays} Return)
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-blue-300/90 font-medium">
+                    ({tourDays} Days / {tourDays - 1} Nights)
+                  </span>
+                </div>
+
+                <div className="text-[11px] text-blue-300/80 flex items-center justify-between border-t border-blue-900/30 pt-2">
+                  <span>💡 Advance online: ₹600 (Locks cab)</span>
+                  <span className="text-slate-400">Balance paid in cash directly to driver</span>
+                </div>
+              </div>
+            )}
+
+            {/* If Round Trip or Multi-Day: Return Date & Time Inputs */}
+            {(isRoundTrip || tripType === "multiday") && (
+              <div className="rounded-xl border border-blue-900/40 bg-blue-950/20 p-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-semibold text-blue-300 block mb-1">
+                    Return Journey Date * <span className="text-[10px] text-slate-400 font-mono">({formatDDMMYYYY(returnDate)})</span>
+                  </label>
+                  <input
+                    type="date"
+                    className="w-full h-9 rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white focus:border-blue-500 focus:outline-none"
+                    value={returnDate}
+                    min={date}
+                    onChange={(e) => setReturnDate(e.target.value)}
+                  />
+                  <span className="text-[10px] text-slate-500 mt-0.5 block">
+                    {tripType === "multiday" ? `Auto-calculated for ${tourDays}-Day package (editable if needed)` : "Same or next day return"}
+                  </span>
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold text-blue-300 block mb-1">Return Time</label>
+                  <input
+                    className="w-full h-9 rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white focus:border-blue-500 focus:outline-none"
+                    value={returnTime}
+                    onChange={(e) => setReturnTime(e.target.value)}
+                    placeholder="05:00 PM"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 5. Passenger Stepper, Vehicle Tier & Budget */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-[11px] font-semibold text-slate-300 block mb-1">Passenger Count</label>
+              <div className="flex items-center h-9 w-44 rounded-lg border border-slate-700 bg-slate-900 px-1">
+                <button
+                  type="button"
+                  onClick={() => setPassengers(Math.max(1, passengers - 1))}
+                  className="w-8 h-7 flex items-center justify-center rounded text-slate-300 hover:text-white hover:bg-slate-800 text-sm font-bold"
+                >
+                  -
+                </button>
+                <span className="flex-1 text-center font-bold text-white text-xs">
+                  {passengers} {passengers === 1 ? "Passenger" : "Passengers"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPassengers(Math.min(20, passengers + 1))}
+                  className="w-8 h-7 flex items-center justify-center rounded text-slate-300 hover:text-white hover:bg-slate-800 text-sm font-bold"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold text-slate-300 block mb-1">Vehicle Tier</label>
+              <select
+                className="w-full h-9 rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white focus:border-blue-500 focus:outline-none"
+                value={vehicleType}
+                onChange={(e) => setVehicleType(e.target.value)}
+              >
+                <option value="SUV">SUV (Innova, Bolero, Scorpio) - Recommended for Hills</option>
+                <option value="Sedan">Sedan (Dzire, Etios) - Best for Plains/Airport</option>
+                <option value="7-seater">7-seater (Innova / Ertiga)</option>
+                <option value="9-seater">9-seater (Cruiser / Maxx)</option>
+              </select>
+            </div>
+          </div>
+
+          {/* 7. Special Notes & Target Budget */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-[11px] font-semibold text-slate-300 block mb-1">Special Notes / Flight Timing</label>
+              <input
+                className="w-full h-9 rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white focus:border-blue-500 focus:outline-none"
+                placeholder="e.g. Flight arrives 11:30 AM, 4 large bags"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold text-slate-300 block mb-1">Target Budget Benchmark (₹ Optional)</label>
+              <input
+                type="number"
+                min={0}
+                className="w-full h-9 rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white focus:border-blue-500 focus:outline-none font-mono"
+                placeholder="e.g. 3500"
+                value={guestBudget}
+                onChange={(e) => setGuestBudget(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex items-center justify-between pt-4 border-t border-slate-800">
+            <span className="text-[11px] text-slate-500">
+              Dispatches immediately to matching homestay and mountain drivers.
+            </span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className="px-4 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 text-xs font-semibold"
+                onClick={onClose}
+                disabled={busy}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-950/60 disabled:opacity-50"
+                disabled={busy}
+              >
+                {busy ? "Dispatching..." : "Dispatch Request to Drivers"}
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
 
 export function CabRequestsTab({ demo, initialTenantKey, initialFilter }: TabProps & { initialTenantKey?: string; initialFilter?: string }) {
-  const [filter, setFilter] = useState(initialFilter && CAB_FILTERS[initialFilter] ? initialFilter : initialTenantKey ? "all" : "open");
+  const [viewMode, setViewMode] = useState<"board" | "split">("board");
+  const [stageFilter, setStageFilter] = useState<string>("all");
   const [tenantKey, setTenantKey] = useState(initialTenantKey || "");
   const [tenantQuery, setTenantQuery] = useState(initialTenantKey || "");
+  const [createOpen, setCreateOpen] = useState(false);
   const [page, setPage] = useState(0);
-  const f = CAB_FILTERS[filter];
+  const [selectedId, setSelectedId] = useState<string>("");
+
+  const { data: summaryData, reload: reloadSummary } = useLoad(
+    () => adminApi("/stayride/summary", { demo }).then((r) => r.data as Any),
+    [demo],
+    true
+  );
+  const cabStats = summaryData?.cab || {};
+
+  // Fetch all active requests so all 4 stages are visible simultaneously on the board!
   const { data, error, loading, reload, updatedAt } = useLoad(async () => {
-    const r = toPage(await adminApi(f.pending ? "/cab-requests/pending" : "/cab-requests", { demo, query: { ...f.query, tenantKey: tenantQuery, ...pq(page) } }));
-    return f.keep ? { ...r, items: r.items.filter(f.keep) } : r;
-  }, [demo, filter, tenantQuery, page], true);
+    const queryParams: Any = {
+      tenantKey: tenantQuery || undefined,
+      ...pq(page),
+    };
+    if (stageFilter === "needs") queryParams.needsReassignment = "true";
+    if (stageFilter === "claims") queryParams.claim = "pending";
+    if (stageFilter === "nopin") queryParams.noPin = "review";
+    if (stageFilter === "refunds") queryParams.refundStatus = "PENDING";
+    if (stageFilter === "unmatched") queryParams.unmatched = "true";
+
+    const r = toPage(await adminApi("/cab-requests", { demo, query: queryParams }));
+    return r;
+  }, [demo, stageFilter, tenantQuery, page], true);
+
   const items = data?.items || [];
+
+  // Categorize requests into 4 lifecycle stages for the multi-stage board
+  const stage1Open = items.filter((c) => ["PENDING_REVIEW", "FINDING_DRIVER", "QUOTE_RECEIVED"].includes(c.status));
+  const stage2Awaiting = items.filter((c) => c.status === "AWAITING_ADVANCE_PAYMENT" || (c.status === "CONFIRMED" && !c.advancePaid));
+  const stage3Active = items.filter((c) => ["CONFIRMED", "EN_ROUTE_PICKUP", "ARRIVED_HOMESTAY", "TRIP_STARTED"].includes(c.status) && c.advancePaid);
+  const stage4Completed = items.filter((c) => c.status === "COMPLETED");
+
+  // Auto-select first item when items load if none selected
+  useEffect(() => {
+    if (items.length > 0 && (!selectedId || !items.some((c) => rid(c) === selectedId))) {
+      setSelectedId(rid(items[0]));
+    }
+  }, [items, selectedId]);
+
+  const selectedRequest = items.find((c) => rid(c) === selectedId) || items[0] || null;
+
+  const handleRefresh = () => {
+    reload();
+    reloadSummary();
+  };
+
+  const openInspector = (c: Any) => {
+    setSelectedId(rid(c));
+    setViewMode("split");
+  };
 
   return (
     <Panel
-      title="Cab requests"
-      subtitle="Full request lifecycle: assign, payment, trip, refunds and driver settlement."
-      onRefresh={reload}
+      title="Cab Requests Command Center"
+      subtitle="Live multi-stage pipeline board, driver bidding desk, on-road transit tracking, and admin payment overrides."
+      onRefresh={handleRefresh}
       error={error}
       loading={loading}
       updatedAt={updatedAt}
       right={
-        <form onSubmit={(e) => { e.preventDefault(); setPage(0); setTenantQuery(tenantKey.trim().toLowerCase()); }} className="flex gap-2">
-          <input className={input} placeholder="Homestay key (email)" value={tenantKey} onChange={(e) => setTenantKey(e.target.value)} />
-          <button className={btn.primary}>Filter</button>
-        </form>
+        <div className="flex items-center gap-2">
+          {/* View Mode Switcher */}
+          <div className="flex items-center bg-slate-900 border border-slate-800 rounded-xl p-0.5 text-xs">
+            <button
+              type="button"
+              onClick={() => setViewMode("board")}
+              className={`px-3 py-1.5 rounded-lg font-semibold transition ${
+                viewMode === "board"
+                  ? "bg-blue-600 text-white shadow-sm"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              Pipeline Board (All Stages)
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("split")}
+              className={`px-3 py-1.5 rounded-lg font-semibold transition ${
+                viewMode === "split"
+                  ? "bg-blue-600 text-white shadow-sm"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              Focus Inspector
+            </button>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setCreateOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm transition cursor-pointer"
+          >
+            <span>+ Book Cab for Guest</span>
+          </button>
+        </div>
       }
     >
-      <div className="flex flex-wrap gap-2">
-        {Object.entries(CAB_FILTERS).map(([key, v]) => (
-          <button key={key} onClick={() => { setFilter(key); setPage(0); }} className={chip(filter === key)}>
-            {v.label}
-          </button>
-        ))}
+      {createOpen && (
+        <AdminBookCabModal
+          demo={demo}
+          initialTenantKey={tenantKey || tenantQuery}
+          onClose={() => setCreateOpen(false)}
+          onSuccess={() => handleRefresh()}
+        />
+      )}
+
+      {/* TOP ACTION REQUIRED DECK */}
+      <div className="flex flex-wrap items-center gap-2 p-2.5 rounded-xl bg-slate-900/90 border border-slate-800">
+        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mr-1 flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
+          Exceptions:
+        </span>
+        <button
+          type="button"
+          onClick={() => { setStageFilter(stageFilter === "needs" ? "all" : "needs"); setPage(0); }}
+          className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
+            stageFilter === "needs"
+              ? "bg-red-600 text-white shadow-sm ring-1 ring-red-400"
+              : (cabStats?.needsReassignment > 0
+                ? "bg-red-950/80 text-red-300 border border-red-800/80 hover:bg-red-900/60"
+                : "bg-slate-800/60 text-slate-400 hover:text-white")
+          }`}
+        >
+          <span>Needs Driver</span>
+          <span className="px-1.5 py-0.2 rounded-full bg-red-900/60 text-[10px] font-mono">{cabStats?.needsReassignment ?? 0}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => { setStageFilter(stageFilter === "claims" ? "all" : "claims"); setPage(0); }}
+          className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
+            stageFilter === "claims"
+              ? "bg-blue-600 text-white shadow-sm ring-1 ring-blue-400"
+              : (cabStats?.pendingClaims > 0
+                ? "bg-blue-950/80 text-blue-300 border border-blue-800/80 hover:bg-blue-900/60"
+                : "bg-slate-800/60 text-slate-400 hover:text-white")
+          }`}
+        >
+          <span>Guest Payment Claims</span>
+          <span className="px-1.5 py-0.2 rounded-full bg-blue-900/60 text-[10px] font-mono">{cabStats?.pendingClaims ?? 0}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => { setStageFilter(stageFilter === "nopin" ? "all" : "nopin"); setPage(0); }}
+          className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
+            stageFilter === "nopin"
+              ? "bg-amber-600 text-white shadow-sm ring-1 ring-amber-400"
+              : (cabStats?.noPinToReview > 0
+                ? "bg-amber-950/80 text-amber-300 border border-amber-800/80 hover:bg-amber-900/60"
+                : "bg-slate-800/60 text-slate-400 hover:text-white")
+          }`}
+        >
+          <span>No-PIN Audits</span>
+          <span className="px-1.5 py-0.2 rounded-full bg-amber-900/60 text-[10px] font-mono">{cabStats?.noPinToReview ?? 0}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => { setStageFilter(stageFilter === "refunds" ? "all" : "refunds"); setPage(0); }}
+          className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
+            stageFilter === "refunds"
+              ? "bg-purple-600 text-white shadow-sm ring-1 ring-purple-400"
+              : (cabStats?.refundsCount > 0
+                ? "bg-purple-950/80 text-purple-300 border border-purple-800/80 hover:bg-purple-900/60"
+                : "bg-slate-800/60 text-slate-400 hover:text-white")
+          }`}
+        >
+          <span>Pending Refunds</span>
+          <span className="px-1.5 py-0.2 rounded-full bg-purple-900/60 text-[10px] font-mono">{cabStats?.refundsCount ?? 0}</span>
+        </button>
+        <div className="ml-auto flex items-center gap-2">
+          {stageFilter !== "all" && (
+            <button
+              type="button"
+              onClick={() => { setStageFilter("all"); setPage(0); }}
+              className="text-xs text-blue-400 hover:underline"
+            >
+              Clear Filter
+            </button>
+          )}
+          <form onSubmit={(e) => { e.preventDefault(); setPage(0); setTenantQuery(tenantKey.trim().toLowerCase()); }} className="flex gap-2">
+            <input className="h-8 rounded-lg border border-slate-700 bg-slate-900 px-2.5 text-xs text-white" placeholder="Filter by host email..." value={tenantKey} onChange={(e) => setTenantKey(e.target.value)} />
+            <button className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold">Filter</button>
+          </form>
+        </div>
       </div>
-      {tenantQuery && <p className="text-[11px] text-slate-400">Homestay: <span className="font-mono">{tenantQuery}</span></p>}
-      {data && (items.length ? items.map((c) => <CabRequestCard key={rid(c)} c={c} demo={demo} onChanged={reload} />) : <Empty>No requests for this filter.</Empty>)}
-      <Pager page={page} setPage={setPage} total={data?.total ?? null} count={items.length} />
+
+      {/* ZERO-LAYOUT-SHIFT STABLE CONTAINER (min-h-[550px]) */}
+      <div className="min-h-[550px] transition-all">
+        {loading && !data && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 animate-pulse pt-2">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-96 rounded-xl border border-slate-800/80 bg-slate-900/40 p-4 space-y-3">
+                <div className="h-4 w-28 bg-slate-800 rounded" />
+                <div className="h-20 bg-slate-850 rounded-lg" />
+                <div className="h-20 bg-slate-850 rounded-lg" />
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* =============================================================== */}
+        {/* VIEW 1: LIVE 4-STAGE PIPELINE BOARD (SEE ALL RIDES ACROSS STAGES)*/}
+        {/* =============================================================== */}
+        {viewMode === "board" && data && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3.5 pt-1 items-start">
+            {/* COLUMN 1: OPEN & BIDDING */}
+            <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-3 space-y-2.5">
+              <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-blue-400" />
+                  <span className="font-bold text-white text-xs">1. Open & Bidding</span>
+                </div>
+                <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono text-[11px] font-bold">
+                  {stage1Open.length}
+                </span>
+              </div>
+              <div className="space-y-2 max-h-[720px] overflow-y-auto pr-0.5">
+                {stage1Open.map((c) => (
+                  <PipelineCard key={rid(c)} c={c} onInspect={() => openInspector(c)} />
+                ))}
+                {stage1Open.length === 0 && (
+                  <p className="p-4 text-center text-xs text-slate-500">No open bidding requests</p>
+                )}
+              </div>
+            </div>
+
+            {/* COLUMN 2: AWAITING ADVANCE */}
+            <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-3 space-y-2.5">
+              <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-amber-400" />
+                  <span className="font-bold text-white text-xs">2. Awaiting Advance</span>
+                </div>
+                <span className="px-2 py-0.5 rounded-full bg-amber-950/80 text-amber-300 border border-amber-800/60 font-mono text-[11px] font-bold">
+                  {stage2Awaiting.length}
+                </span>
+              </div>
+              <div className="space-y-2 max-h-[720px] overflow-y-auto pr-0.5">
+                {stage2Awaiting.map((c) => (
+                  <PipelineCard key={rid(c)} c={c} onInspect={() => openInspector(c)} />
+                ))}
+                {stage2Awaiting.length === 0 && (
+                  <p className="p-4 text-center text-xs text-slate-500">No pending advance payments</p>
+                )}
+              </div>
+            </div>
+
+            {/* COLUMN 3: LIVE & IN TRANSIT */}
+            <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-3 space-y-2.5">
+              <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                  <span className="font-bold text-white text-xs">3. Live in Transit</span>
+                </div>
+                <span className="px-2 py-0.5 rounded-full bg-emerald-950/80 text-emerald-300 border border-emerald-800/60 font-mono text-[11px] font-bold">
+                  {stage3Active.length}
+                </span>
+              </div>
+              <div className="space-y-2 max-h-[720px] overflow-y-auto pr-0.5">
+                {stage3Active.map((c) => (
+                  <PipelineCard key={rid(c)} c={c} onInspect={() => openInspector(c)} />
+                ))}
+                {stage3Active.length === 0 && (
+                  <p className="p-4 text-center text-xs text-slate-500">No active rides on road</p>
+                )}
+              </div>
+            </div>
+
+            {/* COLUMN 4: COMPLETED TRIPS */}
+            <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-3 space-y-2.5">
+              <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-slate-400" />
+                  <span className="font-bold text-white text-xs">4. Completed Trips</span>
+                </div>
+                <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono text-[11px] font-bold">
+                  {stage4Completed.length}
+                </span>
+              </div>
+              <div className="space-y-2 max-h-[720px] overflow-y-auto pr-0.5">
+                {stage4Completed.map((c) => (
+                  <PipelineCard key={rid(c)} c={c} onInspect={() => openInspector(c)} />
+                ))}
+                {stage4Completed.length === 0 && (
+                  <p className="p-4 text-center text-xs text-slate-500">No completed trips</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* =============================================================== */}
+        {/* VIEW 2: SPLIT-PANE FOCUSED INSPECTOR VIEW                       */}
+        {/* =============================================================== */}
+        {viewMode === "split" && data && (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start pt-1">
+            {/* Left Queue (5 cols) */}
+            <div className="lg:col-span-5 space-y-2">
+              <div className="flex items-center justify-between text-xs text-slate-400 px-1 pb-1.5 border-b border-slate-800">
+                <span className="font-semibold text-slate-300">Request Queue ({items.length})</span>
+                <span className="text-[10px] text-slate-500">Select to inspect</span>
+              </div>
+              <div className="space-y-2 max-h-[750px] overflow-y-auto pr-1">
+                {items.map((c) => {
+                  const isSel = selectedId === rid(c);
+                  return (
+                    <PipelineCard
+                      key={rid(c)}
+                      c={c}
+                      selected={isSel}
+                      onInspect={() => setSelectedId(rid(c))}
+                    />
+                  );
+                })}
+              </div>
+              <Pager page={page} setPage={setPage} total={data?.total ?? null} count={items.length} />
+            </div>
+
+            {/* Right Inspector (7 cols, sticky) */}
+            <div className="lg:col-span-7 sticky top-4">
+              {selectedRequest ? (
+                <CabRequestCard
+                  key={rid(selectedRequest)}
+                  c={selectedRequest}
+                  demo={demo}
+                  onChanged={handleRefresh}
+                />
+              ) : (
+                <div className="p-12 text-center rounded-2xl border border-slate-800 bg-slate-950 text-slate-500">
+                  <p className="text-sm font-semibold text-slate-300">No Request Selected</p>
+                  <p className="text-xs text-slate-500 mt-1">Select any cab request from the queue to view full route details and admin actions.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
     </Panel>
+  );
+}
+
+function PipelineCard({
+  c,
+  selected,
+  onInspect,
+}: {
+  c: Any;
+  selected?: boolean;
+  onInspect: () => void;
+}) {
+  const claim = c.paymentClaim?.status === "PENDING";
+  return (
+    <div
+      onClick={onInspect}
+      className={`p-3 rounded-xl border cursor-pointer transition-all ${
+        selected
+          ? "bg-slate-900 border-blue-500 shadow-md ring-1 ring-blue-500/40"
+          : "bg-slate-950/80 border-slate-800 hover:border-slate-700 hover:bg-slate-900/60"
+      }`}
+    >
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="font-mono text-xs font-bold text-white">#{c.reference}</span>
+        <Badge tone={statusTone(c.status)}>{c.status}</Badge>
+      </div>
+
+      <p className="text-xs font-semibold text-slate-200 line-clamp-2">
+        {c.pickupLocation?.address || "Pickup"} ➔ {(c.destinations || []).map((d: Any) => d.address).join(" ➔ ") || "Destination"}
+      </p>
+
+      <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-slate-800/60 text-[11px] text-slate-400">
+        <span className="truncate max-w-[140px]">{c.guestName} ({c.passengers || 1}p)</span>
+        <span className="font-mono font-bold text-emerald-400">
+          {c.agreedFare ? inr(c.agreedFare) : <span className="text-amber-400 font-normal">Awaiting quote</span>}
+        </span>
+      </div>
+
+      <div className="flex items-center justify-between mt-1 text-[10px] text-slate-500">
+        <span>{formatDate(c.date)} • {c.time}</span>
+        <span className="truncate max-w-[120px]">
+          {c.assignedDriverName ? `Driver: ${c.assignedDriverName}` : (Array.isArray(c.quotes) && c.quotes.length > 0 ? `${c.quotes.length} quotes` : "No quotes")}
+        </span>
+      </div>
+
+      {c.needsReassignment && (
+        <div className="mt-1.5 text-[10px] font-semibold text-red-300 bg-red-950/70 px-2 py-0.5 rounded border border-red-900/50">
+          Needs Driver Reassignment
+        </div>
+      )}
+      {claim && (
+        <div className="mt-1.5 text-[10px] font-semibold text-blue-300 bg-blue-950/70 px-2 py-0.5 rounded border border-blue-900/50">
+          Guest Claims Paid (UTR: {c.paymentClaim.utr})
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1247,13 +2823,13 @@ function CabRequestCard({ c, demo, onChanged }: { c: Any; demo: boolean; onChang
   const canPay = c.status === "AWAITING_ADVANCE_PAYMENT" && !c.advancePaid;
   const claim = canPay && c.paymentClaim?.status === "PENDING" ? c.paymentClaim : null;
   const [busy, setBusy] = useState(false);
-  const canVoid = c.status === "CONFIRMED" && c.advancePaid && !c.hostPayoutId;
-  const canCancel = !["COMPLETED", "CANCELLED"].includes(c.status) && !c.hostPayoutId;
+  const canVoid = c.status === "CONFIRMED" && c.advancePaid && !c.hostPayoutId && !c.needsReassignment;
+  const canCancel = !["COMPLETED", "CANCELLED"].includes(c.status) && !c.hostPayoutId && !c.driverPayoutId;
   const canRefund = (c.status === "CANCELLED" || (c.status === "COMPLETED" && c.noShow)) && c.refundStatus === "PENDING";
   const toReview = c.status === "COMPLETED" && c.completedWithoutPin && !c.noPinReviewedAt;
-  const canStart = c.status === "CONFIRMED" && c.advancePaid && !c.needsReassignment;
+  const canStart = ["CONFIRMED", "EN_ROUTE_PICKUP", "ARRIVED_HOMESTAY"].includes(c.status) && c.advancePaid && !c.needsReassignment;
   const canComplete = c.status === "TRIP_STARTED";
-  const canSettleDriver = c.status === "COMPLETED" && c.driverSettlementStatus === "PENDING" && !(c.completedWithoutPin && !c.noPinReviewedAt);
+  const canSettleDriver = c.status === "COMPLETED" && c.driverSettlementStatus === "PENDING" && !(c.completedWithoutPin && !c.noPinReviewedAt) && !c.driverPayoutId;
 
   function voidPayment() {
     const reason = ask(`Reason for voiding payment ${c.advancePaymentId} (${inr(c.advanceAmount)}) on #${c.reference}:`);
@@ -1298,63 +2874,126 @@ function CabRequestCard({ c, demo, onChanged }: { c: Any; demo: boolean; onChang
 
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 space-y-3 text-xs">
+      {/* CARD HEADER & STATUS BADGES */}
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <p className="text-sm font-bold text-white">
-            #{c.reference} <Badge tone={statusTone(c.status)}>{c.status}</Badge>{" "}
-            {c.needsReassignment && <Badge tone="red">Needs driver</Badge>}{" "}
-            {claim && <Badge tone="blue">Guest says paid</Badge>}{" "}
-            {toReview && <Badge tone="amber">No PIN — to review</Badge>}{" "}
-            {c.noShow && <Badge tone="red">No-show</Badge>}{" "}
-            {c.ownFleet && <Badge tone="blue">Own fleet</Badge>}{" "}
-            {c.dispatched === false && ["PENDING_REVIEW", "FINDING_DRIVER", "QUOTE_RECEIVED"].includes(c.status) && <Badge tone="slate">Held for owner</Badge>}{" "}
-            {c.refundStatus && c.refundStatus !== "NONE" && <Badge tone={c.refundStatus === "PENDING" ? "amber" : "green"}>Refund {c.refundStatus}</Badge>}{" "}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-black text-white font-mono">#{c.reference}</span>
+            <Badge tone={statusTone(c.status)}>{c.status}</Badge>
+            {c.needsReassignment && <Badge tone="red">Needs driver</Badge>}
+            {claim && <Badge tone="blue">Guest says paid</Badge>}
+            {toReview && <Badge tone="amber">No PIN — to review</Badge>}
+            {c.noShow && <Badge tone="red">No-show</Badge>}
+            {c.ownFleet && <Badge tone="blue">Own fleet</Badge>}
+            {c.dispatched === false && ["PENDING_REVIEW", "FINDING_DRIVER", "QUOTE_RECEIVED"].includes(c.status) && <Badge tone="slate">Held for owner</Badge>}
+            {c.refundStatus && c.refundStatus !== "NONE" && <Badge tone={c.refundStatus === "PENDING" ? "amber" : "green"}>Refund {c.refundStatus}</Badge>}
             {c.driverSettlementStatus && c.driverSettlementStatus !== "NONE" && (
               <Badge tone={c.driverSettlementStatus === "PENDING" ? "amber" : "green"}>Driver {c.driverSettlementStatus}</Badge>
             )}
+          </div>
+          <p className="text-slate-400 mt-1">
+            <span className="font-semibold text-slate-300">{c.homestayName || "—"}</span> ({c.propertyId}) • Source: {c.requestSource || "—"} • created {dt(c.createdAt)}
           </p>
-          <p className="text-slate-400">
-            {c.homestayName || "—"} ({c.propertyId}) • {c.requestSource || "—"} • created {dt(c.createdAt)}
-          </p>
-          <p className="text-slate-300">
-            {c.guestName} • {c.guestPhone} • {c.passengers ?? "—"} pax • {c.vehicleType || "—"} • {formatDate(c.date)} {c.time || ""}
-            {c.guestBudget ? ` • Target: ${inr(c.guestBudget)}` : ""}
-          </p>
-          <p className="text-slate-400">
-            {c.pickupLocation?.address || "—"}
-            {c.pickupLocation?.lat && c.pickupLocation?.lng && (
+          <div className="flex items-center gap-2 flex-wrap text-slate-300 mt-1">
+            <span className="font-semibold text-white">{c.guestName}</span>
+            <span className="font-mono text-slate-400">{c.guestPhone}</span>
+            {c.guestPhone && (
               <a
-                href={`https://www.google.com/maps/search/?api=1&query=${c.pickupLocation.lat},${c.pickupLocation.lng}`}
+                href={`https://wa.me/${String(c.guestPhone).replace(/\D/g, "")}`}
                 target="_blank"
                 rel="noreferrer"
-                className="ml-1.5 inline-flex items-center text-emerald-400 hover:underline text-xs"
+                className="inline-flex items-center gap-1 rounded bg-emerald-950 px-1.5 py-0.2 text-[10px] font-semibold text-emerald-300 border border-emerald-800/60 hover:bg-emerald-900"
               >
-                📍 Pin ({Number(c.pickupLocation.lat).toFixed(4)}, {Number(c.pickupLocation.lng).toFixed(4)})
+                💬 WhatsApp
               </a>
             )}
-            {" ➔ "}
-            {(c.destinations || []).map((d: Any) => d.address).join(" ➔ ") || "—"}
-            {c.isRoundTrip ? " (round trip)" : ""}
-          </p>
-          {c.assignedDriverName && <p className="text-slate-300">Driver: {c.assignedDriverName} • {c.assignedDriverPhone || "—"}{c.assignedDriverUserId ? " (platform)" : " (manual)"}</p>}
-          {c.cancellationReason && <p className="text-red-400">Cancelled: {c.cancellationReason}</p>}
-          {c.advanceDueAt && !c.advancePaid && <p className="text-amber-300">Advance due by {dt(c.advanceDueAt)}</p>}
+            <span>• {c.passengers ?? "—"} pax • {c.vehicleType || "—"} • {formatDate(c.date)} {c.time || ""}</span>
+            {c.guestBudget ? <span className="text-emerald-400 font-bold">• Target: {inr(c.guestBudget)}</span> : null}
+          </div>
+
+          {/* ROUTE DISPLAY */}
+          <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800/80 mt-2 space-y-1">
+            <div className="flex items-center gap-1.5 text-slate-300">
+              <span className="text-emerald-400">🟢 Pickup:</span>
+              <span className="font-medium text-white">{c.pickupLocation?.address || "Pickup address not set"}</span>
+              {c.pickupLocation?.lat && c.pickupLocation?.lng && (
+                <a
+                  href={`https://www.google.com/maps/search/?api=1&query=${c.pickupLocation.lat},${c.pickupLocation.lng}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="ml-1 text-[11px] text-blue-400 hover:underline"
+                >
+                  (• Maps)
+                </a>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5 text-slate-300">
+              <span className="text-rose-400">🏁 Dropoff:</span>
+              <span className="font-medium text-white">{(c.destinations || []).map((d: Any) => d.address).join(" ➔ ") || "Destination not set"}</span>
+              {c.isRoundTrip && <span className="ml-1 text-[10px] font-bold text-amber-400 bg-amber-950/80 px-1.5 rounded border border-amber-900/60">Round Trip</span>}
+            </div>
+            {c.notes && <p className="text-[11px] text-slate-400 pt-0.5 italic">Note: {c.notes}</p>}
+          </div>
+
+          {/* ON-ROAD TRANSIT TRACKER */}
+          {["CONFIRMED", "EN_ROUTE_PICKUP", "ARRIVED_HOMESTAY", "TRIP_STARTED", "COMPLETED"].includes(c.status) && (
+            <div className="flex items-center gap-1.5 p-2 rounded-xl bg-slate-950/80 border border-slate-800 text-[11px] overflow-x-auto mt-2">
+              <span className="font-bold text-slate-400 text-[10px] uppercase tracking-wider mr-1">Transit Tracker:</span>
+              <span className={`px-2 py-0.5 rounded font-semibold ${c.status === "CONFIRMED" ? "bg-emerald-950 text-emerald-300 border border-emerald-700/60" : "text-slate-500"}`}>
+                ✓ Advance Paid
+              </span>
+              <span className="text-slate-600">➔</span>
+              <span className={`px-2 py-0.5 rounded font-semibold ${c.status === "EN_ROUTE_PICKUP" ? "bg-blue-950 text-blue-300 border border-blue-700/60 animate-pulse" : ["ARRIVED_HOMESTAY", "TRIP_STARTED", "COMPLETED"].includes(c.status) ? "text-slate-400" : "text-slate-600"}`}>
+                En Route
+              </span>
+              <span className="text-slate-600">➔</span>
+              <span className={`px-2 py-0.5 rounded font-semibold ${c.status === "ARRIVED_HOMESTAY" ? "bg-cyan-950 text-cyan-300 border border-cyan-700/60 animate-pulse" : ["TRIP_STARTED", "COMPLETED"].includes(c.status) ? "text-slate-400" : "text-slate-600"}`}>
+                Arrived Homestay
+              </span>
+              <span className="text-slate-600">➔</span>
+              <span className={`px-2 py-0.5 rounded font-semibold ${c.status === "TRIP_STARTED" ? "bg-emerald-950 text-emerald-300 border border-emerald-700/60 animate-pulse" : c.status === "COMPLETED" ? "text-slate-400" : "text-slate-600"}`}>
+                Trip Started
+              </span>
+              <span className="text-slate-600">➔</span>
+              <span className={`px-2 py-0.5 rounded font-semibold ${c.status === "COMPLETED" ? "bg-emerald-600 text-white font-bold" : "text-slate-600"}`}>
+                Completed
+              </span>
+            </div>
+          )}
+
+          {c.assignedDriverName && (
+            <div className="flex items-center gap-2 mt-2 p-2 rounded-xl bg-blue-950/30 border border-blue-900/40 text-blue-300">
+              <span className="font-bold">Assigned Driver:</span>
+              <span className="font-semibold text-white">{c.assignedDriverName}</span>
+              <span className="font-mono text-slate-300">({c.assignedDriverPhone || "No phone"})</span>
+              {c.assignedDriverPhone && (
+                <a
+                  href={`tel:${c.assignedDriverPhone}`}
+                  className="rounded bg-blue-900/60 px-1.5 py-0.2 text-[10px] text-blue-200 hover:bg-blue-800"
+                >
+                  Call
+                </a>
+              )}
+            </div>
+          )}
+          {c.cancellationReason && <p className="text-red-400 mt-1 font-mono">Cancelled: {c.cancellationReason}</p>}
+          {c.advanceDueAt && !c.advancePaid && <p className="text-amber-300 mt-1">Advance due by {dt(c.advanceDueAt)}</p>}
           {claim && (
-            <p className="text-blue-300">
-              Guest says paid · UTR <span className="font-mono text-white">{claim.utr}</span> · {inr(claim.amount)} · {dt(claim.submittedAt)}. Check your UPI account, then Record payment or Reject claim.
-            </p>
+            <div className="mt-2 p-2 rounded-xl bg-blue-950/60 border border-blue-700/60 text-blue-200">
+              <span className="font-bold">Guest says paid:</span> UTR <span className="font-mono font-bold text-white">{claim.utr}</span> • {inr(claim.amount)} • {dt(claim.submittedAt)}. Check bank account and click "Record payment" or "Reject claim".
+            </div>
           )}
           {canPay && c.paymentClaim?.status === "REJECTED" && (
-            <p className="text-slate-400">Claim rejected (UTR {c.paymentClaim.utr}){c.paymentClaim.reason ? `: ${c.paymentClaim.reason}` : ""}</p>
+            <p className="text-slate-400 mt-1">Previous claim rejected (UTR {c.paymentClaim.utr}){c.paymentClaim.reason ? `: ${c.paymentClaim.reason}` : ""}</p>
           )}
-          {c.paymentLinkUrl && <p className="text-slate-400">Payment link: <a className="text-blue-400 underline" href={c.paymentLinkUrl} target="_blank" rel="noreferrer">{c.paymentLinkUrl}</a></p>}
+          {c.paymentLinkUrl && <p className="text-slate-400 mt-1">Payment link: <a className="text-blue-400 underline" href={c.paymentLinkUrl} target="_blank" rel="noreferrer">{c.paymentLinkUrl}</a></p>}
           {Array.isArray(c.unmatchedPayments) && c.unmatchedPayments.length > 0 && (
             <div className="mt-2 rounded-xl border border-red-800/60 bg-red-950/40 p-2.5 space-y-1.5">
               <p className="font-bold text-red-300">Unmatched / Out-of-Sequence Payments (Refunds Needed):</p>
               {c.unmatchedPayments.map((u: Any, idx: number) => (
                 <div key={idx} className="flex flex-wrap items-center justify-between gap-2 text-slate-300">
                   <span>
-                    <span className="font-mono text-white">{u.paymentId}</span> • {inr(u.amount)} • {u.status === "UNVERIFIED_GUEST_CLAIM" ? "unverified guest UPI claim (check your bank)" : `state was ${u.status}`} • {dt(u.at)}
+                    <span className="font-mono text-white">{u.paymentId}</span> • {inr(u.amount)} • {u.status === "UNVERIFIED_GUEST_CLAIM" ? "unverified guest UPI claim" : `state was ${u.status}`} • {dt(u.at)}
                     {u.refundedAt ? (
                       <span className="ml-2 font-semibold text-emerald-400">✓ Refunded (UTR: {u.refundReference || "—"})</span>
                     ) : (
@@ -1395,9 +3034,9 @@ function CabRequestCard({ c, demo, onChanged }: { c: Any; demo: boolean; onChang
             }
           />
           <Money
-            label="Cash to driver"
+            label="Cash on drop"
             value={
-              c.remainingCashAmount && c.remainingCashAmount > 0
+              typeof c.remainingCashAmount === "number" && c.remainingCashAmount > 0
                 ? inr(c.remainingCashAmount)
                 : <span className="text-slate-400">—</span>
             }
@@ -1489,6 +3128,20 @@ function AssignForm({ c, demo, onDone }: { c: Any; demo: boolean; onDone: () => 
     }
   }
 
+  async function selectQuote(q: Any) {
+    const qFare = String(q.quotedFare);
+    setDriverUserId(String(q.driverId));
+    setPicked({ _id: String(q.driverId), name: q.driverName, phone: q.driverPhone });
+    setFare(qFare);
+    if (!locked && Number(qFare) > 0) {
+      try {
+        const r = await adminApi("/commission/preview", { method: "POST", body: { fare: Number(qFare), tenantKey: c.propertyId }, demo });
+        setPreview(r.data);
+        setPreviewFor(qFare);
+      } catch {}
+    }
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!driverUserId && (!name.trim() || !phone.trim())) return alert("Pick an approved driver or enter driver name and phone.");
@@ -1549,7 +3202,7 @@ function AssignForm({ c, demo, onDone }: { c: Any; demo: boolean; onDone: () => 
               type="button"
               key={i}
               className="rounded border border-emerald-700/60 bg-emerald-950/40 px-2.5 py-1 text-emerald-300 hover:bg-emerald-900/60 font-medium text-xs flex items-center gap-1 transition"
-              onClick={() => { setDriverUserId(String(q.driverId)); setPicked({ _id: String(q.driverId), name: q.driverName, phone: q.driverPhone }); setFare(String(q.quotedFare)); }}
+              onClick={() => selectQuote(q)}
             >
               ✓ {q.driverName} ({inr(q.quotedFare)})
             </button>
@@ -1780,409 +3433,185 @@ export function PayoutsTab({ demo }: TabProps) {
 }
 
 // ---------------------------------------------------------------------------
-// 7. Platform settings
+// 7. Platform settings (Unified Control Tower Settings Console)
 // ---------------------------------------------------------------------------
+
 /** Mirrors the server's CommissionService.split so unsaved values can be previewed. */
 function localSplit(fare: number, totalComm: number, adminPct: number, homePct: number, adv: number, min: number) {
   const f = Math.round(fare);
-  // Same percents the save sends, then the server's rounding (each part rounded on the fare)
   const platformPct = roundPct((totalComm * adminPct) / 100);
   const pfA = Math.min(f, Math.round((f * platformPct) / 100));
   const hcA = Math.min(f - pfA, Math.round((f * roundPct(totalComm - platformPct)) / 100));
   const totalCommAmt = pfA + hcA;
-  const advance = Math.min(f, Math.max(min, Math.round((f * adv) / 100), totalCommAmt));
+  const calcAdv = adv === 0 ? (min > 0 ? min : totalCommAmt) : Math.max(min, Math.round((f * adv) / 100), totalCommAmt);
+  const advance = Math.min(f, calcAdv);
   const driverExcess = Math.max(0, advance - totalCommAmt);
   const cash = f - advance;
   const driverTotal = cash + driverExcess;
   return { f, totalCommAmt, pfA, hcA, driver: driverTotal, advance, cash, driverShare: driverExcess };
 }
 
-/** Effective operational values (platform.* is the one source of truth), as form strings. */
-const savedOps = (data: Any | null) => ({
-  quoteWindow: String(data?.platform?.quoteWindowHours ?? 4),
-  minThreshold: String(data?.platform?.minDriverPayoutThreshold ?? 100),
-  ownFleetComm: String(data?.platform?.ownFleetFeePercent ?? 5),
-  ownFleetMin: String(data?.platform?.ownFleetMinFee ?? 100),
-});
+const VEHICLE_KEYS = ["Sedan", "SUV", "7-seater", "9-seater"] as const;
+
+const DISPATCH_NUM_FIELDS: { key: string; label: string; hint: string; min?: number; step?: number }[] = [
+  { key: "advanceWindowMin", label: "Advance Payment Window (minutes)", hint: "Guest payment hold window (recommended 120m for manual UPI verification)", min: 15 },
+  { key: "quoteBiddingWindowMin", label: "Driver Bidding Window (minutes)", hint: "Window before lowest driver bid is auto-accepted (0 = manual host select)", min: 0 },
+  { key: "quoteValidityHours", label: "Driver Quote Validity (hours)", hint: "Duration before driver quotes expire (0 = never)", min: 0 },
+  { key: "nearbyRadiusKm", label: "Nearby Search Radius (km)", hint: "Drivers beyond this radius from homestay are omitted (0 = platform-wide)", min: 0 },
+  { key: "driverBroadcastMax", label: "WhatsApp Driver Broadcast Cap", hint: "Max nearby drivers alerted via WhatsApp per ride request", min: 1 },
+  { key: "hillSurchargeMultiplier", label: "Mountain Terrain Surcharge", hint: "Multiplier for steep mountain corridors (e.g. 1.15 = +15%)", min: 1.0, step: 0.05 },
+  { key: "hillSurchargeDistanceKm", label: "Mountain Surcharge Threshold (km)", hint: "Corridor distance in km beyond which mountain surcharge applies", min: 0 },
+  { key: "maxFare", label: "Maximum Fare Ceiling ₹", hint: "Sanity safeguard cap against fraudulent or corrupted quotes", min: 1000 },
+  { key: "askCabCooldownHours", label: "Ask-for-Cab Cooldown (hours)", hint: "Minimum buffer between promotional WhatsApps to the same guest", min: 1 },
+  { key: "pickupStepMin", label: "Pickup Time Step (minutes)", hint: "Minute interval quantization for guest pickup time selection", min: 5 },
+  { key: "bookingHorizonDays", label: "Booking Window (days ahead)", hint: "Furthest future date guests are permitted to book in advance", min: 1 },
+  { key: "guestLinkDays", label: "Guest Link Validity (days)", hint: "Lifetime of the unique public guest booking URL", min: 1 },
+  { key: "maxOpenRequestsPerPhone", label: "Max Open Requests per Phone", hint: "Anti-spam threshold for guest public requests", min: 1 },
+];
+
+const BUSINESS_FIELDS: { key: string; label: string; placeholder: string; hint?: string }[] = [
+  { key: "name", label: "Brand Name", placeholder: "e.g. StayCabs" },
+  { key: "legalName", label: "Registered Business Legal Name", placeholder: "e.g. StayRide Mobility Private Limited" },
+  { key: "address", label: "Registered Office Address", placeholder: "e.g. Hill Cart Road, Siliguri, West Bengal 734001" },
+  { key: "email", label: "Support & Operations Email", placeholder: "support@staycabs.in" },
+  { key: "phone", label: "Support Phone / WhatsApp Hotline", placeholder: "+91 98765 43210", hint: "Primary phone shown on passes and guest receipts" },
+  { key: "upiId", label: "Platform Collection UPI ID (VPA)", placeholder: "stayride@okhdfcbank", hint: "VPA displayed on QR codes for manual UPI advance payments" },
+  { key: "paymentPageUrl", label: "Hosted Payment Page URL", placeholder: "https://rzp.io/rzp/yourlink", hint: "External payment fallback if direct API simulation is active" },
+  { key: "grievanceOfficer", label: "Grievance Officer Name", placeholder: "e.g. Tirtharaj Saha", hint: "India IT Rules & DPDP Act compliance requirement" },
+  { key: "grievanceEmail", label: "Grievance Officer Email", placeholder: "grievance@staycabs.in" },
+  { key: "website", label: "Official Public Website URL", placeholder: "https://staycabs.in" },
+];
+
+const WHATSAPP_EVENTS: { key: string; label: string; purpose: string }[] = [
+  { key: "ASK_CAB", label: "Ask Guest for Cab", purpose: "Automated invite link sent to arriving homestay guests" },
+  { key: "NEW_REQUEST", label: "New Trip Alert to Drivers", purpose: "Broadcast to local drivers with route and vehicle quote link" },
+  { key: "QUOTE_COUNTER", label: "Owner Fare Counter-Offer", purpose: "Sent to quoting driver when homestay negotiates" },
+  { key: "QUOTE_ACCEPTED_DRIVER", label: "Driver Quote Accepted", purpose: "Notifies winning driver their bid was selected" },
+  { key: "QUOTE_ACCEPTED_GUEST", label: "Guest Advance Payment Link", purpose: "Prompts guest to pay advance hold fee to lock ride" },
+  { key: "ADVANCE_PAID_GUEST", label: "Booking Confirmed (Guest)", purpose: "Trip confirmed pass with driver details and OTP" },
+  { key: "BOARDING_PIN_GUEST", label: "Boarding PIN Pass", purpose: "Authentication security PIN required at boarding" },
+  { key: "ADVANCE_PAID_DRIVER", label: "Trip Dispatched (Driver)", purpose: "Driver receipt with pickup coordinates and guest phone" },
+  { key: "ADVANCE_EXPIRED_GUEST", label: "Advance Hold Expired", purpose: "Notifies guest payment window closed without confirmation" },
+  { key: "TRIP_ASSIGNED_DRIVER", label: "Direct Fleet Assignment", purpose: "Dispatches ride to homestay's dedicated fleet driver" },
+  { key: "TRIP_CANCELLED_GUEST", label: "Trip Cancellation Alert", purpose: "Notifies guest when ride is revoked by host or admin" },
+  { key: "REFUND_GUEST", label: "Advance Refund Receipt", purpose: "Confirms advance return when ride is cancelled before dispatch" },
+  { key: "COMPLETION_REMINDER_DRIVER", label: "Cash Confirmation Reminder", purpose: "Prompts driver to collect remaining cash and submit OTP" },
+  { key: "BIDDING_TIMEOUT_OWNER", label: "Bidding Window Closed", purpose: "Alerts homestay when no driver bids arrived in window" },
+  { key: "DRIVER_WELCOME", label: "Driver Registration Welcome", purpose: "Sent upon driver onboarding on mobile app" },
+  { key: "PAYOUT_SETTLED_DRIVER", label: "Payout Disbursed (Driver)", purpose: "Payment settlement receipt with bank reference" },
+  { key: "PAYOUT_REJECTED_DRIVER", label: "Payout Request Declined", purpose: "Notifies driver if bank details or balance check failed" },
+  { key: "VEHICLE_UPDATED_GUEST", label: "Vehicle Plate Reassigned", purpose: "Emergency vehicle or driver swap alert to passenger" },
+];
+
+type SettingsSection = "financials" | "dispatch" | "pricing" | "sightseeing" | "whatsapp" | "business" | "features";
 
 export function SettingsTab({ demo }: TabProps) {
   const { data, error, loading, reload, updatedAt } = useLoad(() => adminApi("/commission/settings", { demo }).then((r) => r.data as Any), [demo], true);
-  const [totalComm, setTotalComm] = useState("");
-  const [adminShare, setAdminShare] = useState("");
-  const [homeShare, setHomeShare] = useState("");
-  const [adv, setAdv] = useState("");
-  const [min, setMin] = useState("");
-  const [quoteWindow, setQuoteWindow] = useState("");
-  const [minThreshold, setMinThreshold] = useState("");
-  const [ownFleetComm, setOwnFleetComm] = useState("");
-  const [ownFleetMin, setOwnFleetMin] = useState("");
+  
+  const [activeSection, setActiveSection] = useState<SettingsSection>("financials");
+
+  // Commission & Splits
+  const [totalComm, setTotalComm] = useState("10");
+  const [adminShare, setAdminShare] = useState("50");
+  const [adv, setAdv] = useState("15");
+  const [min, setMin] = useState("500");
+  const [ownFleetComm, setOwnFleetComm] = useState("5");
+  const [ownFleetMin, setOwnFleetMin] = useState("100");
+  const [minThreshold, setMinThreshold] = useState("100");
+
+  // Operational Platform Config
+  const [cfg, setCfg] = useState<Any | null>(null);
+  const [presets, setPresets] = useState("");
+  const [icalHosts, setIcalHosts] = useState("");
   const [features, setFeatures] = useState<Any>({});
+
+  // Calculation & Save
+  const [fareSim, setFareSim] = useState("3000");
   const [reason, setReason] = useState("");
-  const [fare, setFare] = useState("3000");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!data) return;
     setTotalComm(String(data.totalCommissionPercent ?? 10));
     setAdminShare(String(data.adminSharePercentOfCommission ?? 50));
-    setHomeShare(String(data.homestaySharePercentOfCommission ?? 50));
     setAdv(String(data.defaultAdvancePercent ?? 15));
     setMin(String(data.minAdvanceAmount ?? 500));
-    const ops = savedOps(data);
-    setQuoteWindow(ops.quoteWindow);
-    setMinThreshold(ops.minThreshold);
-    setOwnFleetComm(ops.ownFleetComm);
-    setOwnFleetMin(ops.ownFleetMin);
+    setOwnFleetComm(String(data.platform?.ownFleetFeePercent ?? 5));
+    setOwnFleetMin(String(data.platform?.ownFleetMinFee ?? 100));
+    setMinThreshold(String(data.platform?.minDriverPayoutThreshold ?? 100));
+
+    if (data.platform) {
+      setCfg(JSON.parse(JSON.stringify(data.platform)));
+      setPresets((data.platform.sightseeingPresets || []).join("\n"));
+      setIcalHosts((data.platform.icalAllowedHosts || []).join("\n"));
+    }
     setFeatures(data.features || {});
   }, [data]);
 
-  const dirty =
-    !!data &&
-    (reason !== "" ||
-      totalComm !== String(data.totalCommissionPercent ?? 10) ||
-      adminShare !== String(data.adminSharePercentOfCommission ?? 50) ||
-      homeShare !== String(data.homestaySharePercentOfCommission ?? 50) ||
-      adv !== String(data.defaultAdvancePercent ?? 15) ||
-      min !== String(data.minAdvanceAmount ?? 500) ||
-      quoteWindow !== savedOps(data).quoteWindow ||
-      minThreshold !== savedOps(data).minThreshold ||
-      ownFleetComm !== savedOps(data).ownFleetComm ||
-      ownFleetMin !== savedOps(data).ownFleetMin ||
-      JSON.stringify(features) !== JSON.stringify(data.features || {}));
+  // Clean Presets & Domains
+  const presetList = (text: string) => text.split("\n").map((p) => p.trim()).filter(Boolean);
+  const cleanDomainList = (text: string) =>
+    text
+      .split("\n")
+      .map((p) => p.trim())
+      .filter(Boolean)
+      .map((line) => {
+        try {
+          if (line.includes("://")) {
+            return new URL(line).hostname.replace(/^www\./, "");
+          }
+          return line.split("/")[0].replace(/^www\./, "").trim();
+        } catch {
+          return line;
+        }
+      })
+      .filter(Boolean);
+
+  // Dirty state tracking
+  const isFinancialsDirty =
+    !data ||
+    totalComm !== String(data.totalCommissionPercent ?? 10) ||
+    adminShare !== String(data.adminSharePercentOfCommission ?? 50) ||
+    adv !== String(data.defaultAdvancePercent ?? 15) ||
+    min !== String(data.minAdvanceAmount ?? 500) ||
+    ownFleetComm !== String(data.platform?.ownFleetFeePercent ?? 5) ||
+    ownFleetMin !== String(data.platform?.ownFleetMinFee ?? 100) ||
+    minThreshold !== String(data.platform?.minDriverPayoutThreshold ?? 100);
+
+  const isOpsDirty =
+    !!data?.platform &&
+    !!cfg &&
+    JSON.stringify({ ...cfg, sightseeingPresets: presetList(presets), icalAllowedHosts: cleanDomainList(icalHosts) }) !==
+      JSON.stringify(data.platform);
+
+  const isFeaturesDirty = !!data?.features && JSON.stringify(features) !== JSON.stringify(data.features);
+
+  const dirty = isFinancialsDirty || isOpsDirty || isFeaturesDirty;
   useEditLock(dirty);
 
-  const which = demo ? "DEMO (test) dataset" : "PRODUCTION dataset";
+  // Field Setters
+  const setCfgField = (key: string, value: unknown) => setCfg((c: Any) => ({ ...c, [key]: value }));
+  const setVehicleProp = (k: string, field: string, value: unknown) =>
+    setCfg((c: Any) => ({ ...c, vehicles: { ...c.vehicles, [k]: { ...c.vehicles?.[k], [field]: value } } }));
 
-  async function save(e: React.FormEvent) {
-    e.preventDefault();
-    if (!reason.trim()) return alert("A change reason is required.");
-    if ([totalComm, adminShare, homeShare, adv, min].some((v) => v === "")) return alert("All commission & advance rates are required.");
-    const tc = Number(totalComm);
-    const ap = Number(adminShare);
-    const hp = Number(homeShare);
-    if (ap + hp !== 100) return alert("Platform Share % and Homestay Share % of the commission must total exactly 100%.");
-    if (!window.confirm(`Apply to the ${which}: Total commission ${totalComm}%, Platform split ${adminShare}%, Homestay split ${homeShare}%, advance ${adv}%, min advance ₹${min}, own fleet ${ownFleetComm}% with ₹${ownFleetMin} minimum fee?`)) return;
-    // Operational values live in platform.* (also edited on the Operations tab): send only what changed here.
-    const ops = savedOps(data);
-    // Homestay share = total minus the rounded platform share, so the two always add up to the total
-    const platformPct = roundPct(tc * (ap / 100));
-    setSaving(true);
-    await act(
-      () => adminApi("/commission/settings", {
-        method: "PUT",
-        demo,
-        body: {
-          totalCommissionPercent: tc,
-          adminSharePercentOfCommission: ap,
-          homestaySharePercentOfCommission: hp,
-          globalPlatformFeePercent: platformPct,
-          globalHomestayCommissionPercent: roundPct(tc - platformPct),
-          defaultAdvancePercent: Number(adv),
-          minAdvanceAmount: Number(min),
-          quoteWindowHours: quoteWindow !== ops.quoteWindow ? Number(quoteWindow) : undefined,
-          minDriverPayoutThreshold: minThreshold !== ops.minThreshold ? Number(minThreshold) : undefined,
-          ownFleetCommissionPercent: ownFleetComm !== ops.ownFleetComm ? Number(ownFleetComm || 0) : undefined,
-          ownFleetMinFee: ownFleetMin !== ops.ownFleetMin ? Number(ownFleetMin || 0) : undefined,
-          features,
-          changeReason: reason.trim(),
-        },
-      }),
-      () => { setReason(""); reload(); }
-    );
-    setSaving(false);
-  }
-
-  const setFeature = (k: string, field: "enabled" | "defaultOn", v: boolean) => setFeatures((f: Any) => ({ ...f, [k]: { ...f[k], [field]: v } }));
-  const sample = Number(fare) > 0 && [totalComm, adminShare, homeShare, adv, min].every((v) => v !== "")
-    ? localSplit(Number(fare), Number(totalComm), Number(adminShare), Number(homeShare), Number(adv), Number(min))
-    : null;
-
-  return (
-    <>
-    <Panel
-      title={<>Platform settings {demo ? <Badge tone="amber">DEMO DATASET</Badge> : <Badge tone="green">PRODUCTION</Badge>}</>}
-      subtitle="Dynamic commission architecture, advance floors, 4-hour bidding windows, and driver wallet thresholds."
-      onRefresh={reload}
-      error={error}
-      loading={loading}
-      updatedAt={updatedAt}
-    >
-      <div className={`rounded-xl border px-4 py-3 text-xs font-bold ${demo ? "border-amber-600/50 bg-amber-950/50 text-amber-300" : "border-emerald-700/50 bg-emerald-950/40 text-emerald-300"}`}>
-        {demo
-          ? "You are editing the DEMO (test) dataset settings. Production homestays are not affected. Untick “Demo dataset” to edit production."
-          : "You are editing PRODUCTION settings. Changes apply dynamically across all new cab requests."}
-      </div>
-      {data && (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <form onSubmit={save} className="space-y-4 text-xs">
-            <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-3 space-y-2.5">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400 block">
-                1. Commission Architecture (Deducted from Advance)
-              </span>
-              <div className="grid grid-cols-3 gap-2">
-                <label className="text-slate-300">
-                  Total Commission %
-                  <input className={`${input} mt-1 w-full`} type="number" step="0.5" min="0" max="30" required value={totalComm} onChange={(e) => setTotalComm(e.target.value)} />
-                </label>
-                <label className="text-slate-300">
-                  Platform Share %
-                  <input className={`${input} mt-1 w-full`} type="number" step="1" min="0" max="100" required value={adminShare} onChange={(e) => setAdminShare(e.target.value)} />
-                </label>
-                <label className="text-slate-300">
-                  Homestay Share %
-                  <input className={`${input} mt-1 w-full`} type="number" step="1" min="0" max="100" required value={homeShare} onChange={(e) => setHomeShare(e.target.value)} />
-                </label>
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-3 space-y-2.5">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-blue-400 block">
-                2. Guest Advance & Booking Policy
-              </span>
-              <div className="grid grid-cols-2 gap-3">
-                <label className="text-slate-300">
-                  Guest Advance %
-                  <input className={`${input} mt-1 w-full`} type="number" step="0.5" min="0" required value={adv} onChange={(e) => setAdv(e.target.value)} />
-                </label>
-                <label className="text-slate-300">
-                  Minimum Advance Floor ₹
-                  <input className={`${input} mt-1 w-full`} type="number" min="0" required value={min} onChange={(e) => setMin(e.target.value)} />
-                </label>
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-3 space-y-2.5">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-amber-400 block">
-                3. Operations, Syndicates & Driver Wallet
-              </span>
-              <div className="grid grid-cols-2 gap-2">
-                <label className="text-slate-300">
-                  Quote Window (Hrs)
-                  <input className={`${input} mt-1 w-full`} type="number" step="0.5" min="0.5" required value={quoteWindow} onChange={(e) => setQuoteWindow(e.target.value)} />
-                </label>
-                <label className="text-slate-300">
-                  Min Driver Payout ₹
-                  <input className={`${input} mt-1 w-full`} type="number" min="10" required value={minThreshold} onChange={(e) => setMinThreshold(e.target.value)} />
-                </label>
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-3 space-y-2.5">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-purple-400 block">
-                4. Homestay In-House Fleet (&ldquo;My Drivers&rdquo;) Policy
-              </span>
-              <div className="grid grid-cols-2 gap-3">
-                <label className="text-slate-300">
-                  Own Fleet Commission % (0-50)
-                  <input className={`${input} mt-1 w-full`} type="number" step="0.5" min="0" max="50" value={ownFleetComm} onChange={(e) => setOwnFleetComm(e.target.value)} />
-                </label>
-                <label className="text-slate-300">
-                  Own Fleet Minimum Fee ₹
-                  <input className={`${input} mt-1 w-full`} type="number" min="0" max="5000" value={ownFleetMin} onChange={(e) => setOwnFleetMin(e.target.value)} />
-                </label>
-              </div>
-              <p className="text-[10px] text-slate-400">
-                Encourages homestays to bring their own cars. Set to 0% to allow homestays to keep 100% of their car&apos;s earnings.
-              </p>
-            </div>
-
-            <table className="w-full text-left">
-              <thead className="text-slate-400">
-                <tr><th className="p-1">Feature</th><th className="p-1">Enabled globally</th><th className="p-1">On by default for homestays</th></tr>
-              </thead>
-              <tbody>
-                {FEATURE_KEYS.map((k) => (
-                  <tr key={k} className="text-slate-300">
-                    <td className="p-1">{FEATURE_LABELS[k]}</td>
-                    <td className="p-1"><input type="checkbox" checked={!!features[k]?.enabled} onChange={(e) => setFeature(k, "enabled", e.target.checked)} /></td>
-                    <td className="p-1">
-                      {k === "driverQuotes" ? (
-                        <span className="text-[10px] text-slate-500">all drivers (no per-homestay setting)</span>
-                      ) : (
-                        <input type="checkbox" checked={!!features[k]?.defaultOn} onChange={(e) => setFeature(k, "defaultOn", e.target.checked)} />
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            <label className="block text-slate-300">
-              Change reason *
-              <input className={`${input} mt-1 w-full`} required value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Adjusted commission split to 50/50 and verified 4h window" />
-            </label>
-            <button className={demo ? "rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-500 disabled:opacity-50 cursor-pointer" : btn.primary} disabled={saving}>
-              {saving ? "Saving Settings..." : `Save ${demo ? "DEMO" : "PRODUCTION"} Settings`}
-            </button>
-            <p className="text-[11px] text-slate-500">
-              Last change by {data.updatedBy || "—"} • {data.changeReason || "—"} • effective {dt(data.effectiveFrom)}
-            </p>
-          </form>
-
-          <div className="space-y-3 text-xs">
-            <label className="block text-slate-300">
-              Interactive Math Simulation Fare ₹
-              <input className={`${input} mt-1 w-full font-mono text-sm font-bold text-emerald-400`} type="number" min="1" value={fare} onChange={(e) => setFare(e.target.value)} placeholder="e.g. 3000" />
-            </label>
-            {sample ? (
-              <div className="rounded-xl border border-slate-800 bg-slate-900 p-4 space-y-2.5">
-                <div className="flex justify-between items-center pb-2 border-b border-slate-800">
-                  <span className="font-bold text-white text-sm">Winning Driver Fare (All-Inclusive):</span>
-                  <span className="font-mono font-black text-emerald-400 text-base">{inr(sample.f)}</span>
-                </div>
-
-                <div className="space-y-1.5 text-slate-300">
-                  <div className="flex justify-between items-center text-blue-300">
-                    <span>Guest Advance Paid Online:</span>
-                    <span className="font-mono font-bold">{inr(sample.advance)}</span>
-                  </div>
-                  <div className="flex justify-between items-center text-slate-400">
-                    <span>Total Commission ({totalComm}%):</span>
-                    <span className="font-mono font-semibold text-red-400">-{inr(sample.totalCommAmt)}</span>
-                  </div>
-                  <div className="pl-3 border-l-2 border-slate-700 space-y-1 text-[11px] text-slate-400">
-                    <div className="flex justify-between items-center">
-                      <span>• Platform Share ({adminShare}%):</span>
-                      <span className="font-mono text-emerald-400">{inr(sample.pfA)}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span>• Homestay Host Wallet ({homeShare}%):</span>
-                      <span className="font-mono text-emerald-400">{inr(sample.hcA)}</span>
-                    </div>
-                  </div>
-                  <div className="flex justify-between items-center text-amber-300 pt-1">
-                    <span>Cash Driver Collects at Drop-Off:</span>
-                    <span className="font-mono font-bold">{inr(sample.cash)}</span>
-                  </div>
-                  <div className="flex justify-between items-center text-emerald-400">
-                    <span>Excess Advance into Driver Wallet:</span>
-                    <span className="font-mono font-bold">+{inr(sample.driverShare)}</span>
-                  </div>
-                </div>
-
-                <div className="pt-2 border-t border-slate-800 flex justify-between items-center">
-                  <span className="font-extrabold text-white">Driver Total Net In-Hand:</span>
-                  <span className="font-mono font-black text-emerald-400 text-base">
-                    {inr(sample.driver)} ({100 - Number(totalComm)}%)
-                  </span>
-                </div>
-                <p className="text-[10px] text-slate-500 pt-1 leading-tight">
-                  Zero customer surcharge. Math is strictly zero-sum: {inr(sample.cash)} (cash) + {inr(sample.driverShare)} (wallet) + {inr(sample.totalCommAmt)} (comm) = {inr(sample.f)}.
-                </p>
-              </div>
-            ) : (
-              <Empty>Enter a sample fare to preview the split.</Empty>
-            )}
-          </div>
-        </div>
-      )}
-    </Panel>
-    <OperationsSettings demo={demo} />
-    </>
-  );
-}
-
-
-// Operational settings (server: services/platform-config.ts). The server validates and clamps every
-// value, and the apps and the guest page read them from the server, so nothing here is hard-coded there.
-const VEHICLE_KEYS = ["Sedan", "SUV", "7-seater", "9-seater"] as const;
-const NUM_FIELDS: { key: string; label: string; hint: string }[] = [
-  { key: "advanceWindowMin", label: "Advance payment window (minutes)", hint: "Minutes the guest has to pay the advance (min 15). With manual UPI confirmation keep it around 120." },
-  { key: "ownFleetFeePercent", label: "Own-fleet fee %", hint: "Platform fee when the owner uses their own driver (paid by the guest as the advance)." },
-  { key: "ownFleetMinFee", label: "Own-fleet minimum fee ₹", hint: "Floor, so an under-reported fare still pays." },
-  { key: "nearbyRadiusKm", label: "Nearby radius (km)", hint: "Drivers further than this from the homestay are not notified. 0 = everyone." },
-  { key: "driverBroadcastMax", label: "WhatsApp drivers per request", hint: "Each message costs money; push goes to all matching drivers." },
-  { key: "askCabCooldownHours", label: "Ask-for-Cab cooldown (hours)", hint: "Minimum gap between two messages to the same guest." },
-  { key: "pickupStepMin", label: "Pickup time step (minutes)", hint: "" },
-  { key: "bookingHorizonDays", label: "Booking window (days ahead)", hint: "" },
-  { key: "guestLinkDays", label: "Guest link validity (days)", hint: "" },
-  { key: "maxOpenRequestsPerPhone", label: "Open requests per guest phone", hint: "Abuse limit on the public guest page." },
-  { key: "maxFare", label: "Maximum fare ₹", hint: "Sanity cap on any quote or assignment." },
-  { key: "hillSurchargeMultiplier", label: "Mountain Terrain Surcharge Multiplier", hint: "e.g. 1.15 for 15% surcharge on steep mountain routes." },
-  { key: "hillSurchargeDistanceKm", label: "Mountain Surcharge Threshold (km)", hint: "Distance in km beyond which mountain terrain surcharge kicks in (default 40 km)." },
-  { key: "quoteValidityHours", label: "Driver quote valid for (hours)", hint: "After this a quote expires and the driver can quote again. 0 = never." },
-  { key: "quoteBiddingWindowMin", label: "Driver bidding window (minutes)", hint: "Wait time for driver bids before auto-accepting lowest quote. 0 = instant on first bid." },
-];
-
-// Business details shown in the app's Privacy Policy, Terms and Refund pages (required before publishing)
-const BUSINESS_FIELDS: { key: string; label: string; hint?: string }[] = [
-  { key: "name", label: "Brand name" },
-  { key: "legalName", label: "Registered business name" },
-  { key: "address", label: "Registered address (city, state)" },
-  { key: "email", label: "Support email" },
-  { key: "phone", label: "Support Phone / WhatsApp", hint: "Primary platform support line for guest help, WhatsApp inquiries, and homestay contact fallback." },
-  { key: "upiId", label: "Platform Collection UPI ID (VPA)", hint: "VPA for advance booking fee payments (e.g. platform@okhdfcbank)" },
-  { key: "paymentPageUrl", label: "Online Payment Page URL (Razorpay / Hosted)", hint: "Hosted gateway or payment page URL (e.g. https://rzp.io/rzp/id3OHPlh). Used when direct API is in simulation mode." },
-  { key: "grievanceOfficer", label: "Grievance Officer name" },
-  { key: "grievanceEmail", label: "Grievance email" },
-  { key: "website", label: "Website" },
-];
-
-// Message types StayRide sends on WhatsApp; each needs a Meta-approved template (wording is set in Meta)
-const WHATSAPP_EVENTS: { key: string; label: string }[] = [
-  { key: "ASK_CAB", label: "Ask guest for a cab (link)" },
-  { key: "NEW_REQUEST", label: "New trip request to drivers (quote link)" },
-  { key: "QUOTE_COUNTER", label: "Owner's counter-offer to a driver" },
-  { key: "QUOTE_ACCEPTED_DRIVER", label: "Driver: your quote was accepted" },
-  { key: "QUOTE_ACCEPTED_GUEST", label: "Guest: pay the advance" },
-  { key: "ADVANCE_PAID_GUEST", label: "Guest: trip confirmed + driver details" },
-  { key: "BOARDING_PIN_GUEST", label: "Guest: boarding PIN (authentication template)" },
-  { key: "ADVANCE_PAID_DRIVER", label: "Driver: trip confirmed + guest details" },
-  { key: "ADVANCE_EXPIRED_GUEST", label: "Guest: hold expired (advance not paid)" },
-  { key: "TRIP_ASSIGNED_DRIVER", label: "Own driver: trip assigned" },
-  { key: "TRIP_CANCELLED_GUEST", label: "Guest: trip cancelled notification" },
-  { key: "REFUND_GUEST", label: "Guest: advance refund notification" },
-  { key: "COMPLETION_REMINDER_DRIVER", label: "Driver: trip completion & cash confirmation reminder" },
-  { key: "BIDDING_TIMEOUT_OWNER", label: "Owner: bidding window closed without driver quotes" },
-  { key: "DRIVER_WELCOME", label: "Driver: public signup welcome alert" },
-  { key: "PAYOUT_SETTLED_DRIVER", label: "Driver: payout sent" },
-  { key: "PAYOUT_REJECTED_DRIVER", label: "Driver: payout declined" },
-  { key: "VEHICLE_UPDATED_GUEST", label: "Guest: vehicle plate changed" },
-];
-
-function OperationsSettings({ demo }: TabProps) {
-  const { data, error, loading, reload, updatedAt } = useLoad(() => adminApi("/commission/settings", { demo }).then((r) => r.data as Any), [demo], true);
-  const [cfg, setCfg] = useState<Any | null>(null);
-  const [presets, setPresets] = useState("");
-  const [icalHosts, setIcalHosts] = useState("");
-  const [reason, setReason] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    if (!data?.platform) return;
-    setCfg(JSON.parse(JSON.stringify(data.platform)));
-    setPresets((data.platform.sightseeingPresets || []).join("\n"));
-    setIcalHosts((data.platform.icalAllowedHosts || []).join("\n"));
-  }, [data]);
-
-  const dirty = !!data?.platform && !!cfg && (reason !== "" || JSON.stringify({ ...cfg, sightseeingPresets: presetList(presets), icalAllowedHosts: presetList(icalHosts) }) !== JSON.stringify(data.platform));
-  useEditLock(dirty);
-
-  function presetList(text: string) {
-    return text.split("\n").map((p) => p.trim()).filter(Boolean);
-  }
-  const set = (key: string, value: unknown) => setCfg((c: Any) => ({ ...c, [key]: value }));
-  const setVehicle = (k: string, field: string, value: unknown) =>
-    setCfg((c: Any) => ({ ...c, vehicles: { ...c.vehicles, [k]: { ...c.vehicles[k], [field]: value } } }));
-
-  const updateRouteField = (index: number, field: string, val: unknown) => {
+  const updateRouteField = (idx: number, field: string, val: unknown) => {
     setCfg((c: Any) => {
       const routes = [...(c.routePresets || [])];
-      if (!routes[index]) return c;
-      routes[index] = { ...routes[index], [field]: val };
+      if (!routes[idx]) return c;
+      routes[idx] = { ...routes[idx], [field]: val };
       return { ...c, routePresets: routes };
     });
   };
 
-  const updateRouteFare = (index: number, vKey: string, val: number) => {
+  const updateRouteFare = (idx: number, vKey: string, val: string) => {
     setCfg((c: Any) => {
       const routes = [...(c.routePresets || [])];
-      if (!routes[index]) return c;
-      routes[index] = {
-        ...routes[index],
+      if (!routes[idx]) return c;
+      routes[idx] = {
+        ...routes[idx],
         fares: {
-          ...(routes[index].fares || {}),
-          [vKey]: val,
+          ...(routes[idx].fares || {}),
+          [vKey]: val === "" ? "" : isNaN(Number(val)) ? 0 : Number(val),
         },
       };
       return { ...c, routePresets: routes };
@@ -2194,267 +3623,919 @@ function OperationsSettings({ demo }: TabProps) {
       const routes = [...(c.routePresets || [])];
       routes.push({
         id: `route-${Date.now().toString(36)}`,
-        name: "New Hill Route",
+        name: "New Scenic Corridor",
         category: "SIGHTSEEING",
-        duration: "approx 2 hrs",
-        description: "Scenic hill route",
+        duration: "approx 2.5 hrs (45 km)",
+        description: "Custom hill mountain transfer",
         fares: { Sedan: 2200, SUV: 2800, "7-seater": 3200, "9-seater": 4200 },
       });
       return { ...c, routePresets: routes };
     });
   };
 
-  const removeRoutePreset = (index: number) => {
-    if (!window.confirm("Remove this route preset?")) return;
+  const removeRoutePreset = (idx: number) => {
+    if (!window.confirm("Remove this mountain route benchmark?")) return;
     setCfg((c: Any) => {
       const routes = [...(c.routePresets || [])];
-      routes.splice(index, 1);
+      routes.splice(idx, 1);
       return { ...c, routePresets: routes };
     });
   };
 
-  async function save(e: React.FormEvent) {
-    e.preventDefault();
-    if (!cfg || !data) return;
-    if (!reason.trim()) return alert("A change reason is required.");
-    if (!window.confirm(`Apply these operations settings to the ${demo ? "DEMO" : "PRODUCTION"} dataset?`)) return;
+  // Revert / Reset
+  const resetAll = () => {
+    if (!window.confirm("Discard all unsaved edits and reload current settings from server?")) return;
+    reload();
+  };
+
+  // Unified Atomic Save
+  async function saveAll(e?: React.FormEvent) {
+    if (e) e.preventDefault();
+    if (!data) return;
+    if (!reason.trim()) {
+      alert("A change reason is required for audit logging (e.g. 'Updated peak season rates').");
+      return;
+    }
+
+    const tc = Number(totalComm) || 0;
+    const ap = Number(adminShare) || 0;
+    const pf = roundPct(tc * (ap / 100));
+    const hc = roundPct(tc - pf);
+
+    // Sanitize Route Fares before sending
+    const sanitizedRoutes = (cfg?.routePresets || []).map((r: Any) => {
+      const cleanFares: Record<string, number> = {};
+      for (const vk of VEHICLE_KEYS) {
+        const fv = r.fares?.[vk];
+        cleanFares[vk] = fv === "" || isNaN(Number(fv)) ? 0 : Number(fv);
+      }
+      return { ...r, fares: cleanFares };
+    });
+
+    const payload: Any = {
+      globalPlatformFeePercent: pf,
+      globalHomestayCommissionPercent: hc,
+      defaultAdvancePercent: Number(adv) || 0,
+      minAdvanceAmount: Number(min) || 0,
+      features,
+      platform: {
+        ...(cfg || {}),
+        ownFleetFeePercent: Number(ownFleetComm) || 0,
+        ownFleetMinFee: Number(ownFleetMin) || 0,
+        minDriverPayoutThreshold: Number(minThreshold) || 0,
+        routePresets: sanitizedRoutes,
+        sightseeingPresets: presetList(presets),
+        icalAllowedHosts: cleanDomainList(icalHosts),
+      },
+      changeReason: reason.trim(),
+    };
+
     setSaving(true);
     await act(
       () =>
         adminApi("/commission/settings", {
           method: "PUT",
           demo,
-          body: {
-            // only the operations config: the server keeps the saved rates and feature switches
-            platform: { ...cfg, sightseeingPresets: presetList(presets), icalAllowedHosts: presetList(icalHosts) },
-            changeReason: reason.trim(),
-          },
+          body: payload,
         }),
-      () => { setReason(""); reload(); }
+      () => {
+        setReason("");
+        reload();
+      }
     );
     setSaving(false);
   }
 
+  // Live Split Simulation
+  const tcNum = Number(totalComm) || 0;
+  const apNum = Number(adminShare) || 0;
+  const hpNum = Math.max(0, 100 - apNum);
+  const advNum = Number(adv) || 0;
+  const minNum = Number(min) || 0;
+  const simSplit = localSplit(Number(fareSim) || 3000, tcNum, apNum, hpNum, advNum, minNum);
+
   return (
-    <Panel
-      title={<>Operations settings {demo ? <Badge tone="amber">DEMO DATASET</Badge> : <Badge tone="green">PRODUCTION</Badge>}</>}
-      subtitle="Payment window, own-fleet fee, nearby radius, WhatsApp, booking times, presets and vehicle classes. The server clamps invalid values."
-      onRefresh={reload}
-      error={error}
-      loading={loading}
-      updatedAt={updatedAt}
-    >
-      {cfg && (
-        <form onSubmit={save} className="space-y-4 text-xs">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {NUM_FIELDS.map((f) => (
-              <label key={f.key} className="text-slate-300">
-                {f.label}
-                <input className={`${input} mt-1 w-full`} type="number" min="0" value={cfg[f.key] ?? ""} onChange={(e) => set(f.key, e.target.value === "" ? "" : Number(e.target.value))} />
-                {f.hint && <span className="mt-1 block text-[10px] text-slate-500">{f.hint}</span>}
-              </label>
-            ))}
-            <label className="text-slate-300">
-              Earliest pickup time
-              <input className={`${input} mt-1 w-full`} value={cfg.pickupStart ?? ""} onChange={(e) => set("pickupStart", e.target.value)} placeholder="03:30 AM" />
-            </label>
-            <label className="text-slate-300">
-              Latest pickup time
-              <input className={`${input} mt-1 w-full`} value={cfg.pickupEnd ?? ""} onChange={(e) => set("pickupEnd", e.target.value)} placeholder="10:00 PM" />
-            </label>
-            <label className="text-slate-300">
-              WhatsApp template language
-              <input className={`${input} mt-1 w-full`} value={cfg.whatsappLanguage ?? ""} onChange={(e) => set("whatsappLanguage", e.target.value)} placeholder="en, hi, ne, bn…" />
-              <span className="mt-1 block text-[10px] text-slate-500">Templates must be approved in Meta in this language.</span>
-            </label>
+    <div className="space-y-6">
+      {/* Top Header & Sub-Navigation */}
+      <Panel
+        title={
+          <div className="flex items-center gap-3">
+            <span className="text-lg font-bold text-white">Platform Settings Control Tower</span>
+            {demo ? <Badge tone="amber">DEMO DATASET</Badge> : <Badge tone="green">PRODUCTION ACTIVE</Badge>}
+            {dirty && <Badge tone="red">UNSAVED CHANGES</Badge>}
           </div>
-
-          <table className="w-full text-left">
-            <thead className="text-slate-400">
-              <tr><th className="p-1">Vehicle class</th><th className="p-1">Label shown</th><th className="p-1">Seats</th><th className="p-1">Estimate ₹</th><th className="p-1">Bookable</th></tr>
-            </thead>
-            <tbody>
-              {VEHICLE_KEYS.map((k) => (
-                <tr key={k} className="text-slate-300">
-                  <td className="p-1 font-mono">{k}</td>
-                  <td className="p-1"><input className={`${input} w-full`} value={cfg.vehicles?.[k]?.label ?? ""} onChange={(e) => setVehicle(k, "label", e.target.value)} /></td>
-                  <td className="p-1"><input className={`${input} w-20`} type="number" min="1" value={cfg.vehicles?.[k]?.seats ?? ""} onChange={(e) => setVehicle(k, "seats", Number(e.target.value))} /></td>
-                  <td className="p-1"><input className={`${input} w-24`} type="number" min="0" value={cfg.vehicles?.[k]?.estFare ?? ""} onChange={(e) => setVehicle(k, "estFare", Number(e.target.value))} /></td>
-                  <td className="p-1"><input type="checkbox" checked={!!cfg.vehicles?.[k]?.enabled} onChange={(e) => setVehicle(k, "enabled", e.target.checked)} /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          {/* Route-Specific Benchmark Pricing */}
-          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
-              <div>
-                <h4 className="text-sm font-semibold text-slate-200">Route-Specific Benchmark Pricing</h4>
-                <p className="text-[11px] text-slate-400">
-                  Calibrate fixed benchmark fares across vehicle tiers for popular Darjeeling and Sikkim hill routes. Displayed in the guest booking wizard and used as baseline estimates for driver bidding.
-                </p>
-              </div>
+        }
+        subtitle="Manage commission splits, mountain route fare benchmarks, dispatch automation, WhatsApp templates, and compliance business profiles."
+        onRefresh={reload}
+        error={error}
+        loading={loading}
+        updatedAt={updatedAt}
+        right={
+          dirty ? (
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={resetAll} className={btn.ghost} disabled={saving}>
+                Discard Edits
+              </button>
               <button
                 type="button"
-                onClick={addRoutePreset}
-                className="self-start sm:self-auto rounded-lg bg-emerald-700/80 hover:bg-emerald-600 px-3 py-1.5 text-[11px] font-semibold text-white transition-colors"
+                onClick={() => saveAll()}
+                className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-lg shadow-emerald-900/40 hover:bg-emerald-500 disabled:opacity-50"
+                disabled={saving}
               >
-                + Add Route Preset
+                {saving ? "Saving All..." : "Save Platform Settings"}
               </button>
             </div>
+          ) : undefined
+        }
+      >
+        {/* Navigation Sub-Tabs */}
+        <div className="flex flex-wrap gap-1.5 border-b border-slate-800 pb-3">
+          {[
+            { id: "financials", label: "Commission & Splits", icon: "•", dirty: isFinancialsDirty },
+            { id: "dispatch", label: "Mountain & Dispatch", icon: "•", dirty: isOpsDirty },
+            { id: "pricing", label: "Fleet & Route Pricing", icon: "•", dirty: isOpsDirty },
+            { id: "sightseeing", label: "Sightseeing & Calendar", icon: "•", dirty: isOpsDirty },
+            { id: "whatsapp", label: "WhatsApp Templates", icon: "•", dirty: isOpsDirty },
+            { id: "business", label: "Business & Compliance", icon: "•", dirty: isOpsDirty },
+            { id: "features", label: "Global Feature Switches", icon: "•", dirty: isFeaturesDirty },
+          ].map((tab) => {
+            const active = activeSection === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveSection(tab.id as SettingsSection)}
+                className={`relative flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-semibold transition-all ${
+                  active
+                    ? "bg-blue-600 text-white shadow-md shadow-blue-900/40"
+                    : "bg-slate-900/80 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                }`}
+              >
+                <span>{tab.icon}</span>
+                <span>{tab.label}</span>
+                {tab.dirty && (
+                  <span className="h-2 w-2 rounded-full bg-amber-400 ring-2 ring-slate-950" title="Modified" />
+                )}
+              </button>
+            );
+          })}
+        </div>
 
-            <div className="space-y-3">
-              {(cfg.routePresets || []).map((route: Any, idx: number) => (
-                <div key={route.id || idx} className="rounded-lg border border-slate-800/80 bg-slate-950/60 p-3 space-y-3">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 flex-1">
-                      <div>
-                        <span className="text-[10px] text-slate-400">Route Name</span>
-                        <input
-                          className={`${input} w-full mt-0.5 font-medium`}
-                          value={route.name || ""}
-                          onChange={(e) => updateRouteField(idx, "name", e.target.value)}
-                          placeholder="e.g. Bagdogra Airport Transfer"
-                        />
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400">Category</span>
-                        <select
-                          className={`${input} w-full mt-0.5`}
-                          value={route.category || "SIGHTSEEING"}
-                          onChange={(e) => updateRouteField(idx, "category", e.target.value)}
-                        >
-                          <option value="AIRPORT_STATION">Airport / Station</option>
-                          <option value="SIGHTSEEING">Sightseeing</option>
-                          <option value="DAY_EXCURSION">Day Excursion</option>
-                          <option value="LOCAL_DROP">Local Drop</option>
-                        </select>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400">Duration / Distance</span>
-                        <input
-                          className={`${input} w-full mt-0.5`}
-                          value={route.duration || ""}
-                          onChange={(e) => updateRouteField(idx, "duration", e.target.value)}
-                          placeholder="e.g. approx 3 hrs (70 km)"
-                        />
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => removeRoutePreset(idx)}
-                      className="text-xs text-rose-400 hover:text-rose-300 px-2 py-1 transition-colors self-end sm:self-center"
-                      title="Delete route preset"
-                    >
-                      Delete
-                    </button>
-                  </div>
+        {/* ------------------------------------------------------------------ */}
+        {/* Sub-Tab 1: Commission & Financials                                 */}
+        {/* ------------------------------------------------------------------ */}
+        {activeSection === "financials" && (
+          <div className="space-y-6 pt-2">
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              {/* Split Rates Card */}
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 space-y-4">
+                <div className="border-b border-slate-800 pb-2">
+                  <h3 className="text-sm font-bold text-white">Platform Commission Structure</h3>
+                  <p className="text-[11px] text-slate-400">
+                    Defines take-rates calculated on every completed ride fare.
+                  </p>
+                </div>
 
-                  <div>
-                    <span className="text-[10px] text-slate-400">Description / Subtext</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <label className="text-slate-300">
+                    <span className="font-semibold">Total Commission %</span>
                     <input
-                      className={`${input} w-full mt-0.5 text-xs text-slate-300`}
-                      value={route.description || ""}
-                      onChange={(e) => updateRouteField(idx, "description", e.target.value)}
-                      placeholder="e.g. One-way hill descent / climb transfer via Rohini route"
+                      className={`${input} mt-1 w-full font-mono text-sm font-bold text-emerald-400`}
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="100"
+                      value={totalComm}
+                      onChange={(e) => setTotalComm(e.target.value)}
                     />
+                    <span className="mt-1 block text-[10px] text-slate-500">
+                      Standard take-rate on driver quote
+                    </span>
+                  </label>
+
+                  <label className="text-slate-300">
+                    <span className="font-semibold">Platform Fee Split %</span>
+                    <input
+                      className={`${input} mt-1 w-full font-mono text-sm font-bold text-blue-400`}
+                      type="number"
+                      step="1"
+                      min="0"
+                      max="100"
+                      value={adminShare}
+                      onChange={(e) => setAdminShare(e.target.value)}
+                    />
+                    <span className="mt-1 block text-[10px] text-slate-500">
+                      Homestay share automatically set to {100 - (Number(adminShare) || 0)}%
+                    </span>
+                  </label>
+
+                  <label className="text-slate-300">
+                    <span className="font-semibold">Default Guest Advance %</span>
+                    <input
+                      className={`${input} mt-1 w-full font-mono`}
+                      type="number"
+                      step="1"
+                      min="0"
+                      max="100"
+                      value={adv}
+                      onChange={(e) => setAdv(e.target.value)}
+                    />
+                    <span className="mt-1 block text-[10px] text-slate-500">
+                      Advance hold paid by passenger to confirm trip
+                    </span>
+                  </label>
+
+                  <label className="text-slate-300">
+                    <span className="font-semibold">Minimum Advance Floor ₹</span>
+                    <input
+                      className={`${input} mt-1 w-full font-mono`}
+                      type="number"
+                      step="50"
+                      min="0"
+                      value={min}
+                      onChange={(e) => setMin(e.target.value)}
+                    />
+                    <span className="mt-1 block text-[10px] text-slate-500">
+                      Absolute floor advance on lower-fare local rides
+                    </span>
+                  </label>
+                </div>
+
+                <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3.5 space-y-2">
+                  <span className="text-[11px] font-semibold text-slate-300 uppercase tracking-wider block">
+                    Homestay Host & Own-Fleet Policies
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <label className="text-slate-400 text-xs">
+                      Own-Fleet Fee %
+                      <input
+                        className={`${input} mt-1 w-full font-mono`}
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={ownFleetComm}
+                        onChange={(e) => setOwnFleetComm(e.target.value)}
+                      />
+                      <span className="mt-0.5 block text-[10px] text-slate-500">Platform cut when host driver used</span>
+                    </label>
+
+                    <label className="text-slate-400 text-xs">
+                      Own-Fleet Min Fee ₹
+                      <input
+                        className={`${input} mt-1 w-full font-mono`}
+                        type="number"
+                        min="0"
+                        value={ownFleetMin}
+                        onChange={(e) => setOwnFleetMin(e.target.value)}
+                      />
+                      <span className="mt-0.5 block text-[10px] text-slate-500">Fee floor on low reported fares</span>
+                    </label>
+
+                    <label className="text-slate-400 text-xs">
+                      Min Driver Payout ₹
+                      <input
+                        className={`${input} mt-1 w-full font-mono`}
+                        type="number"
+                        min="0"
+                        value={minThreshold}
+                        onChange={(e) => setMinThreshold(e.target.value)}
+                      />
+                      <span className="mt-0.5 block text-[10px] text-slate-500">Minimum wallet balance to withdraw</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* Interactive Split Simulator */}
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                  <div>
+                    <h3 className="text-sm font-bold text-white">Interactive Fare Split Simulator</h3>
+                    <p className="text-[11px] text-slate-400">
+                      Verify net earnings and cash splits before committing platform rates.
+                    </p>
+                  </div>
+                  <div className="flex gap-1.5">
+                    {["1800", "2800", "3600", "5200"].map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => setFareSim(s)}
+                        className={`rounded-md px-2 py-1 text-[11px] font-mono font-semibold transition-colors ${
+                          fareSim === s
+                            ? "bg-blue-600 text-white"
+                            : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                        }`}
+                      >
+                        ₹{s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-slate-300 text-xs">
+                    Sample Trip Fare (₹)
+                    <input
+                      className={`${input} mt-1 w-full font-mono text-base font-bold text-amber-400`}
+                      type="number"
+                      step="100"
+                      min="500"
+                      value={fareSim}
+                      onChange={(e) => setFareSim(e.target.value)}
+                      placeholder="e.g. 3000"
+                    />
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  <div className="rounded-xl border border-slate-800 bg-slate-950 p-3">
+                    <span className="text-[10px] font-semibold text-slate-400 uppercase">Passenger Advance</span>
+                    <p className="mt-1 font-mono text-base font-black text-emerald-400">₹{simSplit.advance.toLocaleString("en-IN")}</p>
+                    <span className="text-[10px] text-slate-500">Paid online via UPI</span>
                   </div>
 
-                  <div className="pt-2 border-t border-slate-800/60">
-                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-1.5">
-                      Fares per Vehicle Tier (₹)
-                    </span>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                      {VEHICLE_KEYS.map((vKey) => (
-                        <div key={vKey} className="flex items-center gap-1.5 bg-slate-900/80 px-2.5 py-1.5 rounded-md border border-slate-800">
-                          <span className="text-[11px] font-mono text-slate-400 min-w-[50px]">{vKey}:</span>
-                          <span className="text-xs text-slate-500">₹</span>
-                          <input
-                            type="number"
-                            min="0"
-                            step="50"
-                            className="w-full bg-transparent text-xs font-semibold text-white focus:outline-none"
-                            value={route.fares?.[vKey] ?? ""}
-                            onChange={(e) => updateRouteFare(idx, vKey, Number(e.target.value))}
-                            placeholder="0"
-                          />
-                        </div>
-                      ))}
-                    </div>
+                  <div className="rounded-xl border border-slate-800 bg-slate-950 p-3">
+                    <span className="text-[10px] font-semibold text-slate-400 uppercase">Platform Take</span>
+                    <p className="mt-1 font-mono text-base font-black text-blue-400">₹{simSplit.pfA.toLocaleString("en-IN")}</p>
+                    <span className="text-[10px] text-slate-500">StayCabs cut</span>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-800 bg-slate-950 p-3">
+                    <span className="text-[10px] font-semibold text-slate-400 uppercase">Homestay Share</span>
+                    <p className="mt-1 font-mono text-base font-black text-amber-400">₹{simSplit.hcA.toLocaleString("en-IN")}</p>
+                    <span className="text-[10px] text-slate-500">Host referral cut</span>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-800 bg-slate-950 p-3">
+                    <span className="text-[10px] font-semibold text-slate-400 uppercase">Cash to Driver</span>
+                    <p className="mt-1 font-mono text-base font-black text-white">₹{simSplit.cash.toLocaleString("en-IN")}</p>
+                    <span className="text-[10px] text-slate-500">Collected at trip end</span>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-800 bg-slate-950 p-3">
+                    <span className="text-[10px] font-semibold text-slate-400 uppercase">Online Excess</span>
+                    <p className="mt-1 font-mono text-base font-black text-slate-300">₹{simSplit.driverShare.toLocaleString("en-IN")}</p>
+                    <span className="text-[10px] text-slate-500">Wallet balance credit</span>
+                  </div>
+
+                  <div className="rounded-xl border border-emerald-900/60 bg-emerald-950/30 p-3">
+                    <span className="text-[10px] font-semibold text-emerald-400 uppercase">Driver Net</span>
+                    <p className="mt-1 font-mono text-base font-black text-emerald-300">₹{simSplit.driver.toLocaleString("en-IN")}</p>
+                    <span className="text-[10px] text-emerald-500/80">Cash + wallet credit</span>
                   </div>
                 </div>
-              ))}
-              {(!cfg.routePresets || cfg.routePresets.length === 0) && (
-                <div className="text-center py-4 text-xs text-slate-500">
-                  No route presets configured yet. Defaults from server will apply until customized.
-                </div>
-              )}
+
+                <p className="text-[11px] text-slate-400 leading-relaxed bg-slate-950/80 p-3 rounded-xl border border-slate-800/80">
+                  💡 <strong className="text-slate-200">Rule Guarantee:</strong> Advance collections automatically cover the homestay and platform take-rate first. Any remaining advance flows directly to the driver&apos;s settlement balance.
+                </p>
+              </div>
             </div>
           </div>
+        )}
 
-          <label className="block text-slate-300">
-            Sightseeing presets (one per line)
-            <textarea className={`${input} mt-1 h-40 w-full font-mono`} value={presets} onChange={(e) => setPresets(e.target.value)} />
-          </label>
+        {/* ------------------------------------------------------------------ */}
+        {/* Sub-Tab 2: Mountain & Dispatch Rules                               */}
+        {/* ------------------------------------------------------------------ */}
+        {activeSection === "dispatch" && cfg && (
+          <div className="space-y-5 pt-2">
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 space-y-4">
+              <div className="border-b border-slate-800 pb-2">
+                <h3 className="text-sm font-bold text-white">Mountain Corridor & Automation Dispatch Rules</h3>
+                <p className="text-[11px] text-slate-400">
+                  Configure dispatch radiuses, mountain surcharges, and anti-abuse thresholds enforced by the server.
+                </p>
+              </div>
 
-          <div className="rounded-xl border border-slate-800 p-3">
-            <p className="mb-2 font-semibold text-slate-300">Business details (legal pages)</p>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              {BUSINESS_FIELDS.map((f) => (
-                <label key={f.key} className="text-slate-400">
-                  <span>{f.label}</span>
-                  {f.hint && <p className="text-[11px] text-slate-500 font-normal leading-tight mt-0.5">{f.hint}</p>}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {DISPATCH_NUM_FIELDS.map((f) => (
+                  <label key={f.key} className="text-slate-300">
+                    <span className="font-semibold">{f.label}</span>
+                    <input
+                      className={`${input} mt-1 w-full font-mono`}
+                      type="number"
+                      min={f.min ?? 0}
+                      step={f.step ?? 1}
+                      value={cfg[f.key] ?? ""}
+                      onChange={(e) =>
+                        setCfgField(f.key, e.target.value === "" ? "" : Number(e.target.value))
+                      }
+                    />
+                    {f.hint && <span className="mt-1 block text-[10px] text-slate-500">{f.hint}</span>}
+                  </label>
+                ))}
+
+                <label className="text-slate-300">
+                  <span className="font-semibold">Earliest Pickup Time</span>
                   <input
                     className={`${input} mt-1 w-full`}
-                    value={cfg.business?.[f.key] ?? ""}
-                    onChange={(e) => set("business", { ...(cfg.business || {}), [f.key]: e.target.value })}
+                    value={cfg.pickupStart ?? ""}
+                    onChange={(e) => setCfgField("pickupStart", e.target.value)}
+                    placeholder="03:30 AM"
+                  />
+                  <span className="mt-1 block text-[10px] text-slate-500">Accommodates Tiger Hill sunrise departures</span>
+                </label>
+
+                <label className="text-slate-300">
+                  <span className="font-semibold">Latest Pickup Time</span>
+                  <input
+                    className={`${input} mt-1 w-full`}
+                    value={cfg.pickupEnd ?? ""}
+                    onChange={(e) => setCfgField("pickupEnd", e.target.value)}
+                    placeholder="10:00 PM"
+                  />
+                  <span className="mt-1 block text-[10px] text-slate-500">Night curfew limit for mountain driving</span>
+                </label>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------------ */}
+        {/* Sub-Tab 3: Fleet & Route Pricing                                  */}
+        {/* ------------------------------------------------------------------ */}
+        {activeSection === "pricing" && cfg && (
+          <div className="space-y-6 pt-2">
+            {/* Vehicle Classes */}
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 space-y-4">
+              <div className="border-b border-slate-800 pb-2">
+                <h3 className="text-sm font-bold text-white">Vehicle Tier Classes</h3>
+                <p className="text-[11px] text-slate-400">
+                  Supported passenger vehicle categories in the booking wizard and driver bidding app.
+                </p>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="border-b border-slate-800 text-[11px] uppercase tracking-wider text-slate-400">
+                    <tr>
+                      <th className="p-2.5">Class Key</th>
+                      <th className="p-2.5">Passenger Label</th>
+                      <th className="p-2.5">Seats</th>
+                      <th className="p-2.5">Baseline Estimate ₹</th>
+                      <th className="p-2.5 text-center">Active / Bookable</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60">
+                    {VEHICLE_KEYS.map((k) => (
+                      <tr key={k} className="hover:bg-slate-900/40">
+                        <td className="p-2.5 font-mono font-semibold text-slate-200">{k}</td>
+                        <td className="p-2.5">
+                          <input
+                            className={`${input} w-full max-w-xs`}
+                            value={cfg.vehicles?.[k]?.label ?? ""}
+                            onChange={(e) => setVehicleProp(k, "label", e.target.value)}
+                          />
+                        </td>
+                        <td className="p-2.5">
+                          <input
+                            className={`${input} w-20 font-mono`}
+                            type="number"
+                            min="1"
+                            value={cfg.vehicles?.[k]?.seats ?? ""}
+                            onChange={(e) => setVehicleProp(k, "seats", Number(e.target.value))}
+                          />
+                        </td>
+                        <td className="p-2.5">
+                          <input
+                            className={`${input} w-28 font-mono`}
+                            type="number"
+                            min="0"
+                            value={cfg.vehicles?.[k]?.estFare ?? ""}
+                            onChange={(e) => setVehicleProp(k, "estFare", Number(e.target.value))}
+                          />
+                        </td>
+                        <td className="p-2.5 text-center">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-0"
+                            checked={!!cfg.vehicles?.[k]?.enabled}
+                            onChange={(e) => setVehicleProp(k, "enabled", e.target.checked)}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Route-Specific Benchmark Pricing */}
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                <div>
+                  <h3 className="text-sm font-bold text-white">Route-Specific Benchmark Pricing</h3>
+                  <p className="text-[11px] text-slate-400">
+                    Fixed corridor benchmarks for Darjeeling, Siliguri, and Sikkim hill routes. Displayed in public booking wizards and used as driver bid anchors.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={addRoutePreset}
+                  className="self-start sm:self-auto rounded-lg bg-emerald-600 hover:bg-emerald-500 px-3.5 py-1.5 text-xs font-semibold text-white shadow-md shadow-emerald-900/30 transition-colors"
+                >
+                  + Add Corridor Preset
+                </button>
+              </div>
+
+              <div className="space-y-3.5">
+                {(cfg.routePresets || []).map((route: Any, idx: number) => (
+                  <div
+                    key={route.id || idx}
+                    className="rounded-xl border border-slate-800 bg-slate-950/80 p-4 space-y-3 transition-colors hover:border-slate-700"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1">
+                        <div>
+                          <span className="text-[10px] font-semibold text-slate-400 uppercase">Corridor Name</span>
+                          <input
+                            className={`${input} w-full mt-1 font-semibold text-white`}
+                            value={route.name || ""}
+                            onChange={(e) => updateRouteField(idx, "name", e.target.value)}
+                            placeholder="e.g. Bagdogra Airport Transfer"
+                          />
+                        </div>
+
+                        <div>
+                          <span className="text-[10px] font-semibold text-slate-400 uppercase">Category</span>
+                          <select
+                            className={`${input} w-full mt-1`}
+                            value={route.category || "SIGHTSEEING"}
+                            onChange={(e) => updateRouteField(idx, "category", e.target.value)}
+                          >
+                            <option value="AIRPORT_STATION">Airport / Railway Station</option>
+                            <option value="SIGHTSEEING">Sightseeing Point-to-Point</option>
+                            <option value="DAY_EXCURSION">Full Day Excursion</option>
+                            <option value="LOCAL_DROP">Local Town Drop</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <span className="text-[10px] font-semibold text-slate-400 uppercase">Duration & Distance</span>
+                          <input
+                            className={`${input} w-full mt-1`}
+                            value={route.duration || ""}
+                            onChange={(e) => updateRouteField(idx, "duration", e.target.value)}
+                            placeholder="e.g. approx 3 hrs (70 km)"
+                          />
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => removeRoutePreset(idx)}
+                        className="self-end sm:self-center rounded-lg border border-red-500/30 px-2.5 py-1 text-xs font-semibold text-red-400 hover:bg-red-950/60 transition-colors"
+                      >
+                        Delete
+                      </button>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] font-semibold text-slate-400 uppercase">Corridor Description / Route Notes</span>
+                      <input
+                        className={`${input} w-full mt-1 text-xs`}
+                        value={route.description || ""}
+                        onChange={(e) => updateRouteField(idx, "description", e.target.value)}
+                        placeholder="e.g. One-way hill descent / climb transfer via Rohini bypass route"
+                      />
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-800/80">
+                      <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-2">
+                        Benchmark Fares per Vehicle Tier (₹)
+                      </span>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                        {VEHICLE_KEYS.map((vKey) => (
+                          <div
+                            key={vKey}
+                            className="flex items-center gap-2 bg-slate-900/90 px-3 py-2 rounded-lg border border-slate-800"
+                          >
+                            <span className="text-[11px] font-mono text-slate-400 min-w-[55px]">{vKey}:</span>
+                            <span className="text-xs text-slate-500">₹</span>
+                            <input
+                              type="number"
+                              min="0"
+                              step="50"
+                              className="w-full bg-transparent text-xs font-bold text-emerald-400 focus:outline-none"
+                              value={route.fares?.[vKey] ?? ""}
+                              onChange={(e) => updateRouteFare(idx, vKey, e.target.value)}
+                              placeholder="0"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------------ */}
+        {/* Sub-Tab 4: Sightseeing & Calendar Sync                             */}
+        {/* ------------------------------------------------------------------ */}
+        {activeSection === "sightseeing" && (
+          <div className="space-y-6 pt-2">
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              {/* Sightseeing Presets */}
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 space-y-4">
+                <div className="border-b border-slate-800 pb-2">
+                  <h3 className="text-sm font-bold text-white">Curated Sightseeing Spots</h3>
+                  <p className="text-[11px] text-slate-400">
+                    Popular hill tourist destinations offered to guests in quick-booking pills. One per line.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950 p-2.5">
+                  {presetList(presets).map((p, i) => (
+                    <span key={i} className="rounded-lg bg-slate-800 px-2 py-0.5 text-[11px] text-slate-200 border border-slate-700">
+                      • {p}
+                    </span>
+                  ))}
+                  {presetList(presets).length === 0 && (
+                    <span className="text-xs text-slate-500">No sightseeing presets configured.</span>
+                  )}
+                </div>
+
+                <label className="block text-slate-300">
+                  <span className="font-semibold text-xs">Edit Presets (One per line)</span>
+                  <textarea
+                    className={`${input} mt-1 h-44 w-full font-mono text-xs leading-relaxed`}
+                    value={presets}
+                    onChange={(e) => setPresets(e.target.value)}
+                    placeholder="Tiger Hill Sunrise
+Batasia Loop & War Memorial
+Lamahatta Eco Park..."
                   />
                 </label>
-              ))}
+              </div>
+
+              {/* Calendar Sync */}
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 space-y-4">
+                <div className="border-b border-slate-800 pb-2">
+                  <h3 className="text-sm font-bold text-white">Calendar Sync (iCal Allowed Hosts)</h3>
+                  <p className="text-[11px] text-slate-400">
+                    Security whitelist: hosts can only sync booking calendars from these verified domains.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950 p-2.5">
+                  {cleanDomainList(icalHosts).map((h, i) => (
+                    <span key={i} className="rounded-lg bg-emerald-950 px-2 py-0.5 text-[11px] text-emerald-300 border border-emerald-800/40">
+                      • {h}
+                    </span>
+                  ))}
+                </div>
+
+                <label className="block text-slate-300">
+                  <span className="font-semibold text-xs">Allowed Domains (One domain per line)</span>
+                  <textarea
+                    className={`${input} mt-1 h-44 w-full font-mono text-xs leading-relaxed`}
+                    value={icalHosts}
+                    onChange={(e) => setIcalHosts(e.target.value)}
+                    placeholder="airbnb.com
+booking.com
+makemytrip.com
+vrbo.com"
+                  />
+                  <span className="mt-1 block text-[10px] text-slate-500">
+                    URLs are automatically sanitized to domain names (e.g. pasting https://www.airbnb.com/... stores airbnb.com).
+                  </span>
+                </label>
+              </div>
             </div>
-            <p className="mt-1 text-[10px] text-slate-500">Empty fields show a visible “to be added” placeholder in the app&apos;s legal pages.</p>
           </div>
+        )}
 
-          <table className="w-full text-left">
-            <thead className="text-slate-400">
-              <tr><th className="p-1">WhatsApp message</th><th className="p-1">Approved template name (empty = plain text, test number only)</th></tr>
-            </thead>
-            <tbody>
-              {WHATSAPP_EVENTS.map((e) => (
-                <tr key={e.key} className="text-slate-300">
-                  <td className="p-1">{e.label}</td>
-                  <td className="p-1">
+        {/* ------------------------------------------------------------------ */}
+        {/* Sub-Tab 5: WhatsApp Meta Templates                                 */}
+        {/* ------------------------------------------------------------------ */}
+        {activeSection === "whatsapp" && cfg && (
+          <div className="space-y-5 pt-2">
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                <div>
+                  <h3 className="text-sm font-bold text-white">WhatsApp Business Meta Templates</h3>
+                  <p className="text-[11px] text-slate-400">
+                    Configure Meta-approved template names for automated WhatsApp notifications. Empty templates fallback to plain-text (sandbox/test mode).
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-400 font-semibold">Language:</span>
+                  <input
+                    className={`${input} w-24 font-mono text-xs text-center`}
+                    value={cfg.whatsappLanguage ?? "en"}
+                    onChange={(e) => setCfgField("whatsappLanguage", e.target.value.trim().toLowerCase())}
+                    placeholder="en"
+                  />
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="border-b border-slate-800 text-[11px] uppercase tracking-wider text-slate-400">
+                    <tr>
+                      <th className="p-2.5">Lifecycle Event</th>
+                      <th className="p-2.5">Notification Purpose</th>
+                      <th className="p-2.5">Meta Approved Template Name</th>
+                      <th className="p-2.5 text-center">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60">
+                    {WHATSAPP_EVENTS.map((ev) => {
+                      const tName = cfg.whatsappTemplates?.[ev.key] || "";
+                      const hasTemplate = !!tName.trim();
+                      return (
+                        <tr key={ev.key} className="hover:bg-slate-900/40">
+                          <td className="p-2.5 font-semibold text-slate-200">{ev.label}</td>
+                          <td className="p-2.5 text-slate-400">{ev.purpose}</td>
+                          <td className="p-2.5">
+                            <input
+                              className={`${input} w-full max-w-sm font-mono text-xs`}
+                              value={tName}
+                              placeholder="e.g. stayride_trip_confirmed"
+                              onChange={(e) =>
+                                setCfg((c: Any) => ({
+                                  ...c,
+                                  whatsappTemplates: {
+                                    ...(c.whatsappTemplates || {}),
+                                    [ev.key]: e.target.value.toLowerCase().replace(/[\s-]+/g, "_"),
+                                  },
+                                }))
+                              }
+                            />
+                          </td>
+                          <td className="p-2.5 text-center">
+                            {hasTemplate ? (
+                              <Badge tone="green">Meta Template</Badge>
+                            ) : (
+                              <Badge tone="amber">Plain Text</Badge>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------------ */}
+        {/* Sub-Tab 6: Business & Compliance                                  */}
+        {/* ------------------------------------------------------------------ */}
+        {activeSection === "business" && cfg && (
+          <div className="space-y-5 pt-2">
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 space-y-4">
+              <div className="border-b border-slate-800 pb-2">
+                <h3 className="text-sm font-bold text-white">Business Entity & Compliance Details</h3>
+                <p className="text-[11px] text-slate-400">
+                  Rendered in Terms of Service, Privacy Policy, Payment Receipts, and Grievance redressal disclosures.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {BUSINESS_FIELDS.map((f) => (
+                  <label key={f.key} className="text-slate-300">
+                    <span className="font-semibold">{f.label}</span>
+                    {f.hint && <p className="text-[10px] text-slate-500 font-normal mt-0.5">{f.hint}</p>}
                     <input
-                      className={`${input} w-full font-mono`}
-                      value={cfg.whatsappTemplates?.[e.key] ?? ""}
-                      placeholder="e.g. ask_cab_template"
-                      onChange={(ev) => set("whatsappTemplates", { ...(cfg.whatsappTemplates || {}), [e.key]: ev.target.value.trim().toLowerCase() })}
+                      className={`${input} mt-1 w-full`}
+                      value={cfg.business?.[f.key] ?? ""}
+                      placeholder={f.placeholder}
+                      onChange={(e) =>
+                        setCfg((c: Any) => ({
+                          ...c,
+                          business: { ...(c.business || {}), [f.key]: e.target.value },
+                        }))
+                      }
                     />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
-          <label className="block text-slate-300">
-            Calendar sync: allowed sites (one domain per line)
-            <textarea className={`${input} mt-1 h-28 w-full font-mono`} value={icalHosts} onChange={(e) => setIcalHosts(e.target.value)} />
-            <span className="mt-1 block text-[10px] text-slate-500">Owners can only import iCal links from these domains and their subdomains (e.g. airbnb.com covers www.airbnb.com).</span>
-          </label>
+        {/* ------------------------------------------------------------------ */}
+        {/* Sub-Tab 7: Global Feature Switches                                */}
+        {/* ------------------------------------------------------------------ */}
+        {activeSection === "features" && (
+          <div className="space-y-5 pt-2">
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 space-y-4">
+              <div className="border-b border-slate-800 pb-2">
+                <h3 className="text-sm font-bold text-white">Global Feature Switches</h3>
+                <p className="text-[11px] text-slate-400">
+                  Enable or suspend high-level platform modules. Disabling a feature suspends it globally regardless of homestay settings.
+                </p>
+              </div>
 
-          <label className="block text-slate-300">
-            Change reason *
-            <input className={`${input} mt-1 w-full`} required value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why are these settings changing?" />
-          </label>
-          <button className={demo ? "rounded-lg bg-amber-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-amber-500 disabled:opacity-50" : btn.primary} disabled={saving}>
-            {saving ? "Saving..." : `Save ${demo ? "DEMO" : "PRODUCTION"} operations settings`}
-          </button>
-        </form>
-      )}
-    </Panel>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {FEATURE_KEYS.map((k) => {
+                  const feat = features[k] || { enabled: true, defaultOn: true };
+                  return (
+                    <div
+                      key={k}
+                      className="rounded-xl border border-slate-800 bg-slate-950 p-4 space-y-3"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="text-xs font-bold text-slate-200">{FEATURE_LABELS[k] || k}</h4>
+                          <span className="font-mono text-[10px] text-slate-500">feature_key: {k}</span>
+                        </div>
+                        <Badge tone={feat.enabled ? "green" : "red"}>
+                          {feat.enabled ? "ACTIVE" : "SUSPENDED"}
+                        </Badge>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-2 border-t border-slate-800/80 text-xs">
+                        <span className="text-slate-400">Platform-wide Enablement</span>
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-0"
+                          checked={feat.enabled !== false}
+                          onChange={(e) =>
+                            setFeatures((prev: Any) => ({
+                              ...prev,
+                              [k]: { ...(prev[k] || {}), enabled: e.target.checked },
+                            }))
+                          }
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-400">Default On for New Homestays</span>
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-0"
+                          checked={feat.defaultOn !== false}
+                          onChange={(e) =>
+                            setFeatures((prev: Any) => ({
+                              ...prev,
+                              [k]: { ...(prev[k] || {}), defaultOn: e.target.checked },
+                            }))
+                          }
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------------ */}
+        {/* Sticky Bottom Save Action Bar                                      */}
+        {/* ------------------------------------------------------------------ */}
+        {dirty && (
+          <div className="sticky bottom-4 z-40 rounded-2xl border border-blue-500/40 bg-slate-950/95 p-4 shadow-2xl backdrop-blur-md">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full bg-amber-400 animate-pulse" />
+                  <span className="text-xs font-bold text-white">Unsaved Configuration Changes</span>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Settings are staged locally. A change reason is required to commit to audit logs.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 flex-1 max-w-lg justify-end">
+                <input
+                  className={`${input} flex-1 min-w-[200px] text-xs`}
+                  required
+                  placeholder="Audit Change Reason (e.g. Updated holiday route fares) *"
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                />
+                <button
+                  type="button"
+                  onClick={resetAll}
+                  className={btn.ghost}
+                  disabled={saving}
+                >
+                  Discard
+                </button>
+                <button
+                  type="button"
+                  onClick={() => saveAll()}
+                  disabled={saving}
+                  className="rounded-lg bg-emerald-600 hover:bg-emerald-500 px-4 py-2 text-xs font-bold text-white shadow-lg shadow-emerald-900/50 disabled:opacity-50"
+                >
+                  {saving ? "Saving..." : `Save ${demo ? "DEMO" : "PRODUCTION"} Settings`}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </Panel>
+    </div>
   );
 }
+
 
 // ---------------------------------------------------------------------------
 // 8. Appeals
@@ -2508,9 +4589,50 @@ export function AppealsTab({ demo }: TabProps) {
 // ---------------------------------------------------------------------------
 const AUDIT_FILTERS = { action: "", targetId: "", tenantId: "", driverId: "", actorRole: "", actor: "", from: "", to: "" };
 
+function renderAuditDetails(details: Any, onInspect: (data: Any) => void) {
+  if (!details || (typeof details === "object" && Object.keys(details).length === 0)) {
+    return <span className="text-slate-600">—</span>;
+  }
+
+  return (
+    <div className="space-y-1">
+      <div className="flex flex-wrap items-center gap-1.5">
+        {details.amount !== undefined && (
+          <Badge tone="green">₹{Number(details.amount).toLocaleString("en-IN")}</Badge>
+        )}
+        {details.driverShareOfAdvance !== undefined && (
+          <Badge tone="blue">Driver Share: ₹{Number(details.driverShareOfAdvance).toLocaleString("en-IN")}</Badge>
+        )}
+        {(details.utr || details.transactionId || details.reference) && (
+          <span className="font-mono text-[10px] text-amber-300 bg-amber-950/60 px-1.5 py-0.5 rounded border border-amber-900/40">
+            Ref: {details.utr || details.transactionId || details.reference}
+          </span>
+        )}
+        {details.status && (
+          <Badge tone="slate">{String(details.status)}</Badge>
+        )}
+        {details.targetName && (
+          <span className="font-semibold text-white">{String(details.targetName)}</span>
+        )}
+        {details.reason && (
+          <span className="text-slate-300 italic text-[11px]">"{String(details.reason)}"</span>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={() => onInspect(details)}
+        className="text-[10px] text-blue-400 hover:text-blue-300 hover:underline font-mono"
+      >
+        inspect raw payload
+      </button>
+    </div>
+  );
+}
+
 export function AuditTab({ demo }: TabProps) {
   const [f, setF] = useState(AUDIT_FILTERS);
   const [q, setQ] = useState(AUDIT_FILTERS);
+  const [viewJson, setViewJson] = useState<Any | null>(null);
   const set = (k: keyof typeof AUDIT_FILTERS) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
   // Date inputs are IST calendar days: from 00:00 IST to the end of the "to" day in IST.
   const { from, to, ...rest } = q;
@@ -2522,42 +4644,104 @@ export function AuditTab({ demo }: TabProps) {
     true
   );
   const items = data?.items || [];
+
+  const handleReset = () => {
+    setF(AUDIT_FILTERS);
+    setQ(AUDIT_FILTERS);
+    setPage(0);
+  };
+
   return (
     <Panel
-      title="Audit log"
-      subtitle="Every admin and money action, newest first. Times and dates in IST."
+      title="Audit Log"
+      subtitle="Complete chronological audit trail of all platform operations, money settlements, and administrative actions."
       onRefresh={reload}
       error={error}
       loading={loading}
       updatedAt={updatedAt}
-      right={
-        <form onSubmit={(e) => { e.preventDefault(); setPage(0); setQ(Object.fromEntries(Object.entries(f).map(([k, v]) => [k, v.trim()])) as typeof f); }} className="flex flex-wrap gap-2">
-          <input className={input} placeholder="Action (e.g. payment.record)" value={f.action} onChange={set("action")} />
-          <input className={input} placeholder="Target ID" value={f.targetId} onChange={set("targetId")} />
-          <input className={input} placeholder="Tenant (owner email)" value={f.tenantId} onChange={set("tenantId")} />
-          <input className={input} placeholder="Driver ID" value={f.driverId} onChange={set("driverId")} />
-          <input className={input} placeholder="Actor contains" value={f.actor} onChange={set("actor")} />
-          <select className={input} value={f.actorRole} onChange={set("actorRole")} aria-label="Actor role">
-            <option value="">Any role</option>
-            {["ADMIN", "OWNER", "DRIVER", "CUSTOMER", "SYSTEM"].map((r) => <option key={r} value={r}>{r}</option>)}
-          </select>
-          <input type="date" className={input} value={f.from} onChange={set("from")} aria-label="From date (IST)" title="From (IST)" />
-          <input type="date" className={input} value={f.to} onChange={set("to")} aria-label="To date (IST)" title="To (IST)" />
-          <button className={btn.primary}>Filter</button>
-        </form>
-      }
     >
+      {/* STRUCTURED TWO-TIER FILTER TOOLBAR */}
+      <form onSubmit={(e) => { e.preventDefault(); setPage(0); setQ(Object.fromEntries(Object.entries(f).map(([k, v]) => [k, v.trim()])) as typeof f); }} className="rounded-2xl border border-slate-800 bg-slate-900/60 p-3.5 space-y-2.5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+          <div>
+            <label className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">Action</label>
+            <input className={`${input} w-full`} placeholder="e.g. payment.record" value={f.action} onChange={set("action")} />
+          </div>
+          <div>
+            <label className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">Actor Filter</label>
+            <input className={`${input} w-full`} placeholder="Actor name or email" value={f.actor} onChange={set("actor")} />
+          </div>
+          <div>
+            <label className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">Actor Role</label>
+            <select className={`${input} w-full`} value={f.actorRole} onChange={set("actorRole")} aria-label="Actor role">
+              <option value="">Any Role</option>
+              {["ADMIN", "OWNER", "DRIVER", "CUSTOMER", "SYSTEM"].map((r) => <option key={r} value={r}>{r}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">Date Range (IST)</label>
+            <div className="flex items-center gap-1">
+              <input type="date" className={`${input} w-1/2`} value={f.from} onChange={set("from")} title="From date" />
+              <span className="text-slate-500">→</span>
+              <input type="date" className={`${input} w-1/2`} value={f.to} onChange={set("to")} title="To date" />
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-2 pt-1 border-t border-slate-800/60">
+          <div>
+            <label className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">Target ID</label>
+            <input className={`${input} w-full`} placeholder="Target ID" value={f.targetId} onChange={set("targetId")} />
+          </div>
+          <div>
+            <label className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">Homestay Tenant</label>
+            <input className={`${input} w-full`} placeholder="Owner email / key" value={f.tenantId} onChange={set("tenantId")} />
+          </div>
+          <div>
+            <label className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">Driver ID</label>
+            <input className={`${input} w-full`} placeholder="Driver ID" value={f.driverId} onChange={set("driverId")} />
+          </div>
+          <div className="sm:col-span-2 flex items-end justify-end gap-2">
+            <button type="button" onClick={handleReset} className={btn.ghost}>Reset All</button>
+            <button type="submit" className={btn.primary}>Apply Filters</button>
+          </div>
+        </div>
+      </form>
+
+      {viewJson && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl text-xs space-y-3">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+              <h4 className="font-bold text-white text-sm">Audit Payload Details</h4>
+              <button type="button" onClick={() => setViewJson(null)} className="text-slate-400 hover:text-white font-bold">✕</button>
+            </div>
+            <pre className="max-h-[60vh] overflow-y-auto rounded-xl bg-slate-950 p-3 font-mono text-[11px] text-emerald-400 whitespace-pre-wrap break-all border border-slate-800">
+              {JSON.stringify(viewJson, null, 2)}
+            </pre>
+            <div className="text-right">
+              <button type="button" onClick={() => setViewJson(null)} className={btn.primary}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {data &&
         (items.length ? (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto rounded-xl border border-slate-800">
             <table className="w-full text-left text-xs">
               <thead className="border-b border-slate-800 bg-slate-900/60 text-slate-400 font-semibold uppercase tracking-wider">
-                <tr><th className="p-3">When</th><th className="p-3">Actor</th><th className="p-3">Action</th><th className="p-3">Target</th><th className="p-3">Details</th></tr>
+                <tr>
+                  <th className="p-3 w-40">When (IST)</th>
+                  <th className="p-3 w-48">Actor</th>
+                  <th className="p-3 w-48">Action</th>
+                  <th className="p-3 w-44">Target</th>
+                  <th className="p-3">Event Details</th>
+                </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
                 {items.map((l, i) => (
-                  <tr key={rid(l) || i} className="align-top">
-                    <td className="p-3 whitespace-nowrap text-slate-400">{dt(l.createdAt)}</td>
+                  <tr key={rid(l) || i} className="align-top hover:bg-slate-900/40 transition">
+                    <td className="p-3 whitespace-nowrap text-slate-400 font-mono text-[11px]">{dt(l.createdAt)}</td>
                     <td className="p-3 text-slate-200">
                       <div className="font-semibold text-slate-100">{l.actorDisplayName || l.actor}</div>
                       {l.actorDisplayName && l.actor !== l.actorDisplayName && (
@@ -2569,14 +4753,16 @@ export function AuditTab({ demo }: TabProps) {
                       <div className="font-semibold text-slate-200">{l.targetLabel || l.targetType}</div>
                       <span className="font-mono text-[10px] text-slate-500">{l.targetId}</span>
                     </td>
-                    <td className="p-3"><pre className="max-w-md whitespace-pre-wrap break-all text-[10px] text-slate-400 font-mono bg-slate-900/40 p-2 rounded">{JSON.stringify(l.details ?? {}, null, 1)}</pre></td>
+                    <td className="p-3">
+                      {renderAuditDetails(l.details, (payload) => setViewJson(payload))}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         ) : (
-          <Empty>No audit entries.</Empty>
+          <Empty>No audit entries for this query.</Empty>
         ))}
       <Pager page={page} setPage={setPage} total={data?.total ?? null} count={items.length} />
     </Panel>
@@ -2629,8 +4815,13 @@ export function GuestsTab({ demo, initialSearch, initialTenant }: TabProps & { i
             <table className="w-full text-left text-xs">
               <thead className="border-b border-slate-800 bg-slate-900/60 text-slate-400 font-semibold uppercase tracking-wider">
                 <tr>
-                  <th className="p-3">Guest</th><th className="p-3">Phone</th><th className="p-3">Homestay</th><th className="p-3">Status</th>
-                  <th className="p-3">Stay</th><th className="p-3">Actions</th><th className="p-3">Last contacted</th>
+                  <th className="p-3 min-w-[140px]">Guest</th>
+                  <th className="p-3 min-w-[130px]">Phone</th>
+                  <th className="p-3 min-w-[140px]">Homestay</th>
+                  <th className="p-3 min-w-[90px]">Status</th>
+                  <th className="p-3 min-w-[130px]">Stay Dates</th>
+                  <th className="p-3 min-w-[200px]">Last Contacted</th>
+                  <th className="p-3 text-right min-w-[160px]">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
@@ -2672,7 +4863,7 @@ function GuestRow({ g, demo, onChanged }: { g: Any; demo: boolean; onChanged: ()
   const copy = () => navigator.clipboard?.writeText(g.tel || g.phone).then(() => alert("Number copied."), () => alert(g.tel || g.phone));
 
   return (
-    <tr className="align-top">
+    <tr className="align-top hover:bg-slate-900/40 transition">
       <td className="p-3 font-semibold text-slate-100">{g.guestName || "Guest"}<div className="text-[10px] font-normal text-slate-500">Room {g.roomNumber || "—"}</div></td>
       <td className="p-3 whitespace-nowrap font-mono text-slate-200">
         {g.tel || g.phone || "—"}
@@ -2681,10 +4872,36 @@ function GuestRow({ g, demo, onChanged }: { g: Any; demo: boolean; onChanged: ()
       <td className="p-3 text-slate-300">{g.homestayName || g.tenantKey}</td>
       <td className="p-3"><Badge tone={g.status === "CHECKED_IN" ? "green" : "blue"}>{g.status === "CHECKED_IN" ? "Checked in" : "Booked"}</Badge></td>
       <td className="p-3 whitespace-nowrap text-slate-400">{formatDate(g.checkIn)} → {formatDate(g.checkOut)}</td>
-      <td className="p-3">
-        <div className="flex flex-wrap gap-2">
+      <td className="p-3 text-[11px] text-slate-400 space-y-1.5 max-w-[240px]">
+        {(g.askCab || []).slice(0, 3).map((line: string, i: number) => {
+          const parts = line.split(" · ");
+          const actor = parts[0] || "Admin";
+          const time = parts[1] || "";
+          const status = parts[2] || "";
+          return (
+            <div key={i} className="flex items-center gap-1.5 flex-wrap text-[11px] leading-tight">
+              <span className="font-semibold text-slate-300">Cab ask:</span>
+              <span className="text-slate-400">{time || actor}</span>
+              {status && (
+                <Badge tone={status === "read" ? "green" : status === "delivered" ? "blue" : status === "failed" ? "red" : "slate"}>
+                  {status}
+                </Badge>
+              )}
+            </div>
+          );
+        })}
+        {g.lastCall && (
+          <div className="flex items-center gap-1 text-[10px] text-amber-400">
+            <span>Call:</span>
+            <span>{dt(g.lastCall.at)}</span>
+          </div>
+        )}
+        {!g.askCab?.length && !g.lastCall && <span className="text-slate-600">—</span>}
+      </td>
+      <td className="p-3 text-right">
+        <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
           <button
-            className={g.phoneMissing ? "cursor-not-allowed rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-500" : btn.primary}
+            className={g.phoneMissing ? "cursor-not-allowed rounded-lg bg-slate-800 px-2.5 py-1 text-xs font-semibold text-slate-500" : btn.primary}
             disabled={busy || g.phoneMissing}
             title={g.phoneMissing ? "Guest phone is missing or invalid for WhatsApp" : undefined}
             onClick={() => askCab()}
@@ -2694,11 +4911,6 @@ function GuestRow({ g, demo, onChanged }: { g: Any; demo: boolean; onChanged: ()
           {g.tel && <a className={btn.ok} href={`tel:${g.tel}`} onClick={recordCall}>Call</a>}
           {(g.tel || g.phone) && <button className={btn.ghost} onClick={copy}>Copy</button>}
         </div>
-      </td>
-      <td className="p-3 text-[11px] text-slate-400 space-y-1">
-        {(g.askCab || []).map((line: string, i: number) => <div key={i} className="whitespace-nowrap">Ask for cab: {line}</div>)}
-        {g.lastCall && <div>Call started {dt(g.lastCall.at)} • {g.lastCall.by}</div>}
-        {!g.askCab?.length && !g.lastCall && "—"}
       </td>
     </tr>
   );
