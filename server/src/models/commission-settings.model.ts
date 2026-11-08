@@ -89,7 +89,7 @@ const CommissionSettingsSchema = new Schema<ICommissionSettings>(
       type: Number,
       required: true,
       default: 15.0, // Default 15% advance required
-      min: 5,
+      min: 0,
       max: 100,
     },
     minAdvanceAmount: { type: Number, default: 500, min: 0 },
@@ -126,9 +126,9 @@ CommissionSettingsSchema.pre("save", function () {
     this.homestaySharePercentOfCommission = Number((100 - adminShare).toFixed(2));
   }
 
-  // Safety guard: Advance must cover Total Commission to prevent negative driver debt
+  // Safety guard: If percentage advance is active (> 0), it should cover Total Commission unless a flat advance floor (minAdvanceAmount) is set
   const totalComm = this.totalCommissionPercent ?? (this.globalPlatformFeePercent + this.globalHomestayCommissionPercent);
-  if (this.defaultAdvancePercent < totalComm) {
+  if (this.defaultAdvancePercent > 0 && this.defaultAdvancePercent < totalComm && !(Number(this.minAdvanceAmount) > 0)) {
     throw new Error(
       `Invalid commission configuration: Default Advance (${this.defaultAdvancePercent}%) cannot be lower than Total Commission (${totalComm}%). Advance must be greater than or equal to total commission to prevent negative driver balances.`
     );

@@ -84,8 +84,10 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const MainTabs: React.FC = () => {
   const insets = useSafeAreaInsets();
-  const bottomPad = Math.max(insets.bottom, Platform.OS === 'ios' ? 24 : 10);
-  const tabHeight = 54 + bottomPad;
+  const bottomPad = insets.bottom > 0
+    ? insets.bottom + (Platform.OS === 'ios' ? 2 : 4)
+    : (Platform.OS === 'android' ? 12 : 8);
+  const tabHeight = 52 + bottomPad;
 
   return (
     <Tab.Navigator
@@ -141,8 +143,10 @@ const MainTabs: React.FC = () => {
 
 const DriverTabs: React.FC = () => {
   const insets = useSafeAreaInsets();
-  const bottomPad = Math.max(insets.bottom, Platform.OS === 'ios' ? 24 : 10);
-  const tabHeight = 54 + bottomPad;
+  const bottomPad = insets.bottom > 0
+    ? insets.bottom + (Platform.OS === 'ios' ? 2 : 4)
+    : (Platform.OS === 'android' ? 12 : 8);
+  const tabHeight = 52 + bottomPad;
 
   return (
     <DriverTab.Navigator
@@ -216,9 +220,9 @@ const UnifiedAppTabs: React.FC = () => {
       return (
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: '#0F172A' }}>
           <Ionicons name="time-outline" size={40} color="#FBBF24" />
-          <Text style={{ fontSize: 20, fontWeight: '800', color: '#FFFFFF', textAlign: 'center', marginTop: 12 }}>Awaiting StayRide approval</Text>
+          <Text style={{ fontSize: 20, fontWeight: '800', color: '#FFFFFF', textAlign: 'center', marginTop: 12 }}>Awaiting StayCabs approval</Text>
           <Text style={{ fontSize: 14, color: '#94A3B8', textAlign: 'center', marginTop: 8, lineHeight: 20, maxWidth: 300 }}>
-            StayRide is reviewing your driver account. Trip requests will appear here once you are approved.
+            StayCabs is reviewing your driver account. Trip requests will appear here once you are approved.
           </Text>
           <TouchableOpacity
             onPress={() => sync().catch(() => {})}

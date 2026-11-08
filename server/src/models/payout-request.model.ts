@@ -81,6 +81,10 @@ PayoutRequestSchema.index(
   { name: 'one_pending_payout_per_driver', unique: true, partialFilterExpression: { recipientType: 'DRIVER', status: 'PENDING' } }
 );
 PayoutRequestSchema.index({ status: 1, requestedAt: -1 }, { name: 'status_requestedAt' });
+PayoutRequestSchema.index(
+  { utrNumber: 1 },
+  { name: 'unique_settled_utr', unique: true, partialFilterExpression: { status: 'SETTLED', utrNumber: { $type: 'string', $gt: '' } } }
+);
 
 export function getPayoutRequestModel(isDemo: boolean = false): mongoose.Model<IPayoutRequest> {
   // Demo data lives only in "test", everything else only in "production"; never fall back to the

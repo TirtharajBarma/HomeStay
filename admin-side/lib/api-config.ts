@@ -50,6 +50,8 @@ export function clearAdminSession(): void {
   if (typeof window === "undefined") return;
   window.localStorage.removeItem(TOKEN_STORAGE_KEY);
   window.localStorage.removeItem(USER_STORAGE_KEY);
+  document.cookie = `${TOKEN_STORAGE_KEY}=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`;
+  document.cookie = `${TOKEN_STORAGE_KEY}=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Strict`;
 }
 
 let isRefreshing = false;
@@ -162,7 +164,8 @@ export async function adminApi<T = any>(
   for (const [k, v] of Object.entries(opts.query || {})) if (v !== undefined && v !== "") params.set(k, String(v));
   if (opts.demo) params.set("demo", "true");
   const qs = params.toString();
-  const res = await apiFetch(`${API_BASE_URL}/admin${path}${qs ? `?${qs}` : ""}`, {
+  const sep = path.includes("?") ? "&" : "?";
+  const res = await apiFetch(`${API_BASE_URL}/admin${path}${qs ? `${sep}${qs}` : ""}`, {
     method: opts.method || "GET",
     headers: opts.body ? { "Content-Type": "application/json" } : {},
     body: opts.body ? JSON.stringify(opts.demo ? { ...opts.body, demo: true } : opts.body) : undefined,

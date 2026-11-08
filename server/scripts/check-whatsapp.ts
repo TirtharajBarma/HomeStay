@@ -43,7 +43,7 @@ assert.ok(messages.advancePaidGuestMessage(doc).text.includes('9222222222'));
 assert.ok(messages.advancePaidDriverMessage(doc).text.includes('9111111111'));
 // template variables carry what the plain text shows (approved bodies use these counts)
 assert.equal(messages.newRequestMessage(doc, 'https://q').params[3], 'SUV');
-assert.equal(messages.advancePaidGuestMessage({ ...doc, pickupOtp: 4821 }).params.length, 7);
+assert.equal(messages.advancePaidGuestMessage({ ...doc, pickupOtp: 4821 }).params.length, 8);
 assert.deepEqual(messages.boardingPinGuestMessage('4821').params, ['4821']);
 const driverParams = messages.advancePaidDriverMessage({ ...doc, reference: 'SR-1' }, 'https://d').params;
 assert.equal(driverParams[1], 'SR-1');

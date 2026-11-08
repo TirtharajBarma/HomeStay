@@ -29,8 +29,20 @@ const HOME_PERIOD_OPTIONS = [
   { label: 'Last 1 year', value: '1y', icon: 'calendar-outline' as const },
 ];
 
+function formatReadableArea(rawLocation?: string): string {
+  if (!rawLocation) return '';
+  const parts = rawLocation.split(',').map((p) => p.trim()).filter(Boolean);
+  if (parts.length <= 1) return parts[0] || '';
+  const isPlotOrNumber = /^(\d+|[\d\/\-]+[a-zA-Z]?|[a-zA-Z\d\/\-]+#[a-zA-Z\d]+)$/.test(parts[0]) || /^\d+\/\d+/.test(parts[0]);
+  if (isPlotOrNumber && parts.length > 1) {
+    return parts.slice(1, 3).join(', ');
+  }
+  return parts.slice(0, 2).join(', ');
+}
+
 export const HomeScreen: React.FC = () => {
   const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
   const {
     homestay,
     todayBookings,
@@ -53,9 +65,15 @@ export const HomeScreen: React.FC = () => {
   const [period, setPeriod] = useState<'7d' | '30d' | '6m' | '1y'>('30d');
   const [metric, setMetric] = useState<'revenue' | 'bookings' | 'cabs' | 'commission'>('revenue');
   const [lastSyncedAt, setLastSyncedAt] = useState<Date>(new Date());
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(timer);
+  }, []);
 
   const formatSyncAge = (date: Date): string => {
-    const diffMs = Date.now() - date.getTime();
+    const diffMs = now - date.getTime();
     const diffSec = Math.floor(diffMs / 1000);
     if (diffSec < 60) return 'just now';
     const diffMin = Math.floor(diffSec / 60);
@@ -64,7 +82,7 @@ export const HomeScreen: React.FC = () => {
     return `${diffHr}h ago`;
   };
 
-  const isRecentSync = Date.now() - lastSyncedAt.getTime() < 2 * 60 * 1000;
+  const isRecentSync = now - lastSyncedAt.getTime() < 2 * 60 * 1000;
 
   const handleSync = async () => {
     await sync();
@@ -97,7 +115,7 @@ export const HomeScreen: React.FC = () => {
         <Text style={styles.syncText}>Last synced: {formatSyncAge(lastSyncedAt)}</Text>
       </View>
       <ScrollView
-        contentContainerStyle={[styles.scrollContent, { paddingTop: 12 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingTop: 12, paddingBottom: Math.max(insets.bottom, 16) + 76 }]}
         refreshControl={<RefreshControl refreshing={syncing} onRefresh={handleSync} colors={[Colors.brandPrimary]} />}
         showsVerticalScrollIndicator={false}
       >
@@ -105,7 +123,7 @@ export const HomeScreen: React.FC = () => {
           greeting={homestay.ownerName ? `${greeting()}, ${homestay.ownerName.split(' ')[0]}` : greeting()}
           homestayName={homestay.name || 'My Homestay'}
           tagline="Cosy stays in the clouds. Mountain cabs, zero hassle."
-          location={(homestay.location || '').split(',')[0]}
+          location={formatReadableArea(homestay.location)}
           ratingText={
             isDemoMode
               ? `4.9 • ${totalBookings()} stays`

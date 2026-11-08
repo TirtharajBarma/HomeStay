@@ -65,6 +65,7 @@ export const welcomeSightseeingMessage = (guestName: string, homestayName: strin
 /** quoteLink: the driver's own page to quote without opening the app (WhatsApp-only drivers). */
 export const newRequestMessage = (doc: any, quoteLink: string): Built => {
   const budgetInfo = doc.guestBudget ? `\nGuest Target Budget: ₹${Number(doc.guestBudget).toLocaleString('en-IN')}` : '';
+  const tourNotesInfo = doc.guestNotes ? `\nTrip Notes: ${doc.guestNotes}` : '';
   const roundTripInfo = doc.isRoundTrip
     ? `\nTrip Type: Round Trip (Driver waits during tour & returns guest)${doc.returnTime ? `\nReturn: ${doc.returnDate ? new Date(Number(doc.returnDate)).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' }) : 'Same Day'} at ${doc.returnTime}` : ''}`
     : '\nTrip Type: One-Way Drop';
@@ -77,9 +78,9 @@ export const newRequestMessage = (doc: any, quoteLink: string): Built => {
       `New trip request from ${params[0]}.\n` +
       `Route: ${params[1]}\n` +
       `Pickup: ${params[2]}\n` +
-      `Vehicle: ${params[3]}${roundTripInfo}${budgetInfo}\n\n` +
+      `Vehicle: ${params[3]}${roundTripInfo}${tourNotesInfo}${budgetInfo}\n\n` +
       `Submit your total trip fare quote here: ${params[4]}\n\n` +
-      `Guest pays 15% advance online; you collect the rest in cash at drop-off.`,
+      `Guest pays advance online; you collect the rest directly in cash from the guest.`,
   };
 };
 
@@ -132,7 +133,8 @@ export const quoteAcceptedGuestMessage = (doc: any, link: string, windowMin: num
 
 /** After the advance: the guest gets the driver's phone and the plan. */
 export const advancePaidGuestMessage = (doc: any): Built => {
-  const passUrl = `https://staycabs.in/cab-request?ref=${doc.reference || ''}`;
+  const phoneParam = doc.guestPhone ? `&phone=${encodeURIComponent(doc.guestPhone)}` : '';
+  const passUrl = `https://staycabs.in/cab-request?ref=${doc.reference || ''}${phoneParam}`;
   const params = [
     doc.guestName,
     doc.assignedDriverName || 'Your driver',

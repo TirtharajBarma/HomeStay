@@ -37,7 +37,7 @@ export function validateRates(pf: number, hc: number, adv: number) {
   if (![pf, hc, adv].every((n) => Number.isFinite(n))) throw new Error("Rates must be numbers.");
   if (pf < 0 || hc < 0 || pf > 100 || hc > 100) throw new Error("Percentages must be between 0 and 100.");
   if (pf + hc >= 100) throw new Error("Platform Fee % + Homestay Commission % must be less than 100%.");
-  if (adv < 5 || adv > 100) throw new Error("Advance % must be between 5 and 100.");
+  if (adv < 0 || adv > 100) throw new Error("Advance % must be between 0 and 100.");
 }
 
 export class CommissionService {
@@ -132,7 +132,7 @@ export class CommissionService {
     // Omitted values keep what is saved, so saving one settings form never reverts another's changes
     const pf = params.globalPlatformFeePercent === undefined ? settings.globalPlatformFeePercent : pct(params.globalPlatformFeePercent);
     const hc = params.globalHomestayCommissionPercent === undefined ? settings.globalHomestayCommissionPercent : pct(params.globalHomestayCommissionPercent);
-    const adv = params.defaultAdvancePercent === undefined ? Math.max(settings.defaultAdvancePercent, pf + hc) : pct(params.defaultAdvancePercent);
+    const adv = params.defaultAdvancePercent === undefined ? settings.defaultAdvancePercent : pct(params.defaultAdvancePercent);
     validateRates(pf, hc, adv);
     settings.globalPlatformFeePercent = pf;
     settings.globalHomestayCommissionPercent = hc;
@@ -315,12 +315,13 @@ export class CommissionService {
     const homestayCommissionAmount = Math.min(agreedFare - platformFeeAmount, Math.round((agreedFare * hcPercent) / 100));
     const totalCommission = platformFeeAmount + homestayCommissionAmount;
 
-    // Advance collected online from guest is strictly for StayRide platform fee + homestay commission.
-    // It respects the minimum advance floor (minAdvanceAmount) and never exceeds the total agreed fare.
-    const advanceAmount = Math.min(
-      agreedFare,
-      Math.max(minAdvanceAmount, totalCommission, Math.round((agreedFare * advancePercent) / 100))
-    );
+    // Advance collected online from guest:
+    // When advancePercent === 0, flat advance mode is active (minimum advance, e.g. ₹600, or total commission, whichever is higher).
+    // When advancePercent > 0 (e.g. 15%), dynamic percentage advance is active.
+    const calculatedAdvance = advancePercent === 0
+      ? Math.max(minAdvanceAmount, totalCommission)
+      : Math.max(minAdvanceAmount, totalCommission, Math.round((agreedFare * advancePercent) / 100));
+    const advanceAmount = Math.min(agreedFare, calculatedAdvance);
 
     const driverShareOfAdvance = Math.max(0, advanceAmount - totalCommission);
     const remainingCashToDriver = Math.max(0, agreedFare - advanceAmount);

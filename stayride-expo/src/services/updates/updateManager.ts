@@ -507,7 +507,7 @@ export function useAppUpdateManager(): AppUpdateInfo {
     if (updateManifest) {
       const msg = extractUpdateMessage(updateManifest);
       if (msg) {
-        setStoredMessage(msg);
+        queueMicrotask(() => setStoredMessage(msg));
         AsyncStorage.setItem(PENDING_MESSAGE_KEY, msg).catch(() => {});
       }
     }

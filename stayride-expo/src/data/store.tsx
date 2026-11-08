@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Alert, AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useClerk } from '@clerk/expo';
 import {
   Room,
   Guest,
@@ -230,6 +231,7 @@ interface StayRideContextType {
 const StayRideContext = createContext<StayRideContextType | null>(null);
 
 export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const clerk = useClerk();
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [backendStatus, setBackendStatus] = useState<'checking' | 'connected' | 'offline'>('checking');
@@ -274,22 +276,6 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [isDemoMode, setIsDemoMode] = useState(false);
   const [outboxCount, setOutboxCount] = useState(0);
 
-  // Refs so async code (persist, sync, timers) never reads a stale session from a closure
-  const sessionRef = useRef<UserSession | null>(null);
-  // Bumped on login/logout/clerk sync; async results from an older generation are dropped
-  const genRef = useRef(0);
-  const syncRef = useRef<() => Promise<void>>(async () => {});
-  const syncInFlight = useRef(false);
-  const applySession = (s: UserSession | null) => {
-    sessionRef.current = s;
-    setSession(s);
-  };
-  // Offline demo session is fabricated locally; never send it to the server
-  const isOfflineDemo = () => {
-    const token = api.getSession()?.accessToken;
-    return Boolean(token && (token.startsWith('demo-token-') || token.startsWith('demo-driver-token-') || token.startsWith('demo-')));
-  };
-
   // Identity used to isolate the local cache + outbox by account (owner email, else driver email)
   const storageIdFor = (s: UserSession | null) => (s?.owner?.email || s?.driver?.email || '').toLowerCase().trim();
 
@@ -312,6 +298,23 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     // a stale price, so it is discarded rather than replayed.
     outbox.clear().catch(() => {});
     setOutboxCount(outbox.count());
+  };
+
+  // Refs so async code (persist, sync, timers) never reads a stale session from a closure
+  const sessionRef = useRef<UserSession | null>(null);
+  // Bumped on login/logout/clerk sync; async results from an older generation are dropped
+  const genRef = useRef(0);
+  const syncRef = useRef<() => Promise<void>>(async () => {});
+  const syncInFlight = useRef(false);
+  const applySession = (s: UserSession | null) => {
+    sessionRef.current = s;
+    setSession(s);
+    bindOutbox(storageIdFor(s));
+  };
+  // Offline demo session is fabricated locally; never send it to the server
+  const isOfflineDemo = () => {
+    const token = api.getSession()?.accessToken;
+    return Boolean(token && (token.startsWith('demo-token-') || token.startsWith('demo-driver-token-') || token.startsWith('demo-')));
   };
 
   // Keep the banner count in sync with the queue
@@ -1837,6 +1840,11 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   // `message` is shown after a forced sign out (internal use only)
   const signOutLocal = async (message?: string) => {
+    try {
+      await clerk?.signOut();
+    } catch (e) {
+      console.log('[Clerk] signOut note:', e);
+    }
     // Remove this device's push token while the session can still authenticate the call
     if (api.isLoggedIn() && !isOfflineDemo()) unregisterPush(); // fire-and-forget; the token is read synchronously
     genRef.current++;

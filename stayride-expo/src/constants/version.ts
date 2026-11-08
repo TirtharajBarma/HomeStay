@@ -2,8 +2,8 @@
  * Application Version and Release Configuration
  * Auto-synced with EAS Updates & Local Builds
  */
-export const CURRENT_RELEASE_VERSION = "v1.0.3";
-export const RELEASE_DESCRIPTION = "Unified cab booking with radar buffer, direct driver dialing, and security hardening";
+export const CURRENT_RELEASE_VERSION = "v1.0.4";
+export const RELEASE_DESCRIPTION = "Mountain mobility polish, responsive layout refinements, and host direct connection updates";
 export const APP_BINARY_VERSION = "v1.0.0 (Build 1)";
 export const ADMIN_NAME = process.env.EXPO_PUBLIC_APP_NAME ? `${process.env.EXPO_PUBLIC_APP_NAME} Admin` : "Platform Admin";
 export const AUTHOR_CREDIT = "Built with ❤️ for Mountain Hospitality";
@@ -18,6 +18,16 @@ export interface ReleaseHistoryItem {
 }
 
 export const INITIAL_RELEASE_HISTORY: ReleaseHistoryItem[] = [
+  {
+    version: "v1.0.4",
+    date: "Nov 7, 2026",
+    title: "Mountain mobility polish, responsive layout refinements, and host direct connection updates",
+    notes: [
+          "Mountain mobility polish, responsive layout refinements, and host direct connection updates"
+    ],
+    type: "ota",
+    isNativeBuild: false,
+  },
   {
     version: "v1.0.3",
     date: "Oct 27, 2026",

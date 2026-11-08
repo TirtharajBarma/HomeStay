@@ -177,6 +177,7 @@ export function WebLocationPicker({
       setCenter({ latitude: lat, longitude: lng });
 
       if (isLockingSuggestionRef.current) {
+        isLockingSuggestionRef.current = false;
         return;
       }
 
@@ -252,6 +253,10 @@ export function WebLocationPicker({
         subdomains: "abc",
       }).addTo(map);
 
+      map.on("dragstart", () => {
+        isLockingSuggestionRef.current = false;
+      });
+
       map.on("moveend", () => {
         if (!isSubscribed) return;
         try {
@@ -263,6 +268,13 @@ export function WebLocationPicker({
       });
 
       leafletMapRef.current = map;
+
+      // Invalidate size to ensure full-container rendering inside dynamic modal
+      setTimeout(() => {
+        try {
+          map.invalidateSize();
+        } catch {}
+      }, 150);
 
       // Initial reverse geocode if no address provided
       if (!initialAddress) {

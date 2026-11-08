@@ -215,17 +215,22 @@ export const MyDriversScreen: React.FC = () => {
         onRequestClose={() => setFormVisible(false)}
       >
         <KeyboardAwareOverlay style={{ flex: 1 }}>
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setFormVisible(false)}
-        >
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>
-              {editingDriver ? 'Edit driver' : 'Add your driver'}
-            </Text>
+          <View style={styles.modalOverlay}>
+            <TouchableOpacity
+              style={StyleSheet.absoluteFill}
+              activeOpacity={1}
+              onPress={() => setFormVisible(false)}
+            />
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>
+                {editingDriver ? 'Edit driver' : 'Add your driver'}
+              </Text>
 
-            <ScrollView style={{ maxHeight: 420 }} showsVerticalScrollIndicator={false}>
+              <ScrollView
+                style={{ maxHeight: 420 }}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+              >
               <Text style={styles.label}>Name *</Text>
               <TextInput
                 style={styles.input}
@@ -326,7 +331,7 @@ export const MyDriversScreen: React.FC = () => {
               </Text>
             </TouchableOpacity>
           </View>
-        </TouchableOpacity>
+        </View>
         </KeyboardAwareOverlay>
       </Modal>
     </View>

@@ -228,7 +228,7 @@ export function resolvePlatformConfig(saved: any): PlatformConfig {
   const presets = Array.isArray(s.sightseeingPresets)
     ? s.sightseeingPresets.map((p: unknown) => text(p, '', 80)).filter(Boolean).slice(0, 40)
     : d.sightseeingPresets;
-  const routePresets: RoutePreset[] = Array.isArray(s.routePresets) && s.routePresets.length > 0
+  const routePresets: RoutePreset[] = Array.isArray(s.routePresets)
     ? s.routePresets.map((r: any) => ({
         id: text(r.id, 'route', 50),
         name: text(r.name, 'Mountain Route', 100),
@@ -271,11 +271,24 @@ export function resolvePlatformConfig(saved: any): PlatformConfig {
     quoteBiddingWindowMin: num(s.quoteBiddingWindowMin, s.quoteWindowHours ? Math.round(Number(s.quoteWindowHours) * 60) : d.quoteBiddingWindowMin, 0, 4320),
     business: Object.fromEntries(BUSINESS_KEYS.map((k) => [k, text(s.business?.[k], d.business[k] || '', 300)])) as unknown as BusinessDetails,
     whatsappTemplates: Object.fromEntries(
-      WHATSAPP_EVENTS.map((e) => [e, typeof s.whatsappTemplates?.[e] === 'string' ? s.whatsappTemplates[e].trim() : ''])
-        .filter(([, v]) => /^[a-z0-9_]{1,200}$/.test(v as string))
+      WHATSAPP_EVENTS.map((e) => {
+        let v = typeof s.whatsappTemplates?.[e] === 'string' ? s.whatsappTemplates[e].trim().toLowerCase() : '';
+        v = v.replace(/[-\s]+/g, '_');
+        return [e, v];
+      }).filter(([, v]) => /^[a-z0-9_]{1,200}$/.test(v as string))
     ) as Record<string, string>,
     icalAllowedHosts: Array.isArray(s.icalAllowedHosts)
-      ? [...new Set(s.icalAllowedHosts.map((h: unknown) => String(h ?? '').trim().toLowerCase()).filter((h: string) => /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(h)))].slice(0, 40) as string[]
+      ? [...new Set(s.icalAllowedHosts.map((h: unknown) => {
+          let str = String(h ?? '').trim().toLowerCase();
+          try {
+            if (str.startsWith('http://') || str.startsWith('https://')) {
+              str = new URL(str).hostname;
+            } else if (str.includes('/')) {
+              str = str.split('/')[0];
+            }
+          } catch {}
+          return str;
+        }).filter((h: string) => /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(h)))].slice(0, 40) as string[]
       : d.icalAllowedHosts,
   };
   if ((parseTime12(cfg.pickupEnd) ?? 0) <= (parseTime12(cfg.pickupStart) ?? 0)) {

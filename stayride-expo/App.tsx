@@ -59,7 +59,7 @@ const SessionWatcher: React.FC = () => {
   return (
     <View style={[StyleSheet.absoluteFill, { justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: '#0F172A' }]}>
       <Text style={{ fontSize: 20, fontWeight: '800', color: '#FFFFFF', textAlign: 'center' }}>
-        Account suspended by StayRide
+        Account suspended by StayCabs
       </Text>
       <Text style={{ fontSize: 14, color: '#94A3B8', textAlign: 'center', marginTop: 8, lineHeight: 20, maxWidth: 320 }}>
         {accountBlock}
@@ -97,7 +97,7 @@ export default function App() {
         </Text>
         <Text style={{ fontSize: 14, color: '#555555', textAlign: 'center' }}>
           This build is missing its sign-in configuration (EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY). Please install an
-          updated version of StayRide.
+          updated version of StayCabs.
         </Text>
       </View>
     );

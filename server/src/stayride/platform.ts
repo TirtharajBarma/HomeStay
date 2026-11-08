@@ -1253,6 +1253,7 @@ export function driverTripView(d: any, driverUserId: string, driverPhone?: strin
     passengers: d.passengers,
     vehicleType: d.vehicleType,
     guestBudget: d.guestBudget || null,
+    guestNotes: d.guestNotes || '',
     pickupOtpRequired: Boolean(d.pickupOtp),
     status: TRIP_STATUS[d.status] || d.status,
     driverView,
@@ -1497,14 +1498,12 @@ export function resolveDestinationCoordinates(trip: any): { lat: number; lng: nu
 
 /** One rule for the requests a driver's vehicle can take: who is told about a request = what he can see. */
 export function vehicleFits(vehicle: any, doc: any): boolean {
-  const type = String(vehicle?.type || '');
-  if (!type) return true; // not set yet: hears about every request
-  const pax = Number(doc.passengers || 1);
-  // a taxi union / syndicate (signup): its fleet has every vehicle class; a recorded seat count still caps big groups
-  if (type === 'Fleet') return pax <= 4 || !(Number(vehicle.seats) > 0) || Number(vehicle.seats) >= pax;
-  // 5+ passengers needs a 6-7 seater mountain vehicle (Bolero, Scorpio, Innova, Xylo), never a hatchback / sedan
-  if (pax > 4) return !['Hatchback', 'Sedan'].includes(type) && (['SUV', 'MUV', '7-seater', '9-seater'].includes(type) || Number(vehicle.seats) >= pax);
-  return !doc.vehicleType || type === doc.vehicleType;
+  // Permissive vehicle matching: allow drivers of any vehicle class (SUV, Sedan, Fleet, etc.)
+  // to view, receive alerts, and quote on requests. Hosts and guests can review vehicle details before confirming.
+  const pax = Number(doc?.passengers || 1);
+  const seats = Number(vehicle?.seats || 0);
+  if (seats > 0 && pax > seats) return false;
+  return true;
 }
 
 /**
@@ -1531,9 +1530,8 @@ export function areaMatches(driverArea: unknown, homestayArea: unknown): boolean
   return areaParts(driverArea).some((d) => homestay.some((h) => within(d, h) || within(h, d)));
 }
 
-/** Radius filter: with a known distance, within the radius; without GPS, only a driver based in the homestay's area. 0 = no filter. */
-export const nearbyPasses = (km: number | null, radiusKm: number, driverArea: unknown, homestayArea: unknown) =>
-  radiusKm <= 0 || (km === null ? areaMatches(driverArea, homestayArea) : km <= radiusKm);
+/** Permissive location filter: allow all active platform drivers to see and quote on trips across the network. */
+export const nearbyPasses = (km: number | null, radiusKm: number, driverArea: unknown, homestayArea: unknown) => true;
 
 // 60-minute GPS recency: older coordinates are stale in mountain terrain (drivers would match across ridges).
 const freshLocationOf = (d: any) => {
