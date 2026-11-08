@@ -8,7 +8,7 @@ import { Icon } from "./icon";
 
 export function StayCard({ stay, booking }: { stay: Stay; booking: Booking }) {
   return (
-    <article className="group relative flex flex-col overflow-hidden rounded-xl border border-outline-variant/60 bg-surface-container-lowest sunlit-card-shadow sunlit-card-hover focus-within:border-primary">
+    <article className="group relative flex flex-col overflow-hidden rounded-xl border border-outline-variant/60 bg-surface-container-lowest shadow-ambient transition-all duration-500 ease-out hover:-translate-y-1 hover:border-primary/40 hover:shadow-elevated focus-within:border-primary">
       {/* Photo Frame */}
       <div className="relative aspect-[16/10] w-full overflow-hidden bg-surface-container">
         <Image
@@ -16,11 +16,11 @@ export function StayCard({ stay, booking }: { stay: Stay; booking: Booking }) {
           alt={stay.imageAlt}
           fill
           sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
-          className="object-cover transition-opacity duration-300 group-hover:opacity-95"
+          className="object-cover transition-transform duration-700 ease-out will-change-transform group-hover:scale-[1.03]"
         />
         {stay.petFriendly && (
           <div className="absolute top-2.5 left-2.5">
-            <span className="inline-flex items-center gap-1 rounded-md bg-surface/90 px-2 py-0.5 text-label-sm font-medium text-primary backdrop-blur-xs shadow-xs">
+            <span className="inline-flex items-center gap-1.5 rounded-md border border-outline-variant/50 bg-surface/90 px-2.5 py-1 text-label-sm font-medium text-primary backdrop-blur-md shadow-xs">
               <Icon name="pets" className="text-[12px] text-outline" />
               <span>Pet-friendly</span>
             </span>
@@ -56,7 +56,7 @@ export function StayCard({ stay, booking }: { stay: Stay; booking: Booking }) {
             )}
           </div>
 
-          <span className="inline-flex items-center text-label-sm font-medium text-primary transition-colors group-hover:text-primary-container">
+          <span className="inline-flex items-center gap-0.5 text-label-sm font-medium text-primary transition-all duration-300 ease-out group-hover:translate-x-1 group-hover:text-primary-container">
             <span>View room</span>
             <Icon name="chevron_right" className="text-[14px]" />
           </span>

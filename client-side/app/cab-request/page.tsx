@@ -10,7 +10,13 @@ import { getRecaptchaToken } from "@/lib/recaptcha";
 import { waNumber } from "@/lib/whatsapp";
 import { upiPayUrl, isUtr, cleanUtr } from "@/lib/upi";
 import { toDataURL } from "qrcode";
-import { WebLocationPicker, PickedLocation } from "@/components/web-location-picker";
+import dynamic from "next/dynamic";
+import type { PickedLocation } from "@/components/web-location-picker";
+
+const WebLocationPicker = dynamic(
+  () => import("@/components/web-location-picker").then((m) => m.WebLocationPicker),
+  { ssr: false }
+);
 
 export interface RoutePreset {
   id: string;

@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { API_ENDPOINTS, apiFetch } from "@/lib/api-config";
 import { siteConfig } from "@/lib/site-config";
 import { Icon } from "@/components/icon";
+import { getFallbackLegalDoc } from "@/lib/legal-content";
 
 type LegalPage = { title: string; version: string; sections: { heading: string; body: string }[] };
 
@@ -17,18 +18,32 @@ const DOCS = [
 
 export default function LegalDocPage() {
   const doc = String(useParams().doc || "");
-  const [page, setPage] = useState<LegalPage | null>(null);
+  const fallback = getFallbackLegalDoc(doc);
+  const [serverData, setServerData] = useState<{ doc: string; page: LegalPage } | null>(null);
   const [error, setError] = useState("");
+
+  const page = (serverData?.doc === doc ? serverData.page : null) || fallback;
 
   useEffect(() => {
     let cancelled = false;
+
+    // Background revalidation: DB is the ultimate source of truth
     apiFetch<LegalPage>(API_ENDPOINTS.legal(doc))
-      .then((p) => !cancelled && setPage(p))
-      .catch((e) => !cancelled && setError(e?.message || "This policy page could not be loaded."));
+      .then((p) => {
+        if (!cancelled && p && Array.isArray(p.sections)) {
+          setServerData({ doc, page: p });
+          setError("");
+        }
+      })
+      .catch((e) => {
+        if (!cancelled && !fallback) {
+          setError(e?.message || "This policy page could not be loaded.");
+        }
+      });
     return () => {
       cancelled = true;
     };
-  }, [doc]);
+  }, [doc, fallback]);
 
   const activeDocName = DOCS.find(([d]) => d === doc)?.[1] || page?.title || "Legal";
 

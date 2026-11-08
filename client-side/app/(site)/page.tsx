@@ -51,9 +51,14 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
       <section className="border-b border-outline-variant/60 bg-surface pt-8 pb-10 md:pt-16 md:pb-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6">
           <div className="mx-auto mb-8 max-w-3xl text-center md:mb-12">
-            <div className="mb-3 inline-flex items-center gap-1.5 rounded-md border border-outline-variant/70 bg-surface-container-low px-2.5 py-1 text-label-sm text-on-surface-variant">
-              <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-outline-variant/60 bg-surface-container-low/90 px-3 py-1 text-label-sm text-on-surface-variant backdrop-blur-xs shadow-2xs">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/40 opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+              </span>
               <span>2,042m · Darjeeling &amp; Sikkim Himalayas</span>
+              <span className="text-outline">·</span>
+              <span className="text-outline">Live Mountain Network</span>
             </div>
             <h1 className="mb-3 font-display text-2xl sm:text-3xl md:text-display font-medium tracking-tight text-primary">
               Himalayan homestays &amp; mountain transfers

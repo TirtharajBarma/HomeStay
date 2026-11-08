@@ -20,6 +20,7 @@ import { Property } from "../models/property.model.js";
 import { toWhatsAppNumber } from "../services/whatsapp.service.js";
 import { httpError } from "../middlewares/error-handler.js";
 import { config } from "../config/env.js";
+import { NotificationService } from "../services/notification.service.js";
 
 const router = Router();
 
@@ -101,6 +102,34 @@ router.post("/commission/preview", async (req, res) => {
   const cfg = await CommissionService.getPlatformConfig(isDemo(req));
   const fare = parseFare(req.body.fare, cfg.maxFare);
   ok(res, await CommissionService.calculateSplit(fare, req.body.tenantKey || req.body.propertyId, isDemo(req)));
+});
+
+router.post("/email-alerts/test", async (req, res) => {
+  const demo = isDemo(req);
+  const result = await NotificationService.sendAdminAlert(
+    "bookingCreated",
+    "Test Operational Alert from StayRide Operations",
+    {
+      badge: "TEST ALERT",
+      reference: "TEST-001",
+      summary: "This is a real-time verification email dispatched from your StayRide Platform Settings.",
+      items: [
+        { label: "Dispatch Timestamp", value: new Date().toLocaleString("en-IN") },
+        { label: "Initiated By", value: actor(req) || "Platform Administrator" },
+        { label: "SMTP Provider", value: "Resend Transactional Mail Engine" },
+        { label: "Recipient Count", value: "Active Verified Recipient(s)" },
+      ],
+      actionUrl: "https://admin.staycabs.in",
+      actionText: "Open Admin Dashboard →",
+    },
+    demo
+  );
+
+  if (!result.success) {
+    throw httpError(400, result.error || "Failed to send test email. Check your SMTP settings and recipient list.");
+  }
+
+  ok(res, { success: true, recipients: result.recipients }, `Test operational alert sent to ${result.recipients.join(", ")}.`);
 });
 
 // ---------------------------------------------------------------------------

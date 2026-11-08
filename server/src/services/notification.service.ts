@@ -1,6 +1,24 @@
 import nodemailer from "nodemailer";
 import { config } from "../config/env.js";
 import { logger } from "../utils/logger.js";
+import { CommissionService } from "./commission.service.js";
+
+export interface AdminAlertDetails {
+  badge: string;
+  reference?: string;
+  summary: string;
+  items: Array<{ label: string; value: string }>;
+  actionUrl?: string;
+  actionText?: string;
+}
+
+export type AdminAlertEvent =
+  | "bookingCreated"
+  | "cabRequestCreated"
+  | "paymentClaimSubmitted"
+  | "advancePaid"
+  | "tripCompleted"
+  | "refundClaimed";
 
 export interface BookingNotificationPayload {
   reference: string;
@@ -60,6 +78,193 @@ export class NotificationService {
       return this.transporter;
     }
     return null;
+  }
+
+  /**
+   * Dispatch instant operational email alert to configured Admin email addresses.
+   * Only administrators receive these alerts; guests and drivers are never emailed.
+   */
+  static async sendAdminAlert(
+    event: AdminAlertEvent,
+    title: string,
+    details: AdminAlertDetails,
+    isDemo = false
+  ): Promise<{ success: boolean; recipients: string[]; error?: string }> {
+    try {
+      const cfg = await CommissionService.getPlatformConfig(isDemo);
+      const emailConfig = cfg.emailAlerts;
+
+      if (!emailConfig?.enabled) {
+        logger.info(`[ADMIN ALERT SKIPPED] Email alerts globally disabled in platform settings for ${event}`);
+        return { success: false, recipients: [], error: "Alerts disabled" };
+      }
+
+      if (emailConfig.triggers && emailConfig.triggers[event] === false) {
+        logger.info(`[ADMIN ALERT SKIPPED] Event trigger ${event} is toggled off in platform settings`);
+        return { success: false, recipients: [], error: `Trigger ${event} disabled` };
+      }
+
+      const recipients = (emailConfig.recipients || [])
+        .map((e) => (typeof e === "string" ? e.trim().toLowerCase() : ""))
+        .filter((e) => e && e.includes("@") && e.includes("."));
+
+      if (recipients.length === 0) {
+        logger.warn(`[ADMIN ALERT SKIPPED] No valid admin recipient emails configured for ${event}`);
+        return { success: false, recipients: [], error: "No recipients" };
+      }
+
+      const resendApiKey = process.env.RESEND_API_KEY || (process.env.SMTP_PASS?.startsWith("re_") ? process.env.SMTP_PASS : "");
+      const transporter = this.getTransporter();
+      if (!resendApiKey && !transporter) {
+        logger.warn(`[ADMIN ALERT] Neither Resend API key nor SMTP configured. Alert logged to console for ${recipients.join(", ")}`);
+        return { success: false, recipients, error: "Email service not configured" };
+      }
+
+      const defaultFrom = process.env.SMTP_FROM || `"StayCabs Bookings" <booking@send.${config.appDomain || "staycabs.in"}>`;
+      const replyTo = config.supportEmail || `support@${config.appDomain || "staycabs.in"}`;
+      const subject = `[StayCabs Ops] ${title}`;
+
+      const textBody = `
+[${details.badge.toUpperCase()}]
+${title}
+${details.summary}
+
+----------------------------------------
+${details.items.map((i) => `${i.label.padEnd(22)}: ${i.value}`).join("\n")}
+----------------------------------------
+
+StayCabs Operations Desk · Darjeeling & Sikkim Himalayas
+      `.trim();
+
+      const htmlBody = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${subject}</title>
+</head>
+<body style="margin: 0; padding: 24px; background-color: #0B0F14; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #E6EDF3;">
+  <table width="100%" border="0" cellpadding="0" cellspacing="0" style="max-width: 600px; margin: 0 auto; background-color: #121820; border: 1px solid #1E293B; border-radius: 12px; overflow: hidden;">
+    <tr>
+      <td style="padding: 20px 24px; background-color: #0D1117; border-bottom: 1px solid #1E293B;">
+        <table width="100%" border="0" cellpadding="0" cellspacing="0">
+          <tr>
+            <td>
+              <span style="font-size: 16px; font-weight: 700; color: #FFFFFF; letter-spacing: -0.3px;">StayCabs Operations</span>
+              <span style="display: block; font-size: 11px; color: #94A3B8; margin-top: 2px;">Live Himalayan Travel & Transit Network</span>
+            </td>
+            <td align="right">
+              <span style="display: inline-block; padding: 4px 10px; font-size: 11px; font-weight: 600; border-radius: 6px; background-color: rgba(46, 160, 67, 0.15); color: #3FB950; border: 1px solid rgba(46, 160, 67, 0.3);">
+                ${details.badge}
+              </span>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 24px;">
+        <h2 style="margin: 0 0 8px 0; font-size: 18px; font-weight: 600; color: #FFFFFF; line-height: 1.3;">
+          ${title}
+        </h2>
+        <p style="margin: 0 0 20px 0; font-size: 13px; color: #94A3B8; line-height: 1.5;">
+          ${details.summary}
+        </p>
+        <table width="100%" border="0" cellpadding="0" cellspacing="0" style="background-color: #0D1117; border: 1px solid #1E293B; border-radius: 8px; margin-bottom: 24px;">
+          ${details.items
+            .map(
+              (item, idx) => `
+          <tr>
+            <td style="padding: 10px 16px; font-size: 12px; color: #94A3B8; border-bottom: ${idx === details.items.length - 1 ? "none" : "1px solid #1E293B"}; width: 38%;">
+              ${item.label}
+            </td>
+            <td style="padding: 10px 16px; font-size: 13px; font-weight: 600; color: #FFFFFF; font-family: monospace; border-bottom: ${idx === details.items.length - 1 ? "none" : "1px solid #1E293B"};">
+              ${item.value}
+            </td>
+          </tr>`
+            )
+            .join("")}
+        </table>
+        <div style="text-align: center; margin-top: 10px;">
+          <a href="${details.actionUrl || "https://admin.staycabs.in"}" style="display: inline-block; background-color: #1E7E4B; color: #FFFFFF; font-size: 13px; font-weight: 600; padding: 10px 24px; border-radius: 8px; text-decoration: none;">
+            ${details.actionText || "Open Operations Desk →"}
+          </a>
+        </div>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 16px 24px; background-color: #0D1117; border-top: 1px solid #1E293B; text-align: center; font-size: 11px; color: #64748B;">
+        This operational alert was dispatched exclusively to authorized platform administrators (${recipients.join(", ")}).
+        <br>Manage your alert preferences in Admin Dashboard → Platform Settings.
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+      `.trim();
+
+      let dispatched = false;
+
+      // 1. Prefer Resend REST API (faster, 100% reliable on Vercel Serverless)
+      if (resendApiKey) {
+        try {
+          const res = await fetch("https://api.resend.com/emails", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${resendApiKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              from: defaultFrom,
+              to: recipients,
+              reply_to: replyTo,
+              subject,
+              text: textBody,
+              html: htmlBody,
+            }),
+          });
+          if (res.ok) {
+            dispatched = true;
+          } else {
+            const errData = await res.json().catch(() => ({})) as any;
+            logger.warn(`[ADMIN ALERT] Resend REST API returned error: ${errData?.message || res.statusText}. Falling back to SMTP...`);
+          }
+        } catch (fetchErr: any) {
+          logger.warn(`[ADMIN ALERT] Resend fetch exception: ${fetchErr?.message}. Falling back to SMTP...`);
+        }
+      }
+
+      // 2. Fallback to Nodemailer SMTP
+      if (!dispatched && transporter) {
+        await transporter.sendMail({
+          from: defaultFrom,
+          to: recipients.join(", "),
+          replyTo,
+          subject,
+          text: textBody,
+          html: htmlBody,
+        });
+        dispatched = true;
+      }
+
+      if (!dispatched) {
+        throw new Error("Failed to dispatch alert via Resend API or SMTP");
+      }
+
+      logger.info(`[ADMIN ALERT SENT] Dispatched "${title}" to ${recipients.join(", ")}`, {
+        action: "email.admin_alert",
+        metadata: { event, recipients, reference: details.reference },
+      });
+
+      return { success: true, recipients };
+    } catch (err: any) {
+      logger.warn(`[ADMIN ALERT FAILED] Error dispatching "${title}": ${err?.message}`, {
+        action: "email.admin_alert.error",
+        error: { message: err?.message || String(err), stack: err?.stack },
+      });
+      return { success: false, recipients: [], error: err?.message || "Failed to send email" };
+    }
   }
 
   /**

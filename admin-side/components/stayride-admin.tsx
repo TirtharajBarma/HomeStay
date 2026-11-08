@@ -1949,6 +1949,35 @@ const statusTone = (s: string) =>
   s === "EXPIRED" ? "slate" :
   s === "AWAITING_ADVANCE_PAYMENT" ? "amber" : "cyan";
 
+const statusLabel = (s: string) => {
+  switch (s) {
+    case "AWAITING_ADVANCE_PAYMENT":
+      return "Advance Due";
+    case "FINDING_DRIVER":
+      return "Finding Driver";
+    case "QUOTE_RECEIVED":
+      return "Quote In";
+    case "PENDING_REVIEW":
+      return "Review";
+    case "EN_ROUTE_PICKUP":
+      return "En Route";
+    case "ARRIVED_HOMESTAY":
+      return "Arrived";
+    case "TRIP_STARTED":
+      return "In Transit";
+    case "CONFIRMED":
+      return "Confirmed";
+    case "COMPLETED":
+      return "Completed";
+    case "CANCELLED":
+      return "Cancelled";
+    case "EXPIRED":
+      return "Expired";
+    default:
+      return s ? s.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (l) => l.toUpperCase()) : "Unknown";
+  }
+};
+
 function getSmartInitialDateTime(): { date: string; time: string } {
   const now = new Date();
   const target = new Date(now.getTime() + 2 * 60 * 60 * 1000);
@@ -2972,9 +3001,11 @@ function PipelineCard({
           : "bg-[#0D1117] border-slate-800/80 hover:border-slate-700 hover:bg-[#121820]"
       }`}
     >
-      <div className="flex items-center justify-between mb-1.5">
-        <span className="font-mono text-xs font-bold text-white">#{c.reference}</span>
-        <Badge tone={statusTone(c.status)}>{c.status}</Badge>
+      <div className="flex items-center justify-between gap-1.5 mb-1.5 min-w-0">
+        <span className="font-mono text-xs font-bold text-white truncate shrink min-w-0">#{c.reference}</span>
+        <span className="shrink-0">
+          <Badge tone={statusTone(c.status)}>{statusLabel(c.status)}</Badge>
+        </span>
       </div>
 
       <p className="text-xs font-semibold text-slate-200 line-clamp-2">
@@ -3852,12 +3883,14 @@ const WHATSAPP_EVENTS: { key: string; label: string; purpose: string }[] = [
   { key: "VEHICLE_UPDATED_GUEST", label: "Vehicle Plate Reassigned", purpose: "Emergency vehicle or driver swap alert to passenger" },
 ];
 
-type SettingsSection = "financials" | "dispatch" | "pricing" | "sightseeing" | "whatsapp" | "business" | "features";
+type SettingsSection = "financials" | "dispatch" | "pricing" | "sightseeing" | "whatsapp" | "email" | "business" | "features";
 
 export function SettingsTab({ demo }: TabProps) {
   const { data, error, loading, reload, updatedAt } = useLoad(() => adminApi("/commission/settings", { demo }).then((r) => r.data as Any), [demo], true);
   
   const [activeSection, setActiveSection] = useState<SettingsSection>("financials");
+  const [testEmailStatus, setTestEmailStatus] = useState<string>("");
+  const [testEmailLoading, setTestEmailLoading] = useState(false);
 
   // Commission & Splits
   const [totalComm, setTotalComm] = useState("10");
@@ -3915,6 +3948,35 @@ export function SettingsTab({ demo }: TabProps) {
         }
       })
       .filter(Boolean);
+
+  const handleSendTestEmail = async () => {
+    setTestEmailLoading(true);
+    setTestEmailStatus("");
+    try {
+      const recipients = cfg?.emailAlerts?.recipients || [];
+      if (!recipients.length) {
+        setTestEmailStatus("✕ Please enter at least one admin email in the box above.");
+        setTestEmailLoading(false);
+        return;
+      }
+      const res = await fetch("/api/email-alerts/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recipients }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json.success) {
+        const sentTo = json.recipients || recipients;
+        setTestEmailStatus(`✓ Test alert sent to: ${sentTo.join(", ")}`);
+      } else {
+        setTestEmailStatus(`✕ Delivery error: ${json.message || "Failed to send email"}`);
+      }
+    } catch (err: any) {
+      setTestEmailStatus(`✕ Error: ${err?.message || "Failed to send test email"}`);
+    } finally {
+      setTestEmailLoading(false);
+    }
+  };
 
   // Dirty state tracking
   const isFinancialsDirty =
@@ -4105,6 +4167,7 @@ export function SettingsTab({ demo }: TabProps) {
             { id: "pricing", label: "Fleet & Route Pricing", icon: "•", dirty: isOpsDirty },
             { id: "sightseeing", label: "Sightseeing & Calendar", icon: "•", dirty: isOpsDirty },
             { id: "whatsapp", label: "WhatsApp Templates", icon: "•", dirty: isOpsDirty },
+            { id: "email", label: "Admin Email Alerts", icon: "•", dirty: isOpsDirty },
             { id: "business", label: "Business & Compliance", icon: "•", dirty: isOpsDirty },
             { id: "features", label: "Global Feature Switches", icon: "•", dirty: isFeaturesDirty },
           ].map((tab) => {
@@ -4733,7 +4796,173 @@ vrbo.com"
         )}
 
         {/* ------------------------------------------------------------------ */}
-        {/* Sub-Tab 6: Business & Compliance                                  */}
+        {/* Sub-Tab 6: Admin Email Alerts                                     */}
+        {/* ------------------------------------------------------------------ */}
+        {activeSection === "email" && cfg && (
+          <div className="space-y-6 pt-2">
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 space-y-5">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                <div>
+                  <h3 className="text-sm font-bold text-white">Administrator Operational Email Notifications</h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Real-time operational alerts dispatched via Resend transactional email relay directly to your personal or team inboxes.
+                  </p>
+                </div>
+                <label className="flex items-center gap-2 cursor-pointer bg-[#0D1117] border border-slate-800 px-3 py-1.5 rounded-lg hover:border-slate-700 transition">
+                  <input
+                    type="checkbox"
+                    className="accent-[#2EA043] rounded h-4 w-4 cursor-pointer"
+                    checked={cfg.emailAlerts?.enabled ?? true}
+                    onChange={(e) =>
+                      setCfg({
+                        ...cfg,
+                        emailAlerts: { ...(cfg.emailAlerts || {}), enabled: e.target.checked },
+                      })
+                    }
+                  />
+                  <span className="text-xs font-semibold text-slate-200">
+                    {(cfg.emailAlerts?.enabled ?? true) ? "Alerts Enabled" : "Alerts Paused"}
+                  </span>
+                </label>
+              </div>
+
+              {/* Recipient Emails */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-300">
+                    Recipient Admin Email Addresses
+                  </label>
+                  <span className="text-[11px] text-slate-500 font-mono">
+                    {Array.isArray(cfg.emailAlerts?.recipients) ? cfg.emailAlerts.recipients.length : 0} configured
+                  </span>
+                </div>
+                <textarea
+                  rows={3}
+                  className="w-full rounded-xl border border-slate-700/80 bg-[#0D1117] px-3.5 py-2.5 text-xs text-white font-mono placeholder:text-slate-600 focus:border-[#2EA043] focus:outline-none"
+                  placeholder="admin@staycabs.in&#10;your.personal.email@gmail.com"
+                  value={Array.isArray(cfg.emailAlerts?.recipients) ? cfg.emailAlerts.recipients.join("\n") : ""}
+                  onChange={(e) => {
+                    const list = e.target.value
+                      .split(/[\n,]/)
+                      .map((x) => x.trim())
+                      .filter(Boolean);
+                    setCfg({
+                      ...cfg,
+                      emailAlerts: { ...(cfg.emailAlerts || {}), recipients: list },
+                    });
+                  }}
+                />
+                <p className="text-[11px] text-slate-500">
+                  Multiple emails supported (one per line or comma-separated). Only administrators receive these alerts; guests and drivers are never emailed.
+                </p>
+              </div>
+
+              {/* Event Triggers */}
+              <div className="space-y-3 pt-3 border-t border-slate-800">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-white">Select Operational Triggers</h4>
+                  <span className="text-[11px] text-slate-500">Checked events fire immediately</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {[
+                    {
+                      key: "bookingCreated",
+                      label: "Homestay Room Booking Created",
+                      desc: "When a host logs a guest room reservation",
+                    },
+                    {
+                      key: "cabRequestCreated",
+                      label: "New Cab Transit Request",
+                      desc: "When a guest requests a ride via web or link",
+                    },
+                    {
+                      key: "paymentClaimSubmitted",
+                      label: "Guest Payment Claim (UTR Verify)",
+                      desc: "When a guest submits a 12-digit UPI UTR for verification",
+                    },
+                    {
+                      key: "advancePaid",
+                      label: "Advance Payment Confirmed",
+                      desc: "When an advance deposit is verified (Razorpay / UPI)",
+                    },
+                    {
+                      key: "tripCompleted",
+                      label: "Trip Completed & Settlement Ready",
+                      desc: "When a transfer ends and driver payout is calculated",
+                    },
+                    {
+                      key: "refundClaimed",
+                      label: "Trip Cancellation / Refund",
+                      desc: "When a booked ride is cancelled or refunded",
+                    },
+                  ].map((trigger) => {
+                    const checked = cfg.emailAlerts?.triggers?.[trigger.key] ?? true;
+                    return (
+                      <label
+                        key={trigger.key}
+                        className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition ${
+                          checked
+                            ? "border-emerald-500/30 bg-emerald-500/5 text-slate-200"
+                            : "border-slate-800 bg-[#0D1117] text-slate-400"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          className="mt-0.5 accent-[#2EA043] rounded"
+                          checked={checked}
+                          onChange={(e) => {
+                            const curTriggers = cfg.emailAlerts?.triggers || {};
+                            setCfg({
+                              ...cfg,
+                              emailAlerts: {
+                                ...(cfg.emailAlerts || {}),
+                                triggers: { ...curTriggers, [trigger.key]: e.target.checked },
+                              },
+                            });
+                          }}
+                        />
+                        <div className="space-y-0.5">
+                          <p className="text-xs font-semibold text-white">{trigger.label}</p>
+                          <p className="text-[11px] text-slate-400 leading-relaxed">{trigger.desc}</p>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Test Email Button & Live Feedback */}
+              <div className="pt-4 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    disabled={testEmailLoading}
+                    onClick={handleSendTestEmail}
+                    className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-3.5 py-2 text-xs font-medium text-slate-200 hover:bg-slate-700 transition cursor-pointer disabled:opacity-50"
+                  >
+                    <span className="material-symbols-outlined text-sm">send</span>
+                    <span>{testEmailLoading ? "Sending test alert..." : "Send Test Alert Email"}</span>
+                  </button>
+                  {testEmailStatus && (
+                    <span
+                      className={`text-xs font-semibold ${
+                        testEmailStatus.startsWith("✓") ? "text-emerald-400" : "text-red-400"
+                      }`}
+                    >
+                      {testEmailStatus}
+                    </span>
+                  )}
+                </div>
+                <span className="text-[11px] font-mono text-slate-500">
+                  SMTP Relay: smtp.resend.com:587
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------------ */}
+        {/* Sub-Tab 7: Business & Compliance                                  */}
         {/* ------------------------------------------------------------------ */}
         {activeSection === "business" && cfg && (
           <div className="space-y-5 pt-2">

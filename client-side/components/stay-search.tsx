@@ -29,10 +29,10 @@ const kindOptions = [
 ];
 
 const fieldClass =
-  "flex flex-col justify-between rounded-lg border border-outline-variant/60 bg-surface p-3 min-h-[88px] transition-colors focus-within:border-primary";
+  "flex flex-col justify-between rounded-lg border border-outline-variant/60 bg-surface p-3 min-h-[88px] transition-all duration-200 focus-within:border-primary focus-within:shadow-2xs";
 
 const dateControlClass =
-  "h-9 w-full rounded-md border border-outline-variant/60 bg-surface-container-lowest focus-within:border-primary transition-colors";
+  "h-9 w-full rounded-md border border-outline-variant/60 bg-surface-container-lowest focus-within:border-primary transition-all duration-200";
 
 const selectClass =
   "h-9 w-full rounded-md border border-outline-variant/60 bg-surface-container-lowest px-2 text-body-sm tabular-nums text-on-surface focus:border-primary focus:outline-none";
@@ -169,7 +169,7 @@ export function StaySearch({ booking, filters, maxGuests }: StaySearchProps) {
         <div className="flex flex-col justify-center sm:col-span-2 lg:col-span-3">
           <button
             type="submit"
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-primary px-5 text-label-md font-medium text-on-primary transition-colors hover:bg-primary-container focus-visible:outline-2 focus-visible:outline-primary cursor-pointer shadow-ambient"
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-primary px-5 text-label-md font-medium text-on-primary transition-all duration-300 hover:bg-primary-container hover:shadow-elevated active:translate-y-[1px] focus-visible:outline-2 focus-visible:outline-primary cursor-pointer shadow-ambient"
           >
             <Icon name="search" className="text-[18px]" />
             <span>Search stays</span>

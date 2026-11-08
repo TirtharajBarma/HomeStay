@@ -27,6 +27,7 @@ import { Driver } from '../models/driver.model.js';
 import { Booking } from '../models/booking.model.js';
 import { tenantDbModel } from '../utils/tenant-model.js';
 import { requireRecaptcha } from '../middlewares/recaptcha.js';
+import { NotificationService } from '../services/notification.service.js';
 
 export function getUserModel(isDemo: boolean = false): mongoose.Model<any> {
   return tenantDbModel(isDemo, 'User', User.schema);
@@ -1041,6 +1042,21 @@ async function createPlatformTrip(
     },
   });
   if (doc.dispatched !== false) await notifyNewRequest(isDemo, doc);
+  NotificationService.sendAdminAlert('cabRequestCreated', `New Cab Request: #${doc.reference} (${doc.guestName})`, {
+    badge: 'CAB REQUEST',
+    reference: doc.reference,
+    summary: `New transit request dispatched from ${doc.pickupLocation?.address || 'Pickup'} to ${(doc.destinations || []).map((d: any) => d.address).join(' → ') || 'Destination'}.`,
+    items: [
+      { label: 'Trip Reference', value: `#${doc.reference}` },
+      { label: 'Passenger', value: `${doc.guestName} (${doc.passengers || 1} pax)` },
+      { label: 'Phone', value: doc.guestPhone },
+      { label: 'Pickup Location', value: doc.pickupLocation?.address || '—' },
+      { label: 'Destination', value: (doc.destinations || []).map((d: any) => d.address).join(' → ') || '—' },
+      { label: 'Schedule', value: `${doc.date} at ${doc.time}` },
+      { label: 'Vehicle Class', value: doc.vehicleType || 'Any' },
+      { label: 'Dispatch Source', value: source },
+    ],
+  }, isDemo).catch((e: any) => logger.warn(`[Admin Alert] Cab request alert error: ${e?.message}`));
   return { trip, doc };
 }
 
@@ -2410,6 +2426,24 @@ stayrideV1Router.post('/bookings', async (req: Request, res: Response) => {
   // Not for a back-dated stay that is already over (autoAskCab).
   const askCab = await autoAskCab(tenantKey, isDemo, (await loadReqStore(req)).homestay.name, created);
   if (askCab) created.askCab = askCab;
+
+  const homestayName = (await loadReqStore(req)).homestay.name || tenantKey;
+  NotificationService.sendAdminAlert('bookingCreated', `New Homestay Booking: #${created.id} (${created.guestName})`, {
+    badge: 'ROOM BOOKING',
+    reference: String(created.id),
+    summary: `New room reservation recorded by homestay host (${homestayName}).`,
+    items: [
+      { label: 'Booking ID', value: `#${created.id}` },
+      { label: 'Homestay Host', value: `${homestayName} (${tenantKey})` },
+      { label: 'Guest Name', value: created.guestName },
+      { label: 'Phone', value: created.phone || '—' },
+      { label: 'Room', value: `Room ${created.roomNumber}` },
+      { label: 'Stay Dates', value: `${new Date(created.checkIn).toLocaleDateString('en-IN')} to ${new Date(created.checkOut).toLocaleDateString('en-IN')}` },
+      { label: 'Total Booking Amount', value: `₹${Number(created.amount || 0).toLocaleString('en-IN')}` },
+      { label: 'Advance Paid', value: `₹${Number((created as any).advance || req.body?.advance || 0).toLocaleString('en-IN')}` },
+    ],
+  }, isDemo).catch((e: any) => logger.warn(`[Admin Alert] Booking alert error: ${e?.message}`));
+
   res.status(201).json(created);
 });
 

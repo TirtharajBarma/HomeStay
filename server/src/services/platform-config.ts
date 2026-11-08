@@ -65,6 +65,21 @@ export interface PlatformConfig {
   whatsappTemplates: Record<string, string>;
   /** Who runs StayRide, shown in the legal pages and the app (required business / grievance details) */
   business: BusinessDetails;
+  /** Admin operational email notifications */
+  emailAlerts: EmailAlertsConfig;
+}
+
+export interface EmailAlertsConfig {
+  enabled: boolean;
+  recipients: string[];
+  triggers: {
+    bookingCreated: boolean;
+    cabRequestCreated: boolean;
+    paymentClaimSubmitted: boolean;
+    advancePaid: boolean;
+    tripCompleted: boolean;
+    refundClaimed: boolean;
+  };
 }
 
 export interface BusinessDetails {
@@ -198,6 +213,18 @@ export const DEFAULT_PLATFORM_CONFIG: PlatformConfig = {
   whatsappTemplates: {},
   // Fill these in Operations settings before publishing the app: they appear in the legal pages
   business: { name: env.appName || 'Homestay & Cab Network', legalName: '', address: '', email: env.supportEmail || '', phone: '', upiId: '', grievanceOfficer: '', grievanceEmail: '', website: env.guestWebUrl || '' },
+  emailAlerts: {
+    enabled: true,
+    recipients: [env.supportEmail || 'support@staycabs.in'],
+    triggers: {
+      bookingCreated: true,
+      cabRequestCreated: true,
+      paymentClaimSubmitted: true,
+      advancePaid: true,
+      tripCompleted: true,
+      refundClaimed: true,
+    },
+  },
   icalAllowedHosts: ['airbnb.com', 'airbnb.co.in', 'booking.com', 'vrbo.com', 'expedia.com', 'agoda.com', 'makemytrip.com', 'goibibo.com', 'calendar.google.com', 'tripadvisor.com'],
 };
 
@@ -277,6 +304,24 @@ export function resolvePlatformConfig(saved: any): PlatformConfig {
         return [e, v];
       }).filter(([, v]) => /^[a-z0-9_]{1,200}$/.test(v as string))
     ) as Record<string, string>,
+    emailAlerts: {
+      enabled: typeof s.emailAlerts?.enabled === 'boolean' ? s.emailAlerts.enabled : d.emailAlerts.enabled,
+      recipients: Array.isArray(s.emailAlerts?.recipients)
+        ? ([...new Set(
+            s.emailAlerts.recipients
+              .map((e: unknown) => (typeof e === 'string' ? e.trim().toLowerCase() : ''))
+              .filter((e: string) => e && e.includes('@') && e.includes('.'))
+          )].slice(0, 20) as string[])
+        : d.emailAlerts.recipients,
+      triggers: {
+        bookingCreated: typeof s.emailAlerts?.triggers?.bookingCreated === 'boolean' ? s.emailAlerts.triggers.bookingCreated : true,
+        cabRequestCreated: typeof s.emailAlerts?.triggers?.cabRequestCreated === 'boolean' ? s.emailAlerts.triggers.cabRequestCreated : true,
+        paymentClaimSubmitted: typeof s.emailAlerts?.triggers?.paymentClaimSubmitted === 'boolean' ? s.emailAlerts.triggers.paymentClaimSubmitted : true,
+        advancePaid: typeof s.emailAlerts?.triggers?.advancePaid === 'boolean' ? s.emailAlerts.triggers.advancePaid : true,
+        tripCompleted: typeof s.emailAlerts?.triggers?.tripCompleted === 'boolean' ? s.emailAlerts.triggers.tripCompleted : true,
+        refundClaimed: typeof s.emailAlerts?.triggers?.refundClaimed === 'boolean' ? s.emailAlerts.triggers.refundClaimed : true,
+      },
+    },
     icalAllowedHosts: Array.isArray(s.icalAllowedHosts)
       ? [...new Set(s.icalAllowedHosts.map((h: unknown) => {
           let str = String(h ?? '').trim().toLowerCase();

@@ -31,37 +31,43 @@ export function StayFilters({
 
   return (
     <div className="flex w-full flex-col gap-2 md:w-auto md:items-end">
-      {/* Horizontal Filter Bar */}
+      {/* Apple-Style Segmented Filter Bar */}
       <div className="-mx-4 px-4 sm:-mx-6 sm:px-6 md:mx-0 md:px-0 flex flex-nowrap md:flex-wrap items-center gap-2 overflow-x-auto no-scrollbar scroll-smooth py-1">
-        {kindFilters.map((filter) => {
-          const active = filters.kind === filter.kind;
+        {/* Unified Category Track */}
+        <div className="inline-flex items-center rounded-lg border border-outline-variant/60 bg-surface-container-low/80 p-0.5 backdrop-blur-xs shadow-2xs">
+          {kindFilters.map((filter) => {
+            const active = filters.kind === filter.kind;
 
-          return (
-            <button
-              key={filter.kind}
-              type="button"
-              onClick={() => apply({ ...filters, kind: filter.kind })}
-              aria-pressed={active}
-              className={
-                active
-                  ? `${baseChip} bg-primary text-on-primary`
-                  : `${baseChip} border border-outline-variant/70 bg-surface-container-lowest text-on-surface-variant hover:border-outline`
-              }
-            >
-              <span>{filter.label}</span>
-              <span className="ml-1.5 opacity-70 tabular-nums">{counts[filter.kind]}</span>
-            </button>
-          );
-        })}
+            return (
+              <button
+                key={filter.kind}
+                type="button"
+                onClick={() => apply({ ...filters, kind: filter.kind })}
+                aria-pressed={active}
+                className={
+                  active
+                    ? "relative rounded-md bg-surface-container-lowest px-3 py-1.5 text-label-sm font-medium text-primary shadow-xs transition-all duration-200 cursor-pointer"
+                    : "relative rounded-md px-3 py-1.5 text-label-sm font-medium text-on-surface-variant transition-colors hover:text-primary cursor-pointer"
+                }
+              >
+                <span>{filter.label}</span>
+                <span className={`ml-1.5 tabular-nums ${active ? "text-primary/70" : "text-outline"}`}>
+                  {counts[filter.kind]}
+                </span>
+              </button>
+            );
+          })}
+        </div>
 
+        {/* Pet-Friendly Companion Filter */}
         <button
           type="button"
           onClick={() => apply({ ...filters, petFriendly: !filters.petFriendly })}
           aria-pressed={filters.petFriendly}
           className={
             filters.petFriendly
-              ? `${baseChip} items-center gap-1.5 bg-primary text-on-primary`
-              : `${baseChip} items-center gap-1.5 border border-outline-variant/70 bg-surface-container-lowest text-on-surface-variant hover:border-outline`
+              ? "inline-flex items-center gap-1.5 rounded-lg border border-primary bg-primary px-3 py-1.5 text-label-sm font-medium text-on-primary shadow-xs transition-all duration-200 cursor-pointer"
+              : "inline-flex items-center gap-1.5 rounded-lg border border-outline-variant/60 bg-surface-container-lowest px-3 py-1.5 text-label-sm font-medium text-on-surface-variant hover:border-outline hover:text-primary transition-all duration-200 cursor-pointer"
           }
         >
           <Icon name="pets" className="text-[12px]" />

@@ -110,7 +110,7 @@ export function CheckoutDates({
 
       {open && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-on-surface/40 backdrop-blur-sm transition-all duration-300"
           onClick={() => setOpen(false)}
         >
           <div
@@ -118,7 +118,7 @@ export function CheckoutDates({
             role="dialog"
             aria-modal="true"
             aria-labelledby="modal-title"
-            className="w-full max-w-sm rounded-2xl border border-outline-variant/50 bg-surface-container-lowest p-5 shadow-2xl animate-in zoom-in-95 duration-200"
+            className="w-full max-w-sm rounded-2xl border border-outline-variant/60 bg-surface-container-lowest p-5 sm:p-6 shadow-ambient transition-all duration-300"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}

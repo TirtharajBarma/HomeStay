@@ -52,16 +52,38 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
       try {
         const storedToken = window.localStorage.getItem(TOKEN_KEY);
         const storedUser = window.localStorage.getItem(USER_KEY);
-        if (!storedToken || !storedUser) return;
-
-        const parsed = JSON.parse(storedUser);
-        if (parsed.role !== "admin") {
-          clearAdminSession();
+        if (!storedToken || !storedUser) {
+          setIsLoading(false);
           return;
         }
 
-        // Do not trust localStorage: confirm the token with the server. A 401 makes
-        // apiFetch clear the session and redirect to /login.
+        let parsed: any = null;
+        try {
+          parsed = JSON.parse(storedUser);
+        } catch {
+          clearAdminSession();
+          setIsLoading(false);
+          return;
+        }
+
+        if (parsed?.role !== "admin") {
+          clearAdminSession();
+          setIsLoading(false);
+          return;
+        }
+
+        // Fast hydration: unblock the admin UI instantly (0ms) from trusted local session
+        setToken(storedToken);
+        setAdmin({
+          id: String(parsed.id || parsed._id || ""),
+          name: parsed.name || "",
+          email: parsed.email || "",
+          role: "admin",
+        });
+        setIsLoading(false);
+
+        // Background server verification (MongoDB DB remains ultimate source of truth):
+        // If the session was revoked or expired, 401 triggers clearAdminSession()
         const res = await apiFetch(API_ENDPOINTS.me());
         if (!res.ok) throw new Error(`Session check failed (${res.status}).`);
         const json = await res.json();
@@ -80,7 +102,6 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
         const secureFlag = typeof window !== "undefined" && window.location.protocol === "https:" ? "; Secure" : "";
         document.cookie = `${TOKEN_KEY}=${storedToken}; path=/; SameSite=Strict; max-age=86400${secureFlag}`;
         if (cancelled) return;
-        setToken(storedToken);
         setAdmin(user);
       } catch {
         if (!cancelled) {

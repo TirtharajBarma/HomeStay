@@ -69,11 +69,14 @@ export function SiteHeader() {
               href={link.href}
               className={
                 link.active
-                  ? "inline-flex h-9 items-center text-body-md font-medium text-primary"
-                  : "inline-flex h-9 items-center text-body-md text-on-surface-variant transition-colors hover:text-primary"
+                  ? "relative inline-flex h-9 items-center text-body-md font-medium text-primary"
+                  : "relative inline-flex h-9 items-center text-body-md text-on-surface-variant transition-colors hover:text-primary"
               }
             >
-              {link.label}
+              <span>{link.label}</span>
+              {link.active && (
+                <span className="absolute -bottom-1 left-0 right-0 h-[2px] rounded-full bg-primary" />
+              )}
             </Link>
           ))}
         </nav>

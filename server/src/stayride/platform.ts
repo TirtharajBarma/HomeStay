@@ -31,6 +31,7 @@ import { notify, PushMessage } from '../services/push.service.js';
 import { createPaymentLink, cancelPaymentLink, gatewayEnabled } from '../services/payment-gateway.service.js';
 import { PlatformConfig, ownFleetFee } from '../services/platform-config.js';
 import { tenantManager, istDayStart } from './store.js';
+import { NotificationService } from '../services/notification.service.js';
 
 export const OPEN_STATUSES = ['PENDING_REVIEW', 'FINDING_DRIVER', 'QUOTE_RECEIVED'];
 // Paid (advance collected) but not started: the only states where a removed driver can be replaced.
@@ -1207,6 +1208,19 @@ export async function cancelRequest(
     doc.guestPhone ? whatsapp(isDemo, doc.guestPhone, messages.tripCancelledGuestMessage(updated)) : Promise.resolve(),
     doc.advancePaid ? Promise.resolve() : cancelPaymentLink(doc.paymentLinkId), // the guest must not pay a cancelled trip
   ]);
+  NotificationService.sendAdminAlert('refundClaimed', `Trip Cancelled: #${doc.reference}`, {
+    badge: 'TRIP CANCELLED',
+    reference: doc.reference,
+    summary: `Transit transfer was cancelled by ${actor}. Reason: ${reason || 'Not specified'}.`,
+    items: [
+      { label: 'Trip Reference', value: `#${doc.reference}` },
+      { label: 'Passenger', value: doc.guestName || '—' },
+      { label: 'Cancelled By', value: actor },
+      { label: 'Cancellation Reason', value: reason || 'Not specified' },
+      { label: 'Advance Refund Status', value: doc.advancePaid ? (doc.refundStatus || 'PENDING REFUND') : 'No advance paid' },
+      { label: 'Advance Amount', value: `₹${Number(doc.advanceAmount || 0).toLocaleString('en-IN')}` },
+    ],
+  }, isDemo).catch((e) => logger.warn(`[Admin Alert] Cancellation alert error: ${e?.message}`));
   return updated;
 }
 
@@ -1748,6 +1762,18 @@ export async function completeTrip(isDemo: boolean, filter: Record<string, any>,
 
   await audit(actor, 'cab.complete', 'CabRequest', String(doc._id), { driverShareOfAdvance: driverShare }, isDemo, scope(updated));
   await pushOwner(isDemo, String(updated.propertyId), { title: 'Trip completed', body: `Trip ${updated.reference} is complete. Rate your driver.`, data: tripData(updated, 'TRIP_COMPLETED') });
+  NotificationService.sendAdminAlert('tripCompleted', `Trip Completed: #${updated.reference}`, {
+    badge: 'TRIP COMPLETED',
+    reference: updated.reference,
+    summary: `Transit transfer was completed successfully. Settlement dues updated.`,
+    items: [
+      { label: 'Trip Reference', value: `#${updated.reference}` },
+      { label: 'Passenger', value: updated.guestName || '—' },
+      { label: 'Assigned Driver', value: updated.assignedDriverName || '—' },
+      { label: 'Total Fare', value: `₹${Number(updated.agreedFare || 0).toLocaleString('en-IN')}` },
+      { label: 'Driver Settlement Share', value: `₹${Number(driverShare).toLocaleString('en-IN')}` },
+    ],
+  }, isDemo).catch((e) => logger.warn(`[Admin Alert] Trip complete alert error: ${e?.message}`));
   return updated;
 }
 
@@ -2311,6 +2337,21 @@ export async function submitPaymentClaim(isDemo: boolean, doc: any, utrInput: un
       body: `Trip ${doc.reference}: the guest says they paid ₹${Number(doc.advanceAmount).toLocaleString('en-IN')}. We are confirming the payment.`,
       data: tripData(updated, 'ADVANCE_CLAIMED'),
     }).catch(() => {});
+    NotificationService.sendAdminAlert('paymentClaimSubmitted', `Payment Claim: #${doc.reference} (UTR: ${utr})`, {
+      badge: 'VERIFY UPI UTR',
+      reference: doc.reference,
+      summary: `Guest claims advance payment was made. Verification required in admin portal.`,
+      items: [
+        { label: 'Trip Reference', value: `#${doc.reference}` },
+        { label: 'Passenger', value: doc.guestName || '—' },
+        { label: 'Phone', value: doc.guestPhone || '—' },
+        { label: 'Reported UTR', value: utr },
+        { label: 'Claimed Amount', value: `₹${Number(doc.advanceAmount).toLocaleString('en-IN')}` },
+        { label: 'Hold Window', value: due ? `Until ${new Date(due).toLocaleTimeString('en-IN')}` : 'Immediate' },
+      ],
+      actionUrl: `https://admin.staycabs.in`,
+      actionText: 'Review in Admin Desk →',
+    }, isDemo).catch((e) => logger.warn(`[Admin Alert] Payment claim error: ${e?.message}`));
   }
   return updated;
 }
@@ -2383,6 +2424,20 @@ async function applyAdvancePayment(isDemo: boolean, doc: any, p: { transactionId
     whatsapp(isDemo, updated.assignedDriverPhone, messages.advancePaidDriverMessage(updated, driverQuoteLink(isDemo, linkDriverId(updated), updated))),
     confirmGuestWhatsApp(isDemo, updated),
   ]);
+  NotificationService.sendAdminAlert('advancePaid', `Advance Confirmed: #${updated.reference} (₹${p.amount})`, {
+    badge: 'ADVANCE CONFIRMED',
+    reference: updated.reference,
+    summary: `Advance payment verified and locked in. Ride is officially confirmed.`,
+    items: [
+      { label: 'Trip Reference', value: `#${updated.reference}` },
+      { label: 'Passenger', value: updated.guestName || '—' },
+      { label: 'Advance Received', value: `₹${Number(p.amount).toLocaleString('en-IN')}` },
+      { label: 'Payment Method', value: p.method || 'Razorpay / UPI' },
+      { label: 'Transaction ID / UTR', value: p.transactionId },
+      { label: 'Driver Assigned', value: updated.assignedDriverName || 'Auto-dispatching' },
+      { label: 'Homestay Cut', value: `₹${Number(commission || 0).toLocaleString('en-IN')}` },
+    ],
+  }, isDemo).catch((e) => logger.warn(`[Admin Alert] Advance confirmed error: ${e?.message}`));
   return updated;
 }
 

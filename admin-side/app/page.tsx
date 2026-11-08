@@ -288,24 +288,58 @@ export default function AdminDashboardPage() {
           ))}
         </div>
 
-        {activeTab === "dashboard" && <DashboardTab demo={demo} />}
-        {activeTab === "users" && <UsersTab demo={demo} />}
-        {activeTab === "homestays" && (
-          <HomestaysTab
-            demo={demo}
-            onOpenCabRequests={(tenantKey) => {
-              handleTabChange("cab-requests"); // first: it clears the filter
-              setCabTenant(tenantKey);
-            }}
-          />
-        )}
-        {activeTab === "guests" && <GuestsTab key={`${guestTenant}|${guestSearch}`} demo={demo} initialSearch={guestSearch || undefined} initialTenant={guestTenant || undefined} />}
-        {activeTab === "drivers" && <DriversTab demo={demo} />}
-        {activeTab === "cab-requests" && <CabRequestsTab key={`${cabTenant}|${cabFilter}`} demo={demo} initialTenantKey={cabTenant || undefined} initialFilter={cabFilter || undefined} />}
-        {activeTab === "payouts" && <PayoutsTab demo={demo} />}
-        {activeTab === "settings" && <SettingsTab demo={demo} />}
-        {activeTab === "appeals" && <AppealsTab demo={demo} />}
-        {activeTab === "audit" && <AuditTab demo={demo} />}
+        <div className={activeTab === "dashboard" ? "block" : "hidden"}>
+          {visitedTabs.has("dashboard") && <DashboardTab demo={demo} />}
+        </div>
+        <div className={activeTab === "users" ? "block" : "hidden"}>
+          {visitedTabs.has("users") && <UsersTab demo={demo} />}
+        </div>
+        <div className={activeTab === "homestays" ? "block" : "hidden"}>
+          {visitedTabs.has("homestays") && (
+            <HomestaysTab
+              demo={demo}
+              onOpenCabRequests={(tenantKey) => {
+                handleTabChange("cab-requests"); // first: it clears the filter
+                setCabTenant(tenantKey);
+              }}
+            />
+          )}
+        </div>
+        <div className={activeTab === "guests" ? "block" : "hidden"}>
+          {visitedTabs.has("guests") && (
+            <GuestsTab
+              key={`${guestTenant}|${guestSearch}`}
+              demo={demo}
+              initialSearch={guestSearch || undefined}
+              initialTenant={guestTenant || undefined}
+            />
+          )}
+        </div>
+        <div className={activeTab === "drivers" ? "block" : "hidden"}>
+          {visitedTabs.has("drivers") && <DriversTab demo={demo} />}
+        </div>
+        <div className={activeTab === "cab-requests" ? "block" : "hidden"}>
+          {visitedTabs.has("cab-requests") && (
+            <CabRequestsTab
+              key={`${cabTenant}|${cabFilter}`}
+              demo={demo}
+              initialTenantKey={cabTenant || undefined}
+              initialFilter={cabFilter || undefined}
+            />
+          )}
+        </div>
+        <div className={activeTab === "payouts" ? "block" : "hidden"}>
+          {visitedTabs.has("payouts") && <PayoutsTab demo={demo} />}
+        </div>
+        <div className={activeTab === "settings" ? "block" : "hidden"}>
+          {visitedTabs.has("settings") && <SettingsTab demo={demo} />}
+        </div>
+        <div className={activeTab === "appeals" ? "block" : "hidden"}>
+          {visitedTabs.has("appeals") && <AppealsTab demo={demo} />}
+        </div>
+        <div className={activeTab === "audit" ? "block" : "hidden"}>
+          {visitedTabs.has("audit") && <AuditTab demo={demo} />}
+        </div>
 
         {activeTab === "legacy" && (
           <>
