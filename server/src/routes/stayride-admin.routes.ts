@@ -12,7 +12,7 @@ import {
   OPEN_STATUSES, cabModel, payoutModel, userModel, parseFare, cancelRequest, startTrip, completeTrip,
   adminAssignDriver, adminRecordPayment, adminRejectPaymentClaim, adminVoidPayment, adminMarkRefunded, adminSettleDriver, adminReviewNoPin,
   settlePayout, rejectPayout, expireStaleRequests, overlayTrips, onDriverStatusChange, releaseDriverTrips, adminRefundUnmatched, maskPhone,
-  sendAskCab, autoAskCab, askCabConfirmText, askCabLine, stayOrder, last10, dispatchFields, notifyNewRequest,
+  sendAskCab, autoAskCab, askCabConfirmText, askCabLine, stayOrder, last10, dispatchFields, notifyNewRequest, istDateTime,
 } from "../stayride/platform.js";
 import { logger } from "../utils/logger.js";
 import { getGuestLinkModel } from "../models/guest-link.model.js";
@@ -544,8 +544,13 @@ router.post("/cab-requests/create", async (req: Request, res: Response) => {
     : [{ address: destination || "Destination", order: 0 }];
 
   const tripDate = typeof date === "number" ? date : new Date(date || Date.now()).getTime();
+  const timeStr = String(time || "10:00 AM").trim();
+  const pickupAt = istDateTime(tripDate, timeStr) ?? tripDate;
+  if (pickupAt < Date.now() - 5 * 60 * 1000) {
+    throw httpError(400, "Pickup date and time cannot be in the past. Please select a future time.");
+  }
   const returnTimestamp = req.body.returnDate ? (typeof req.body.returnDate === "number" ? req.body.returnDate : new Date(req.body.returnDate).getTime()) : undefined;
-  const dispatch = await dispatchFields(targetTenant, demo, tripDate, time || "10:00 AM");
+  const dispatch = await dispatchFields(targetTenant, demo, tripDate, timeStr);
 
   const doc = await Cab.create({
     reference,

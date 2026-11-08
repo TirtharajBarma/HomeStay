@@ -79,28 +79,28 @@ export default async function DedicatedHomestayPage({
             <div className="flex flex-wrap items-center gap-3">
               <a
                 href="#cab-transfers"
-                className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-on-primary shadow transition hover:opacity-95 tap-spring active:scale-95"
+                className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-label-md font-medium text-on-primary shadow-sm transition-opacity hover:opacity-95 active:opacity-90"
               >
                 <Icon name="directions_car" className="text-lg" />
-                <span>Book Cab Transfer</span>
+                <span>Book cab transfer</span>
               </a>
               {cleanPhone ? (
                 <a
                   href={`https://wa.me/${cleanPhone}?text=${encodeURIComponent(`Hello! I have a confirmed booking at ${stay.name}.`)}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex items-center gap-2 rounded-xl border border-outline-variant/60 bg-surface px-4 py-2.5 text-sm font-semibold text-on-surface hover:bg-surface-container tap-spring active:scale-95"
+                  className="flex items-center gap-2 rounded-xl border border-outline-variant/60 bg-surface px-4 py-2.5 text-label-md font-medium text-on-surface hover:bg-surface-container transition-colors active:opacity-90"
                 >
                   <Icon name="chat" className="text-lg text-secondary" />
-                  <span>{hasHostDirectPhone ? "Message Host" : `Message ${siteConfig.appName} Desk`}</span>
+                  <span>{hasHostDirectPhone ? "Message host" : `Message ${siteConfig.appName} desk`}</span>
                 </a>
               ) : (
                 <a
                   href={`mailto:${contactEmail}?subject=${encodeURIComponent(`Confirmed Booking Inquiry - ${stay.name}`)}`}
-                  className="flex items-center gap-2 rounded-xl border border-outline-variant/60 bg-surface px-4 py-2.5 text-sm font-semibold text-on-surface hover:bg-surface-container tap-spring active:scale-95"
+                  className="flex items-center gap-2 rounded-xl border border-outline-variant/60 bg-surface px-4 py-2.5 text-label-md font-medium text-on-surface hover:bg-surface-container transition-colors active:opacity-90"
                 >
                   <Icon name="mail" className="text-lg text-secondary" />
-                  <span>Email Host</span>
+                  <span>Email host</span>
                 </a>
               )}
             </div>
@@ -144,11 +144,11 @@ export default async function DedicatedHomestayPage({
         <section className="my-10 scroll-mt-20">
           <div className="mb-6 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <span className="text-xs font-bold uppercase tracking-wider text-secondary">
-                Rooms &amp; Tariffs
+              <span className="text-label-sm font-medium text-secondary">
+                Rooms &amp; tariffs
               </span>
-              <h2 className="font-serif text-2xl font-bold text-primary sm:text-3xl">
-                Available Rooms at {stay.name}
+              <h2 className="font-display text-2xl font-medium text-primary sm:text-3xl">
+                Available rooms at {stay.name}
               </h2>
             </div>
             <p className="text-xs text-on-surface-variant">
@@ -216,10 +216,10 @@ export default async function DedicatedHomestayPage({
                       href={waUrl}
                       target={cleanPhone ? "_blank" : undefined}
                       rel={cleanPhone ? "noreferrer" : undefined}
-                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 py-2.5 text-xs font-semibold text-white shadow transition tap-spring active:scale-95"
+                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary hover:bg-primary-container py-2.5 text-label-md font-medium text-on-primary shadow-sm transition-colors active:opacity-90"
                     >
                       <Icon name={cleanPhone ? "chat" : "mail"} className="text-base" />
-                      <span>{cleanPhone ? "Inquire on WhatsApp" : "Inquire via Email"}</span>
+                      <span>{cleanPhone ? "Inquire on WhatsApp" : "Inquire via email"}</span>
                     </a>
                   </div>
                 </div>
@@ -232,11 +232,11 @@ export default async function DedicatedHomestayPage({
       {/* 4. Cabs: requested through the secure link the host sends on WhatsApp */}
       <section id="cab-transfers" className="my-12 scroll-mt-20">
         <div className="rounded-3xl border border-outline-variant/50 bg-surface-container-lowest p-6 sm:p-8 shadow-md">
-          <span className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-secondary">
+          <span className="inline-flex items-center gap-1.5 text-label-sm font-medium text-secondary">
             <Icon name="local_taxi" className="text-base" />
             Hill cabs &amp; transfers
           </span>
-          <h2 className="mt-1 font-serif text-2xl font-bold text-primary sm:text-3xl">Need a cab during your stay?</h2>
+          <h2 className="mt-1 font-display text-2xl font-medium text-primary sm:text-3xl">Need a cab during your stay?</h2>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-on-surface-variant">
             Ask your host for a cab or request directly online. We arrange verified local drivers for airport/railway transfers, sunrise sightseeing, and day excursions. You pay a small online advance booking fee, and the rest directly in cash to your driver at destination.
           </p>

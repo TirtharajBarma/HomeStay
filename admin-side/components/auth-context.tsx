@@ -180,9 +180,9 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
       }}
     >
       {isLoading ? (
-        <div className="flex min-h-screen items-center justify-center gap-2 bg-slate-900 text-slate-400">
+        <div className="flex min-h-screen items-center justify-center gap-2 bg-[#0B0F14] text-slate-400">
           <span className="material-symbols-outlined animate-spin text-2xl">progress_activity</span>
-          <span className="text-sm font-semibold">Checking session…</span>
+          <span className="text-sm font-medium">Checking session…</span>
         </div>
       ) : (
         children

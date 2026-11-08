@@ -3,8 +3,8 @@ import { AdminAuthProvider } from "@/components/auth-context";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Super Admin Tower | Platform Operations",
-  description: "Global operations control tower, property verification, driver settlements and revenue analytics.",
+  title: "StayRide Platform Operations",
+  description: "Operations, property verification, driver dispatch settlements, and revenue analytics.",
 };
 
 export default function RootLayout({
@@ -26,7 +26,7 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap"
         />
       </head>
-      <body suppressHydrationWarning className="min-h-screen bg-slate-50 text-slate-900">
+      <body suppressHydrationWarning className="min-h-screen bg-[#0B0F14] text-[#E6EDF3] antialiased">
         <AdminAuthProvider>{children}</AdminAuthProvider>
       </body>
     </html>

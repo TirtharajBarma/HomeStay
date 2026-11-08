@@ -21,56 +21,56 @@ const navLinks = [
     icon: "spa",
     active: false,
   },
+  // {
+  //   href: "/cab-request",
+  //   label: "Mountain cabs",
+  //   hint: "Fixed-fare hill transfers & day tours",
+  //   icon: "local_taxi",
+  //   active: false,
+  // },
   {
     href: "/join-driver",
-    label: "Cab Join",
-    hint: `Drive with ${siteConfig.appName} Network`,
-    icon: "local_taxi",
+    label: "Drive with us",
+    hint: `Join the ${siteConfig.appName} driver network`,
+    icon: "directions_car",
     active: false,
   },
   {
     href: "/#story",
-    label: `About ${siteConfig.appName}`,
-    hint: "Empowering Himalayan hosts & drivers",
+    label: "About",
+    hint: "Himalayan hosts & local drivers",
     icon: "menu_book",
-    active: false,
-  },
-  {
-    href: "/#contact",
-    label: "Support",
-    hint: "Direct guest & host desk",
-    icon: "phone_in_talk",
     active: false,
   },
 ] satisfies (NavLink & { active: boolean })[];
 
 export function SiteHeader() {
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-outline-variant/40 bg-surface/90 backdrop-blur-md shadow-navbar">
-      <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-2 px-4 py-3 sm:px-6 sm:py-4">
-        <Link href="/" className="group flex min-h-11 min-w-0 items-center gap-2.5 sm:gap-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-on-primary transition-transform duration-200 group-hover:scale-105">
-            <Icon name="local_taxi" className="text-[20px]" />
+    <header className="sticky top-0 z-50 w-full border-b border-outline-variant/60 bg-surface/95 backdrop-blur-md shadow-navbar">
+      <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between gap-4 px-4 sm:px-6">
+        <Link href="/" className="group flex items-center gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-on-primary">
+            <Icon name="cottage" className="text-[18px]" />
           </span>
-          <span className="flex min-w-0 flex-col">
-            <span className="truncate font-display text-headline-sm font-semibold tracking-tight text-primary sm:text-headline-md">
+          <span className="flex flex-col">
+            <span className="truncate font-display text-headline-sm font-medium tracking-tight text-primary">
               {siteConfig.appName}
             </span>
-            <span className="-mt-0.5 hidden text-label-sm tracking-wider text-outline xs:block sm:block">
-              HIMALAYAN STAYS &amp; CABS
+            <span className="-mt-0.5 hidden text-label-sm text-outline xs:block">
+              Himalayan stays &amp; cabs
             </span>
           </span>
         </Link>
 
-        <nav className="hidden items-center gap-8 lg:flex" aria-label="Primary">
+        <nav className="hidden items-center gap-7 lg:flex" aria-label="Primary">
           {navLinks.map((link) => (
             <Link
               key={link.href}
               href={link.href}
               className={
                 link.active
-                  ? "inline-flex min-h-11 items-center text-title-md font-semibold text-primary"
-                  : "inline-flex min-h-11 items-center text-body-md text-on-surface-variant transition-colors duration-200 hover:text-primary"
+                  ? "inline-flex h-9 items-center text-body-md font-medium text-primary"
+                  : "inline-flex h-9 items-center text-body-md text-on-surface-variant transition-colors hover:text-primary"
               }
             >
               {link.label}
@@ -78,26 +78,12 @@ export function SiteHeader() {
           ))}
         </nav>
 
-        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2.5">
-          <Link
-            href="/join-driver"
-            className="inline-flex items-center gap-1.5 rounded-full border border-[#14422D]/20 bg-[#14422D]/8 px-3 py-1.5 text-xs font-bold text-[#14422D] shadow-2xs hover:bg-[#14422D]/12 tap-spring active:scale-95 transition-all"
-          >
-            <Icon name="local_taxi" className="text-[16px] text-[#14422D]" />
-            <span>Cab Join</span>
-          </Link>
-          <Link
-            href="/#search-bar"
-            className="hidden min-h-11 items-center rounded-lg border border-outline-variant/60 px-4 text-label-md text-on-surface transition-all duration-200 hover:bg-surface-container-high md:inline-flex"
-          >
-            Check Dates
-          </Link>
+        <div className="flex shrink-0 items-center gap-3">
           <Link
             href="/#accommodations"
-            className="hidden min-h-11 items-center gap-1.5 rounded-lg bg-primary px-3 text-label-md text-on-primary shadow-sm transition-all duration-200 hover:bg-primary-container active:scale-[0.98] sm:inline-flex sm:gap-2 sm:px-4"
+            className="inline-flex h-9 items-center rounded-md bg-primary px-3.5 text-label-md font-medium text-on-primary transition-colors hover:bg-primary-container"
           >
-            <span>Book Stay</span>
-            <Icon name="north_east" className="text-[16px]" />
+            Book a stay
           </Link>
           <MobileNav links={navLinks} />
         </div>
@@ -109,16 +95,16 @@ export function SiteHeader() {
 /** Shared estate lockup, used by the checkout and cab headers. */
 export function BrandLockup() {
   return (
-    <Link href="/" className="group flex min-h-11 min-w-0 items-center gap-2.5 sm:gap-3">
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-on-primary transition-transform duration-200 group-hover:scale-95">
-        <Icon name="local_taxi" className="text-lg" />
+    <Link href="/" className="group flex items-center gap-3">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-on-primary">
+        <Icon name="cottage" className="text-[18px]" />
       </span>
-      <span className="flex min-w-0 flex-col">
-        <span className="truncate font-display text-headline-sm font-semibold leading-tight tracking-tight text-primary sm:text-headline-md">
+      <span className="flex flex-col">
+        <span className="truncate font-display text-headline-sm font-medium leading-tight tracking-tight text-primary">
           {siteConfig.appName}
         </span>
-        <span className="hidden text-label-sm font-medium tracking-wider text-on-surface-variant sm:block">
-          HIMALAYAN STAYS &amp; CABS
+        <span className="hidden text-label-sm text-outline sm:block">
+          Himalayan stays &amp; mountain cabs
         </span>
       </span>
     </Link>
@@ -134,7 +120,7 @@ export function CheckoutHeader() {
         <div className="flex shrink-0 items-center gap-2 sm:gap-6">
           <div className="hidden items-center gap-1.5 rounded-full border border-outline-variant/30 bg-surface-container px-3 py-1.5 text-label-md text-primary md:flex">
             <Icon name="lock" filled className="text-base" />
-            <span>Secure Direct Booking</span>
+            <span>Secure direct booking</span>
           </div>
           <a
             href={hosts.phoneHref}
@@ -142,8 +128,8 @@ export function CheckoutHeader() {
           >
             <Icon name="phone_in_talk" className="text-xl text-primary" />
             <span className="hidden text-left md:block">
-              <span className="block text-label-sm uppercase tracking-wider text-outline">
-                Host Assistance
+              <span className="block text-label-sm text-outline">
+                Host assistance
               </span>
               <span className="block text-title-md font-semibold leading-tight text-primary">
                 {hosts.phone}
@@ -159,7 +145,7 @@ export function CheckoutHeader() {
 
 const progressSteps = [
   { label: "Accommodations", short: "Stay", href: "/#accommodations" },
-  { label: "Dates & Details", short: "Details", href: "#stay-summary" },
+  { label: "Dates & details", short: "Details", href: "#stay-summary" },
 ];
 
 export function CheckoutProgress() {
@@ -187,13 +173,13 @@ export function CheckoutProgress() {
             <Icon name="chevron_right" className="text-xs text-outline" />
             <span className="flex min-h-11 items-center gap-1 px-1 font-semibold text-primary">
               <span className="sm:hidden">3. Confirm</span>
-              <span className="hidden sm:inline">3. Finalize Reservation</span>
+              <span className="hidden sm:inline">3. Finalize reservation</span>
             </span>
           </span>
         </nav>
         <div className="hidden shrink-0 items-center gap-2 text-label-sm text-primary md:flex">
           <Icon name="verified" filled className="text-sm text-secondary" />
-          <span>Guaranteed Direct Price • No Booking Fees</span>
+          <span>Guaranteed direct price · No booking fees</span>
         </div>
       </div>
     </div>

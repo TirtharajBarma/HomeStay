@@ -9,22 +9,19 @@ export default function NotFound() {
         <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-primary-container/40 text-on-primary-container">
           <Icon name="explore_off" className="text-4xl" />
         </div>
-        <p className="text-label-md uppercase tracking-widest text-secondary">Trail Not Found</p>
-        <h1 className="mt-2 font-display text-headline-lg text-primary">
-          This path ends in the wildflower meadow.
+        <p className="text-label-sm font-medium text-secondary">Trail not found</p>
+        <h1 className="mt-2 font-display text-headline-lg font-medium text-primary">
+          This path ends in the mountain mist.
         </h1>
-        <p className="mt-3 text-body-lg text-on-surface-variant">
-          The page you were looking for has wandered off the estate path. The accommodations
-          catalogue is a short walk back.
+        <p className="mt-3 text-body-md text-on-surface-variant leading-relaxed">
+          The page you were looking for is not on this trail. The accommodations catalogue is a short walk back.
         </p>
         <Link
           href="/#accommodations"
-          className="mt-8 inline-flex items-center gap-2 rounded-xl bg-primary-container px-4 sm:px-6 py-3.5 text-title-md text-on-primary transition-colors hover:bg-primary group"
+          className="mt-8 inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-label-md font-medium text-on-primary transition-colors hover:bg-primary-container"
         >
-          <svg className="h-4 w-4 shrink-0 transition-transform group-hover:-translate-x-0.5" fill="none" viewBox="0 0 24 24" strokeWidth="2.2" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
-          </svg>
-          <span>Back to Accommodations</span>
+          <Icon name="arrow_back" className="text-[16px]" />
+          <span>Back to accommodations</span>
         </Link>
       </div>
     </main>

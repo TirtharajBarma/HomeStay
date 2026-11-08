@@ -5,7 +5,7 @@ import type { GalleryShot } from "./stays";
 
 export const estate = {
   hostsInOrchard:
-    "https://lh3.googleusercontent.com/aida-public/AB6AXuCCHi6UFkrFm-BsrJDUHIEY5SNJPVVygbs-JabWIWVjlaKTUgXWiEIYlunIjFg0rSmBPboOHlgMj39T2eSSOT7EkLlLlotMt3Ml0VQ-H4uuZd795YgqNT0JrfGFn32tvocCMFZUUzXCaf6p4B5A_FeaKCjp1OMaAKS2YVeTXHIE6G_VkP4bnO6AxL_hJYbG1_w1qeTMPYbUr2QSlis82P6eTTJuADaP8KF2XHb65SbJCZP0B6NdRjYU",
+    "https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=1200&q=80",
   hostsPortrait:
     "https://lh3.googleusercontent.com/aida-public/AB6AXuBMgV16m5Vg-n38ORIaQe_IidYACn8d2DwL2kunbcSOa08FLttNGrorX-WOWHQJ8yjZFT1pH_w84gdIaq_Swv4-Q7sRXVK6BAzMMa6_HcEmiPMagk3w-O76urOSLbSSQi_x1BOpfd72336jO6l4mzPFKU5CcSLcVgifz1Rsq0SY8I9ir79bk5KWjEmTbh5_IY9TwSD3dis_q1zeHlcM0R2IRoCZql-6zpUbLIgXCJgHqQ3rvsGYxjZg",
   orchardPatio:

@@ -4,7 +4,6 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
 import {
-  formatDateRange,
   formatGuests,
   formatNights,
   homeHref,
@@ -13,6 +12,7 @@ import {
   type Filters,
 } from "@/lib/booking";
 
+import { DateInput } from "./date-input";
 import { Icon } from "./icon";
 
 type StaySearchProps = {
@@ -29,12 +29,15 @@ const kindOptions = [
 ];
 
 const fieldClass =
-  "flex flex-col justify-center rounded-lg border border-outline-variant/30 bg-surface p-3";
+  "flex flex-col justify-between rounded-lg border border-outline-variant/60 bg-surface p-3 min-h-[88px] transition-colors focus-within:border-primary";
 
-const controlClass =
-  "min-h-11 w-full rounded-lg border border-outline-variant/40 bg-surface-container-lowest px-2.5 py-2 text-body-sm text-on-surface focus:border-primary focus:outline-none md:min-h-9 md:py-1 md:text-label-sm";
+const dateControlClass =
+  "h-9 w-full rounded-md border border-outline-variant/60 bg-surface-container-lowest focus-within:border-primary transition-colors";
 
-const hintClass = "text-label-sm text-outline";
+const selectClass =
+  "h-9 w-full rounded-md border border-outline-variant/60 bg-surface-container-lowest px-2 text-body-sm tabular-nums text-on-surface focus:border-primary focus:outline-none";
+
+const hintClass = "text-label-sm text-outline tabular-nums";
 
 export function StaySearch({ booking, filters, maxGuests }: StaySearchProps) {
   const router = useRouter();
@@ -57,110 +60,121 @@ export function StaySearch({ booking, filters, maxGuests }: StaySearchProps) {
   return (
     <form
       onSubmit={handleSubmit}
-      className="mb-8 rounded-xl border border-outline-variant/60 bg-surface-container-lowest p-3 sunlit-card-shadow md:p-4"
+      className="mb-8 rounded-xl border border-outline-variant/70 bg-surface-container-lowest p-3 shadow-ambient md:p-4"
     >
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div className={fieldClass}>
-          <label
-            htmlFor="search-check-in"
-            className="mb-1.5 flex items-center gap-1.5 text-label-sm text-on-surface-variant"
-          >
-            <Icon name="calendar_month" className="text-[15px] text-primary" />
-            Check-in — Check-out
-          </label>
-          <span className="text-title-md font-semibold text-primary">
-            {formatDateRange({ ...draft, guests })}
-          </span>
-          <span className={hintClass}>{formatNights(nights)}</span>
-          <div className="mt-2 grid grid-cols-2 gap-1.5">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-12">
+        {/* Dates */}
+        <div className={`${fieldClass} sm:col-span-2 lg:col-span-4`}>
+          <div className="flex items-center justify-between">
+            <label
+              htmlFor="search-check-in"
+              className="text-label-sm font-medium text-on-surface-variant"
+            >
+              Dates
+            </label>
+            <span className={hintClass}>{formatNights(nights)}</span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 mt-1">
             <div>
-              <input
+              <DateInput
                 id="search-check-in"
                 name="checkIn"
-                type="date"
+                ariaLabel="Check-in date (DD/MM/YYYY)"
+                placeholder="Check-in"
                 value={checkIn}
-                onChange={(event) => setCheckIn(event.target.value)}
-                className={controlClass}
+                onChange={setCheckIn}
+                className={dateControlClass}
               />
               <span className="sr-only">Check-in date</span>
             </div>
             <div>
-              <input
+              <DateInput
+                id="search-check-out"
                 name="checkOut"
-                type="date"
-                aria-label="Check-out date"
+                ariaLabel="Check-out date (DD/MM/YYYY)"
+                placeholder="Check-out"
                 min={checkIn}
                 value={checkOut}
-                onChange={(event) => setCheckOut(event.target.value)}
-                className={controlClass}
+                onChange={setCheckOut}
+                className={dateControlClass}
               />
             </div>
           </div>
+
           {needsNights && (
-            <span className="mt-1.5 flex items-center gap-1 text-label-sm text-secondary">
-              <Icon name="info" className="text-[13px]" />
-              Check-out will be set to {formatNights(nights).toLowerCase()} after arrival
+            <span className="mt-1 text-[11px] text-secondary">
+              Check-out: {formatNights(nights).toLowerCase()} after arrival
             </span>
           )}
         </div>
 
-        <div className={fieldClass}>
-          <label
-            htmlFor="search-guests"
-            className="mb-1.5 flex items-center gap-1.5 text-label-sm text-on-surface-variant"
-          >
-            <Icon name="group" className="text-[15px] text-primary" />
-            Guests
-          </label>
-          <select
-            id="search-guests"
-            name="guests"
-            value={guests}
-            onChange={(event) => setGuests(Number(event.target.value))}
-            className="min-h-11 w-full cursor-pointer bg-transparent text-title-md font-semibold text-primary focus:outline-none md:min-h-9"
-          >
-            {Array.from({ length: maxGuests }, (_, index) => index + 1).map((count) => (
-              <option key={count} value={count}>
-                {formatGuests(count)}
-              </option>
-            ))}
-          </select>
-          <span className={hintClass}>Quiet retreat pacing</span>
+        {/* Guests */}
+        <div className={`${fieldClass} sm:col-span-1 lg:col-span-2`}>
+          <div className="flex items-center justify-between">
+            <label
+              htmlFor="search-guests"
+              className="text-label-sm font-medium text-on-surface-variant"
+            >
+              Guests
+            </label>
+            <span className={hintClass}>1–4 per room</span>
+          </div>
+          <div className="mt-1">
+            <select
+              id="search-guests"
+              name="guests"
+              value={guests}
+              onChange={(event) => setGuests(Number(event.target.value))}
+              className={`${selectClass} cursor-pointer font-medium text-primary`}
+            >
+              {Array.from({ length: maxGuests }, (_, index) => index + 1).map((count) => (
+                <option key={count} value={count}>
+                  {formatGuests(count)}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
-        <div className={fieldClass}>
-          <label
-            htmlFor="search-kind"
-            className="mb-1.5 flex items-center gap-1.5 text-label-sm text-on-surface-variant"
-          >
-            <Icon name="villa" className="text-[15px] text-primary" />
-            Shelter Type
-          </label>
-          <select
-            id="search-kind"
-            name="kind"
-            value={kind}
-            onChange={(event) => setKind(event.target.value as Filters["kind"])}
-            className="min-h-11 w-full cursor-pointer bg-transparent text-title-md font-semibold text-primary focus:outline-none md:min-h-9"
-          >
-            {kindOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <span className={hintClass}>All Valley options</span>
+        {/* Stay Type */}
+        <div className={`${fieldClass} sm:col-span-1 lg:col-span-3`}>
+          <div className="flex items-center justify-between">
+            <label
+              htmlFor="search-kind"
+              className="text-label-sm font-medium text-on-surface-variant"
+            >
+              Accommodation type
+            </label>
+            <span className={hintClass}>All valley stays</span>
+          </div>
+          <div className="mt-1">
+            <select
+              id="search-kind"
+              name="kind"
+              value={kind}
+              onChange={(event) => setKind(event.target.value as Filters["kind"])}
+              className={`${selectClass} cursor-pointer font-medium text-primary`}
+            >
+              {kindOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
-        <button
-          type="submit"
-          className="flex min-h-14 items-stretch justify-center rounded-lg bg-primary px-6 text-label-md text-on-primary shadow-sm transition-all duration-200 hover:bg-primary-container active:scale-[0.98] sm:min-h-0 lg:min-h-14"
-        >
-          <span className="flex w-full items-center justify-center gap-2">
+        {/* Action Button */}
+        <div className="flex flex-col justify-center sm:col-span-2 lg:col-span-3">
+          <button
+            type="submit"
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-primary px-5 text-label-md font-medium text-on-primary transition-colors hover:bg-primary-container focus-visible:outline-2 focus-visible:outline-primary cursor-pointer shadow-ambient"
+          >
             <Icon name="search" className="text-[18px]" />
-            <span>Search Stays</span>
-          </span>
-        </button>
+            <span>Search stays</span>
+          </button>
+        </div>
       </div>
     </form>
   );

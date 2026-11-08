@@ -29,22 +29,22 @@ export default function AdminError({
   }, [error]);
 
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 text-slate-100">
-      <div className="max-w-md w-full bg-slate-900 rounded-2xl border border-slate-800 p-6 shadow-xl text-center space-y-4">
-        <div className="w-12 h-12 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center mx-auto text-xl font-bold">
+    <div className="min-h-screen bg-[#0B0F14] flex items-center justify-center p-6 text-slate-100">
+      <div className="max-w-md w-full bg-[#121820] rounded-xl border border-slate-800/80 p-6 shadow-xl text-center space-y-4">
+        <div className="w-10 h-10 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-300 flex items-center justify-center mx-auto text-base font-semibold">
           !
         </div>
         <div>
-          <h2 className="text-base font-bold text-white">Admin Tower System Alert</h2>
+          <h2 className="text-sm font-semibold text-white">System alert</h2>
           <p className="text-xs text-slate-400 mt-1">
-            {error?.message || "An unexpected error occurred while loading this administrative view."}
+            {error?.message || "An unexpected error occurred while loading this view."}
           </p>
         </div>
         <button
           onClick={() => reset()}
-          className="w-full rounded-xl bg-emerald-600 py-2.5 text-xs font-bold text-white hover:bg-emerald-500 transition-colors cursor-pointer"
+          className="w-full rounded-lg bg-[#1E7E4B] py-2 text-xs font-medium text-white hover:bg-[#259A5C] transition-colors cursor-pointer"
         >
-          Reload Dashboard View
+          Reload view
         </button>
       </div>
     </div>

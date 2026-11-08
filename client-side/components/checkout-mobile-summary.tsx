@@ -30,23 +30,23 @@ export function CheckoutMobileSummary({
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="block lg:hidden mb-6 rounded-2xl border border-outline-variant/50 bg-surface-container-lowest p-4 shadow-xs">
+    <div className="block lg:hidden mb-6 rounded-xl border border-outline-variant/60 bg-surface-container-lowest p-4 shadow-ambient">
       {/* Top row: Thumbnail & Stay info */}
       <div className="flex items-center gap-3">
-        <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-outline-variant/30">
+        <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-outline-variant/40">
           <Image
             src={stay.image}
             alt={stay.imageAlt}
             fill
-            sizes="64px"
+            sizes="56px"
             className="object-cover"
           />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-outline truncate">
+          <p className="text-label-sm text-outline truncate">
             {stay.wing}
           </p>
-          <h2 className="font-display text-title-md font-semibold text-primary truncate">
+          <h2 className="font-display text-body-md font-medium text-primary truncate">
             {stay.name}
           </h2>
           <div className="mt-0.5 flex items-center gap-2">
@@ -56,12 +56,12 @@ export function CheckoutMobileSummary({
       </div>
 
       {/* Trip details: Dates & Guests with direct Edit Modal */}
-      <div className="mt-3.5 pt-3 border-t border-outline-variant/20 space-y-2">
-        <div className="flex items-center justify-between text-xs">
+      <div className="mt-3.5 pt-3 border-t border-outline-variant/30 space-y-2">
+        <div className="flex items-center justify-between text-body-sm">
           <div>
             <span className="text-on-surface-variant">Dates: </span>
-            <span className="font-semibold text-on-surface">{formatDateRange(booking)}</span>
-            <span className="text-outline ml-1">({formatNights(booking.nights)})</span>
+            <span className="font-medium text-on-surface tabular-nums">{formatDateRange(booking)}</span>
+            <span className="text-outline text-label-sm ml-1 tabular-nums">({formatNights(booking.nights)})</span>
           </div>
           <CheckoutDates
             slug={stay.slug}
@@ -72,11 +72,11 @@ export function CheckoutMobileSummary({
           />
         </div>
 
-        <div className="flex items-center justify-between text-xs">
+        <div className="flex items-center justify-between text-body-sm">
           <div>
             <span className="text-on-surface-variant">Guests: </span>
-            <span className="font-semibold text-on-surface">
-              {booking.guests} Adult{booking.guests === 1 ? "" : "s"}
+            <span className="font-medium text-on-surface">
+              {booking.guests} adult{booking.guests === 1 ? "" : "s"}
             </span>
           </div>
           <CheckoutDates
@@ -90,43 +90,43 @@ export function CheckoutMobileSummary({
       </div>
 
       {/* Price summary row with toggle */}
-      <div className="mt-3 pt-3 border-t border-outline-variant/20">
+      <div className="mt-3 pt-3 border-t border-outline-variant/30">
         <button
           type="button"
           onClick={() => setExpanded(!expanded)}
-          className="flex w-full items-center justify-between text-left tap-spring"
+          className="flex w-full items-center justify-between text-left cursor-pointer"
         >
           <div>
-            <span className="text-[11px] text-outline block">Total Booking Price</span>
-            <span className="font-display text-headline-sm font-bold text-primary">
+            <span className="text-label-sm text-outline block">Total</span>
+            <span className="font-display text-headline-sm font-medium text-primary tabular-nums">
               {formatMoney(quote.total)}
             </span>
           </div>
-          <span className="inline-flex items-center gap-1 text-xs font-semibold text-primary">
-            <span>{expanded ? "Hide details" : "Price breakdown"}</span>
-            <Icon name={expanded ? "expand_less" : "expand_more"} className="text-base" />
+          <span className="inline-flex items-center gap-1 text-label-sm font-medium text-primary">
+            <span>{expanded ? "Hide breakdown" : "Price breakdown"}</span>
+            <Icon name={expanded ? "expand_less" : "expand_more"} className="text-sm" />
           </span>
         </button>
 
         {expanded && (
-          <div className="mt-3 pt-3 border-t border-outline-variant/20 space-y-2 text-xs text-on-surface-variant animate-in fade-in duration-150">
+          <div className="mt-3 pt-3 border-t border-outline-variant/20 space-y-2 text-label-sm text-on-surface-variant animate-in fade-in duration-150">
             <div className="flex justify-between">
               <span>
                 {formatMoney(stay.price)} × {formatNights(quote.nights).toLowerCase()}
               </span>
-              <span className="font-medium text-on-surface">{formatMoney(quote.roomTotal)}</span>
+              <span className="font-medium text-on-surface tabular-nums">{formatMoney(quote.roomTotal)}</span>
             </div>
             <div className="flex justify-between">
-              <span>Hill Breakfast &amp; Firewood</span>
-              <span className="font-medium text-emerald-700">Included Free</span>
+              <span>Hill breakfast</span>
+              <span className="font-medium text-primary">Included</span>
             </div>
             <div className="flex justify-between">
-              <span>Estate Cleaning &amp; Linens</span>
-              <span className="font-medium text-on-surface">{formatMoney(quote.cleaning)}</span>
+              <span>Estate cleaning &amp; linens</span>
+              <span className="font-medium text-on-surface tabular-nums">{formatMoney(quote.cleaning)}</span>
             </div>
             <div className="flex justify-between">
               <span>{TAX_LABEL}</span>
-              <span className="font-medium text-on-surface">{formatMoney(quote.tax)}</span>
+              <span className="font-medium text-on-surface tabular-nums">{formatMoney(quote.tax)}</span>
             </div>
           </div>
         )}

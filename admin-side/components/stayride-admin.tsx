@@ -2,7 +2,7 @@
 
 // StayRide platform admin desks. Every value shown comes from the server; missing money is "—",
 // never a made-up default. Every server error is surfaced (adminApi throws its message).
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { adminApi } from "@/lib/api-config";
 
 type Any = Record<string, any>;
@@ -30,26 +30,149 @@ const parseDateObj = (v: unknown): Date | null => {
   const d = !isNaN(num) ? new Date(num) : new Date(String(v));
   return isNaN(d.getTime()) ? null : d;
 };
-const dt = (v: unknown) => {
-  const d = parseDateObj(v);
-  return d ? d.toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : "—";
-};
-const formatDate = (v: unknown) => {
-  const d = parseDateObj(v);
-  return d ? d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" }) : String(v || "—");
-};
-const formatDDMMYYYY = (v: unknown) => {
+export const formatStrictDDMMYYYY = (v: unknown): string => {
+  if (!v) return "—";
   if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v)) {
     const [y, m, d] = v.split("-");
-    return `${d}/${m}/${y}`;
+    return `${d.padStart(2, "0")}/${m.padStart(2, "0")}/${y}`;
   }
   const d = parseDateObj(v);
-  if (!d) return String(v || "—");
-  const day = String(d.getDate()).padStart(2, "0");
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const year = d.getFullYear();
-  return `${day}/${month}/${year}`;
+  return d ? d.toLocaleDateString("en-GB", { timeZone: "Asia/Kolkata", day: "2-digit", month: "2-digit", year: "numeric" }) : String(v || "—");
 };
+
+export const formatStrictDateTime = (v: unknown): string => {
+  const d = parseDateObj(v);
+  return d ? d.toLocaleString("en-GB", { timeZone: "Asia/Kolkata", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true }) : "—";
+};
+
+export const formatDisplayDate = (v: unknown): string => {
+  const d = parseDateObj(v);
+  if (!d) return String(v || "—");
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yyyy = d.getFullYear();
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return `${dd}/${mm}/${yyyy} (${d.getDate()} ${months[d.getMonth()]} ${yyyy})`;
+};
+
+const dt = (v: unknown) => formatStrictDateTime(v);
+const formatDate = (v: unknown) => formatStrictDDMMYYYY(v);
+const formatDDMMYYYY = (v: unknown) => formatStrictDDMMYYYY(v);
+
+/**
+ * Controlled date input that strictly renders and edits dates in DD/MM/YYYY format.
+ * Bypasses OS/browser locale quirks (e.g. US Chrome forcing MM/DD/YYYY) while
+ * offering both typed entry and a native calendar popup.
+ */
+function DatePickerDDMMYYYY({
+  value,
+  onChange,
+  min,
+  placeholder = "DD/MM/YYYY",
+  required = false,
+  className,
+}: {
+  value: string;
+  onChange: (val: string) => void;
+  min?: string;
+  placeholder?: string;
+  required?: boolean;
+  className?: string;
+}) {
+  const pickerRef = useRef<HTMLInputElement>(null);
+
+  const toDisplay = (v: string): string => {
+    if (!v) return "";
+    if (/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+      const [y, m, d] = v.split("-");
+      return `${d}/${m}/${y}`;
+    }
+    return v;
+  };
+
+  const [text, setText] = useState(() => toDisplay(value));
+
+  useEffect(() => {
+    setText(toDisplay(value));
+  }, [value]);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value;
+    setText(raw);
+    const m = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+    if (m) {
+      const d = m[1].padStart(2, "0");
+      const mo = m[2].padStart(2, "0");
+      const y = m[3];
+      const ymd = `${y}-${mo}-${d}`;
+      const parsed = new Date(Number(y), Number(mo) - 1, Number(d));
+      if (!isNaN(parsed.getTime()) && parsed.getDate() === Number(d)) {
+        onChange(ymd);
+      }
+    }
+  };
+
+  const handleBlur = () => {
+    setText(toDisplay(value));
+  };
+
+  const triggerPicker = () => {
+    if (pickerRef.current) {
+      try {
+        if (typeof pickerRef.current.showPicker === "function") {
+          pickerRef.current.showPicker();
+        } else {
+          pickerRef.current.focus();
+        }
+      } catch {
+        pickerRef.current.focus();
+      }
+    }
+  };
+
+  return (
+    <div className="relative flex items-center w-full">
+      <input
+        type="text"
+        required={required}
+        placeholder={placeholder}
+        value={text}
+        onChange={handleInputChange}
+        onBlur={handleBlur}
+        className={
+          className ||
+          "w-full h-9 rounded-lg border border-slate-800 bg-[#0D1117] px-3 pr-9 text-xs text-white font-mono placeholder:text-slate-500 focus:border-[#2EA043] focus:outline-none focus:ring-1 focus:ring-[#2EA043]/30 transition-colors"
+        }
+      />
+      <button
+        type="button"
+        onClick={triggerPicker}
+        title="Open calendar (DD/MM/YYYY)"
+        className="absolute right-2.5 p-1 text-slate-400 hover:text-white transition-colors cursor-pointer"
+      >
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+      </button>
+      <input
+        ref={pickerRef}
+        type="date"
+        tabIndex={-1}
+        value={value}
+        min={min}
+        onChange={(e) => {
+          if (e.target.value) {
+            onChange(e.target.value);
+            setText(toDisplay(e.target.value));
+          }
+        }}
+        className="sr-only"
+        aria-hidden="true"
+      />
+    </div>
+  );
+}
+
 /** Id of a server record: new API objects use `id`, older ones `_id`. */
 const rid = (r: Any | null | undefined) => String(r?.id ?? r?._id ?? "");
 
@@ -156,14 +279,14 @@ function ask(label: string): string | null {
 }
 
 const btn = {
-  primary: "rounded-lg bg-blue-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-blue-500 disabled:opacity-50",
-  ok: "rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-emerald-500 disabled:opacity-50",
-  danger: "rounded-lg border border-red-500/40 bg-red-950/40 px-2.5 py-1 text-[11px] font-bold text-red-400 hover:bg-red-900/60 disabled:opacity-50",
-  ghost: "rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1 text-[11px] font-semibold text-slate-200 hover:bg-slate-700 disabled:opacity-50",
+  primary: "rounded-lg bg-[#1E7E4B] hover:bg-[#259A5C] px-3.5 py-1.5 text-xs font-medium text-white transition disabled:opacity-50 shadow-xs cursor-pointer",
+  ok: "rounded-lg bg-[#1E7E4B] hover:bg-[#259A5C] px-3.5 py-1.5 text-xs font-medium text-white transition disabled:opacity-50 shadow-xs cursor-pointer",
+  danger: "rounded-lg border border-red-500/20 bg-red-500/10 hover:bg-red-500/20 px-3.5 py-1.5 text-xs font-medium text-red-300 transition disabled:opacity-50 cursor-pointer",
+  ghost: "rounded-lg border border-slate-700/80 bg-slate-800/60 hover:bg-slate-800 px-3.5 py-1.5 text-xs font-medium text-slate-200 transition disabled:opacity-50 cursor-pointer",
 };
-const input = "rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-xs text-white focus:border-blue-500 focus:outline-none";
+const input = "rounded-lg border border-slate-800 bg-[#0D1117] px-3 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:border-[#2EA043] focus:outline-none focus:ring-1 focus:ring-[#2EA043] transition";
 const chip = (on: boolean) =>
-  `rounded-full border px-3 py-1 text-[11px] font-bold ${on ? "border-blue-500 bg-blue-950 text-blue-300" : "border-slate-700 text-slate-400 hover:text-slate-200"}`;
+  `rounded-md border px-2.5 py-1 text-xs font-medium transition ${on ? "border-[#2EA043]/40 bg-[#2EA043]/15 text-[#3FB950]" : "border-slate-800 bg-[#0D1117] text-slate-400 hover:text-slate-200"}`;
 
 function Ago({ t }: { t: number | null }) {
   const [, tick] = useState(0);
@@ -172,18 +295,18 @@ function Ago({ t }: { t: number | null }) {
     return () => window.clearInterval(id);
   }, []);
   if (!t) return null;
-  return <span className="text-[10px] text-slate-500">updated {Math.max(0, Math.round((Date.now() - t) / 1000))}s ago</span>;
+  return <span className="text-[11px] text-slate-500">updated {Math.max(0, Math.round((Date.now() - t) / 1000))}s ago</span>;
 }
 
 function Panel({ title, subtitle, onRefresh, error, loading, children, right, updatedAt }: {
   title: ReactNode; subtitle?: string; onRefresh?: () => void; error?: string; loading?: boolean; children: ReactNode; right?: ReactNode; updatedAt?: number | null;
 }) {
   return (
-    <section className="rounded-2xl border border-slate-800 bg-slate-950 p-6 shadow space-y-4">
+    <section className="rounded-2xl border border-slate-800/80 bg-[#121820] p-6 shadow-xs space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-base font-bold text-white">{title}</h2>
-          {subtitle && <p className="text-xs text-slate-400">{subtitle}</p>}
+          <h2 className="text-sm font-semibold text-white">{title}</h2>
+          {subtitle && <p className="text-xs text-slate-400 mt-0.5">{subtitle}</p>}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {right}
@@ -196,10 +319,10 @@ function Panel({ title, subtitle, onRefresh, error, loading, children, right, up
         </div>
       </div>
       {error && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-800/40 bg-red-950/40 px-4 py-3 text-xs font-semibold text-red-300">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-xs text-red-300">
           <span>{error}</span>
           {onRefresh && (
-            <button onClick={onRefresh} disabled={loading} className="shrink-0 rounded-lg border border-red-500/40 px-2.5 py-1 text-[11px] font-bold text-red-300 hover:bg-red-900/60 disabled:opacity-50">
+            <button onClick={onRefresh} disabled={loading} className="shrink-0 rounded-md border border-red-500/30 px-2.5 py-1 text-xs font-medium text-red-300 hover:bg-red-500/20 transition disabled:opacity-50">
               {loading ? "Retrying..." : "Retry"}
             </button>
           )}
@@ -212,23 +335,23 @@ function Panel({ title, subtitle, onRefresh, error, loading, children, right, up
 
 function Badge({ children, tone = "slate" }: { children: ReactNode; tone?: "slate" | "green" | "amber" | "red" | "blue" | "cyan" | "purple" }) {
   const tones = {
-    slate: "bg-slate-800 text-slate-300 border-slate-700",
-    green: "bg-emerald-950 text-emerald-400 border-emerald-800/40",
-    amber: "bg-amber-950 text-amber-400 border-amber-800/40",
-    red: "bg-red-950 text-red-400 border-red-800/40",
-    blue: "bg-blue-950 text-blue-300 border-blue-800/40",
-    cyan: "bg-cyan-950 text-cyan-300 border-cyan-800/40",
-    purple: "bg-purple-950 text-purple-300 border-purple-800/40",
+    slate: "bg-slate-800/60 text-slate-300 border-slate-700/60",
+    green: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+    amber: "bg-amber-500/10 text-amber-300 border-amber-500/20",
+    red: "bg-red-500/10 text-red-300 border-red-500/20",
+    blue: "bg-sky-500/10 text-sky-300 border-sky-500/20",
+    cyan: "bg-teal-500/10 text-teal-300 border-teal-500/20",
+    purple: "bg-purple-500/10 text-purple-300 border-purple-500/20",
   };
-  return <span className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-bold ${tones[tone]}`}>{children}</span>;
+  return <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-medium leading-none ${tones[tone]}`}>{children}</span>;
 }
 
-function Kpi({ label, value, hint }: { label: string; value: ReactNode; hint?: string }) {
+function Kpi({ label, value, hint, accent }: { label: string; value: ReactNode; hint?: string; accent?: boolean }) {
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
-      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">{label}</span>
-      <p className="mt-1 font-mono text-xl font-black text-white">{value}</p>
-      {hint && <span className="text-[10px] text-slate-500">{hint}</span>}
+    <div className={`rounded-xl border p-4 shadow-xs transition ${accent ? "border-emerald-500/30 bg-emerald-500/5" : "border-slate-800/80 bg-[#0D1117]"}`}>
+      <span className={`text-xs font-medium ${accent ? "text-emerald-400" : "text-slate-400"}`}>{label}</span>
+      <p className="mt-1.5 font-mono text-lg font-semibold tabular-nums text-white">{value}</p>
+      {hint && <span className="mt-1 block text-[11px] text-slate-500 leading-tight">{hint}</span>}
     </div>
   );
 }
@@ -261,18 +384,18 @@ function Dialog({ title, message, confirmLabel, danger, reasonLabel, reasonRequi
   }
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
-      <form onSubmit={submit} className="w-full max-w-md space-y-3 rounded-2xl border border-slate-800 bg-slate-950 p-6 text-xs shadow-2xl">
-        <h3 className="text-base font-bold text-white">{title}</h3>
-        <div className="text-slate-300">{message}</div>
+      <form onSubmit={submit} className="w-full max-w-md space-y-4 rounded-2xl border border-slate-800/80 bg-[#121820] p-6 text-xs shadow-xl">
+        <h3 className="text-sm font-semibold text-white">{title}</h3>
+        <div className="text-slate-300 leading-relaxed">{message}</div>
         {children}
         {reasonLabel && (
-          <label className="block text-slate-300">
+          <label className="block text-slate-300 font-medium">
             {reasonLabel}{reasonRequired ? " *" : ""}
-            <textarea className={`${input} mt-1 w-full`} rows={2} maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} />
+            <textarea className={`${input} mt-1.5 w-full`} rows={2} maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} />
           </label>
         )}
-        {err && <p className="rounded-xl border border-red-800/40 bg-red-950/40 px-3 py-2 font-semibold text-red-300">{err}</p>}
-        <div className="flex justify-end gap-2">
+        {err && <p className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300">{err}</p>}
+        <div className="flex justify-end gap-2 pt-2">
           <button type="button" className={btn.ghost} onClick={() => onClose(false)} disabled={busy}>Cancel</button>
           <button className={danger ? btn.danger : btn.primary} disabled={busy}>{busy ? "Working..." : confirmLabel}</button>
         </div>
@@ -338,25 +461,45 @@ export function DashboardTab({ demo }: TabProps) {
   return (
     <Panel title="Platform revenue dashboard" subtitle="Live totals from cab requests and homestay payouts." onRefresh={reload} error={error} loading={loading} updatedAt={updatedAt}>
       {data && (
-        <>
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
-            <Kpi label="Open requests" value={cab.open ?? "—"} />
-            <Kpi label="Awaiting payment" value={cab.awaitingPayment ?? "—"} />
-            <Kpi label="Completed trips" value={cab.completed ?? "—"} />
-            <Kpi label="GMV (completed)" value={inr(cab.gmv)} />
-            <Kpi label="Advance collected" value={inr(cab.advanceCollected)} />
-            <Kpi label="Platform fee earned" value={inr(cab.platformFee)} hint={rateHint(rates?.pf)} />
-            <Kpi label="Homestay commission earned (lifetime)" value={inr(cab.homestayCommission)} hint={rateHint(rates?.hc)} />
-            <Kpi label="Homestay commission owed now (unpaid)" value={inr(cab.homestayCommissionUnpaid)} hint="Payable, not yet in any payout request" />
-            <Kpi label="Completed without PIN — to review" value={cab.noPinToReview ?? "—"} hint="Held out of payouts until reviewed (Cab requests filter)" />
-            <Kpi label="Refunds pending" value={inr(cab.refundsPending)} />
-            <Kpi label="Driver share dues pending" value={inr(cab.driverDuesPending)} />
-            {typeof cab.unmatchedPending === "number" && cab.unmatchedPending > 0 && (
-              <Kpi label="Unmatched money to refund" value={inr(cab.unmatchedPending)} hint={`${cab.unmatchedCount ?? 0} payment(s)`} />
-            )}
-          </div>
+        <div className="space-y-6">
+          {/* Tier 1: Core Financial Volume */}
           <div>
-            <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">Homestay payouts by status</h3>
+            <h3 className="mb-2.5 text-xs font-medium text-slate-400">Core Volume &amp; Platform Revenue</h3>
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+              <Kpi label="Gross volume (completed)" value={inr(cab.gmv)} hint="Total passenger booking spend" accent />
+              <Kpi label="Platform fee earned" value={inr(cab.platformFee)} hint={rateHint(rates?.pf)} accent />
+              <Kpi label="Advance collected" value={inr(cab.advanceCollected)} hint="Customer UPI advance on file" />
+              <Kpi label="Completed trips" value={cab.completed ?? "—"} hint="Confirmed and executed hill rides" />
+            </div>
+          </div>
+
+          {/* Tier 2: Partner Commissions & Dues */}
+          <div>
+            <h3 className="mb-2.5 text-xs font-medium text-slate-400">Partner Commissions &amp; Outstanding Dues</h3>
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+              <Kpi label="Homestay commission (lifetime)" value={inr(cab.homestayCommission)} hint={rateHint(rates?.hc)} />
+              <Kpi label="Homestay commission owed now" value={inr(cab.homestayCommissionUnpaid)} hint="Payable, not yet in any payout request" />
+              <Kpi label="Driver share dues pending" value={inr(cab.driverDuesPending)} hint="Awaiting settlement" />
+              <Kpi label="Refunds pending" value={inr(cab.refundsPending)} hint="Passenger cancellations" />
+            </div>
+          </div>
+
+          {/* Tier 3: Review Queue & Active Pipeline */}
+          <div>
+            <h3 className="mb-2.5 text-xs font-medium text-slate-400">Active Requests &amp; Review Queue</h3>
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+              <Kpi label="Open requests" value={cab.open ?? "—"} hint="Finding driver or pending review" />
+              <Kpi label="Awaiting payment" value={cab.awaitingPayment ?? "—"} hint="Quote accepted, held on timer" />
+              <Kpi label="Completed without PIN" value={cab.noPinToReview ?? "—"} hint="Held for operator review" />
+              {typeof cab.unmatchedPending === "number" && cab.unmatchedPending > 0 && (
+                <Kpi label="Unmatched payments" value={inr(cab.unmatchedPending)} hint={`${cab.unmatchedCount ?? 0} payment(s)`} />
+              )}
+            </div>
+          </div>
+
+          {/* Homestay Payouts Ledger */}
+          <div>
+            <h3 className="mb-2.5 text-xs font-medium text-slate-400">Homestay payouts by status</h3>
             {payouts.length ? (
               <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                 {payouts.map((p) => (
@@ -367,7 +510,7 @@ export function DashboardTab({ demo }: TabProps) {
               <Empty>No payout requests yet.</Empty>
             )}
           </div>
-        </>
+        </div>
       )}
     </Panel>
   );
@@ -427,7 +570,7 @@ export function UsersTab({ demo }: TabProps) {
         (items.length ? (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="border-b border-slate-800 bg-slate-900/60 text-slate-400 font-semibold uppercase tracking-wider">
+              <thead className="border-b border-slate-800 text-slate-400 font-medium text-xs">
                 <tr>
                   <th className="p-3">User</th>
                   <th className="p-3">Role</th>
@@ -568,7 +711,7 @@ export function HomestaysTab({ demo, onOpenCabRequests }: HomestaysProps) {
         items.length ? (
           <div className="overflow-x-auto rounded-xl border border-slate-800">
             <table className="w-full text-left text-xs">
-              <thead className="border-b border-slate-800 bg-slate-900/60 text-slate-400 font-semibold uppercase tracking-wider">
+              <thead className="border-b border-slate-800 text-slate-400 font-medium text-xs">
                 <tr>
                   <th className="p-3">Homestay & Location</th>
                   <th className="p-3">Owner Contact</th>
@@ -677,20 +820,20 @@ function HomestayRow({
       <td className="p-3">
         <div className="flex flex-col gap-1 items-start">
           {o ? (
-            <span className="rounded bg-blue-950/80 px-2 py-0.5 text-[10px] font-mono text-blue-300 border border-blue-800/60">
+            <span className="rounded-md bg-emerald-500/10 px-2 py-0.5 text-[11px] font-mono text-emerald-300 border border-emerald-500/20">
               PF {o.pfPercent}% • HC {o.hcPercent}% • Adv {o.advancePercent}%
             </span>
           ) : (
-            <span className="rounded bg-slate-800/80 px-2 py-0.5 text-[10px] text-slate-400 border border-slate-700/60">
+            <span className="rounded-md bg-slate-800/60 px-2 py-0.5 text-[11px] text-slate-400 border border-slate-700/60">
               Global commission
             </span>
           )}
           {activeCustomFlags > 0 ? (
-            <span className="rounded bg-amber-950/80 px-2 py-0.5 text-[10px] font-semibold text-amber-300 border border-amber-800/60">
+            <span className="rounded-md bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-300 border border-amber-500/20">
               {activeCustomFlags} custom feature flag(s)
             </span>
           ) : (
-            <span className="text-[10px] text-slate-500">Standard features</span>
+            <span className="text-[11px] text-slate-500">Standard features</span>
           )}
         </div>
       </td>
@@ -698,7 +841,7 @@ function HomestayRow({
         <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
           <button className={btn.primary} onClick={onOpen}>Open Data</button>
           <button className={btn.ghost} onClick={onConfigure} title="Feature flags and custom commission rates">
-            ⚙️ Overrides
+            Overrides
           </button>
         </div>
       </td>
@@ -755,37 +898,37 @@ function HomestayConfigModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-xs">
-      <div className="w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl text-xs space-y-4">
+      <div className="w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-800/80 bg-[#121820] p-6 shadow-xl text-xs space-y-4">
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
           <div>
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-white flex items-center gap-2">
               <span>{t.homestayName || t.tenantKey}</span>
               {t.blocked ? <Badge tone="red">Suspended</Badge> : <Badge tone="green">Active</Badge>}
             </h3>
-            <p className="text-slate-400 text-xs">Configure granular access, feature permissions, and custom fee schedules.</p>
+            <p className="text-slate-400 text-xs mt-0.5">Configure granular access, feature permissions, and custom fee schedules.</p>
           </div>
-          <button type="button" className="text-slate-400 hover:text-white text-lg font-bold" onClick={onClose}>✕</button>
+          <button type="button" className="text-slate-400 hover:text-white text-base font-bold" onClick={onClose}>✕</button>
         </div>
 
         <div className="flex gap-2 border-b border-slate-800 pb-2">
           <button
             type="button"
             onClick={() => setTab("features")}
-            className={`px-3 py-1.5 rounded-lg font-semibold transition ${tab === "features" ? "bg-blue-600 text-white" : "text-slate-400 hover:text-white"}`}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${tab === "features" ? "bg-[#1E7E4B] text-white" : "text-slate-400 hover:text-white"}`}
           >
             Feature Switches
           </button>
           <button
             type="button"
             onClick={() => setTab("commission")}
-            className={`px-3 py-1.5 rounded-lg font-semibold transition ${tab === "commission" ? "bg-blue-600 text-white" : "text-slate-400 hover:text-white"}`}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${tab === "commission" ? "bg-[#1E7E4B] text-white" : "text-slate-400 hover:text-white"}`}
           >
-            Commission Overrides {o && <span className="ml-1 text-[10px] bg-blue-900 px-1.5 rounded">Active</span>}
+            Commission Overrides {o && <span className="ml-1 text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 rounded">Active</span>}
           </button>
           <button
             type="button"
             onClick={() => setTab("account")}
-            className={`px-3 py-1.5 rounded-lg font-semibold transition ${tab === "account" ? "bg-blue-600 text-white" : "text-slate-400 hover:text-white"}`}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${tab === "account" ? "bg-[#1E7E4B] text-white" : "text-slate-400 hover:text-white"}`}
           >
             Account Access
           </button>
@@ -799,9 +942,9 @@ function HomestayConfigModal({
                 const ov = overrides[k];
                 const value = ov === true ? "on" : ov === false ? "off" : "default";
                 return (
-                  <div key={k} className="p-3 rounded-xl border border-slate-800 bg-slate-950/60 space-y-2">
+                  <div key={k} className="p-3 rounded-xl border border-slate-800 bg-[#0D1117] space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="font-semibold text-slate-200">{FEATURE_LABELS[k]}</span>
+                      <span className="font-medium text-slate-200">{FEATURE_LABELS[k]}</span>
                       {effective[k] ? <Badge tone="green">ON</Badge> : <Badge>OFF</Badge>}
                     </div>
                     <select
@@ -826,8 +969,8 @@ function HomestayConfigModal({
 
         {tab === "commission" && (
           <div className="space-y-4">
-            <div className="p-3 rounded-xl border border-blue-900/50 bg-blue-950/30 text-slate-300 space-y-1">
-              <span className="font-semibold text-blue-200">Custom Fee Schedule</span>
+            <div className="p-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 text-slate-300 space-y-1">
+              <span className="font-medium text-emerald-300">Custom Fee Schedule</span>
               <p className="text-[11px] text-slate-400">By default, all homestays use platform global rates. Setting an override here locks custom rates for all rides booked through this property.</p>
             </div>
             <div className="grid grid-cols-3 gap-3">
@@ -863,8 +1006,8 @@ function HomestayConfigModal({
         )}
 
         {tab === "account" && (
-          <div className="p-4 rounded-xl border border-slate-800 bg-slate-950 space-y-3">
-            <h4 className="font-bold text-slate-200">Account Access & Suspension</h4>
+          <div className="p-4 rounded-xl border border-slate-800 bg-[#0D1117] space-y-3">
+            <h4 className="font-semibold text-slate-200">Account access & suspension</h4>
             <p className="text-slate-400 text-xs">
               Suspending a homestay prevents it from dispatching rides or receiving bookings. It does not delete data history.
             </p>
@@ -939,13 +1082,13 @@ function TenantDataViewer({
 
   return (
     <div className="fixed inset-0 z-40 overflow-y-auto bg-black/85 p-4 backdrop-blur-xs flex items-center justify-center">
-      <div className="w-full max-w-5xl max-h-[92vh] flex flex-col rounded-2xl border border-slate-800 bg-slate-950 shadow-2xl overflow-hidden">
+      <div className="w-full max-w-5xl max-h-[92vh] flex flex-col rounded-2xl border border-slate-800/80 bg-[#121820] shadow-xl overflow-hidden">
         {/* Drawer Header */}
-        <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b border-slate-800 bg-slate-900/70">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b border-slate-800 bg-[#0D1117]/70">
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="text-base font-bold text-white">{t.homestayName || t.tenantKey}</h3>
-              {demo ? <Badge tone="amber">DEMO</Badge> : <Badge tone="green">PRODUCTION</Badge>}
+              <h3 className="text-sm font-semibold text-white">{t.homestayName || t.tenantKey}</h3>
+              {demo ? <Badge tone="amber">Demo</Badge> : <Badge tone="green">Production</Badge>}
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
               Account: <span className="font-mono text-slate-300">{t.tenantKey}</span> • Location: {t.location || "Darjeeling"}
@@ -956,7 +1099,7 @@ function TenantDataViewer({
               <button
                 type="button"
                 onClick={() => onBookCabForGuest({ tenantKey: t.tenantKey, pickup: t.location || t.homestayName })}
-                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm transition"
+                className="px-3 py-1.5 rounded-lg bg-[#1E7E4B] hover:bg-[#259A5C] text-white font-medium text-xs transition"
               >
                 + Book Cab for Host
               </button>
@@ -971,7 +1114,7 @@ function TenantDataViewer({
         </div>
 
         {/* Sub-Navigation Tabs */}
-        <div className="flex flex-wrap items-center gap-1.5 px-6 py-2.5 border-b border-slate-800/80 bg-slate-900/40 text-xs">
+        <div className="flex flex-wrap items-center gap-1.5 px-6 py-2.5 border-b border-slate-800/80 bg-[#0D1117]/40 text-xs">
           {[
             { id: "drivers", label: "Own Fleet Drivers", count: drivers.length },
             { id: "guests", label: "In-House Guests", count: activeGuests.length },
@@ -983,16 +1126,16 @@ function TenantDataViewer({
             <button
               key={item.id}
               onClick={() => setTab(item.id as any)}
-              className={`px-3 py-1.5 rounded-xl font-semibold transition ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
                 tab === item.id
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-850"
+                  ? "bg-[#1E7E4B] text-white"
+                  : "text-slate-400 hover:text-slate-200"
               }`}
             >
               <span>{item.label}</span>
               {typeof item.count === "number" && (
-                <span className={`ml-1.5 px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-                  tab === item.id ? "bg-blue-800 text-white" : "bg-slate-800 text-slate-400"
+                <span className={`ml-1.5 px-1.5 py-0.2 rounded-md text-[10px] font-mono ${
+                  tab === item.id ? "bg-emerald-900 text-white" : "bg-slate-800 text-slate-400"
                 }`}>
                   {item.count}
                 </span>
@@ -1026,18 +1169,18 @@ function TenantDataViewer({
                         </Badge>
                       </div>
                       <div className="text-slate-300 space-y-0.5">
-                        <p className="text-xs">📞 {d.phone || "No phone"}</p>
+                        <p className="text-xs font-mono text-slate-200">{d.phone || "No phone"}</p>
                         <p className="text-xs text-slate-400">
-                          🚕 {d.vehicleType || "SUV"} • Plate: <span className="font-mono text-slate-200">{d.vehicleNumber || d.plate || "Not set"}</span>
+                          {d.vehicleType || "SUV"} • Plate: <span className="font-mono text-slate-200">{d.vehicleNumber || d.plate || "Not set"}</span>
                         </p>
                       </div>
                       {d.phone && (
                         <div className="pt-2 border-t border-slate-800 flex justify-end">
                           <a
                             href={`tel:${d.phone}`}
-                            className="px-2.5 py-1 rounded bg-blue-900/50 hover:bg-blue-800 text-blue-200 text-[11px] font-semibold"
+                            className="px-2.5 py-1 rounded-md bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-medium"
                           >
-                            Call Driver
+                            Call driver
                           </a>
                         </div>
                       )}
@@ -1056,16 +1199,16 @@ function TenantDataViewer({
           {tab === "guests" && (
             <div className="space-y-4">
               <div className="border-b border-slate-800 pb-2">
-                <h4 className="text-sm font-bold text-white">In-House Guests & Calendar Bookings</h4>
+                <h4 className="text-sm font-semibold text-white">In-House Guests &amp; Calendar Bookings</h4>
                 <p className="text-[11px] text-slate-400">Imported from Airbnb, Booking.com, MakeMyTrip, or direct owner bookings. Click "Book Cab" to dispatch immediately.</p>
               </div>
 
               {activeGuests.length > 0 ? (
                 <div className="overflow-x-auto rounded-xl border border-slate-800">
                   <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-900/80 border-b border-slate-800 text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
+                    <thead className="border-b border-slate-800 text-slate-400 font-medium text-xs">
                       <tr>
-                        <th className="p-3">Guest Name & Contact</th>
+                        <th className="p-3">Guest Name &amp; Contact</th>
                         <th className="p-3">Room / Unit</th>
                         <th className="p-3">Stay Dates</th>
                         <th className="p-3">Booking Channel</th>
@@ -1076,15 +1219,15 @@ function TenantDataViewer({
                       {activeGuests.map((g, idx) => (
                         <tr key={idx} className="hover:bg-slate-900/40 transition">
                           <td className="p-3">
-                            <p className="font-bold text-white">{g.name}</p>
+                            <p className="font-medium text-white">{g.name}</p>
                             <p className="text-slate-400 font-mono text-[11px]">{g.phone}</p>
                           </td>
-                          <td className="p-3 font-semibold text-slate-300">{g.room}</td>
+                          <td className="p-3 font-medium text-slate-300">{g.room}</td>
                           <td className="p-3 text-slate-400">
                             {formatDate(g.checkIn)} ➔ {formatDate(g.checkOut)}
                           </td>
                           <td className="p-3">
-                            <span className="px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-300 text-[10px] font-semibold">
+                            <span className="px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-slate-300 text-[11px] font-medium">
                               {g.channel}
                             </span>
                           </td>
@@ -1100,7 +1243,7 @@ function TenantDataViewer({
                                     pickup: t.location || t.homestayName,
                                   })
                                 }
-                                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm transition"
+                                className="px-3 py-1.5 rounded-lg bg-[#1E7E4B] hover:bg-[#259A5C] text-white font-medium text-xs transition"
                               >
                                 Book Cab for Guest
                               </button>
@@ -1124,14 +1267,14 @@ function TenantDataViewer({
             <div className="space-y-4">
               <div className="flex items-center justify-between border-b border-slate-800 pb-2">
                 <div>
-                  <h4 className="text-sm font-bold text-white">Homestay Cab Requests History</h4>
+                  <h4 className="text-sm font-semibold text-white">Homestay Cab Requests History</h4>
                   <p className="text-[11px] text-slate-400">All trips requested by or booked for this homestay.</p>
                 </div>
                 {onOpenCabRequests && (
                   <button
                     type="button"
                     onClick={() => onOpenCabRequests(t.tenantKey)}
-                    className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs"
+                    className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-medium text-xs transition"
                   >
                     View in Cab Requests Desk
                   </button>
@@ -1141,7 +1284,7 @@ function TenantDataViewer({
               {trips.length > 0 ? (
                 <div className="overflow-x-auto rounded-xl border border-slate-800">
                   <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-900/80 border-b border-slate-800 text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
+                    <thead className="border-b border-slate-800 text-slate-400 font-medium text-xs">
                       <tr>
                         <th className="p-3">Reference & Guest</th>
                         <th className="p-3">Route (Pickup ➔ Drop)</th>
@@ -1220,22 +1363,22 @@ function TenantDataViewer({
                 <p className="text-[11px] text-slate-400">Core registration and physical address information.</p>
               </div>
 
-              <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/50 space-y-3">
+              <div className="p-4 rounded-xl border border-slate-800 bg-[#0D1117] space-y-3">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <span className="text-[10px] text-slate-500 uppercase font-semibold">Homestay Name</span>
-                    <p className="text-sm font-bold text-white">{homestay.name || t.homestayName}</p>
+                    <span className="text-xs font-medium text-slate-400">Homestay name</span>
+                    <p className="text-sm font-semibold text-white">{homestay.name || t.homestayName}</p>
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-500 uppercase font-semibold">Owner Name</span>
-                    <p className="text-sm font-bold text-white">{homestay.ownerName || t.ownerName || "—"}</p>
+                    <span className="text-xs font-medium text-slate-400">Owner name</span>
+                    <p className="text-sm font-semibold text-white">{homestay.ownerName || t.ownerName || "—"}</p>
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-500 uppercase font-semibold">Phone</span>
+                    <span className="text-xs font-medium text-slate-400">Phone</span>
                     <p className="text-sm font-mono text-slate-200">{homestay.phone || t.phone || "—"}</p>
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-500 uppercase font-semibold">Address / Location</span>
+                    <span className="text-xs font-medium text-slate-400">Address / location</span>
                     <p className="text-sm text-slate-200">{homestay.address || t.location || "—"}</p>
                   </div>
                 </div>
@@ -1376,9 +1519,9 @@ function RecordEditor({ rec, title, readOnly, note, startOpen, onSave, onDelete,
   }
 
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-3 space-y-2 text-xs">
+    <div className="rounded-xl border border-slate-800 bg-[#0D1117] p-3 space-y-2 text-xs">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <button className="text-left text-sm font-bold text-white hover:text-blue-300" onClick={() => setOpen(!open)}>
+        <button className="text-left text-sm font-semibold text-white hover:text-emerald-300" onClick={() => setOpen(!open)}>
           {open ? "▾" : "▸"} {title}
         </button>
         <div className="flex flex-wrap items-center gap-2">
@@ -1498,17 +1641,17 @@ function AddDriverModal({ demo, initialDriver, onClose, onAdded }: { demo: boole
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
-              className={`p-2 rounded-lg border text-left font-semibold ${driverCategory === "INDIVIDUAL" ? "border-emerald-500 bg-emerald-950/40 text-emerald-300" : "border-slate-800 bg-slate-950 text-slate-400"}`}
+              className={`p-2.5 rounded-lg border text-left text-xs transition-colors ${driverCategory === "INDIVIDUAL" ? "border-[#2EA043] bg-[#1E7E4B]/15 text-emerald-300 font-medium" : "border-slate-800 bg-[#0D1117] text-slate-400 hover:text-slate-200"}`}
               onClick={() => setDriverCategory("INDIVIDUAL")}
             >
-              Independent Driver
+              Independent driver
             </button>
             <button
               type="button"
-              className={`p-2 rounded-lg border text-left font-semibold ${driverCategory === "UNION" ? "border-emerald-500 bg-emerald-950/40 text-emerald-300" : "border-slate-800 bg-slate-950 text-slate-400"}`}
+              className={`p-2.5 rounded-lg border text-left text-xs transition-colors ${driverCategory === "UNION" ? "border-[#2EA043] bg-[#1E7E4B]/15 text-emerald-300 font-medium" : "border-slate-800 bg-[#0D1117] text-slate-400 hover:text-slate-200"}`}
               onClick={() => setDriverCategory("UNION")}
             >
-              Taxi Union Fleet
+              Taxi union fleet
             </button>
           </div>
 
@@ -1673,7 +1816,7 @@ export function DriversTab({ demo }: TabProps) {
           <button
             type="button"
             onClick={() => setCategoryFilter("UNION")}
-            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition ${categoryFilter === "UNION" ? "bg-blue-950 border border-blue-700/60 text-blue-300 font-bold" : "text-slate-400 hover:text-white"}`}
+            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition ${categoryFilter === "UNION" ? "bg-slate-800 border border-slate-700 text-white font-medium" : "text-slate-400 hover:text-white"}`}
           >
             Taxi Syndicate / Union
           </button>
@@ -1684,9 +1827,9 @@ export function DriversTab({ demo }: TabProps) {
         (items.length ? (
           <div className="overflow-x-auto rounded-xl border border-slate-800">
             <table className="w-full text-left text-xs">
-              <thead className="border-b border-slate-800 bg-slate-900/60 text-slate-400 font-semibold uppercase tracking-wider">
+              <thead className="border-b border-slate-800 text-slate-400 font-medium text-xs">
                 <tr>
-                  <th className="p-3">Driver & Category</th>
+                  <th className="p-3">Driver &amp; Category</th>
                   <th className="p-3">Vehicle Details</th>
                   <th className="p-3">Rating</th>
                   <th className="p-3">Status</th>
@@ -1699,14 +1842,14 @@ export function DriversTab({ demo }: TabProps) {
                   <tr key={rid(d)} className="hover:bg-slate-900/40 transition">
                     <td className="p-3">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <p className="font-semibold text-white">{d.name}</p>
+                        <p className="font-medium text-white">{d.name}</p>
                         {d.deletedAt && <Badge tone="red">deleted</Badge>}
                         {isUnionDriver(d) ? (
-                          <span className="rounded bg-blue-900/70 text-blue-200 border border-blue-700/60 px-2 py-0.5 text-[10px] font-bold">
+                          <span className="rounded-md bg-slate-800/80 text-slate-200 border border-slate-700/60 px-2 py-0.5 text-[11px] font-medium">
                             Union: {d.unionName || (d.vehicle?.type === "Fleet" ? d.vehicle?.model : "") || "Taxi Syndicate"}
                           </span>
                         ) : (
-                          <span className="rounded bg-emerald-950/70 text-emerald-300 border border-emerald-800/60 px-2 py-0.5 text-[10px] font-semibold">
+                          <span className="rounded-md bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 px-2 py-0.5 text-[11px] font-medium">
                             Independent Driver
                           </span>
                         )}
@@ -1717,17 +1860,17 @@ export function DriversTab({ demo }: TabProps) {
                     <td className="p-3 text-slate-300">
                       {d.vehicle ? (
                         <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="rounded bg-slate-800 px-2 py-0.5 font-semibold text-slate-200 border border-slate-700/80">
+                          <span className="rounded-md bg-slate-800 px-2 py-0.5 font-medium text-slate-200 border border-slate-700/80">
                             {d.vehicle.type || ""} {d.vehicle.model || ""}
                           </span>
-                          <span className="rounded bg-slate-900 px-1.5 py-0.5 font-mono text-[11px] text-amber-300 border border-amber-900/40">
+                          <span className="rounded-md bg-[#0D1117] px-1.5 py-0.5 font-mono text-[11px] text-amber-300 border border-amber-900/40">
                             {d.vehicle.plate || "—"}
                           </span>
-                          <span className="rounded bg-slate-900 px-1.5 py-0.5 text-[11px] text-slate-400 border border-slate-800">
+                          <span className="rounded-md bg-[#0D1117] px-1.5 py-0.5 text-[11px] text-slate-400 border border-slate-800">
                             {d.vehicle.seats ?? "—"} seats
                           </span>
                           {d.vehicle.area && (
-                            <span className="rounded bg-blue-950/40 px-1.5 py-0.5 text-[11px] text-blue-300 border border-blue-900/40">
+                            <span className="rounded-md bg-slate-800/40 px-1.5 py-0.5 text-[11px] text-slate-300 border border-slate-700/40">
                               {d.vehicle.area}
                             </span>
                           )}
@@ -1752,7 +1895,7 @@ export function DriversTab({ demo }: TabProps) {
                           {d.accountStatus !== "PENDING_APPROVAL" && <button className={btn.ghost} onClick={() => setDriverStatus(d, "PENDING_APPROVAL")}>Set pending</button>}
                           <button
                             type="button"
-                            className="rounded border border-blue-800 bg-blue-950/60 px-2 py-1 text-blue-300 hover:bg-blue-900/80 hover:text-white transition"
+                            className={btn.ghost}
                             onClick={() => setEditingDriver(d)}
                             title="Edit driver category, taxi union, or vehicle details"
                           >
@@ -1806,6 +1949,28 @@ const statusTone = (s: string) =>
   s === "EXPIRED" ? "slate" :
   s === "AWAITING_ADVANCE_PAYMENT" ? "amber" : "cyan";
 
+function getSmartInitialDateTime(): { date: string; time: string } {
+  const now = new Date();
+  const target = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+  const yyyy = target.getFullYear();
+  const mm = String(target.getMonth() + 1).padStart(2, "0");
+  const dd = String(target.getDate()).padStart(2, "0");
+  const dateStr = `${yyyy}-${mm}-${dd}`;
+
+  let hours = target.getHours();
+  let minutes = target.getMinutes();
+  if (minutes > 30) {
+    hours += 1;
+    minutes = 0;
+  } else if (minutes > 0) {
+    minutes = 30;
+  }
+  const period = hours >= 12 ? "PM" : "AM";
+  const h12 = hours % 12 || 12;
+  const timeStr = `${String(h12).padStart(2, "0")}:${String(minutes).padStart(2, "0")} ${period}`;
+  return { date: dateStr, time: timeStr };
+}
+
 function AdminBookCabModal({
   demo,
   initialTenantKey,
@@ -1823,13 +1988,14 @@ function AdminBookCabModal({
   onClose: () => void;
   onSuccess: () => void;
 }) {
+  const initialDt = useMemo(() => getSmartInitialDateTime(), []);
   const [tenantKey, setTenantKey] = useState(initialTenantKey || "");
   const [guestName, setGuestName] = useState(initialGuestName || "");
   const [guestPhone, setGuestPhone] = useState(initialGuestPhone || "");
   const [pickup, setPickup] = useState(initialPickup || "");
   const [destination, setDestination] = useState("");
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [time, setTime] = useState("10:00 AM");
+  const [date, setDate] = useState(initialDt.date);
+  const [time, setTime] = useState(initialDt.time);
   const [tripType, setTripType] = useState<"oneway" | "roundtrip" | "multiday">("oneway");
   const [tourDays, setTourDays] = useState(3);
   const [isRoundTrip, setIsRoundTrip] = useState(false);
@@ -1927,6 +2093,23 @@ function AdminBookCabModal({
       setErr("Pickup and destination locations are required.");
       return;
     }
+    // Prevent submitting rides with past pickup times
+    try {
+      const [y, m, d] = date.split("-").map(Number);
+      const match = time.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+      if (match) {
+        let hh = parseInt(match[1], 10);
+        const mm = parseInt(match[2], 10);
+        const isPm = match[3].toUpperCase() === "PM";
+        if (isPm && hh < 12) hh += 12;
+        if (!isPm && hh === 12) hh = 0;
+        const pickupDateObj = new Date(y, m - 1, d, hh, mm);
+        if (pickupDateObj.getTime() < Date.now() - 5 * 60 * 1000) {
+          setErr("Pickup date and time cannot be in the past. Please select a future time.");
+          return;
+        }
+      }
+    } catch {}
     setBusy(true);
     setErr("");
     try {
@@ -1963,411 +2146,445 @@ function AdminBookCabModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-2xl max-h-[92vh] flex flex-col rounded-2xl border border-slate-800 bg-slate-950 shadow-2xl overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 sm:p-6 backdrop-blur-sm overflow-y-auto">
+      <div className="w-full max-w-4xl max-h-[92vh] flex flex-col rounded-2xl border border-slate-800/80 bg-[#121820] shadow-2xl overflow-hidden my-auto">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900/60">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800/80 bg-[#121820]">
           <div>
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <span>Book Cab on Behalf of Guest</span>
-              {demo ? <Badge tone="amber">DEMO</Badge> : <Badge tone="green">PRODUCTION</Badge>}
-            </h3>
-            <p className="text-xs text-slate-400 mt-0.5">Direct dispatch from admin desk. Select homestay host, guest, and travel route.</p>
+            <div className="flex items-center gap-2.5">
+              <h3 className="text-sm font-semibold text-white">Book Cab on Behalf of Guest</h3>
+              <Badge tone={demo ? "amber" : "green"}>{demo ? "Demo" : "Production"}</Badge>
+            </div>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Direct dispatch from admin desk • Homestay host attribution, mountain route &amp; schedule
+            </p>
           </div>
           <button
             type="button"
-            className="rounded-lg p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className="rounded-md p-1.5 text-slate-400 hover:text-white hover:bg-slate-800/80 transition-colors cursor-pointer"
             onClick={onClose}
+            aria-label="Close dialog"
           >
             ✕
           </button>
         </div>
 
         {/* Form Body */}
-        <form onSubmit={submit} className="flex-1 overflow-y-auto p-6 space-y-4 text-xs">
+        <form onSubmit={submit} className="flex-1 overflow-y-auto p-6 space-y-5 text-xs">
           {err && (
-            <div className="rounded-xl bg-red-950/80 border border-red-800/80 px-3.5 py-2.5 text-red-300 font-semibold">
+            <div className="rounded-lg bg-rose-950/40 border border-rose-800/50 px-3.5 py-2.5 text-rose-300 font-medium">
               {err}
             </div>
           )}
 
-          {/* 1. Dynamic Homestay Selector */}
-          <div className="space-y-1.5">
-            <label className="text-[11px] font-bold uppercase tracking-wider text-slate-300 block">
-              1. Homestay Host Attribution
-            </label>
-            <select
-              className="w-full h-10 rounded-xl border border-slate-700 bg-slate-900 px-3 text-xs text-white focus:border-blue-500 focus:outline-none"
-              value={tenantKey}
-              onChange={(e) => handleSelectHomestay(e.target.value)}
-            >
-              <option value="">Platform Direct Booking (No Homestay Host)</option>
-              {homestays.map((h) => (
-                <option key={h.tenantKey || h.tenantId} value={h.tenantKey || h.tenantId}>
-                  {h.homestayName || h.tenantKey} ({h.location || "Darjeeling"})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Auto-detected In-House Guests Dropdown (if homestay has active bookings) */}
-          {tenantKey && inHouseGuests.length > 0 && (
-            <div className="p-3 rounded-xl border border-blue-900/50 bg-blue-950/30 space-y-2">
-              <div className="flex items-center justify-between text-blue-300">
-                <span className="font-bold text-xs">In-House Guests at this Property ({inHouseGuests.length})</span>
-                <span className="text-[10px] text-blue-400">Click to auto-fill guest details</span>
+          {/* 2-Column Responsive Layout */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+            {/* LEFT COLUMN: Attribution, Guest & Vehicle */}
+            <div className="space-y-4">
+              <div className="border-b border-slate-800/80 pb-2">
+                <h4 className="text-xs font-semibold text-white">1. Attribution &amp; Guest</h4>
+                <p className="text-[11px] text-slate-400">Homestay host, guest identity, and vehicle tier.</p>
               </div>
-              <select
-                className="w-full h-9 rounded-lg border border-blue-800/80 bg-slate-900 px-3 text-xs text-white focus:outline-none"
-                onChange={(e) => {
-                  const idx = Number(e.target.value);
-                  if (idx >= 0 && inHouseGuests[idx]) {
-                    setGuestName(inHouseGuests[idx].name);
-                    if (inHouseGuests[idx].phone) setGuestPhone(inHouseGuests[idx].phone);
-                  }
-                }}
-                defaultValue="-1"
-              >
-                <option value="-1">-- Auto-fill from in-house guest list (or type manually below) --</option>
-                {inHouseGuests.map((g, idx) => (
-                  <option key={idx} value={idx}>
-                    {g.name} {g.phone ? `(${g.phone})` : ""} {g.room ? `• Room: ${g.room}` : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
 
-          {/* 2. Passenger Details */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-[11px] font-semibold text-slate-300 block mb-1">Guest Full Name *</label>
-              <input
-                className="w-full h-9 rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white focus:border-blue-500 focus:outline-none"
-                required
-                placeholder="e.g. Ananya Sharma"
-                value={guestName}
-                onChange={(e) => setGuestName(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="text-[11px] font-semibold text-slate-300 block mb-1">Guest WhatsApp Phone *</label>
-              <input
-                className="w-full h-9 rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white focus:border-blue-500 focus:outline-none font-mono"
-                required
-                placeholder="+91 98000 12345"
-                value={guestPhone}
-                onChange={(e) => setGuestPhone(e.target.value)}
-              />
-            </div>
-          </div>
-
-          {/* 3. Pickup & Destination Locations */}
-          <div className="space-y-2">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="text-[11px] font-semibold text-slate-300 block mb-1">Pickup Location *</label>
-                <input
-                  className="w-full h-9 rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white focus:border-blue-500 focus:outline-none"
-                  required
-                  placeholder="e.g. Courtyard by Marriott Siliguri or Homestay"
-                  value={pickup}
-                  onChange={(e) => setPickup(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="text-[11px] font-semibold text-slate-300 block mb-1">Destination / Tour Stops *</label>
-                <input
-                  className="w-full h-9 rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white focus:border-blue-500 focus:outline-none"
-                  required
-                  placeholder="e.g. Darjeeling Mall Road or Tiger Hill"
-                  value={destination}
-                  onChange={(e) => setDestination(e.target.value)}
-                />
-              </div>
-            </div>
-
-            {/* Optional Destination Suggestions Chips */}
-            <div className="flex flex-wrap items-center gap-1.5 pt-1">
-              <span className="text-[10px] text-slate-500 font-semibold uppercase">Popular:</span>
-              {DESTINATION_SUGGESTIONS.map((s, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={() => setDestination(s)}
-                  className="px-2 py-0.5 rounded-md bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:border-slate-700 text-[10px] transition"
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* 4. Schedule & Tour Format */}
-          <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/50 p-4">
-            <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
-              <label className="text-[11px] font-bold uppercase tracking-wider text-slate-300 block">
-                4. Schedule & Tour Format
-              </label>
-              <span className="text-[11px] font-mono text-emerald-400 font-bold">
-                Departure: {formatDDMMYYYY(date)}
-              </span>
-            </div>
-
-            {/* Departure Date & Time Inputs */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="text-[11px] font-semibold text-slate-300 block mb-1">
-                  Departure Date * <span className="text-[10px] text-slate-500 font-mono">({formatDDMMYYYY(date)})</span>
+              {/* Homestay Attribution */}
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-slate-300 block">
+                  Homestay Host Attribution
                 </label>
-                <input
-                  type="date"
-                  className="w-full h-9 rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white focus:border-blue-500 focus:outline-none"
-                  value={date}
-                  onChange={(e) => {
-                    const newDate = e.target.value;
-                    setDate(newDate);
-                    if (tripType === "multiday") {
-                      setReturnDate(calcReturnYmd(newDate, tourDays));
-                    } else if (tripType === "roundtrip") {
-                      setReturnDate(newDate);
-                    }
-                  }}
-                />
-              </div>
-              <div>
-                <label className="text-[11px] font-semibold text-slate-300 block mb-1">Departure Time *</label>
-                <div className="flex gap-1.5">
-                  <input
-                    className="w-32 h-9 rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white focus:border-blue-500 focus:outline-none"
-                    value={time}
-                    onChange={(e) => setTime(e.target.value)}
-                  />
-                  <select
-                    className="flex-1 h-9 rounded-lg border border-slate-700 bg-slate-900 px-2 text-[11px] text-slate-300 focus:outline-none"
-                    onChange={(e) => e.target.value && setTime(e.target.value)}
-                    defaultValue=""
-                  >
-                    <option value="" disabled>Presets...</option>
-                    {QUICK_TIMES.map((qt) => (
-                      <option key={qt} value={qt}>{qt}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            {/* Trip Format Switcher */}
-            <div className="space-y-1.5 pt-1">
-              <label className="text-[11px] font-semibold text-slate-400 block">
-                Trip Format
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTripType("oneway");
-                    setIsRoundTrip(false);
-                  }}
-                  className={`p-2.5 rounded-xl border text-left transition-all ${
-                    tripType === "oneway"
-                      ? "bg-blue-600/20 border-blue-500 text-white shadow-sm ring-1 ring-blue-500/40"
-                      : "bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200"
-                  }`}
+                <select
+                  className="w-full h-9 rounded-lg border border-slate-800 bg-[#0D1117] px-3 text-xs text-white focus:border-[#2EA043] focus:outline-none focus:ring-1 focus:ring-[#2EA043]/30 transition-colors cursor-pointer"
+                  value={tenantKey}
+                  onChange={(e) => handleSelectHomestay(e.target.value)}
                 >
-                  <p className="font-bold text-xs">One-Way</p>
-                  <p className="text-[10px] text-slate-500 mt-0.5">Single point drop</p>
-                </button>
+                  <option value="">Platform Direct Booking (No Homestay Host)</option>
+                  {homestays.map((h) => (
+                    <option key={h.tenantKey || h.tenantId} value={h.tenantKey || h.tenantId}>
+                      {h.homestayName || h.tenantKey} ({h.location || "Darjeeling"})
+                    </option>
+                  ))}
+                </select>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTripType("roundtrip");
-                    setIsRoundTrip(true);
-                    setReturnDate(date);
-                  }}
-                  className={`p-2.5 rounded-xl border text-left transition-all ${
-                    tripType === "roundtrip"
-                      ? "bg-blue-600/20 border-blue-500 text-white shadow-sm ring-1 ring-blue-500/40"
-                      : "bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200"
-                  }`}
-                >
-                  <p className="font-bold text-xs">Round Trip</p>
-                  <p className="text-[10px] text-slate-500 mt-0.5">Same-day return</p>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTripType("multiday");
-                    setIsRoundTrip(true);
-                    setReturnDate(calcReturnYmd(date, tourDays));
-                  }}
-                  className={`p-2.5 rounded-xl border text-left transition-all ${
-                    tripType === "multiday"
-                      ? "bg-blue-600/20 border-blue-500 text-white shadow-sm ring-1 ring-blue-500/40"
-                      : "bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200"
-                  }`}
-                >
-                  <p className="font-bold text-xs">Multi-Day Tour</p>
-                  <p className="text-[10px] text-slate-500 mt-0.5">Dedicated hill tour</p>
-                </button>
-              </div>
-            </div>
-
-            {/* If Multi-Day Tour: Duration Selector */}
-            {tripType === "multiday" && (
-              <div className="rounded-xl border border-blue-900/40 bg-blue-950/30 p-3 space-y-3">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                  <span className="text-xs font-bold text-blue-300">Package Duration:</span>
-                  <div className="flex gap-1.5 flex-wrap">
-                    {[2, 3, 4, 5, 6, 7].map((dCount) => (
-                      <button
-                        key={dCount}
-                        type="button"
-                        onClick={() => {
-                          setTourDays(dCount);
-                          setReturnDate(calcReturnYmd(date, dCount));
-                        }}
-                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                          tourDays === dCount
-                            ? "bg-blue-600 text-white shadow-sm ring-1 ring-blue-400"
-                            : "bg-slate-900 border border-slate-700 text-slate-300 hover:bg-slate-800"
-                        }`}
-                      >
-                        {dCount} Days
-                      </button>
-                    ))}
+                {/* Auto-detected in-house guests */}
+                {tenantKey && inHouseGuests.length > 0 && (
+                  <div className="p-2.5 rounded-lg border border-emerald-900/30 bg-emerald-950/20 space-y-1">
+                    <div className="flex items-center justify-between text-emerald-300 text-[11px]">
+                      <span>In-House Guests ({inHouseGuests.length})</span>
+                      <span className="text-emerald-400/80">Auto-fill details:</span>
+                    </div>
+                    <select
+                      className="w-full h-8 rounded border border-slate-800 bg-[#0D1117] px-2 text-xs text-white focus:outline-none cursor-pointer"
+                      onChange={(e) => {
+                        const idx = Number(e.target.value);
+                        if (idx >= 0 && inHouseGuests[idx]) {
+                          setGuestName(inHouseGuests[idx].name);
+                          if (inHouseGuests[idx].phone) setGuestPhone(inHouseGuests[idx].phone);
+                        }
+                      }}
+                      defaultValue="-1"
+                    >
+                      <option value="-1">-- Pick guest from booking calendar --</option>
+                      {inHouseGuests.map((g, idx) => (
+                        <option key={idx} value={idx}>
+                          {g.name} {g.phone ? `(${g.phone})` : ""} {g.room ? `• ${g.room}` : ""}
+                        </option>
+                      ))}
+                    </select>
                   </div>
-                </div>
-
-                {/* Tour Schedule Banner with exact DD/MM/YYYY */}
-                <div className="rounded-lg bg-blue-900/30 border border-blue-700/50 p-2.5 flex items-center justify-between flex-wrap gap-2 text-xs">
-                  <div className="flex items-center gap-1.5 text-blue-200 font-semibold">
-                    <span>🗓️ Tour Schedule:</span>
-                    <span className="font-mono font-bold text-white bg-slate-900/80 px-2 py-0.5 rounded border border-blue-600/60">
-                      {formatDDMMYYYY(date)} (Day 1)
-                    </span>
-                    <span>➔</span>
-                    <span className="font-mono font-bold text-emerald-300 bg-slate-900/80 px-2 py-0.5 rounded border border-emerald-600/60">
-                      {formatDDMMYYYY(returnDate)} (Day {tourDays} Return)
-                    </span>
-                  </div>
-                  <span className="text-[11px] text-blue-300/90 font-medium">
-                    ({tourDays} Days / {tourDays - 1} Nights)
-                  </span>
-                </div>
-
-                <div className="text-[11px] text-blue-300/80 flex items-center justify-between border-t border-blue-900/30 pt-2">
-                  <span>💡 Advance online: ₹600 (Locks cab)</span>
-                  <span className="text-slate-400">Balance paid in cash directly to driver</span>
-                </div>
+                )}
               </div>
-            )}
 
-            {/* If Round Trip or Multi-Day: Return Date & Time Inputs */}
-            {(isRoundTrip || tripType === "multiday") && (
-              <div className="rounded-xl border border-blue-900/40 bg-blue-950/20 p-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Guest Details */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[11px] font-semibold text-blue-300 block mb-1">
-                    Return Journey Date * <span className="text-[10px] text-slate-400 font-mono">({formatDDMMYYYY(returnDate)})</span>
+                  <label className="text-xs font-medium text-slate-300 block mb-1">
+                    Guest Full Name *
                   </label>
                   <input
-                    type="date"
-                    className="w-full h-9 rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white focus:border-blue-500 focus:outline-none"
-                    value={returnDate}
-                    min={date}
-                    onChange={(e) => setReturnDate(e.target.value)}
+                    className="w-full h-9 rounded-lg border border-slate-800 bg-[#0D1117] px-3 text-xs text-white placeholder:text-slate-500 focus:border-[#2EA043] focus:outline-none focus:ring-1 focus:ring-[#2EA043]/30 transition-colors"
+                    required
+                    placeholder="e.g. Ananya Sharma"
+                    value={guestName}
+                    onChange={(e) => setGuestName(e.target.value)}
                   />
-                  <span className="text-[10px] text-slate-500 mt-0.5 block">
-                    {tripType === "multiday" ? `Auto-calculated for ${tourDays}-Day package (editable if needed)` : "Same or next day return"}
-                  </span>
                 </div>
                 <div>
-                  <label className="text-[11px] font-semibold text-blue-300 block mb-1">Return Time</label>
+                  <label className="text-xs font-medium text-slate-300 block mb-1">
+                    WhatsApp Phone *
+                  </label>
                   <input
-                    className="w-full h-9 rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white focus:border-blue-500 focus:outline-none"
-                    value={returnTime}
-                    onChange={(e) => setReturnTime(e.target.value)}
-                    placeholder="05:00 PM"
+                    className="w-full h-9 rounded-lg border border-slate-800 bg-[#0D1117] px-3 text-xs text-white font-mono placeholder:text-slate-500 focus:border-[#2EA043] focus:outline-none focus:ring-1 focus:ring-[#2EA043]/30 transition-colors"
+                    required
+                    placeholder="+91 98000 12345"
+                    value={guestPhone}
+                    onChange={(e) => setGuestPhone(e.target.value)}
                   />
                 </div>
               </div>
-            )}
-          </div>
 
-          {/* 5. Passenger Stepper, Vehicle Tier & Budget */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-[11px] font-semibold text-slate-300 block mb-1">Passenger Count</label>
-              <div className="flex items-center h-9 w-44 rounded-lg border border-slate-700 bg-slate-900 px-1">
-                <button
-                  type="button"
-                  onClick={() => setPassengers(Math.max(1, passengers - 1))}
-                  className="w-8 h-7 flex items-center justify-center rounded text-slate-300 hover:text-white hover:bg-slate-800 text-sm font-bold"
-                >
-                  -
-                </button>
-                <span className="flex-1 text-center font-bold text-white text-xs">
-                  {passengers} {passengers === 1 ? "Passenger" : "Passengers"}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setPassengers(Math.min(20, passengers + 1))}
-                  className="w-8 h-7 flex items-center justify-center rounded text-slate-300 hover:text-white hover:bg-slate-800 text-sm font-bold"
-                >
-                  +
-                </button>
+              {/* Vehicle Tier & Passenger Count */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-slate-300 block mb-1">
+                    Vehicle Tier
+                  </label>
+                  <select
+                    className="w-full h-9 rounded-lg border border-slate-800 bg-[#0D1117] px-3 text-xs text-white focus:border-[#2EA043] focus:outline-none focus:ring-1 focus:ring-[#2EA043]/30 transition-colors cursor-pointer"
+                    value={vehicleType}
+                    onChange={(e) => setVehicleType(e.target.value)}
+                  >
+                    <option value="SUV">SUV (Innova, Bolero, Scorpio)</option>
+                    <option value="Sedan">Sedan (Dzire, Etios)</option>
+                    <option value="7-seater">7-seater (Innova / Ertiga)</option>
+                    <option value="9-seater">9-seater (Cruiser / Maxx)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-medium text-slate-300 block mb-1">
+                    Passengers
+                  </label>
+                  <div className="flex items-center h-9 w-full rounded-lg border border-slate-800 bg-[#0D1117] p-1">
+                    <button
+                      type="button"
+                      onClick={() => setPassengers(Math.max(1, passengers - 1))}
+                      className="w-7 h-7 flex items-center justify-center rounded text-slate-400 hover:text-white hover:bg-slate-800 text-sm font-medium transition-colors cursor-pointer"
+                    >
+                      -
+                    </button>
+                    <span className="flex-1 text-center font-medium tabular-nums text-white text-xs">
+                      {passengers} Pax
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setPassengers(Math.min(20, passengers + 1))}
+                      className="w-7 h-7 flex items-center justify-center rounded text-slate-400 hover:text-white hover:bg-slate-800 text-sm font-medium transition-colors cursor-pointer"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Notes & Target Budget */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-slate-300 block mb-1">
+                    Target Budget (₹ Optional)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    className="w-full h-9 rounded-lg border border-slate-800 bg-[#0D1117] px-3 text-xs text-white font-mono placeholder:text-slate-500 focus:border-[#2EA043] focus:outline-none focus:ring-1 focus:ring-[#2EA043]/30 transition-colors"
+                    placeholder="e.g. 3500"
+                    value={guestBudget}
+                    onChange={(e) => setGuestBudget(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-300 block mb-1">
+                    Flight / Special Notes
+                  </label>
+                  <input
+                    className="w-full h-9 rounded-lg border border-slate-800 bg-[#0D1117] px-3 text-xs text-white placeholder:text-slate-500 focus:border-[#2EA043] focus:outline-none focus:ring-1 focus:ring-[#2EA043]/30 transition-colors"
+                    placeholder="e.g. Arrives 11:30 AM, 4 bags"
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                  />
+                </div>
               </div>
             </div>
-            <div>
-              <label className="text-[11px] font-semibold text-slate-300 block mb-1">Vehicle Tier</label>
-              <select
-                className="w-full h-9 rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white focus:border-blue-500 focus:outline-none"
-                value={vehicleType}
-                onChange={(e) => setVehicleType(e.target.value)}
-              >
-                <option value="SUV">SUV (Innova, Bolero, Scorpio) - Recommended for Hills</option>
-                <option value="Sedan">Sedan (Dzire, Etios) - Best for Plains/Airport</option>
-                <option value="7-seater">7-seater (Innova / Ertiga)</option>
-                <option value="9-seater">9-seater (Cruiser / Maxx)</option>
-              </select>
+
+            {/* RIGHT COLUMN: Route, Schedule & Tour Logistics */}
+            <div className="space-y-4">
+              <div className="border-b border-slate-800/80 pb-2">
+                <h4 className="text-xs font-semibold text-white">2. Route &amp; Schedule</h4>
+                <p className="text-[11px] text-slate-400">Pickup location, hill destinations, and timing.</p>
+              </div>
+
+              {/* Pickup & Destination */}
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs font-medium text-slate-300 block mb-1">
+                    Pickup Location *
+                  </label>
+                  <input
+                    className="w-full h-9 rounded-lg border border-slate-800 bg-[#0D1117] px-3 text-xs text-white placeholder:text-slate-500 focus:border-[#2EA043] focus:outline-none focus:ring-1 focus:ring-[#2EA043]/30 transition-colors"
+                    required
+                    placeholder="e.g. Courtyard by Marriott Siliguri or Homestay"
+                    value={pickup}
+                    onChange={(e) => setPickup(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-medium text-slate-300 block">
+                      Destination / Tour Stops *
+                    </label>
+                    <select
+                      className="bg-transparent text-[11px] text-emerald-400 hover:text-emerald-300 focus:outline-none cursor-pointer"
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          setDestination(e.target.value);
+                          e.target.value = "";
+                        }
+                      }}
+                      defaultValue=""
+                    >
+                      <option value="" disabled>Popular corridors...</option>
+                      {DESTINATION_SUGGESTIONS.map((s) => (
+                        <option key={s} value={s} className="bg-[#121820] text-slate-200">
+                          {s}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <input
+                    className="w-full h-9 rounded-lg border border-slate-800 bg-[#0D1117] px-3 text-xs text-white placeholder:text-slate-500 focus:border-[#2EA043] focus:outline-none focus:ring-1 focus:ring-[#2EA043]/30 transition-colors"
+                    required
+                    placeholder="e.g. Darjeeling Mall Road or Tiger Hill"
+                    value={destination}
+                    onChange={(e) => setDestination(e.target.value)}
+                  />
+                </div>
+
+                {/* Compact Corridor Chips */}
+                <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                  <span className="text-[11px] text-slate-500 font-medium mr-0.5">Quick:</span>
+                  {DESTINATION_SUGGESTIONS.slice(0, 4).map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setDestination(s)}
+                      className="px-2 py-0.5 rounded-md bg-[#0D1117] border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white text-[11px] transition-colors cursor-pointer"
+                    >
+                      {s.split("(")[0].trim()}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Trip Format Switcher */}
+              <div className="pt-2">
+                <label className="text-xs font-medium text-slate-300 block mb-1.5">
+                  Trip Format
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTripType("oneway");
+                      setIsRoundTrip(false);
+                    }}
+                    className={`py-2 px-2.5 rounded-lg border text-left transition-colors cursor-pointer ${
+                      tripType === "oneway"
+                        ? "border-[#2EA043] bg-[#1E7E4B]/15 text-white"
+                        : "border-slate-800/80 bg-[#0D1117] text-slate-400 hover:border-slate-700 hover:text-slate-200"
+                    }`}
+                  >
+                    <p className="font-medium text-xs">One-Way</p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">Single drop</p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTripType("roundtrip");
+                      setIsRoundTrip(true);
+                      setReturnDate(date);
+                    }}
+                    className={`py-2 px-2.5 rounded-lg border text-left transition-colors cursor-pointer ${
+                      tripType === "roundtrip"
+                        ? "border-[#2EA043] bg-[#1E7E4B]/15 text-white"
+                        : "border-slate-800/80 bg-[#0D1117] text-slate-400 hover:border-slate-700 hover:text-slate-200"
+                    }`}
+                  >
+                    <p className="font-medium text-xs">Round Trip</p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">Same-day return</p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTripType("multiday");
+                      setIsRoundTrip(true);
+                      setReturnDate(calcReturnYmd(date, tourDays));
+                    }}
+                    className={`py-2 px-2.5 rounded-lg border text-left transition-colors cursor-pointer ${
+                      tripType === "multiday"
+                        ? "border-[#2EA043] bg-[#1E7E4B]/15 text-white"
+                        : "border-slate-800/80 bg-[#0D1117] text-slate-400 hover:border-slate-700 hover:text-slate-200"
+                    }`}
+                  >
+                    <p className="font-medium text-xs">Multi-Day</p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">Tour package</p>
+                  </button>
+                </div>
+              </div>
+
+              {/* Schedule (Date & Time) */}
+              <div className="space-y-3 pt-1">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-medium text-slate-300 block mb-1">
+                      Departure Date (DD/MM/YYYY) *
+                    </label>
+                    <DatePickerDDMMYYYY
+                      value={date}
+                      onChange={(newDate) => {
+                        setDate(newDate);
+                        if (tripType === "multiday") {
+                          setReturnDate(calcReturnYmd(newDate, tourDays));
+                        } else if (tripType === "roundtrip") {
+                          setReturnDate(newDate);
+                        }
+                      }}
+                    />
+                    <span className="text-[11px] text-slate-400 font-mono mt-1 block">
+                      {formatDisplayDate(date)}
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-medium text-slate-300 block mb-1">
+                      Departure Time *
+                    </label>
+                    <div className="flex gap-1.5">
+                      <input
+                        className="w-24 h-9 rounded-lg border border-slate-800 bg-[#0D1117] px-2.5 text-xs text-white font-mono focus:border-[#2EA043] focus:outline-none focus:ring-1 focus:ring-[#2EA043]/30 transition-colors"
+                        value={time}
+                        onChange={(e) => setTime(e.target.value)}
+                      />
+                      <select
+                        className="flex-1 h-9 rounded-lg border border-slate-800 bg-[#0D1117] px-2 text-[11px] text-slate-400 focus:border-[#2EA043] focus:outline-none cursor-pointer"
+                        onChange={(e) => e.target.value && setTime(e.target.value)}
+                        defaultValue=""
+                      >
+                        <option value="" disabled>Presets...</option>
+                        {QUICK_TIMES.map((qt) => (
+                          <option key={qt} value={qt} className="bg-[#121820] text-slate-200">{qt}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* If Multi-Day: Duration & Schedule Summary */}
+                {tripType === "multiday" && (
+                  <div className="p-3 rounded-lg border border-slate-800/80 bg-[#0D1117] space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-300 font-medium">Package Duration:</span>
+                      <div className="flex gap-1">
+                        {[2, 3, 4, 5, 6, 7].map((dCount) => (
+                          <button
+                            key={dCount}
+                            type="button"
+                            onClick={() => {
+                              setTourDays(dCount);
+                              setReturnDate(calcReturnYmd(date, dCount));
+                            }}
+                            className={`px-2.5 py-1 rounded text-xs font-medium transition-colors cursor-pointer ${
+                              tourDays === dCount
+                                ? "bg-[#1E7E4B] text-white"
+                                : "bg-slate-800/60 text-slate-400 hover:text-white"
+                            }`}
+                          >
+                            {dCount}D
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="text-[11px] text-slate-400 font-mono flex items-center justify-between pt-1.5 border-t border-slate-800/60">
+                      <span>{formatStrictDDMMYYYY(date)} (Day 1) → {formatStrictDDMMYYYY(returnDate)} (Day {tourDays})</span>
+                      <span className="text-slate-500 font-sans">{tourDays - 1} nights</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* If Round Trip: Return date & time */}
+                {tripType === "roundtrip" && (
+                  <div className="grid grid-cols-2 gap-3 p-3 rounded-lg border border-slate-800/80 bg-[#0D1117]">
+                    <div>
+                      <label className="text-xs font-medium text-slate-300 block mb-1">
+                        Return Date (DD/MM/YYYY)
+                      </label>
+                      <DatePickerDDMMYYYY
+                        value={returnDate}
+                        min={date}
+                        onChange={(d) => setReturnDate(d)}
+                      />
+                      <span className="text-[11px] text-slate-400 font-mono mt-1 block">
+                        {formatDisplayDate(returnDate)}
+                      </span>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-slate-300 block mb-1">
+                        Return Time
+                      </label>
+                      <input
+                        className="w-full h-9 rounded-lg border border-slate-800 bg-[#121820] px-3 text-xs text-white font-mono placeholder:text-slate-500 focus:border-[#2EA043] focus:outline-none focus:ring-1 focus:ring-[#2EA043]/30 transition-colors"
+                        value={returnTime}
+                        onChange={(e) => setReturnTime(e.target.value)}
+                        placeholder="05:00 PM"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
-          {/* 7. Special Notes & Target Budget */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-[11px] font-semibold text-slate-300 block mb-1">Special Notes / Flight Timing</label>
-              <input
-                className="w-full h-9 rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white focus:border-blue-500 focus:outline-none"
-                placeholder="e.g. Flight arrives 11:30 AM, 4 large bags"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-              />
+          {/* Bottom Action Footer */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-slate-800/80">
+            <div className="text-xs text-slate-400 flex items-center gap-2">
+              <span className="font-medium text-slate-300">Advance online: ₹600</span>
+              <span className="text-slate-600">•</span>
+              <span>Balance cash to driver on drop</span>
             </div>
-            <div>
-              <label className="text-[11px] font-semibold text-slate-300 block mb-1">Target Budget Benchmark (₹ Optional)</label>
-              <input
-                type="number"
-                min={0}
-                className="w-full h-9 rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white focus:border-blue-500 focus:outline-none font-mono"
-                placeholder="e.g. 3500"
-                value={guestBudget}
-                onChange={(e) => setGuestBudget(e.target.value)}
-              />
-            </div>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="flex items-center justify-between pt-4 border-t border-slate-800">
-            <span className="text-[11px] text-slate-500">
-              Dispatches immediately to matching homestay and mountain drivers.
-            </span>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
               <button
                 type="button"
-                className="px-4 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 text-xs font-semibold"
+                className="px-4 py-2 rounded-lg border border-slate-800 hover:bg-slate-800 text-slate-300 text-xs font-medium transition-colors cursor-pointer"
                 onClick={onClose}
                 disabled={busy}
               >
@@ -2375,7 +2592,7 @@ function AdminBookCabModal({
               </button>
               <button
                 type="submit"
-                className="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-950/60 disabled:opacity-50"
+                className="px-5 py-2 rounded-lg bg-[#1E7E4B] hover:bg-[#259A5C] text-white text-xs font-medium transition-colors shadow-xs disabled:opacity-50 cursor-pointer"
                 disabled={busy}
               >
                 {busy ? "Dispatching..." : "Dispatch Request to Drivers"}
@@ -2449,8 +2666,8 @@ export function CabRequestsTab({ demo, initialTenantKey, initialFilter }: TabPro
 
   return (
     <Panel
-      title="Cab Requests Command Center"
-      subtitle="Live multi-stage pipeline board, driver bidding desk, on-road transit tracking, and admin payment overrides."
+      title="Cab Requests"
+      subtitle="Pipeline board, driver dispatch desk, transit tracking, and payment verification."
       onRefresh={handleRefresh}
       error={error}
       loading={loading}
@@ -2458,24 +2675,24 @@ export function CabRequestsTab({ demo, initialTenantKey, initialFilter }: TabPro
       right={
         <div className="flex items-center gap-2">
           {/* View Mode Switcher */}
-          <div className="flex items-center bg-slate-900 border border-slate-800 rounded-xl p-0.5 text-xs">
+          <div className="flex items-center bg-[#0D1117] border border-slate-800 rounded-lg p-0.5 text-xs">
             <button
               type="button"
               onClick={() => setViewMode("board")}
-              className={`px-3 py-1.5 rounded-lg font-semibold transition ${
+              className={`px-3 py-1.5 rounded-md font-medium transition ${
                 viewMode === "board"
-                  ? "bg-blue-600 text-white shadow-sm"
+                  ? "bg-[#1E7E4B] text-white"
                   : "text-slate-400 hover:text-slate-200"
               }`}
             >
-              Pipeline Board (All Stages)
+              Pipeline Board
             </button>
             <button
               type="button"
               onClick={() => setViewMode("split")}
-              className={`px-3 py-1.5 rounded-lg font-semibold transition ${
+              className={`px-3 py-1.5 rounded-md font-medium transition ${
                 viewMode === "split"
-                  ? "bg-blue-600 text-white shadow-sm"
+                  ? "bg-[#1E7E4B] text-white"
                   : "text-slate-400 hover:text-slate-200"
               }`}
             >
@@ -2486,7 +2703,7 @@ export function CabRequestsTab({ demo, initialTenantKey, initialFilter }: TabPro
           <button
             type="button"
             onClick={() => setCreateOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm transition cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1E7E4B] hover:bg-[#259A5C] text-white font-medium text-xs transition cursor-pointer"
           >
             <span>+ Book Cab for Guest</span>
           </button>
@@ -2503,38 +2720,38 @@ export function CabRequestsTab({ demo, initialTenantKey, initialFilter }: TabPro
       )}
 
       {/* TOP ACTION REQUIRED DECK */}
-      <div className="flex flex-wrap items-center gap-2 p-2.5 rounded-xl bg-slate-900/90 border border-slate-800">
-        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mr-1 flex items-center gap-1.5">
-          <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
+      <div className="flex flex-wrap items-center gap-2 p-2.5 rounded-xl bg-[#0D1117] border border-slate-800">
+        <span className="text-xs font-medium text-slate-400 mr-1 flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full bg-amber-400" />
           Exceptions:
         </span>
         <button
           type="button"
           onClick={() => { setStageFilter(stageFilter === "needs" ? "all" : "needs"); setPage(0); }}
-          className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
+          className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 transition cursor-pointer ${
             stageFilter === "needs"
-              ? "bg-red-600 text-white shadow-sm ring-1 ring-red-400"
+              ? "bg-red-500/20 text-red-300 border border-red-500/40"
               : (cabStats?.needsReassignment > 0
-                ? "bg-red-950/80 text-red-300 border border-red-800/80 hover:bg-red-900/60"
+                ? "bg-red-500/10 text-red-300 border border-red-500/20 hover:bg-red-500/20"
                 : "bg-slate-800/60 text-slate-400 hover:text-white")
           }`}
         >
           <span>Needs Driver</span>
-          <span className="px-1.5 py-0.2 rounded-full bg-red-900/60 text-[10px] font-mono">{cabStats?.needsReassignment ?? 0}</span>
+          <span className="px-1.5 py-0.2 rounded-md bg-red-900/40 text-[10px] font-mono">{cabStats?.needsReassignment ?? 0}</span>
         </button>
         <button
           type="button"
           onClick={() => { setStageFilter(stageFilter === "claims" ? "all" : "claims"); setPage(0); }}
-          className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
+          className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 transition cursor-pointer ${
             stageFilter === "claims"
-              ? "bg-blue-600 text-white shadow-sm ring-1 ring-blue-400"
+              ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
               : (cabStats?.pendingClaims > 0
-                ? "bg-blue-950/80 text-blue-300 border border-blue-800/80 hover:bg-blue-900/60"
+                ? "bg-amber-500/10 text-amber-300 border border-amber-500/20 hover:bg-amber-500/20"
                 : "bg-slate-800/60 text-slate-400 hover:text-white")
           }`}
         >
           <span>Guest Payment Claims</span>
-          <span className="px-1.5 py-0.2 rounded-full bg-blue-900/60 text-[10px] font-mono">{cabStats?.pendingClaims ?? 0}</span>
+          <span className="px-1.5 py-0.2 rounded-md bg-amber-900/40 text-[10px] font-mono">{cabStats?.pendingClaims ?? 0}</span>
         </button>
         <button
           type="button"
@@ -2604,8 +2821,8 @@ export function CabRequestsTab({ demo, initialTenantKey, initialFilter }: TabPro
             <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-3 space-y-2.5">
               <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
                 <div className="flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-blue-400" />
-                  <span className="font-bold text-white text-xs">1. Open & Bidding</span>
+                  <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                  <span className="font-medium text-white text-xs">1. Open &amp; Bidding</span>
                 </div>
                 <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono text-[11px] font-bold">
                   {stage1Open.length}
@@ -2723,8 +2940,8 @@ export function CabRequestsTab({ demo, initialTenantKey, initialFilter }: TabPro
                   onChanged={handleRefresh}
                 />
               ) : (
-                <div className="p-12 text-center rounded-2xl border border-slate-800 bg-slate-950 text-slate-500">
-                  <p className="text-sm font-semibold text-slate-300">No Request Selected</p>
+                <div className="p-12 text-center rounded-2xl border border-slate-800/80 bg-[#0D1117] text-slate-500">
+                  <p className="text-sm font-semibold text-slate-300">No request selected</p>
                   <p className="text-xs text-slate-500 mt-1">Select any cab request from the queue to view full route details and admin actions.</p>
                 </div>
               )}
@@ -2751,8 +2968,8 @@ function PipelineCard({
       onClick={onInspect}
       className={`p-3 rounded-xl border cursor-pointer transition-all ${
         selected
-          ? "bg-slate-900 border-blue-500 shadow-md ring-1 ring-blue-500/40"
-          : "bg-slate-950/80 border-slate-800 hover:border-slate-700 hover:bg-slate-900/60"
+          ? "bg-[#0D1117] border-[#2EA043] ring-1 ring-[#2EA043]/30"
+          : "bg-[#0D1117] border-slate-800/80 hover:border-slate-700 hover:bg-[#121820]"
       }`}
     >
       <div className="flex items-center justify-between mb-1.5">
@@ -2779,12 +2996,12 @@ function PipelineCard({
       </div>
 
       {c.needsReassignment && (
-        <div className="mt-1.5 text-[10px] font-semibold text-red-300 bg-red-950/70 px-2 py-0.5 rounded border border-red-900/50">
+        <div className="mt-1.5 text-[11px] font-medium text-red-300 bg-red-500/10 px-2 py-0.5 rounded-md border border-red-500/20">
           Needs Driver Reassignment
         </div>
       )}
       {claim && (
-        <div className="mt-1.5 text-[10px] font-semibold text-blue-300 bg-blue-950/70 px-2 py-0.5 rounded border border-blue-900/50">
+        <div className="mt-1.5 text-[11px] font-medium text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
           Guest Claims Paid (UTR: {c.paymentClaim.utr})
         </div>
       )}
@@ -2873,137 +3090,239 @@ function CabRequestCard({ c, demo, onChanged }: { c: Any; demo: boolean; onChang
   }
 
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 space-y-3 text-xs">
-      {/* CARD HEADER & STATUS BADGES */}
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-black text-white font-mono">#{c.reference}</span>
-            <Badge tone={statusTone(c.status)}>{c.status}</Badge>
-            {c.needsReassignment && <Badge tone="red">Needs driver</Badge>}
-            {claim && <Badge tone="blue">Guest says paid</Badge>}
-            {toReview && <Badge tone="amber">No PIN — to review</Badge>}
-            {c.noShow && <Badge tone="red">No-show</Badge>}
-            {c.ownFleet && <Badge tone="blue">Own fleet</Badge>}
-            {c.dispatched === false && ["PENDING_REVIEW", "FINDING_DRIVER", "QUOTE_RECEIVED"].includes(c.status) && <Badge tone="slate">Held for owner</Badge>}
-            {c.refundStatus && c.refundStatus !== "NONE" && <Badge tone={c.refundStatus === "PENDING" ? "amber" : "green"}>Refund {c.refundStatus}</Badge>}
-            {c.driverSettlementStatus && c.driverSettlementStatus !== "NONE" && (
-              <Badge tone={c.driverSettlementStatus === "PENDING" ? "amber" : "green"}>Driver {c.driverSettlementStatus}</Badge>
-            )}
-          </div>
-          <p className="text-slate-400 mt-1">
-            <span className="font-semibold text-slate-300">{c.homestayName || "—"}</span> ({c.propertyId}) • Source: {c.requestSource || "—"} • created {dt(c.createdAt)}
-          </p>
-          <div className="flex items-center gap-2 flex-wrap text-slate-300 mt-1">
-            <span className="font-semibold text-white">{c.guestName}</span>
-            <span className="font-mono text-slate-400">{c.guestPhone}</span>
-            {c.guestPhone && (
-              <a
-                href={`https://wa.me/${String(c.guestPhone).replace(/\D/g, "")}`}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 rounded bg-emerald-950 px-1.5 py-0.2 text-[10px] font-semibold text-emerald-300 border border-emerald-800/60 hover:bg-emerald-900"
-              >
-                💬 WhatsApp
-              </a>
-            )}
-            <span>• {c.passengers ?? "—"} pax • {c.vehicleType || "—"} • {formatDate(c.date)} {c.time || ""}</span>
-            {c.guestBudget ? <span className="text-emerald-400 font-bold">• Target: {inr(c.guestBudget)}</span> : null}
+    <div className="rounded-2xl border border-slate-800/80 bg-[#121820] p-4 sm:p-5 space-y-4 text-xs">
+      {/* 1. TOP HEADER: Reference, Status Badges, Dispatch Source, and Created Timestamp */}
+      <div className="flex flex-wrap items-center justify-between gap-2.5 pb-3 border-b border-slate-800/80">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm sm:text-base font-bold text-white font-mono tracking-tight">#{c.reference}</span>
+          <Badge tone={statusTone(c.status)}>{c.status}</Badge>
+          {c.needsReassignment && <Badge tone="red">Needs driver</Badge>}
+          {claim && <Badge tone="blue">Guest says paid</Badge>}
+          {toReview && <Badge tone="amber">No PIN — to review</Badge>}
+          {c.noShow && <Badge tone="red">No-show</Badge>}
+          {c.ownFleet && <Badge tone="blue">Own fleet</Badge>}
+          {c.dispatched === false && ["PENDING_REVIEW", "FINDING_DRIVER", "QUOTE_RECEIVED"].includes(c.status) && <Badge tone="slate">Held for owner</Badge>}
+          {c.refundStatus && c.refundStatus !== "NONE" && <Badge tone={c.refundStatus === "PENDING" ? "amber" : "green"}>Refund {c.refundStatus}</Badge>}
+          {c.driverSettlementStatus && c.driverSettlementStatus !== "NONE" && (
+            <Badge tone={c.driverSettlementStatus === "PENDING" ? "amber" : "green"}>Driver {c.driverSettlementStatus}</Badge>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 text-[11px] text-slate-400 font-mono">
+          <span className="px-2 py-0.5 rounded-md bg-[#0D1117] border border-slate-800 text-slate-300">
+            Source: {c.requestSource || "DIRECT"}
+          </span>
+          <span>Created: {dt(c.createdAt)}</span>
+        </div>
+      </div>
+
+      {/* 2. OPERATIONAL GRID: Left = Guest, Host, Route & Transit | Right = Financial Breakdown */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+        {/* LEFT COLUMN (7 cols): Operational Specifications */}
+        <div className="lg:col-span-7 space-y-3">
+          {/* Guest Identity & Homestay Attribution Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {/* Guest Identity Card */}
+            <div className="p-3 rounded-xl bg-[#0D1117] border border-slate-800/80 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] uppercase font-semibold text-slate-500 tracking-wider">Guest Identity</span>
+                <span className="px-1.5 py-0.2 rounded bg-slate-800 text-slate-300 text-[10px] font-mono font-medium">
+                  {c.passengers || 1} Pax
+                </span>
+              </div>
+              <p className="text-xs font-semibold text-white truncate">{c.guestName || "Guest"}</p>
+              <div className="flex items-center justify-between gap-1.5 pt-0.5">
+                <span className="font-mono text-slate-300 text-[11px]">{c.guestPhone || "No phone"}</span>
+                {c.guestPhone && (
+                  <a
+                    href={`https://wa.me/${String(c.guestPhone).replace(/\D/g, "")}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-[#1E7E4B]/15 text-[#3FB950] border border-[#2EA043]/30 hover:bg-[#1E7E4B]/25 transition-colors cursor-pointer"
+                  >
+                    WhatsApp ↗
+                  </a>
+                )}
+              </div>
+            </div>
+
+            {/* Attribution & Vehicle Tier */}
+            <div className="p-3 rounded-xl bg-[#0D1117] border border-slate-800/80 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] uppercase font-semibold text-slate-500 tracking-wider">Attribution</span>
+                <span className="px-1.5 py-0.2 rounded bg-slate-800 text-slate-300 text-[10px] font-medium">
+                  {c.vehicleType || "SUV"}
+                </span>
+              </div>
+              <p className="text-xs font-semibold text-white truncate" title={c.homestayName || c.propertyId}>
+                {c.homestayName || "Platform Direct"}
+              </p>
+              <p className="text-[11px] text-slate-400 truncate">{c.propertyId || "No property ID"}</p>
+            </div>
           </div>
 
-          {/* ROUTE DISPLAY */}
-          <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800/80 mt-2 space-y-1">
-            <div className="flex items-center gap-1.5 text-slate-300">
-              <span className="text-emerald-400">🟢 Pickup:</span>
-              <span className="font-medium text-white">{c.pickupLocation?.address || "Pickup address not set"}</span>
-              {c.pickupLocation?.lat && c.pickupLocation?.lng && (
-                <a
-                  href={`https://www.google.com/maps/search/?api=1&query=${c.pickupLocation.lat},${c.pickupLocation.lng}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="ml-1 text-[11px] text-blue-400 hover:underline"
-                >
-                  (• Maps)
-                </a>
-              )}
+          {/* Departure Schedule & Target Budget Banner */}
+          <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-[#0D1117] border border-slate-800/80 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="text-slate-400 font-medium">Departure:</span>
+              <span className="font-mono font-semibold text-white px-2 py-0.5 rounded bg-slate-800/80 border border-slate-700/60">
+                {formatStrictDDMMYYYY(c.date)}
+              </span>
+              <span className="font-mono font-semibold text-emerald-400 px-2 py-0.5 rounded bg-emerald-950/40 border border-emerald-900/50">
+                {c.time}
+              </span>
             </div>
-            <div className="flex items-center gap-1.5 text-slate-300">
-              <span className="text-rose-400">🏁 Dropoff:</span>
-              <span className="font-medium text-white">{(c.destinations || []).map((d: Any) => d.address).join(" ➔ ") || "Destination not set"}</span>
-              {c.isRoundTrip && <span className="ml-1 text-[10px] font-bold text-amber-400 bg-amber-950/80 px-1.5 rounded border border-amber-900/60">Round Trip</span>}
-            </div>
-            {c.notes && <p className="text-[11px] text-slate-400 pt-0.5 italic">Note: {c.notes}</p>}
+            {c.guestBudget ? (
+              <div className="flex items-center gap-1.5">
+                <span className="text-slate-400">Target Budget:</span>
+                <span className="font-mono font-bold text-[#3FB950] bg-[#1E7E4B]/15 px-2 py-0.5 rounded border border-[#2EA043]/30">
+                  {inr(c.guestBudget)}
+                </span>
+              </div>
+            ) : null}
           </div>
 
-          {/* ON-ROAD TRANSIT TRACKER */}
+          {/* Route Display Box */}
+          <div className="p-3.5 rounded-xl bg-[#0D1117] border border-slate-800/80 space-y-2.5">
+            <div className="flex items-start gap-2.5">
+              <div className="flex flex-col items-center mt-1">
+                <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-emerald-500/20" />
+                <div className="w-0.5 h-6 bg-slate-800 my-0.5" />
+                <span className="h-2.5 w-2.5 rounded-full bg-amber-400 ring-2 ring-amber-500/20" />
+              </div>
+              <div className="flex-1 space-y-2 text-xs">
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase font-semibold text-slate-500 tracking-wider">Pickup Location</span>
+                    {c.pickupLocation?.lat && c.pickupLocation?.lng && (
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${c.pickupLocation.lat},${c.pickupLocation.lng}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[11px] text-emerald-400 hover:underline"
+                      >
+                        Maps ↗
+                      </a>
+                    )}
+                  </div>
+                  <p className="font-medium text-white text-xs mt-0.5">{c.pickupLocation?.address || "Pickup address not set"}</p>
+                </div>
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase font-semibold text-slate-500 tracking-wider">Dropoff Destination</span>
+                    {c.isRoundTrip && (
+                      <span className="text-[10px] font-medium text-amber-300 bg-amber-950/60 px-1.5 py-0.2 rounded border border-amber-900/40">
+                        Round Trip
+                      </span>
+                    )}
+                  </div>
+                  <p className="font-medium text-white text-xs mt-0.5">
+                    {(c.destinations || []).map((d: Any) => d.address).join(" ➔ ") || "Destination not set"}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {c.notes && (
+              <div className="pt-2 border-t border-slate-800/60 text-[11px] text-slate-400">
+                <span className="font-medium text-slate-300">Special Notes:</span> {c.notes}
+              </div>
+            )}
+          </div>
+
+          {/* Transit Tracker (if trip in progress) */}
           {["CONFIRMED", "EN_ROUTE_PICKUP", "ARRIVED_HOMESTAY", "TRIP_STARTED", "COMPLETED"].includes(c.status) && (
-            <div className="flex items-center gap-1.5 p-2 rounded-xl bg-slate-950/80 border border-slate-800 text-[11px] overflow-x-auto mt-2">
-              <span className="font-bold text-slate-400 text-[10px] uppercase tracking-wider mr-1">Transit Tracker:</span>
-              <span className={`px-2 py-0.5 rounded font-semibold ${c.status === "CONFIRMED" ? "bg-emerald-950 text-emerald-300 border border-emerald-700/60" : "text-slate-500"}`}>
-                ✓ Advance Paid
+            <div className="flex items-center gap-1.5 p-2.5 rounded-xl bg-[#0D1117] border border-slate-800 text-xs overflow-x-auto">
+              <span className="font-medium text-slate-400 text-xs mr-1 shrink-0">Transit tracker:</span>
+              <span className={`px-2 py-0.5 rounded font-medium shrink-0 ${c.status === "CONFIRMED" ? "bg-emerald-500/10 text-emerald-300 border border-emerald-500/20" : "text-slate-500"}`}>
+                Advance paid
               </span>
-              <span className="text-slate-600">➔</span>
-              <span className={`px-2 py-0.5 rounded font-semibold ${c.status === "EN_ROUTE_PICKUP" ? "bg-blue-950 text-blue-300 border border-blue-700/60 animate-pulse" : ["ARRIVED_HOMESTAY", "TRIP_STARTED", "COMPLETED"].includes(c.status) ? "text-slate-400" : "text-slate-600"}`}>
-                En Route
+              <span className="text-slate-600 shrink-0">→</span>
+              <span className={`px-2 py-0.5 rounded font-medium shrink-0 ${c.status === "EN_ROUTE_PICKUP" ? "bg-emerald-500/10 text-emerald-300 border border-emerald-500/20" : ["ARRIVED_HOMESTAY", "TRIP_STARTED", "COMPLETED"].includes(c.status) ? "text-slate-400" : "text-slate-600"}`}>
+                En route
               </span>
-              <span className="text-slate-600">➔</span>
-              <span className={`px-2 py-0.5 rounded font-semibold ${c.status === "ARRIVED_HOMESTAY" ? "bg-cyan-950 text-cyan-300 border border-cyan-700/60 animate-pulse" : ["TRIP_STARTED", "COMPLETED"].includes(c.status) ? "text-slate-400" : "text-slate-600"}`}>
-                Arrived Homestay
+              <span className="text-slate-600 shrink-0">→</span>
+              <span className={`px-2 py-0.5 rounded font-medium shrink-0 ${c.status === "ARRIVED_HOMESTAY" ? "bg-emerald-500/10 text-emerald-300 border border-emerald-500/20" : ["TRIP_STARTED", "COMPLETED"].includes(c.status) ? "text-slate-400" : "text-slate-600"}`}>
+                Arrived homestay
               </span>
-              <span className="text-slate-600">➔</span>
-              <span className={`px-2 py-0.5 rounded font-semibold ${c.status === "TRIP_STARTED" ? "bg-emerald-950 text-emerald-300 border border-emerald-700/60 animate-pulse" : c.status === "COMPLETED" ? "text-slate-400" : "text-slate-600"}`}>
-                Trip Started
+              <span className="text-slate-600 shrink-0">→</span>
+              <span className={`px-2 py-0.5 rounded font-medium shrink-0 ${c.status === "TRIP_STARTED" ? "bg-emerald-500/10 text-emerald-300 border border-emerald-500/20" : c.status === "COMPLETED" ? "text-slate-400" : "text-slate-600"}`}>
+                Trip started
               </span>
-              <span className="text-slate-600">➔</span>
-              <span className={`px-2 py-0.5 rounded font-semibold ${c.status === "COMPLETED" ? "bg-emerald-600 text-white font-bold" : "text-slate-600"}`}>
+              <span className="text-slate-600 shrink-0">→</span>
+              <span className={`px-2 py-0.5 rounded font-medium shrink-0 ${c.status === "COMPLETED" ? "bg-[#1E7E4B] text-white" : "text-slate-600"}`}>
                 Completed
               </span>
             </div>
           )}
 
+          {/* Assigned Driver Box */}
           {c.assignedDriverName && (
-            <div className="flex items-center gap-2 mt-2 p-2 rounded-xl bg-blue-950/30 border border-blue-900/40 text-blue-300">
-              <span className="font-bold">Assigned Driver:</span>
-              <span className="font-semibold text-white">{c.assignedDriverName}</span>
-              <span className="font-mono text-slate-300">({c.assignedDriverPhone || "No phone"})</span>
+            <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-[#0D1117] border border-slate-800 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-slate-400">Assigned Driver:</span>
+                <span className="font-semibold text-white">{c.assignedDriverName}</span>
+                <span className="font-mono text-slate-400">({c.assignedDriverPhone || "No phone"})</span>
+              </div>
               {c.assignedDriverPhone && (
                 <a
                   href={`tel:${c.assignedDriverPhone}`}
-                  className="rounded bg-blue-900/60 px-1.5 py-0.2 text-[10px] text-blue-200 hover:bg-blue-800"
+                  className="rounded-md bg-slate-800 hover:bg-slate-700 px-2.5 py-1 text-[11px] text-slate-200 font-medium transition-colors cursor-pointer"
                 >
-                  Call
+                  Call Driver
                 </a>
               )}
             </div>
           )}
-          {c.cancellationReason && <p className="text-red-400 mt-1 font-mono">Cancelled: {c.cancellationReason}</p>}
-          {c.advanceDueAt && !c.advancePaid && <p className="text-amber-300 mt-1">Advance due by {dt(c.advanceDueAt)}</p>}
+
+          {/* Operational Alerts */}
+          {c.cancellationReason && (
+            <div className="p-2.5 rounded-xl bg-red-950/30 border border-red-800/40 text-red-300 text-xs font-mono">
+              Cancelled: {c.cancellationReason}
+            </div>
+          )}
+          {c.advanceDueAt && !c.advancePaid && (
+            <div className="p-2.5 rounded-xl bg-amber-950/30 border border-amber-800/40 text-amber-300 text-xs">
+              Advance due by {dt(c.advanceDueAt)}
+            </div>
+          )}
           {claim && (
-            <div className="mt-2 p-2 rounded-xl bg-blue-950/60 border border-blue-700/60 text-blue-200">
-              <span className="font-bold">Guest says paid:</span> UTR <span className="font-mono font-bold text-white">{claim.utr}</span> • {inr(claim.amount)} • {dt(claim.submittedAt)}. Check bank account and click "Record payment" or "Reject claim".
+            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-200 text-xs space-y-1">
+              <span className="font-medium text-white">Guest Payment Claim:</span>
+              <p>UTR <span className="font-mono font-medium text-white">{claim.utr}</span> • {inr(claim.amount)} • {dt(claim.submittedAt)}</p>
+              <p className="text-[11px] text-amber-300/80">Verify bank deposit and click &quot;Record payment&quot; or &quot;Reject claim&quot;.</p>
             </div>
           )}
           {canPay && c.paymentClaim?.status === "REJECTED" && (
-            <p className="text-slate-400 mt-1">Previous claim rejected (UTR {c.paymentClaim.utr}){c.paymentClaim.reason ? `: ${c.paymentClaim.reason}` : ""}</p>
+            <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 text-xs">
+              Previous claim rejected (UTR {c.paymentClaim.utr}){c.paymentClaim.reason ? `: ${c.paymentClaim.reason}` : ""}
+            </div>
           )}
-          {c.paymentLinkUrl && <p className="text-slate-400 mt-1">Payment link: <a className="text-blue-400 underline" href={c.paymentLinkUrl} target="_blank" rel="noreferrer">{c.paymentLinkUrl}</a></p>}
+          {c.paymentLinkUrl && (
+            <div className="p-2.5 rounded-xl bg-[#0D1117] border border-slate-800 text-xs text-slate-300">
+              <span className="text-slate-400">Payment link: </span>
+              <a className="text-emerald-400 hover:underline break-all" href={c.paymentLinkUrl} target="_blank" rel="noreferrer">
+                {c.paymentLinkUrl}
+              </a>
+            </div>
+          )}
           {Array.isArray(c.unmatchedPayments) && c.unmatchedPayments.length > 0 && (
-            <div className="mt-2 rounded-xl border border-red-800/60 bg-red-950/40 p-2.5 space-y-1.5">
-              <p className="font-bold text-red-300">Unmatched / Out-of-Sequence Payments (Refunds Needed):</p>
+            <div className="rounded-xl border border-rose-800/40 bg-rose-950/20 p-3 space-y-2">
+              <p className="font-semibold text-rose-300">Unmatched / Out-of-Sequence Payments (Refunds Needed):</p>
               {c.unmatchedPayments.map((u: Any, idx: number) => (
-                <div key={idx} className="flex flex-wrap items-center justify-between gap-2 text-slate-300">
-                  <span>
+                <div key={idx} className="flex flex-wrap items-center justify-between gap-2 text-slate-300 pt-1 border-t border-rose-900/30">
+                  <span className="text-xs">
                     <span className="font-mono text-white">{u.paymentId}</span> • {inr(u.amount)} • {u.status === "UNVERIFIED_GUEST_CLAIM" ? "unverified guest UPI claim" : `state was ${u.status}`} • {dt(u.at)}
                     {u.refundedAt ? (
-                      <span className="ml-2 font-semibold text-emerald-400">✓ Refunded (UTR: {u.refundReference || "—"})</span>
+                      <span className="ml-2 font-medium text-emerald-400">Refunded (UTR: {u.refundReference || "—"})</span>
                     ) : (
-                      <span className="ml-2 font-semibold text-amber-400">⚠ Needs Refund</span>
+                      <span className="ml-2 font-medium text-amber-300">Needs refund</span>
                     )}
                   </span>
                   {!u.refundedAt && (
                     <button
                       type="button"
-                      className="rounded bg-red-600 px-2 py-0.5 text-[11px] font-bold text-white hover:bg-red-500"
+                      className="rounded-md bg-rose-700 hover:bg-rose-600 px-2 py-0.5 text-xs font-medium text-white transition-colors cursor-pointer"
                       onClick={() => refundUnmatched(u.paymentId, u.amount)}
                     >
                       Mark Refunded (UTR)
@@ -3014,54 +3333,68 @@ function CabRequestCard({ c, demo, onChanged }: { c: Any; demo: boolean; onChang
             </div>
           )}
         </div>
-        <div className="min-w-[250px] rounded-xl border border-slate-800 bg-slate-950 p-3 space-y-1">
-          <Money
-            label="Agreed fare"
-            value={
-              c.agreedFare && c.agreedFare > 0
-                ? inr(c.agreedFare)
-                : <span className="font-semibold text-amber-400">Awaiting quote</span>
-            }
-          />
-          <Money
-            label="Advance"
-            value={
-              c.advanceAmount && c.advanceAmount > 0 ? (
-                <>{inr(c.advanceAmount)} {c.advancePaid ? <Badge tone="green">PAID</Badge> : <Badge tone="amber">UNPAID</Badge>}</>
-              ) : (
-                <span className="text-slate-400">Pending quote</span>
-              )
-            }
-          />
-          <Money
-            label="Cash on drop"
-            value={
-              typeof c.remainingCashAmount === "number" && c.remainingCashAmount > 0
-                ? inr(c.remainingCashAmount)
-                : <span className="text-slate-400">—</span>
-            }
-          />
-          <SplitRows s={s} fare={s.agreedFare ?? c.agreedFare} />
-          {c.advancePaymentId && <Money label="Txn" value={`${c.advancePaymentId} (${c.paymentRecordedBy || "—"})`} />}
-          {c.hostPayoutId && <Money label="Host payout" value={String(c.hostPayoutId)} />}
-          {Array.isArray(c.voidedPayments) && c.voidedPayments.length > 0 && <Money label="Voided payments" value={c.voidedPayments.length} />}
+
+        {/* RIGHT COLUMN (5 cols): Financial Breakdown & Commercial Settlement */}
+        <div className="lg:col-span-5 space-y-3">
+          <div className="rounded-xl border border-slate-800/80 bg-[#0D1117] p-3.5 space-y-2">
+            <div className="text-[10px] uppercase font-semibold text-slate-500 tracking-wider pb-1 border-b border-slate-800/60">
+              Financial Breakdown
+            </div>
+            <Money
+              label="Agreed Fare"
+              value={
+                c.agreedFare && c.agreedFare > 0
+                  ? inr(c.agreedFare)
+                  : <span className="font-medium text-amber-400">Awaiting quote</span>
+              }
+            />
+            <Money
+              label="Advance Online"
+              value={
+                c.advanceAmount && c.advanceAmount > 0 ? (
+                  <>{inr(c.advanceAmount)} {c.advancePaid ? <Badge tone="green">PAID</Badge> : <Badge tone="amber">UNPAID</Badge>}</>
+                ) : (
+                  <span className="text-slate-400">Pending quote</span>
+                )
+              }
+            />
+            <Money
+              label="Cash on Drop"
+              value={
+                typeof c.remainingCashAmount === "number" && c.remainingCashAmount > 0
+                  ? inr(c.remainingCashAmount)
+                  : <span className="text-slate-400">—</span>
+              }
+            />
+            <div className="pt-1 border-t border-slate-800/60 space-y-1">
+              <SplitRows s={s} fare={s.agreedFare ?? c.agreedFare} />
+            </div>
+            {(c.advancePaymentId || c.hostPayoutId || (Array.isArray(c.voidedPayments) && c.voidedPayments.length > 0)) && (
+              <div className="pt-1.5 border-t border-slate-800/60 space-y-1 text-[11px]">
+                {c.advancePaymentId && <Money label="Txn ID" value={`${c.advancePaymentId} (${c.paymentRecordedBy || "—"})`} />}
+                {c.hostPayoutId && <Money label="Host payout ID" value={String(c.hostPayoutId)} />}
+                {Array.isArray(c.voidedPayments) && c.voidedPayments.length > 0 && <Money label="Voided payments" value={c.voidedPayments.length} />}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
+      {/* 3. DRIVER QUOTES RECEIVED */}
       {Array.isArray(c.quotes) && c.quotes.length > 0 && (
-        <div className="rounded-xl border border-blue-900/40 bg-blue-950/20 p-3 space-y-2">
+        <div className="rounded-xl border border-slate-800 bg-[#0D1117] p-3.5 space-y-2.5">
           <div className="flex items-center justify-between">
-            <span className="font-semibold text-blue-300">Driver Quotes Received ({c.quotes.length}) • Bidding Window</span>
+            <span className="font-medium text-slate-300">Driver Quotes Received ({c.quotes.length}) • Bidding Window</span>
             {["FINDING_DRIVER", "QUOTE_RECEIVED", "PENDING_REVIEW"].includes(c.status) && (
-              <Badge tone="blue">Quotation Active</Badge>
+              <Badge tone="amber">Quotation Active</Badge>
             )}
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             {c.quotes.map((q: Any, i: number) => (
-              <div key={i} className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/60 p-2 text-xs">
+              <div key={i} className="flex items-center justify-between rounded-lg border border-slate-800 bg-[#121820] p-2.5 text-xs">
                 <div>
                   <p className="font-semibold text-white">{q.driverName}</p>
-                  <p className="text-slate-400">{q.driverPhone || "—"}</p>
+                  <p className="text-slate-400 font-mono text-[11px]">{q.driverPhone || "—"}</p>
                 </div>
                 <div className="text-right flex items-center gap-2">
                   <span className="font-mono font-bold text-emerald-400">{inr(q.quotedFare)}</span>
@@ -3075,10 +3408,26 @@ function CabRequestCard({ c, demo, onChanged }: { c: Any; demo: boolean; onChang
         </div>
       )}
 
-      <div className="flex flex-wrap gap-2">
-        {canAssign && <button className={btn.primary} onClick={() => setPanel(panel === "assign" ? "" : "assign")}>{c.needsReassignment ? "Assign new driver" : c.assignedDriverName ? "Re-assign / re-price" : "Assign driver"}</button>}
-        {canPay && <button className={btn.ok} onClick={() => setPanel(panel === "payment" ? "" : "payment")}>Record payment</button>}
-        {claim && <button className={btn.danger} disabled={busy} onClick={rejectClaim}>{busy ? "Working..." : "Reject claim"}</button>}
+      {/* 4. ACTION CONTROLS */}
+      <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-slate-800/80">
+        {canAssign && (
+          <button
+            className={btn.primary}
+            onClick={() => setPanel(panel === "assign" ? "" : "assign")}
+          >
+            {c.needsReassignment ? "Assign new driver" : c.assignedDriverName ? "Re-assign / re-price" : "Assign driver"}
+          </button>
+        )}
+        {canPay && (
+          <button className={btn.ok} onClick={() => setPanel(panel === "payment" ? "" : "payment")}>
+            Record payment
+          </button>
+        )}
+        {claim && (
+          <button className={btn.danger} disabled={busy} onClick={rejectClaim}>
+            {busy ? "Working..." : "Reject claim"}
+          </button>
+        )}
         {canVoid && <button className={btn.danger} onClick={voidPayment}>Void payment</button>}
         {canStart && <button className={btn.primary} onClick={() => window.confirm(`Start trip #${c.reference}?`) && post("start")}>Start trip</button>}
         {canComplete && <button className={btn.ok} onClick={() => window.confirm(`Complete trip #${c.reference}? Driver collects ${inr(c.remainingCashAmount)} in cash.`) && post("complete")}>Complete trip</button>}
@@ -3086,7 +3435,7 @@ function CabRequestCard({ c, demo, onChanged }: { c: Any; demo: boolean; onChang
         {toReview && <button className={btn.ok} onClick={approveRide}>Approve ride happened</button>}
         {toReview && <button className={btn.danger} onClick={markNoShow}>Mark no-show / refund guest</button>}
         {canSettleDriver && <button className={btn.ok} onClick={settleDriver}>Driver settled</button>}
-        {canCancel && <button className={btn.danger} onClick={cancel}>Cancel</button>}
+        {canCancel && <button className={btn.ghost} onClick={cancel}>Cancel</button>}
       </div>
 
       {panel === "assign" && <AssignForm c={c} demo={demo} onDone={() => { setPanel(""); onChanged(); }} />}
@@ -3162,9 +3511,9 @@ function AssignForm({ c, demo, onDone }: { c: Any; demo: boolean; onDone: () => 
   const searchDrivers = () => setDriverQ(driverSearch.trim());
 
   return (
-    <form onSubmit={submit} className="rounded-xl border border-blue-900/40 bg-blue-950/20 p-3 space-y-2.5">
-      <div className="rounded-lg bg-blue-950/60 border border-blue-800/50 p-2 text-[11px] text-blue-300 flex items-center gap-1.5">
-        <span className="font-bold">ℹ️ Assignment Rule:</span> Assigning a driver immediately ends quotation collection, accepts this driver's bid, rejects all competing quotes, and locks the fare.
+    <form onSubmit={submit} className="rounded-xl border border-slate-800 bg-[#0D1117] p-3 space-y-2.5">
+      <div className="rounded-lg bg-slate-900 border border-slate-800 p-2 text-xs text-slate-300 flex items-center gap-1.5">
+        <span className="font-medium text-white">Assignment Rule:</span> Assigning a driver immediately ends quotation collection, accepts this driver's bid, rejects competing quotes, and locks the fare.
       </div>
       <div className="flex flex-wrap gap-2">
         <input
@@ -3201,16 +3550,16 @@ function AssignForm({ c, demo, onDone }: { c: Any; demo: boolean; onDone: () => 
             <button
               type="button"
               key={i}
-              className="rounded border border-emerald-700/60 bg-emerald-950/40 px-2.5 py-1 text-emerald-300 hover:bg-emerald-900/60 font-medium text-xs flex items-center gap-1 transition"
+              className="rounded-md border border-emerald-700/60 bg-emerald-950/30 px-2.5 py-1 text-emerald-300 hover:bg-emerald-900/50 font-medium text-xs flex items-center gap-1 transition"
               onClick={() => selectQuote(q)}
             >
-              ✓ {q.driverName} ({inr(q.quotedFare)})
+              {q.driverName} • {inr(q.quotedFare)}
             </button>
           ))}
         </div>
       )}
       {preview && previewFor === fare && (
-        <div className="grid grid-cols-2 gap-x-4 gap-y-1 rounded-lg border border-slate-800 bg-slate-950 p-2 md:grid-cols-3">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1 rounded-lg border border-slate-800/80 bg-[#0D1117] p-2.5 md:grid-cols-3">
           <Money label="Fare" value={inr(preview.agreedFare)} />
           <Money label="Advance" value={inr(preview.advanceAmount)} />
           <Money label="Cash to driver" value={inr(preview.remainingCashToDriver)} />
@@ -3330,12 +3679,12 @@ export function PayoutsTab({ demo }: TabProps) {
       title={
         <div className="flex flex-wrap items-center gap-3">
           <span>{target === "HOMESTAY" ? "Homestay Commission Payouts" : "Driver Wallet UPI Payouts"}</span>
-          <div className="flex items-center gap-1 p-0.5 bg-slate-900 rounded-lg border border-slate-800">
+          <div className="flex items-center gap-1 p-0.5 bg-[#0D1117] rounded-lg border border-slate-800/80">
             <button
               type="button"
               onClick={() => { setTarget("HOMESTAY"); setPage(0); }}
-              className={`px-2.5 py-0.5 text-[11px] font-semibold rounded transition-all cursor-pointer ${
-                target === "HOMESTAY" ? "bg-emerald-600 text-white shadow-xs" : "text-slate-400 hover:text-white"
+              className={`px-2.5 py-0.5 text-xs font-medium rounded-md transition-all cursor-pointer ${
+                target === "HOMESTAY" ? "bg-[#1E7E4B] text-white shadow-xs" : "text-slate-400 hover:text-white"
               }`}
             >
               Homestay Payouts
@@ -3343,8 +3692,8 @@ export function PayoutsTab({ demo }: TabProps) {
             <button
               type="button"
               onClick={() => { setTarget("DRIVER"); setPage(0); }}
-              className={`px-2.5 py-0.5 text-[11px] font-semibold rounded transition-all cursor-pointer ${
-                target === "DRIVER" ? "bg-emerald-600 text-white shadow-xs" : "text-slate-400 hover:text-white"
+              className={`px-2.5 py-0.5 text-xs font-medium rounded-md transition-all cursor-pointer ${
+                target === "DRIVER" ? "bg-[#1E7E4B] text-white shadow-xs" : "text-slate-400 hover:text-white"
               }`}
             >
               Driver Payouts
@@ -3369,7 +3718,7 @@ export function PayoutsTab({ demo }: TabProps) {
         (items.length ? (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="border-b border-slate-800 bg-slate-900/60 text-slate-400 font-semibold uppercase tracking-wider">
+              <thead className="border-b border-slate-800 text-slate-400 font-medium text-xs">
                 <tr>
                   <th className="p-3">{target === "HOMESTAY" ? "Homestay" : "Driver"}</th>
                   <th className="p-3">Amount</th>
@@ -3765,9 +4114,9 @@ export function SettingsTab({ demo }: TabProps) {
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveSection(tab.id as SettingsSection)}
-                className={`relative flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-semibold transition-all ${
+                className={`relative flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
                   active
-                    ? "bg-blue-600 text-white shadow-md shadow-blue-900/40"
+                    ? "bg-[#1E7E4B] text-white"
                     : "bg-slate-900/80 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
                 }`}
               >
@@ -3861,9 +4210,9 @@ export function SettingsTab({ demo }: TabProps) {
                   </label>
                 </div>
 
-                <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3.5 space-y-2">
-                  <span className="text-[11px] font-semibold text-slate-300 uppercase tracking-wider block">
-                    Homestay Host & Own-Fleet Policies
+                <div className="rounded-xl border border-slate-800 bg-[#0D1117] p-3.5 space-y-2">
+                  <span className="text-xs font-medium text-slate-300 block">
+                    Homestay Host &amp; Own-Fleet Policies
                   </span>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <label className="text-slate-400 text-xs">
@@ -3921,9 +4270,9 @@ export function SettingsTab({ demo }: TabProps) {
                         key={s}
                         type="button"
                         onClick={() => setFareSim(s)}
-                        className={`rounded-md px-2 py-1 text-[11px] font-mono font-semibold transition-colors ${
+                        className={`rounded-md px-2 py-1 text-[11px] font-mono font-medium transition ${
                           fareSim === s
-                            ? "bg-blue-600 text-white"
+                            ? "bg-[#1E7E4B] text-white"
                             : "bg-slate-800 text-slate-300 hover:bg-slate-700"
                         }`}
                       >
@@ -3949,45 +4298,45 @@ export function SettingsTab({ demo }: TabProps) {
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                  <div className="rounded-xl border border-slate-800 bg-slate-950 p-3">
-                    <span className="text-[10px] font-semibold text-slate-400 uppercase">Passenger Advance</span>
-                    <p className="mt-1 font-mono text-base font-black text-emerald-400">₹{simSplit.advance.toLocaleString("en-IN")}</p>
-                    <span className="text-[10px] text-slate-500">Paid online via UPI</span>
+                  <div className="rounded-xl border border-slate-800/80 bg-[#0D1117] p-3">
+                    <span className="text-xs font-medium text-slate-400">Passenger advance</span>
+                    <p className="mt-1 font-mono text-base font-semibold tabular-nums text-emerald-400">₹{simSplit.advance.toLocaleString("en-IN")}</p>
+                    <span className="text-[11px] text-slate-500">Paid online via UPI</span>
                   </div>
 
-                  <div className="rounded-xl border border-slate-800 bg-slate-950 p-3">
-                    <span className="text-[10px] font-semibold text-slate-400 uppercase">Platform Take</span>
-                    <p className="mt-1 font-mono text-base font-black text-blue-400">₹{simSplit.pfA.toLocaleString("en-IN")}</p>
-                    <span className="text-[10px] text-slate-500">StayCabs cut</span>
+                  <div className="rounded-xl border border-slate-800/80 bg-[#0D1117] p-3">
+                    <span className="text-xs font-medium text-slate-400">Platform take</span>
+                    <p className="mt-1 font-mono text-base font-semibold tabular-nums text-slate-200">₹{simSplit.pfA.toLocaleString("en-IN")}</p>
+                    <span className="text-[11px] text-slate-500">StayCabs cut</span>
                   </div>
 
-                  <div className="rounded-xl border border-slate-800 bg-slate-950 p-3">
-                    <span className="text-[10px] font-semibold text-slate-400 uppercase">Homestay Share</span>
-                    <p className="mt-1 font-mono text-base font-black text-amber-400">₹{simSplit.hcA.toLocaleString("en-IN")}</p>
-                    <span className="text-[10px] text-slate-500">Host referral cut</span>
+                  <div className="rounded-xl border border-slate-800/80 bg-[#0D1117] p-3">
+                    <span className="text-xs font-medium text-slate-400">Homestay share</span>
+                    <p className="mt-1 font-mono text-base font-semibold tabular-nums text-amber-300">₹{simSplit.hcA.toLocaleString("en-IN")}</p>
+                    <span className="text-[11px] text-slate-500">Host referral cut</span>
                   </div>
 
-                  <div className="rounded-xl border border-slate-800 bg-slate-950 p-3">
-                    <span className="text-[10px] font-semibold text-slate-400 uppercase">Cash to Driver</span>
-                    <p className="mt-1 font-mono text-base font-black text-white">₹{simSplit.cash.toLocaleString("en-IN")}</p>
-                    <span className="text-[10px] text-slate-500">Collected at trip end</span>
+                  <div className="rounded-xl border border-slate-800/80 bg-[#0D1117] p-3">
+                    <span className="text-xs font-medium text-slate-400">Cash to driver</span>
+                    <p className="mt-1 font-mono text-base font-semibold tabular-nums text-white">₹{simSplit.cash.toLocaleString("en-IN")}</p>
+                    <span className="text-[11px] text-slate-500">Collected at trip end</span>
                   </div>
 
-                  <div className="rounded-xl border border-slate-800 bg-slate-950 p-3">
-                    <span className="text-[10px] font-semibold text-slate-400 uppercase">Online Excess</span>
-                    <p className="mt-1 font-mono text-base font-black text-slate-300">₹{simSplit.driverShare.toLocaleString("en-IN")}</p>
-                    <span className="text-[10px] text-slate-500">Wallet balance credit</span>
+                  <div className="rounded-xl border border-slate-800/80 bg-[#0D1117] p-3">
+                    <span className="text-xs font-medium text-slate-400">Online excess</span>
+                    <p className="mt-1 font-mono text-base font-semibold tabular-nums text-slate-300">₹{simSplit.driverShare.toLocaleString("en-IN")}</p>
+                    <span className="text-[11px] text-slate-500">Wallet balance credit</span>
                   </div>
 
-                  <div className="rounded-xl border border-emerald-900/60 bg-emerald-950/30 p-3">
-                    <span className="text-[10px] font-semibold text-emerald-400 uppercase">Driver Net</span>
-                    <p className="mt-1 font-mono text-base font-black text-emerald-300">₹{simSplit.driver.toLocaleString("en-IN")}</p>
-                    <span className="text-[10px] text-emerald-500/80">Cash + wallet credit</span>
+                  <div className="rounded-xl border border-emerald-900/60 bg-emerald-950/20 p-3">
+                    <span className="text-xs font-medium text-emerald-400">Driver net</span>
+                    <p className="mt-1 font-mono text-base font-semibold tabular-nums text-emerald-300">₹{simSplit.driver.toLocaleString("en-IN")}</p>
+                    <span className="text-[11px] text-emerald-500/80">Cash + wallet credit</span>
                   </div>
                 </div>
 
-                <p className="text-[11px] text-slate-400 leading-relaxed bg-slate-950/80 p-3 rounded-xl border border-slate-800/80">
-                  💡 <strong className="text-slate-200">Rule Guarantee:</strong> Advance collections automatically cover the homestay and platform take-rate first. Any remaining advance flows directly to the driver&apos;s settlement balance.
+                <p className="text-xs text-slate-400 leading-relaxed bg-[#0D1117] p-3 rounded-xl border border-slate-800/80">
+                  <strong className="text-slate-200">Rule guarantee:</strong> Advance collections automatically cover the homestay and platform take-rate first. Any remaining advance flows directly to the driver&apos;s settlement balance.
                 </p>
               </div>
             </div>
@@ -4067,7 +4416,7 @@ export function SettingsTab({ demo }: TabProps) {
 
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
-                  <thead className="border-b border-slate-800 text-[11px] uppercase tracking-wider text-slate-400">
+                  <thead className="border-b border-slate-800 text-slate-400 font-medium text-xs">
                     <tr>
                       <th className="p-2.5">Class Key</th>
                       <th className="p-2.5">Passenger Label</th>
@@ -4108,7 +4457,7 @@ export function SettingsTab({ demo }: TabProps) {
                         <td className="p-2.5 text-center">
                           <input
                             type="checkbox"
-                            className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-0"
+                            className="h-4 w-4 rounded border-slate-700 bg-[#0D1117] text-[#1E7E4B] accent-[#1E7E4B] focus:ring-0"
                             checked={!!cfg.vehicles?.[k]?.enabled}
                             onChange={(e) => setVehicleProp(k, "enabled", e.target.checked)}
                           />
@@ -4132,7 +4481,7 @@ export function SettingsTab({ demo }: TabProps) {
                 <button
                   type="button"
                   onClick={addRoutePreset}
-                  className="self-start sm:self-auto rounded-lg bg-emerald-600 hover:bg-emerald-500 px-3.5 py-1.5 text-xs font-semibold text-white shadow-md shadow-emerald-900/30 transition-colors"
+                  className="self-start sm:self-auto rounded-lg bg-[#1E7E4B] hover:bg-[#259A5C] px-3.5 py-1.5 text-xs font-medium text-white transition-colors cursor-pointer"
                 >
                   + Add Corridor Preset
                 </button>
@@ -4142,12 +4491,12 @@ export function SettingsTab({ demo }: TabProps) {
                 {(cfg.routePresets || []).map((route: Any, idx: number) => (
                   <div
                     key={route.id || idx}
-                    className="rounded-xl border border-slate-800 bg-slate-950/80 p-4 space-y-3 transition-colors hover:border-slate-700"
+                    className="rounded-xl border border-slate-800/80 bg-[#0D1117] p-4 space-y-3 transition-colors hover:border-slate-700"
                   >
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1">
                         <div>
-                          <span className="text-[10px] font-semibold text-slate-400 uppercase">Corridor Name</span>
+                          <span className="text-xs font-medium text-slate-400">Corridor name</span>
                           <input
                             className={`${input} w-full mt-1 font-semibold text-white`}
                             value={route.name || ""}
@@ -4157,7 +4506,7 @@ export function SettingsTab({ demo }: TabProps) {
                         </div>
 
                         <div>
-                          <span className="text-[10px] font-semibold text-slate-400 uppercase">Category</span>
+                          <span className="text-xs font-medium text-slate-400">Category</span>
                           <select
                             className={`${input} w-full mt-1`}
                             value={route.category || "SIGHTSEEING"}
@@ -4171,7 +4520,7 @@ export function SettingsTab({ demo }: TabProps) {
                         </div>
 
                         <div>
-                          <span className="text-[10px] font-semibold text-slate-400 uppercase">Duration & Distance</span>
+                          <span className="text-xs font-medium text-slate-400">Duration and distance</span>
                           <input
                             className={`${input} w-full mt-1`}
                             value={route.duration || ""}
@@ -4184,14 +4533,14 @@ export function SettingsTab({ demo }: TabProps) {
                       <button
                         type="button"
                         onClick={() => removeRoutePreset(idx)}
-                        className="self-end sm:self-center rounded-lg border border-red-500/30 px-2.5 py-1 text-xs font-semibold text-red-400 hover:bg-red-950/60 transition-colors"
+                        className="self-end sm:self-center rounded-md border border-rose-800/50 bg-rose-950/20 px-2.5 py-1 text-xs font-medium text-rose-300 hover:bg-rose-950/40 transition-colors cursor-pointer"
                       >
                         Delete
                       </button>
                     </div>
 
                     <div>
-                      <span className="text-[10px] font-semibold text-slate-400 uppercase">Corridor Description / Route Notes</span>
+                      <span className="text-xs font-medium text-slate-400">Corridor description / route notes</span>
                       <input
                         className={`${input} w-full mt-1 text-xs`}
                         value={route.description || ""}
@@ -4201,14 +4550,14 @@ export function SettingsTab({ demo }: TabProps) {
                     </div>
 
                     <div className="pt-2 border-t border-slate-800/80">
-                      <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-2">
+                      <span className="text-xs font-medium text-slate-400 block mb-2">
                         Benchmark Fares per Vehicle Tier (₹)
                       </span>
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                         {VEHICLE_KEYS.map((vKey) => (
                           <div
                             key={vKey}
-                            className="flex items-center gap-2 bg-slate-900/90 px-3 py-2 rounded-lg border border-slate-800"
+                            className="flex items-center gap-2 bg-slate-900/60 px-3 py-2 rounded-lg border border-slate-800/80"
                           >
                             <span className="text-[11px] font-mono text-slate-400 min-w-[55px]">{vKey}:</span>
                             <span className="text-xs text-slate-500">₹</span>
@@ -4216,7 +4565,7 @@ export function SettingsTab({ demo }: TabProps) {
                               type="number"
                               min="0"
                               step="50"
-                              className="w-full bg-transparent text-xs font-bold text-emerald-400 focus:outline-none"
+                              className="w-full bg-transparent text-xs font-semibold tabular-nums text-emerald-400 focus:outline-none"
                               value={route.fares?.[vKey] ?? ""}
                               onChange={(e) => updateRouteFare(idx, vKey, e.target.value)}
                               placeholder="0"
@@ -4247,9 +4596,9 @@ export function SettingsTab({ demo }: TabProps) {
                   </p>
                 </div>
 
-                <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950 p-2.5">
+                <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto rounded-xl border border-slate-800/80 bg-[#0D1117] p-2.5">
                   {presetList(presets).map((p, i) => (
-                    <span key={i} className="rounded-lg bg-slate-800 px-2 py-0.5 text-[11px] text-slate-200 border border-slate-700">
+                    <span key={i} className="rounded-md bg-slate-800/50 px-2 py-0.5 text-xs text-slate-300 border border-slate-700/60">
                       • {p}
                     </span>
                   ))}
@@ -4280,9 +4629,9 @@ Lamahatta Eco Park..."
                   </p>
                 </div>
 
-                <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950 p-2.5">
+                <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto rounded-xl border border-slate-800/80 bg-[#0D1117] p-2.5">
                   {cleanDomainList(icalHosts).map((h, i) => (
-                    <span key={i} className="rounded-lg bg-emerald-950 px-2 py-0.5 text-[11px] text-emerald-300 border border-emerald-800/40">
+                    <span key={i} className="rounded-md bg-emerald-950/30 px-2 py-0.5 text-xs text-emerald-300 border border-emerald-800/40">
                       • {h}
                     </span>
                   ))}
@@ -4334,7 +4683,7 @@ vrbo.com"
 
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
-                  <thead className="border-b border-slate-800 text-[11px] uppercase tracking-wider text-slate-400">
+                  <thead className="border-b border-slate-800 text-slate-400 font-medium text-xs">
                     <tr>
                       <th className="p-2.5">Lifecycle Event</th>
                       <th className="p-2.5">Notification Purpose</th>
@@ -4438,11 +4787,11 @@ vrbo.com"
                   return (
                     <div
                       key={k}
-                      className="rounded-xl border border-slate-800 bg-slate-950 p-4 space-y-3"
+                      className="rounded-xl border border-slate-800/80 bg-[#0D1117] p-4 space-y-3"
                     >
                       <div className="flex items-center justify-between">
                         <div>
-                          <h4 className="text-xs font-bold text-slate-200">{FEATURE_LABELS[k] || k}</h4>
+                          <h4 className="text-xs font-semibold text-slate-200">{FEATURE_LABELS[k] || k}</h4>
                           <span className="font-mono text-[10px] text-slate-500">feature_key: {k}</span>
                         </div>
                         <Badge tone={feat.enabled ? "green" : "red"}>
@@ -4451,10 +4800,10 @@ vrbo.com"
                       </div>
 
                       <div className="flex items-center justify-between pt-2 border-t border-slate-800/80 text-xs">
-                        <span className="text-slate-400">Platform-wide Enablement</span>
+                        <span className="text-slate-400">Platform-wide enablement</span>
                         <input
                           type="checkbox"
-                          className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-0"
+                          className="h-4 w-4 rounded border-slate-700 bg-[#0D1117] text-[#1E7E4B] accent-[#1E7E4B] focus:ring-0"
                           checked={feat.enabled !== false}
                           onChange={(e) =>
                             setFeatures((prev: Any) => ({
@@ -4466,10 +4815,10 @@ vrbo.com"
                       </div>
 
                       <div className="flex items-center justify-between text-xs">
-                        <span className="text-slate-400">Default On for New Homestays</span>
+                        <span className="text-slate-400">Default on for new homestays</span>
                         <input
                           type="checkbox"
-                          className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-0"
+                          className="h-4 w-4 rounded border-slate-700 bg-[#0D1117] text-[#1E7E4B] accent-[#1E7E4B] focus:ring-0"
                           checked={feat.defaultOn !== false}
                           onChange={(e) =>
                             setFeatures((prev: Any) => ({
@@ -4491,12 +4840,12 @@ vrbo.com"
         {/* Sticky Bottom Save Action Bar                                      */}
         {/* ------------------------------------------------------------------ */}
         {dirty && (
-          <div className="sticky bottom-4 z-40 rounded-2xl border border-blue-500/40 bg-slate-950/95 p-4 shadow-2xl backdrop-blur-md">
+          <div className="sticky bottom-4 z-40 rounded-xl border border-slate-700/80 bg-[#121820]/95 p-4 shadow-2xl backdrop-blur-md">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center justify-between">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="h-2.5 w-2.5 rounded-full bg-amber-400 animate-pulse" />
-                  <span className="text-xs font-bold text-white">Unsaved Configuration Changes</span>
+                  <span className="h-2 w-2 rounded-full bg-amber-400" />
+                  <span className="text-xs font-semibold text-white">Unsaved configuration changes</span>
                 </div>
                 <p className="text-[11px] text-slate-400">
                   Settings are staged locally. A change reason is required to commit to audit logs.
@@ -4664,58 +5013,58 @@ export function AuditTab({ demo }: TabProps) {
       <form onSubmit={(e) => { e.preventDefault(); setPage(0); setQ(Object.fromEntries(Object.entries(f).map(([k, v]) => [k, v.trim()])) as typeof f); }} className="rounded-2xl border border-slate-800 bg-slate-900/60 p-3.5 space-y-2.5">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
           <div>
-            <label className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">Action</label>
+            <label className="text-xs font-medium text-slate-400 block mb-1">Action</label>
             <input className={`${input} w-full`} placeholder="e.g. payment.record" value={f.action} onChange={set("action")} />
           </div>
           <div>
-            <label className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">Actor Filter</label>
+            <label className="text-xs font-medium text-slate-400 block mb-1">Actor filter</label>
             <input className={`${input} w-full`} placeholder="Actor name or email" value={f.actor} onChange={set("actor")} />
           </div>
           <div>
-            <label className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">Actor Role</label>
+            <label className="text-xs font-medium text-slate-400 block mb-1">Actor role</label>
             <select className={`${input} w-full`} value={f.actorRole} onChange={set("actorRole")} aria-label="Actor role">
               <option value="">Any Role</option>
               {["ADMIN", "OWNER", "DRIVER", "CUSTOMER", "SYSTEM"].map((r) => <option key={r} value={r}>{r}</option>)}
             </select>
           </div>
           <div>
-            <label className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">Date Range (IST)</label>
-            <div className="flex items-center gap-1">
-              <input type="date" className={`${input} w-1/2`} value={f.from} onChange={set("from")} title="From date" />
+            <label className="text-xs font-medium text-slate-400 block mb-1">Date range (DD/MM/YYYY)</label>
+            <div className="flex items-center gap-1.5">
+              <DatePickerDDMMYYYY value={f.from} onChange={(d) => setF((prev) => ({ ...prev, from: d }))} placeholder="From" />
               <span className="text-slate-500">→</span>
-              <input type="date" className={`${input} w-1/2`} value={f.to} onChange={set("to")} title="To date" />
+              <DatePickerDDMMYYYY value={f.to} onChange={(d) => setF((prev) => ({ ...prev, to: d }))} placeholder="To" />
             </div>
           </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-2 pt-1 border-t border-slate-800/60">
           <div>
-            <label className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">Target ID</label>
+            <label className="text-xs font-medium text-slate-400 block mb-1">Target ID</label>
             <input className={`${input} w-full`} placeholder="Target ID" value={f.targetId} onChange={set("targetId")} />
           </div>
           <div>
-            <label className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">Homestay Tenant</label>
+            <label className="text-xs font-medium text-slate-400 block mb-1">Homestay tenant</label>
             <input className={`${input} w-full`} placeholder="Owner email / key" value={f.tenantId} onChange={set("tenantId")} />
           </div>
           <div>
-            <label className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">Driver ID</label>
+            <label className="text-xs font-medium text-slate-400 block mb-1">Driver ID</label>
             <input className={`${input} w-full`} placeholder="Driver ID" value={f.driverId} onChange={set("driverId")} />
           </div>
           <div className="sm:col-span-2 flex items-end justify-end gap-2">
-            <button type="button" onClick={handleReset} className={btn.ghost}>Reset All</button>
-            <button type="submit" className={btn.primary}>Apply Filters</button>
+            <button type="button" onClick={handleReset} className={btn.ghost}>Reset all</button>
+            <button type="submit" className={btn.primary}>Apply filters</button>
           </div>
         </div>
       </form>
 
       {viewJson && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl text-xs space-y-3">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-800/80 bg-[#121820] p-6 shadow-xl text-xs space-y-4">
             <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-              <h4 className="font-bold text-white text-sm">Audit Payload Details</h4>
+              <h4 className="font-semibold text-white text-sm">Audit Payload Details</h4>
               <button type="button" onClick={() => setViewJson(null)} className="text-slate-400 hover:text-white font-bold">✕</button>
             </div>
-            <pre className="max-h-[60vh] overflow-y-auto rounded-xl bg-slate-950 p-3 font-mono text-[11px] text-emerald-400 whitespace-pre-wrap break-all border border-slate-800">
+            <pre className="max-h-[60vh] overflow-y-auto rounded-xl bg-[#0D1117] p-3 font-mono text-[11px] text-emerald-400 whitespace-pre-wrap break-all border border-slate-800">
               {JSON.stringify(viewJson, null, 2)}
             </pre>
             <div className="text-right">
@@ -4729,7 +5078,7 @@ export function AuditTab({ demo }: TabProps) {
         (items.length ? (
           <div className="overflow-x-auto rounded-xl border border-slate-800">
             <table className="w-full text-left text-xs">
-              <thead className="border-b border-slate-800 bg-slate-900/60 text-slate-400 font-semibold uppercase tracking-wider">
+              <thead className="border-b border-slate-800 text-slate-400 font-medium text-xs">
                 <tr>
                   <th className="p-3 w-40">When (IST)</th>
                   <th className="p-3 w-48">Actor</th>
@@ -4813,7 +5162,7 @@ export function GuestsTab({ demo, initialSearch, initialTenant }: TabProps & { i
         (items.length ? (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="border-b border-slate-800 bg-slate-900/60 text-slate-400 font-semibold uppercase tracking-wider">
+              <thead className="border-b border-slate-800 text-slate-400 font-medium text-xs">
                 <tr>
                   <th className="p-3 min-w-[140px]">Guest</th>
                   <th className="p-3 min-w-[130px]">Phone</th>
@@ -5003,16 +5352,16 @@ export function NotificationBell({ demo, onOpen }: TabProps & { onOpen: (n: Any)
 
   return (
     <div className="relative">
-      <button onClick={toggle} className="relative flex items-center rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-slate-200 hover:bg-slate-700" aria-label={`Notifications, ${unread} unread`}>
+      <button onClick={toggle} className="relative flex items-center rounded-lg border border-slate-700/80 bg-[#121820] px-2.5 py-1.5 text-slate-200 hover:bg-slate-800 transition-colors cursor-pointer" aria-label={`Notifications, ${unread} unread`}>
         <span className="material-symbols-outlined text-lg">notifications</span>
         {unread > 0 && (
-          <span className="absolute -right-1.5 -top-1.5 rounded-full bg-red-600 px-1.5 text-[10px] font-bold text-white">{unread > 99 ? "99+" : unread}</span>
+          <span className="absolute -right-1.5 -top-1.5 rounded-md bg-rose-600 px-1.5 text-[10px] font-semibold text-white tabular-nums">{unread > 99 ? "99+" : unread}</span>
         )}
       </button>
       {open && (
-        <div className="absolute right-0 z-30 mt-2 w-80 rounded-2xl border border-slate-800 bg-slate-950 p-3 text-xs shadow-2xl">
+        <div className="absolute right-0 z-30 mt-2 w-80 rounded-xl border border-slate-800/80 bg-[#121820] p-3 text-xs shadow-2xl">
           <div className="mb-2 flex items-center justify-between">
-            <span className="font-bold text-white">Notifications</span>
+            <span className="font-semibold text-white">Notifications</span>
             <button className={btn.ghost} onClick={markAll} disabled={!unread}>Mark all read</button>
           </div>
           {items.length ? (

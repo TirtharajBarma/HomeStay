@@ -1,8 +1,8 @@
 import { siteConfig } from "./site-config";
 
 export const hosts = {
-  names: "Verified Himalayan Hosts",
-  since: `${siteConfig.appName} Network`,
+  names: `${siteConfig.appName} Valley Network`,
+  since: "Darjeeling & Sikkim Himalayas",
   email: siteConfig.supportEmail || "",
   bookingEmail: siteConfig.bookingEmail || siteConfig.supportEmail || "",
   phone: siteConfig.supportPhone || `${siteConfig.appName} Support Desk`,
@@ -99,58 +99,111 @@ export const houseRules = [
 
 export const experiences = [
   {
-    icon: "egg_alt",
+    icon: "restaurant",
     title: "Home-Cooked Mountain Meals",
     body: "Wholesome, hot home-cooked meals prepared by your host family using fresh local vegetables, authentic spices, and traditional recipes.",
-    footnote: { icon: "schedule", label: "Breakfast & Dinner Available" },
+    footnote: { icon: "schedule", label: "Breakfast & dinner available" },
   },
   {
     icon: "hiking",
     title: "Tiger Hill & Sunrise Sightseeing",
     body: "Door-to-door cab pickups arranged early morning for Kanchenjunga sunrise over Tiger Hill, Batasia Loop, and Ghoom Monastery.",
-    footnote: { icon: "map", label: "Experienced Hill Drivers" },
+    footnote: { icon: "map", label: "Experienced hill drivers" },
   },
   {
-    icon: "spa",
+    icon: "directions_car",
     title: "Door-to-Door Mountain Transfers",
     body: "Direct transfers between Bagdogra Airport (IXB), NJP Railway Station, Darjeeling, Kalimpong, Gangtok, and Pelling with zero hassle.",
-    footnote: { icon: "local_taxi", label: "Fixed Transparent Fares" },
+    footnote: { icon: "local_taxi", label: "Fixed transparent fares" },
   },
 ];
 
-export const testimonials = [
+export interface MountainStandard {
+  id: string;
+  num: string;
+  category: string;
+  tag: string;
+  title: string;
+  description: string;
+  footnote: string;
+}
+
+export const mountainStandards: MountainStandard[] = [
   {
-    initials: "AS",
-    name: "Amit & Priya Sen",
-    stay: "Bagdogra Airport ➔ Darjeeling Homestay",
-    quote:
-      "Booked our airport transfer and homestay through StayCabs. Our driver was waiting right at the arrival gate and the homestay host welcomed us with hot tea. Seamless experience from start to finish.",
+    id: "fixed-fares",
+    num: "01",
+    category: "Pricing Integrity",
+    tag: "Bagdogra & NJP",
+    title: "Upfront transparent pricing",
+    description:
+      "Every hill fare is fixed and agreed clearly before departure. No airport pickup haggling, no awkward cash negotiations, and zero surprise surcharges when mountain fog rolls in.",
+    footnote: "Clear digital confirmation",
   },
   {
-    initials: "RM",
-    name: "Rahul Mukherjee",
-    stay: "NJP Station ➔ Gangtok Transit",
-    quote:
-      "Finding a reliable hill cab without excessive bargaining used to be stressful. StayCabs gave an honest fare upfront and the driver navigated the mountain roads with absolute skill.",
+    id: "vetted-drivers",
+    num: "02",
+    category: "Road Safety",
+    tag: "Terrain Certified",
+    title: "Licensed mountain drivers",
+    description:
+      "Every driver on our network is a local hill professional with years of proven experience navigating steep Himalayan gradients, hairpin curves, and narrow mountain bypasses.",
+    footnote: "Commercial hill permits verified",
   },
   {
-    initials: "SS",
-    name: "Sunita & Vikram Sharma",
-    stay: "Darjeeling Sightseeing & Homestay Stay",
-    quote:
-      "A peaceful stay overlooking the tea gardens and a spotless vehicle for our Tiger Hill and Mirik day trips. Will definitely recommend StayCabs to anyone visiting North Bengal.",
+    id: "direct-hosts",
+    num: "03",
+    category: "Community First",
+    tag: "100% to Host Families",
+    title: "Zero middleman deductions",
+    description:
+      "Your entire accommodation tariff goes directly to the local family hosting you. We bypass corporate middlemen to keep mountain tourism earnings within valley communities.",
+    footnote: "Direct valley economy",
+  },
+  {
+    id: "comfort-standard",
+    num: "04",
+    category: "Homestay Quality",
+    tag: "Verified Amenities",
+    title: "Running hot water & warm bedding",
+    description:
+      "Himalayan nights get chilly. Every homestay room listed across our valley network is verified to provide working water geysers, clean cotton linens, and heavy wool blankets.",
+    footnote: "Inspected room comfort",
+  },
+  {
+    id: "weather-assurance",
+    num: "05",
+    category: "Booking Flexibility",
+    tag: "Weather Adaptive",
+    title: "Zero-penalty weather rescheduling",
+    description:
+      "Mountain weather can shift unexpectedly. When regional administrations issue road closures or heavy landslide warnings, we reschedule your rides and stays without cancellation fees.",
+    footnote: "Traveler safety first",
+  },
+  {
+    id: "valley-desk",
+    num: "06",
+    category: "Trip Assistance",
+    tag: "Daily 6 AM – 10 PM",
+    title: "Active on-road coordination",
+    description:
+      "Reach our dedicated valley desk on WhatsApp throughout your journey for live road condition checks, departure timing guidance, and direct stay coordination.",
+    footnote: "Direct WhatsApp desk",
   },
 ];
+
+// Backwards-compatible alias for any residual consumers
+export type Testimonial = MountainStandard;
+export const testimonials = mountainStandards;
 
 export const valueBadges = [
-  { icon: "bakery_dining", label: "Hot Hill Breakfast Included" },
-  { icon: "verified", label: "Direct Booking Best Rate" },
-  { icon: "local_fire_department", label: "Firepit & Bonfire Nights" },
+  { icon: "bakery_dining", label: "Hot hill breakfast included" },
+  { icon: "verified", label: "Direct booking best rate" },
+  { icon: "local_fire_department", label: "Firepit & bonfire evenings" },
 ];
 
 export const estateStory = [
-  `${siteConfig.appName} was built directly in the Himalayan foothills of Darjeeling and Sikkim to connect travelers with authentic homestay hospitality and transparent, reliable door-to-door mountain transportation.`,
-  "Every homestay on our network is owned and operated by local families. From warm cups of fresh-plucked garden tea to verified local drivers meeting you right at Bagdogra or NJP station, we connect you directly with the people who call these hills home.",
+  `${siteConfig.appName} was founded directly in the Himalayan foothills of Darjeeling and Sikkim to solve two persistent travel challenges: unpredictable taxi haggling at Bagdogra and NJP, and authentic family homestays being overshadowed by commercial booking algorithms.`,
+  "Instead of extracting high platform cuts, we connect travelers directly with licensed local mountain drivers and multigenerational hill families. Every trip has an upfront agreed fare, and every booking directly supports the people who call these hills home.",
 ];
 
 export const hostQuote =
