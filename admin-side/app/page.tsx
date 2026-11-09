@@ -192,37 +192,37 @@ export default function AdminDashboardPage() {
   return (
     <div className="min-h-screen bg-[#0B0F14] text-[#E6EDF3]">
       {/* 1. TOP HEADER */}
-      <header className="sticky top-0 z-20 border-b border-slate-800/80 bg-[#0B0F14]/90 px-6 py-3.5 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-[#2EA043]/30 bg-[#2EA043]/10 text-[#3FB950]">
-              <span className="material-symbols-outlined text-xl">terrain</span>
+      <header className="sticky top-0 z-20 border-b border-slate-800/80 bg-[#0B0F14]/95 px-3 py-2.5 sm:px-6 sm:py-3.5 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-lg border border-[#2EA043]/30 bg-[#2EA043]/10 text-[#3FB950]">
+              <span className="material-symbols-outlined text-lg sm:text-xl">terrain</span>
             </div>
-            <div>
-              <h1 className="text-sm font-semibold text-white leading-tight">
+            <div className="min-w-0">
+              <h1 className="text-xs sm:text-sm font-semibold text-white leading-tight truncate">
                 StayRide Operations
               </h1>
-              <p className="text-xs text-slate-400">
-                {admin?.email || "—"}{" "}
+              <p className="text-[11px] sm:text-xs text-slate-400 truncate flex items-center gap-1">
+                <span className="truncate max-w-[130px] sm:max-w-none">{admin?.email || "—"}</span>
                 {demo && activeTab !== "legacy" && (
-                  <span className="ml-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-300">
-                    Demo data
+                  <span className="shrink-0 rounded-md border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.2 text-[10px] font-medium text-amber-300">
+                    Demo
                   </span>
                 )}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
             {activeTab !== "legacy" && (
-              <label className="flex items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-2.5 py-1.5 text-xs text-amber-300 cursor-pointer hover:bg-amber-500/10 transition">
+              <label className="flex items-center gap-1.5 sm:gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-2 py-1 sm:px-2.5 sm:py-1.5 text-[11px] sm:text-xs text-amber-300 cursor-pointer hover:bg-amber-500/10 transition select-none">
                 <input
                   type="checkbox"
                   className="rounded border-amber-500/40 accent-[#2EA043] cursor-pointer"
                   checked={demo}
                   onChange={(e) => handleDemoToggle(e.target.checked)}
                 />
-                <span>Demo data</span>
+                <span className="hidden xs:inline sm:inline">Demo data</span>
               </label>
             )}
             {activeTab !== "legacy" && (
@@ -246,24 +246,25 @@ export default function AdminDashboardPage() {
             {activeTab === "legacy" && (
               <button
                 onClick={fetchOverview}
-                className="flex items-center gap-1.5 rounded-lg border border-slate-700/80 bg-slate-800/60 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-800 transition"
+                className="flex items-center gap-1.5 rounded-lg border border-slate-700/80 bg-slate-800/60 px-2.5 py-1.5 sm:px-3 text-xs font-medium text-slate-200 hover:bg-slate-800 transition"
               >
                 <span className="material-symbols-outlined text-sm">refresh</span>
-                <span>Refresh legacy</span>
+                <span className="hidden sm:inline">Refresh</span>
               </button>
             )}
             <button
               onClick={logout}
-              className="flex items-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-300 hover:bg-red-500/20 transition"
+              className="flex items-center gap-1 sm:gap-1.5 rounded-lg border border-red-500/20 bg-red-500/10 px-2.5 py-1.5 sm:px-3 text-xs font-medium text-red-300 hover:bg-red-500/20 transition cursor-pointer"
+              title="Sign out"
             >
               <span className="material-symbols-outlined text-sm">logout</span>
-              <span>Sign out</span>
+              <span className="hidden sm:inline">Sign out</span>
             </button>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl p-6 space-y-6">
+      <main className="mx-auto max-w-7xl px-3 py-3 sm:px-6 sm:py-6 space-y-4 sm:space-y-6">
         {activeTab === "legacy" && overviewError && (
           <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-xs text-red-300">
             {overviewError}
@@ -271,12 +272,12 @@ export default function AdminDashboardPage() {
         )}
 
         {/* 3. DESK TABS SWITCHER */}
-        <div className="flex items-center border-b border-slate-800 overflow-x-auto no-scrollbar">
+        <div className="flex items-center border-b border-slate-800 overflow-x-auto no-scrollbar touch-scroll -mx-3 px-3 sm:mx-0 sm:px-0">
           {TABS.map(([key, icon, label]) => (
             <button
               key={key}
               onClick={() => handleTabChange(key)}
-              className={`flex items-center gap-2 border-b-2 px-3.5 py-2.5 text-xs font-medium transition whitespace-nowrap ${
+              className={`flex shrink-0 items-center gap-1.5 sm:gap-2 border-b-2 px-3 py-2 sm:px-3.5 sm:py-2.5 text-xs font-medium transition whitespace-nowrap cursor-pointer ${
                 activeTab === key
                   ? "border-[#2EA043] text-white"
                   : "border-transparent text-slate-400 hover:text-slate-200"
@@ -345,70 +346,70 @@ export default function AdminDashboardPage() {
           <>
         {/* LEGACY PORTAL KPIS */}
         {/* 2. GLOBAL PLATFORM KPIS */}
-        <section className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
-          <div className="rounded-xl border border-slate-800/80 bg-[#121820] p-4 shadow-xs">
+        <section className="grid grid-cols-2 gap-2.5 sm:gap-3 md:grid-cols-3 lg:grid-cols-6">
+          <div className="rounded-xl border border-slate-800/80 bg-[#121820] p-3 sm:p-4 shadow-xs">
             <span className="text-xs font-medium text-slate-400">
               Gross volume
             </span>
-            <p className="mt-1 font-mono text-lg font-semibold tabular-nums text-white">
+            <p className="mt-1 font-mono text-base sm:text-lg font-semibold tabular-nums text-white">
               {inr(k?.totalGrossRevenue)}
             </p>
-            <span className="text-[11px] text-slate-500">Total room &amp; cab spend</span>
+            <span className="text-[10px] sm:text-[11px] text-slate-500">Total room &amp; cab spend</span>
           </div>
 
-          <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 shadow-xs">
+          <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 sm:p-4 shadow-xs">
             <span className="text-xs font-medium text-emerald-400">
               Platform cut
             </span>
-            <p className="mt-1 font-mono text-lg font-semibold tabular-nums text-emerald-300">
+            <p className="mt-1 font-mono text-base sm:text-lg font-semibold tabular-nums text-emerald-300">
               {inr(k?.totalPlatformCommission)}
             </p>
-            <span className="text-[11px] text-emerald-500/80">Net revenue earned</span>
+            <span className="text-[10px] sm:text-[11px] text-emerald-500/80">Net revenue earned</span>
           </div>
 
-          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 shadow-xs">
+          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 sm:p-4 shadow-xs">
             <span className="text-xs font-medium text-amber-400">
               Pending payouts
             </span>
-            <p className="mt-1 font-mono text-lg font-semibold tabular-nums text-amber-300">
+            <p className="mt-1 font-mono text-base sm:text-lg font-semibold tabular-nums text-amber-300">
               {inr(k?.pendingPayouts)}
             </p>
-            <span className="text-[11px] text-amber-500/80">Awaiting UPI settlement</span>
+            <span className="text-[10px] sm:text-[11px] text-amber-500/80">Awaiting UPI settlement</span>
           </div>
 
-          <div className="rounded-xl border border-slate-800/80 bg-[#121820] p-4 shadow-xs">
+          <div className="rounded-xl border border-slate-800/80 bg-[#121820] p-3 sm:p-4 shadow-xs">
             <span className="text-xs font-medium text-slate-400">
               Registered stays
             </span>
-            <p className="mt-1 font-mono text-lg font-semibold tabular-nums text-white">
+            <p className="mt-1 font-mono text-base sm:text-lg font-semibold tabular-nums text-white">
               {k?.totalProperties ?? "—"}
             </p>
-            <span className="text-[11px] text-slate-500">Homestays in network</span>
+            <span className="text-[10px] sm:text-[11px] text-slate-500">Homestays in network</span>
           </div>
 
-          <div className="rounded-xl border border-slate-800/80 bg-[#121820] p-4 shadow-xs">
+          <div className="rounded-xl border border-slate-800/80 bg-[#121820] p-3 sm:p-4 shadow-xs">
             <span className="text-xs font-medium text-slate-400">
               Fleet drivers
             </span>
-            <p className="mt-1 font-mono text-lg font-semibold tabular-nums text-white">
+            <p className="mt-1 font-mono text-base sm:text-lg font-semibold tabular-nums text-white">
               {k?.totalDrivers ?? "—"}
             </p>
-            <span className="text-[11px] text-slate-500">Active hill partners</span>
+            <span className="text-[10px] sm:text-[11px] text-slate-500">Active hill partners</span>
           </div>
 
-          <div className="rounded-xl border border-slate-800/80 bg-[#121820] p-4 shadow-xs">
+          <div className="rounded-xl border border-slate-800/80 bg-[#121820] p-3 sm:p-4 shadow-xs">
             <span className="text-xs font-medium text-slate-400">
               Total trips
             </span>
-            <p className="mt-1 font-mono text-lg font-semibold tabular-nums text-white">
+            <p className="mt-1 font-mono text-base sm:text-lg font-semibold tabular-nums text-white">
               {k?.totalTrips ?? "—"}
             </p>
-            <span className="text-[11px] text-slate-500">Dispatched transfers</span>
+            <span className="text-[10px] sm:text-[11px] text-slate-500">Dispatched transfers</span>
           </div>
         </section>
         {/* 4. TAB 1: DRIVER PAYOUT SETTLEMENT DESK */}
         {(
-          <section className="rounded-2xl border border-slate-800/80 bg-[#121820] p-6 shadow-xs space-y-4">
+          <section className="rounded-2xl border border-slate-800/80 bg-[#121820] p-4 sm:p-6 shadow-xs space-y-4">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-sm font-semibold text-white">
@@ -420,8 +421,8 @@ export default function AdminDashboardPage() {
               </div>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+            <div className="overflow-x-auto touch-scroll -mx-4 px-4 sm:mx-0 sm:px-0">
+              <table className="w-full text-left text-xs min-w-[760px]">
                 <thead className="border-b border-slate-800 text-slate-400 font-medium">
                   <tr>
                     <th className="p-3">Ref</th>
@@ -473,7 +474,7 @@ export default function AdminDashboardPage() {
                           {trip.payoutStatus === "pending" ? (
                             <button
                               onClick={() => setSettlingTrip(trip)}
-                              className="rounded-md bg-[#1E7E4B] hover:bg-[#259A5C] px-3 py-1.5 font-medium text-white transition text-xs"
+                              className="rounded-md bg-[#1E7E4B] hover:bg-[#259A5C] px-3 py-1.5 font-medium text-white transition text-xs cursor-pointer"
                             >
                               Settle UPI
                             </button>
@@ -498,7 +499,7 @@ export default function AdminDashboardPage() {
 
         {/* 5. TAB 2: HOMESTAY PROPERTY VERIFICATION DESK */}
         {(
-          <section className="rounded-2xl border border-slate-800/80 bg-[#121820] p-6 shadow-xs space-y-4">
+          <section className="rounded-2xl border border-slate-800/80 bg-[#121820] p-4 sm:p-6 shadow-xs space-y-4">
             <div>
               <h2 className="text-sm font-semibold text-white">
                 Network Properties &amp; Host Moderation
@@ -508,8 +509,8 @@ export default function AdminDashboardPage() {
               </p>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+            <div className="overflow-x-auto touch-scroll -mx-4 px-4 sm:mx-0 sm:px-0">
+              <table className="w-full text-left text-xs min-w-[720px]">
                 <thead className="border-b border-slate-800 text-slate-400 font-medium">
                   <tr>
                     <th className="p-3">Property name</th>
@@ -552,7 +553,7 @@ export default function AdminDashboardPage() {
                           {prop.status !== "active" && (
                             <button
                               onClick={() => handlePropertyStatus(prop.id, "active", prop.name)}
-                              className="rounded-md bg-[#1E7E4B] hover:bg-[#259A5C] px-2.5 py-1 text-xs font-medium text-white transition"
+                              className="rounded-md bg-[#1E7E4B] hover:bg-[#259A5C] px-2.5 py-1 text-xs font-medium text-white transition cursor-pointer"
                             >
                               Approve
                             </button>
@@ -560,7 +561,7 @@ export default function AdminDashboardPage() {
                           {prop.status === "active" && (
                             <button
                               onClick={() => handlePropertyStatus(prop.id, "suspended", prop.name)}
-                              className="rounded-md border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 px-2.5 py-1 text-xs font-medium text-red-300 transition"
+                              className="rounded-md border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 px-2.5 py-1 text-xs font-medium text-red-300 transition cursor-pointer"
                             >
                               Suspend
                             </button>
@@ -586,8 +587,8 @@ export default function AdminDashboardPage() {
 
       {/* 9. UPI SETTLEMENT MODAL */}
       {settlingTrip && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
-          <div className="w-full max-w-sm rounded-2xl border border-slate-800/80 bg-[#121820] p-6 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-3 sm:p-4 backdrop-blur-xs overflow-y-auto">
+          <div className="w-full max-w-sm rounded-2xl border border-slate-800/80 bg-[#121820] p-4 sm:p-6 shadow-xl my-auto">
             <h3 className="text-sm font-semibold text-white">
               Settle Driver Payout via UPI
             </h3>
@@ -619,18 +620,18 @@ export default function AdminDashboardPage() {
                 />
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex flex-col-reverse sm:flex-row gap-2 pt-1">
                 <button
                   type="button"
                   onClick={() => setSettlingTrip(null)}
-                  className="flex-1 rounded-lg border border-slate-700/80 bg-slate-800/60 py-2 text-xs font-medium text-slate-300 hover:bg-slate-800 transition"
+                  className="w-full sm:flex-1 rounded-lg border border-slate-700/80 bg-slate-800/60 py-2.5 text-xs font-medium text-slate-300 hover:bg-slate-800 transition cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={settleLoading || !upiRef.trim()}
-                  className="flex-1 rounded-lg bg-[#1E7E4B] hover:bg-[#259A5C] py-2 text-xs font-semibold text-white transition disabled:opacity-50"
+                  className="w-full sm:flex-1 rounded-lg bg-[#1E7E4B] hover:bg-[#259A5C] py-2.5 text-xs font-semibold text-white transition disabled:opacity-50 cursor-pointer"
                 >
                   {settleLoading ? "Recording..." : "Confirm settlement"}
                 </button>

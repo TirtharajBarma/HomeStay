@@ -279,14 +279,14 @@ function ask(label: string): string | null {
 }
 
 const btn = {
-  primary: "rounded-lg bg-[#1E7E4B] hover:bg-[#259A5C] px-3.5 py-1.5 text-xs font-medium text-white transition disabled:opacity-50 shadow-xs cursor-pointer",
-  ok: "rounded-lg bg-[#1E7E4B] hover:bg-[#259A5C] px-3.5 py-1.5 text-xs font-medium text-white transition disabled:opacity-50 shadow-xs cursor-pointer",
-  danger: "rounded-lg border border-red-500/20 bg-red-500/10 hover:bg-red-500/20 px-3.5 py-1.5 text-xs font-medium text-red-300 transition disabled:opacity-50 cursor-pointer",
-  ghost: "rounded-lg border border-slate-700/80 bg-slate-800/60 hover:bg-slate-800 px-3.5 py-1.5 text-xs font-medium text-slate-200 transition disabled:opacity-50 cursor-pointer",
+  primary: "inline-flex items-center justify-center rounded-lg bg-[#1E7E4B] hover:bg-[#259A5C] px-3.5 py-2 sm:py-1.5 text-xs font-medium text-white transition disabled:opacity-50 shadow-xs cursor-pointer select-none",
+  ok: "inline-flex items-center justify-center rounded-lg bg-[#1E7E4B] hover:bg-[#259A5C] px-3.5 py-2 sm:py-1.5 text-xs font-medium text-white transition disabled:opacity-50 shadow-xs cursor-pointer select-none",
+  danger: "inline-flex items-center justify-center rounded-lg border border-red-500/20 bg-red-500/10 hover:bg-red-500/20 px-3.5 py-2 sm:py-1.5 text-xs font-medium text-red-300 transition disabled:opacity-50 cursor-pointer select-none",
+  ghost: "inline-flex items-center justify-center rounded-lg border border-slate-700/80 bg-slate-800/60 hover:bg-slate-800 px-3.5 py-2 sm:py-1.5 text-xs font-medium text-slate-200 transition disabled:opacity-50 cursor-pointer select-none",
 };
-const input = "rounded-lg border border-slate-800 bg-[#0D1117] px-3 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:border-[#2EA043] focus:outline-none focus:ring-1 focus:ring-[#2EA043] transition";
+const input = "h-9 rounded-lg border border-slate-800 bg-[#0D1117] px-3 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:border-[#2EA043] focus:outline-none focus:ring-1 focus:ring-[#2EA043] transition";
 const chip = (on: boolean) =>
-  `rounded-md border px-2.5 py-1 text-xs font-medium transition ${on ? "border-[#2EA043]/40 bg-[#2EA043]/15 text-[#3FB950]" : "border-slate-800 bg-[#0D1117] text-slate-400 hover:text-slate-200"}`;
+  `inline-flex items-center rounded-md border px-2.5 py-1.5 sm:py-1 text-xs font-medium transition cursor-pointer select-none ${on ? "border-[#2EA043]/40 bg-[#2EA043]/15 text-[#3FB950]" : "border-slate-800 bg-[#0D1117] text-slate-400 hover:text-slate-200"}`;
 
 function Ago({ t }: { t: number | null }) {
   const [, tick] = useState(0);
@@ -302,13 +302,13 @@ function Panel({ title, subtitle, onRefresh, error, loading, children, right, up
   title: ReactNode; subtitle?: string; onRefresh?: () => void; error?: string; loading?: boolean; children: ReactNode; right?: ReactNode; updatedAt?: number | null;
 }) {
   return (
-    <section className="rounded-2xl border border-slate-800/80 bg-[#121820] p-6 shadow-xs space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-semibold text-white">{title}</h2>
-          {subtitle && <p className="text-xs text-slate-400 mt-0.5">{subtitle}</p>}
+    <section className="rounded-2xl border border-slate-800/80 bg-[#121820] p-3.5 sm:p-6 shadow-xs space-y-4 sm:space-y-5">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <h2 className="text-sm font-semibold text-white leading-snug">{title}</h2>
+          {subtitle && <p className="text-xs text-slate-400 mt-1 leading-relaxed">{subtitle}</p>}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-start sm:justify-end">
           {right}
           {updatedAt !== undefined && <Ago t={updatedAt} />}
           {onRefresh && (
@@ -348,10 +348,10 @@ function Badge({ children, tone = "slate" }: { children: ReactNode; tone?: "slat
 
 function Kpi({ label, value, hint, accent }: { label: string; value: ReactNode; hint?: string; accent?: boolean }) {
   return (
-    <div className={`rounded-xl border p-4 shadow-xs transition ${accent ? "border-emerald-500/30 bg-emerald-500/5" : "border-slate-800/80 bg-[#0D1117]"}`}>
-      <span className={`text-xs font-medium ${accent ? "text-emerald-400" : "text-slate-400"}`}>{label}</span>
-      <p className="mt-1.5 font-mono text-lg font-semibold tabular-nums text-white">{value}</p>
-      {hint && <span className="mt-1 block text-[11px] text-slate-500 leading-tight">{hint}</span>}
+    <div className={`rounded-xl border p-3 sm:p-4 shadow-xs transition ${accent ? "border-emerald-500/30 bg-emerald-500/5" : "border-slate-800/80 bg-[#0D1117]"}`}>
+      <span className={`text-[11px] sm:text-xs font-medium leading-tight block ${accent ? "text-emerald-400" : "text-slate-400"}`}>{label}</span>
+      <p className="mt-1 sm:mt-1.5 font-mono text-base sm:text-lg font-semibold tabular-nums text-white leading-tight">{value}</p>
+      {hint && <span className="mt-1 block text-[10px] sm:text-[11px] text-slate-500 leading-tight">{hint}</span>}
     </div>
   );
 }
@@ -383,21 +383,21 @@ function Dialog({ title, message, confirmLabel, danger, reasonLabel, reasonRequi
     }
   }
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
-      <form onSubmit={submit} className="w-full max-w-md space-y-4 rounded-2xl border border-slate-800/80 bg-[#121820] p-6 text-xs shadow-xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-3 sm:p-4 backdrop-blur-xs overflow-y-auto">
+      <form onSubmit={submit} className="w-full max-w-md space-y-4 rounded-2xl border border-slate-800/80 bg-[#121820] p-4 sm:p-6 text-xs shadow-xl my-auto">
         <h3 className="text-sm font-semibold text-white">{title}</h3>
         <div className="text-slate-300 leading-relaxed">{message}</div>
         {children}
         {reasonLabel && (
           <label className="block text-slate-300 font-medium">
             {reasonLabel}{reasonRequired ? " *" : ""}
-            <textarea className={`${input} mt-1.5 w-full`} rows={2} maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} />
+            <textarea className={`${input} mt-1.5 w-full h-auto`} rows={2} maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} />
           </label>
         )}
         {err && <p className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300">{err}</p>}
-        <div className="flex justify-end gap-2 pt-2">
-          <button type="button" className={btn.ghost} onClick={() => onClose(false)} disabled={busy}>Cancel</button>
-          <button className={danger ? btn.danger : btn.primary} disabled={busy}>{busy ? "Working..." : confirmLabel}</button>
+        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
+          <button type="button" className={`${btn.ghost} w-full sm:w-auto`} onClick={() => onClose(false)} disabled={busy}>Cancel</button>
+          <button className={`${danger ? btn.danger : btn.primary} w-full sm:w-auto`} disabled={busy}>{busy ? "Working..." : confirmLabel}</button>
         </div>
       </form>
     </div>
@@ -437,14 +437,16 @@ function Pager({ page, setPage, total, count }: { page: number; setPage: (p: num
   const pages = total !== null ? Math.max(1, Math.ceil(total / LIMIT)) : null;
   const hasNext = pages !== null ? page + 1 < pages : count >= LIMIT;
   return (
-    <div className="flex items-center justify-end gap-2 text-xs text-slate-400">
-      <button className={btn.ghost} disabled={page === 0} onClick={() => setPage(page - 1)}>Prev</button>
-      <span>
+    <div className="flex flex-wrap items-center justify-between sm:justify-end gap-2 pt-2 text-xs text-slate-400">
+      <span className="order-1 sm:order-2 text-[11px] sm:text-xs">
         Page {page + 1}
         {pages !== null && ` of ${pages}`}
         {total !== null && ` • ${total} total`}
       </span>
-      <button className={btn.ghost} disabled={!hasNext} onClick={() => setPage(page + 1)}>Next</button>
+      <div className="flex items-center gap-1.5 order-2 sm:order-1 sm:mr-2">
+        <button className={btn.ghost} disabled={page === 0} onClick={() => setPage(page - 1)}>Prev</button>
+        <button className={btn.ghost} disabled={!hasNext} onClick={() => setPage(page + 1)}>Next</button>
+      </div>
     </div>
   );
 }
@@ -464,8 +466,8 @@ export function DashboardTab({ demo }: TabProps) {
         <div className="space-y-6">
           {/* Tier 1: Core Financial Volume */}
           <div>
-            <h3 className="mb-2.5 text-xs font-medium text-slate-400">Core Volume &amp; Platform Revenue</h3>
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <h3 className="mb-2 text-xs font-medium text-slate-400">Core Volume &amp; Platform Revenue</h3>
+            <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
               <Kpi label="Gross volume (completed)" value={inr(cab.gmv)} hint="Total passenger booking spend" accent />
               <Kpi label="Platform fee earned" value={inr(cab.platformFee)} hint={rateHint(rates?.pf)} accent />
               <Kpi label="Advance collected" value={inr(cab.advanceCollected)} hint="Customer UPI advance on file" />
@@ -475,8 +477,8 @@ export function DashboardTab({ demo }: TabProps) {
 
           {/* Tier 2: Partner Commissions & Dues */}
           <div>
-            <h3 className="mb-2.5 text-xs font-medium text-slate-400">Partner Commissions &amp; Outstanding Dues</h3>
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <h3 className="mb-2 text-xs font-medium text-slate-400">Partner Commissions &amp; Outstanding Dues</h3>
+            <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
               <Kpi label="Homestay commission (lifetime)" value={inr(cab.homestayCommission)} hint={rateHint(rates?.hc)} />
               <Kpi label="Homestay commission owed now" value={inr(cab.homestayCommissionUnpaid)} hint="Payable, not yet in any payout request" />
               <Kpi label="Driver share dues pending" value={inr(cab.driverDuesPending)} hint="Awaiting settlement" />
@@ -486,8 +488,8 @@ export function DashboardTab({ demo }: TabProps) {
 
           {/* Tier 3: Review Queue & Active Pipeline */}
           <div>
-            <h3 className="mb-2.5 text-xs font-medium text-slate-400">Active Requests &amp; Review Queue</h3>
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <h3 className="mb-2 text-xs font-medium text-slate-400">Active Requests &amp; Review Queue</h3>
+            <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
               <Kpi label="Open requests" value={cab.open ?? "—"} hint="Finding driver or pending review" />
               <Kpi label="Awaiting payment" value={cab.awaitingPayment ?? "—"} hint="Quote accepted, held on timer" />
               <Kpi label="Completed without PIN" value={cab.noPinToReview ?? "—"} hint="Held for operator review" />
@@ -499,9 +501,9 @@ export function DashboardTab({ demo }: TabProps) {
 
           {/* Homestay Payouts Ledger */}
           <div>
-            <h3 className="mb-2.5 text-xs font-medium text-slate-400">Homestay payouts by status</h3>
+            <h3 className="mb-2 text-xs font-medium text-slate-400">Homestay payouts by status</h3>
             {payouts.length ? (
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 sm:gap-3">
                 {payouts.map((p) => (
                   <Kpi key={String(p._id)} label={String(p._id)} value={inr(p.amount)} hint={`${p.count} payout(s)`} />
                 ))}
@@ -548,28 +550,28 @@ export function UsersTab({ demo }: TabProps) {
       loading={loading}
       updatedAt={updatedAt}
       right={
-        <>
-          <select className={input} value={role} onChange={(e) => { setRole(e.target.value); setPage(0); }}>
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          <select className={`${input} flex-1 sm:flex-initial`} value={role} onChange={(e) => { setRole(e.target.value); setPage(0); }}>
             <option value="">All roles</option>
             {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
           </select>
-          <select className={input} value={status} onChange={(e) => { setStatus(e.target.value); setPage(0); }}>
+          <select className={`${input} flex-1 sm:flex-initial`} value={status} onChange={(e) => { setStatus(e.target.value); setPage(0); }}>
             <option value="">All statuses</option>
             <option value="ACTIVE">Active</option>
             <option value="PENDING_APPROVAL">Pending approval</option>
             <option value="BLOCKED">Blocked</option>
           </select>
-          <form onSubmit={(e) => { e.preventDefault(); setPage(0); setQ(search.trim()); }} className="flex gap-2">
-            <input className={input} placeholder="Name, email or phone" value={search} onChange={(e) => setSearch(e.target.value)} />
-            <button className={btn.primary}>Search</button>
+          <form onSubmit={(e) => { e.preventDefault(); setPage(0); setQ(search.trim()); }} className="flex gap-2 w-full sm:w-auto">
+            <input className={`${input} flex-1 min-w-0 sm:w-52`} placeholder="Name, email or phone" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <button className={`${btn.primary} shrink-0`}>Search</button>
           </form>
-        </>
+        </div>
       }
     >
       {data &&
         (items.length ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+          <div className="overflow-x-auto touch-scroll -mx-3.5 px-3.5 sm:mx-0 sm:px-0">
+            <table className="w-full text-left text-xs min-w-[720px]">
               <thead className="border-b border-slate-800 text-slate-400 font-medium text-xs">
                 <tr>
                   <th className="p-3">User</th>
@@ -615,7 +617,7 @@ export function UsersTab({ demo }: TabProps) {
                     </td>
                     <td className="p-3 text-slate-400 whitespace-nowrap">{dt(u.createdAt)}</td>
                     <td className="p-3 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
+                      <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
                         {u.accountStatus === "PENDING_APPROVAL" && !u.deletedAt && (
                           <button className={btn.ok} onClick={() => setDialog({ u, kind: "approve" })}>Approve</button>
                         )}
@@ -630,7 +632,7 @@ export function UsersTab({ demo }: TabProps) {
                         )}
                         <button className={btn.ghost} title="Revoke all active logins" onClick={() => setDialog({ u, kind: "revoke" })}>Sign out</button>
                         {!u.deletedAt && (
-                          <button className="rounded border border-red-900/50 bg-red-950/40 px-2 py-1 text-[11px] font-semibold text-red-300 hover:bg-red-900/60 transition" onClick={() => setDialog({ u, kind: "delete" })}>Delete</button>
+                          <button className="rounded border border-red-900/50 bg-red-950/40 px-2 py-1 text-[11px] font-semibold text-red-300 hover:bg-red-900/60 transition cursor-pointer" onClick={() => setDialog({ u, kind: "delete" })}>Delete</button>
                         )}
                       </div>
                     </td>
@@ -701,16 +703,16 @@ export function HomestaysTab({ demo, onOpenCabRequests }: HomestaysProps) {
       loading={loading}
       updatedAt={updatedAt}
       right={
-        <form onSubmit={(e) => { e.preventDefault(); setPage(0); setQuery(search.trim()); }} className="flex gap-2">
-          <input className={input} placeholder="Search name, owner, or email" value={search} onChange={(e) => setSearch(e.target.value)} />
-          <button className={btn.primary}>Search</button>
+        <form onSubmit={(e) => { e.preventDefault(); setPage(0); setQuery(search.trim()); }} className="flex gap-2 w-full sm:w-auto">
+          <input className={`${input} flex-1 min-w-0 sm:w-64`} placeholder="Search name, owner, or email" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <button className={`${btn.primary} shrink-0`}>Search</button>
         </form>
       }
     >
       {data && (
         items.length ? (
-          <div className="overflow-x-auto rounded-xl border border-slate-800">
-            <table className="w-full text-left text-xs">
+          <div className="overflow-x-auto touch-scroll -mx-3.5 px-3.5 sm:mx-0 sm:px-0 rounded-xl border border-slate-800">
+            <table className="w-full text-left text-xs min-w-[760px]">
               <thead className="border-b border-slate-800 text-slate-400 font-medium text-xs">
                 <tr>
                   <th className="p-3">Homestay & Location</th>
@@ -897,38 +899,38 @@ function HomestayConfigModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-xs">
-      <div className="w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-800/80 bg-[#121820] p-6 shadow-xl text-xs space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-          <div>
-            <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-              <span>{t.homestayName || t.tenantKey}</span>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-3 sm:p-4 backdrop-blur-xs overflow-y-auto">
+      <div className="w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-800/80 bg-[#121820] p-4 sm:p-6 shadow-xl text-xs space-y-4 my-auto">
+        <div className="flex items-center justify-between border-b border-slate-800 pb-3 gap-2">
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold text-white flex items-center gap-2 flex-wrap">
+              <span className="truncate">{t.homestayName || t.tenantKey}</span>
               {t.blocked ? <Badge tone="red">Suspended</Badge> : <Badge tone="green">Active</Badge>}
             </h3>
             <p className="text-slate-400 text-xs mt-0.5">Configure granular access, feature permissions, and custom fee schedules.</p>
           </div>
-          <button type="button" className="text-slate-400 hover:text-white text-base font-bold" onClick={onClose}>✕</button>
+          <button type="button" className="p-1 text-slate-400 hover:text-white text-lg font-bold cursor-pointer shrink-0" onClick={onClose}>✕</button>
         </div>
 
-        <div className="flex gap-2 border-b border-slate-800 pb-2">
+        <div className="flex gap-1.5 sm:gap-2 border-b border-slate-800 pb-2 overflow-x-auto no-scrollbar touch-scroll">
           <button
             type="button"
             onClick={() => setTab("features")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${tab === "features" ? "bg-[#1E7E4B] text-white" : "text-slate-400 hover:text-white"}`}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition shrink-0 cursor-pointer ${tab === "features" ? "bg-[#1E7E4B] text-white" : "text-slate-400 hover:text-white"}`}
           >
             Feature Switches
           </button>
           <button
             type="button"
             onClick={() => setTab("commission")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${tab === "commission" ? "bg-[#1E7E4B] text-white" : "text-slate-400 hover:text-white"}`}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition shrink-0 cursor-pointer ${tab === "commission" ? "bg-[#1E7E4B] text-white" : "text-slate-400 hover:text-white"}`}
           >
             Commission Overrides {o && <span className="ml-1 text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 rounded">Active</span>}
           </button>
           <button
             type="button"
             onClick={() => setTab("account")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${tab === "account" ? "bg-[#1E7E4B] text-white" : "text-slate-400 hover:text-white"}`}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition shrink-0 cursor-pointer ${tab === "account" ? "bg-[#1E7E4B] text-white" : "text-slate-400 hover:text-white"}`}
           >
             Account Access
           </button>
@@ -1081,25 +1083,25 @@ function TenantDataViewer({
   const rawList: Any[] = rawKey !== "profile" && Array.isArray(data?.[rawKey]) ? data![rawKey] : [];
 
   return (
-    <div className="fixed inset-0 z-40 overflow-y-auto bg-black/85 p-4 backdrop-blur-xs flex items-center justify-center">
-      <div className="w-full max-w-5xl max-h-[92vh] flex flex-col rounded-2xl border border-slate-800/80 bg-[#121820] shadow-xl overflow-hidden">
+    <div className="fixed inset-0 z-40 overflow-y-auto bg-black/85 p-3 sm:p-4 backdrop-blur-xs flex items-center justify-center">
+      <div className="w-full max-w-5xl max-h-[92vh] flex flex-col rounded-2xl border border-slate-800/80 bg-[#121820] shadow-xl overflow-hidden my-auto">
         {/* Drawer Header */}
-        <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b border-slate-800 bg-[#0D1117]/70">
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="text-sm font-semibold text-white">{t.homestayName || t.tenantKey}</h3>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-4 border-b border-slate-800 bg-[#0D1117]/70">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-sm font-semibold text-white truncate">{t.homestayName || t.tenantKey}</h3>
               {demo ? <Badge tone="amber">Demo</Badge> : <Badge tone="green">Production</Badge>}
             </div>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-xs text-slate-400 mt-0.5 truncate">
               Account: <span className="font-mono text-slate-300">{t.tenantKey}</span> • Location: {t.location || "Darjeeling"}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {onBookCabForGuest && (
               <button
                 type="button"
                 onClick={() => onBookCabForGuest({ tenantKey: t.tenantKey, pickup: t.location || t.homestayName })}
-                className="px-3 py-1.5 rounded-lg bg-[#1E7E4B] hover:bg-[#259A5C] text-white font-medium text-xs transition"
+                className="px-3 py-1.5 rounded-lg bg-[#1E7E4B] hover:bg-[#259A5C] text-white font-medium text-xs transition cursor-pointer"
               >
                 + Book Cab for Host
               </button>
@@ -1114,7 +1116,7 @@ function TenantDataViewer({
         </div>
 
         {/* Sub-Navigation Tabs */}
-        <div className="flex flex-wrap items-center gap-1.5 px-6 py-2.5 border-b border-slate-800/80 bg-[#0D1117]/40 text-xs">
+        <div className="flex items-center gap-1.5 px-4 py-2 sm:px-6 sm:py-2.5 border-b border-slate-800/80 bg-[#0D1117]/40 text-xs overflow-x-auto no-scrollbar touch-scroll">
           {[
             { id: "drivers", label: "Own Fleet Drivers", count: drivers.length },
             { id: "guests", label: "In-House Guests", count: activeGuests.length },
@@ -1126,7 +1128,7 @@ function TenantDataViewer({
             <button
               key={item.id}
               onClick={() => setTab(item.id as any)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+              className={`shrink-0 cursor-pointer px-3 py-1.5 rounded-lg text-xs font-medium transition ${
                 tab === item.id
                   ? "bg-[#1E7E4B] text-white"
                   : "text-slate-400 hover:text-slate-200"
@@ -1145,7 +1147,7 @@ function TenantDataViewer({
         </div>
 
         {/* Content Area */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-4 text-xs">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 text-xs">
           {error && <div className="rounded-xl border border-red-800/60 bg-red-950/40 p-3 text-red-300 font-semibold">{error}</div>}
 
           {/* TAB 1: OWN FLEET DRIVERS */}
@@ -1625,14 +1627,14 @@ function AddDriverModal({ demo, initialDriver, onClose, onAdded }: { demo: boole
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-xs">
-      <div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl text-xs space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-          <div>
-            <h3 className="text-base font-bold text-white">{isEditing ? `Edit Driver: ${initialDriver?.name}` : "Add New Platform Driver"}</h3>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-3 sm:p-4 backdrop-blur-xs overflow-y-auto">
+      <div className="w-full max-w-lg max-h-[92vh] overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-4 sm:p-6 shadow-2xl text-xs space-y-4 my-auto">
+        <div className="flex items-center justify-between border-b border-slate-800 pb-3 gap-2">
+          <div className="min-w-0">
+            <h3 className="text-base font-bold text-white truncate">{isEditing ? `Edit Driver: ${initialDriver?.name}` : "Add New Platform Driver"}</h3>
             <p className="text-slate-400">{isEditing ? "Update driver credentials, vehicle fleet, or taxi syndicate affiliation." : "Create an active driver account directly from the admin desk."}</p>
           </div>
-          <button type="button" className="text-slate-400 hover:text-white text-lg font-bold" onClick={onClose}>✕</button>
+          <button type="button" className="p-1 text-slate-400 hover:text-white text-lg font-bold cursor-pointer shrink-0" onClick={onClose}>✕</button>
         </div>
 
         {err && <div className="rounded-lg bg-red-950/80 border border-red-800 p-2 text-red-300 font-semibold">{err}</div>}
@@ -1772,23 +1774,23 @@ export function DriversTab({ demo }: TabProps) {
       loading={loading}
       updatedAt={updatedAt}
       right={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           <button
             type="button"
-            className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-500 flex items-center gap-1 shadow-sm shrink-0"
+            className="rounded-lg bg-[#1E7E4B] hover:bg-[#259A5C] px-3 py-1.5 text-xs font-semibold text-white flex items-center gap-1 shadow-xs shrink-0 cursor-pointer"
             onClick={() => setShowAdd(true)}
           >
             + Add Driver
           </button>
-          <select className={input} value={status} onChange={(e) => { setStatus(e.target.value); setPage(0); }}>
+          <select className={`${input} flex-1 sm:flex-initial`} value={status} onChange={(e) => { setStatus(e.target.value); setPage(0); }}>
             <option value="">All statuses</option>
             <option value="PENDING_APPROVAL">Pending approval</option>
             <option value="ACTIVE">Approved</option>
             <option value="BLOCKED">Blocked</option>
           </select>
-          <form onSubmit={(e) => { e.preventDefault(); setPage(0); setQ(search.trim()); }} className="flex gap-2">
-            <input className={input} placeholder="Name, email or phone" value={search} onChange={(e) => setSearch(e.target.value)} />
-            <button className={btn.primary}>Search</button>
+          <form onSubmit={(e) => { e.preventDefault(); setPage(0); setQ(search.trim()); }} className="flex gap-2 w-full sm:w-auto">
+            <input className={`${input} flex-1 min-w-0 sm:w-52`} placeholder="Name, email or phone" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <button className={`${btn.primary} shrink-0`}>Search</button>
           </form>
         </div>
       }
@@ -1796,27 +1798,27 @@ export function DriversTab({ demo }: TabProps) {
       {showAdd && <AddDriverModal demo={demo} onClose={() => setShowAdd(false)} onAdded={reload} />}
       {editingDriver && <AddDriverModal demo={demo} initialDriver={editingDriver} onClose={() => setEditingDriver(null)} onAdded={reload} />}
 
-      <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
-        <span className="text-xs font-semibold text-slate-400">Category:</span>
-        <div className="flex gap-1.5">
+      <div className="flex items-center gap-2 border-b border-slate-800 pb-3 overflow-x-auto no-scrollbar touch-scroll -mx-3.5 px-3.5 sm:mx-0 sm:px-0">
+        <span className="text-xs font-semibold text-slate-400 shrink-0">Category:</span>
+        <div className="flex gap-1.5 shrink-0">
           <button
             type="button"
             onClick={() => setCategoryFilter("ALL")}
-            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition ${categoryFilter === "ALL" ? "bg-slate-700 text-white font-bold" : "text-slate-400 hover:text-white"}`}
+            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition cursor-pointer ${categoryFilter === "ALL" ? "bg-slate-700 text-white font-bold" : "text-slate-400 hover:text-white"}`}
           >
             All Categories ({rawItems.length})
           </button>
           <button
             type="button"
             onClick={() => setCategoryFilter("INDIVIDUAL")}
-            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition ${categoryFilter === "INDIVIDUAL" ? "bg-emerald-950 border border-emerald-700/60 text-emerald-300 font-bold" : "text-slate-400 hover:text-white"}`}
+            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition cursor-pointer ${categoryFilter === "INDIVIDUAL" ? "bg-emerald-950 border border-emerald-700/60 text-emerald-300 font-bold" : "text-slate-400 hover:text-white"}`}
           >
             Independent Network
           </button>
           <button
             type="button"
             onClick={() => setCategoryFilter("UNION")}
-            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition ${categoryFilter === "UNION" ? "bg-slate-800 border border-slate-700 text-white font-medium" : "text-slate-400 hover:text-white"}`}
+            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition cursor-pointer ${categoryFilter === "UNION" ? "bg-slate-800 border border-slate-700 text-white font-medium" : "text-slate-400 hover:text-white"}`}
           >
             Taxi Syndicate / Union
           </button>
@@ -1825,8 +1827,8 @@ export function DriversTab({ demo }: TabProps) {
 
       {data &&
         (items.length ? (
-          <div className="overflow-x-auto rounded-xl border border-slate-800">
-            <table className="w-full text-left text-xs">
+          <div className="overflow-x-auto touch-scroll -mx-3.5 px-3.5 sm:mx-0 sm:px-0 rounded-xl border border-slate-800">
+            <table className="w-full text-left text-xs min-w-[760px]">
               <thead className="border-b border-slate-800 text-slate-400 font-medium text-xs">
                 <tr>
                   <th className="p-3">Driver &amp; Category</th>
@@ -2175,22 +2177,22 @@ function AdminBookCabModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 sm:p-6 backdrop-blur-sm overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-3 sm:p-4 backdrop-blur-sm overflow-y-auto">
       <div className="w-full max-w-4xl max-h-[92vh] flex flex-col rounded-2xl border border-slate-800/80 bg-[#121820] shadow-2xl overflow-hidden my-auto">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800/80 bg-[#121820]">
-          <div>
-            <div className="flex items-center gap-2.5">
-              <h3 className="text-sm font-semibold text-white">Book Cab on Behalf of Guest</h3>
+        <div className="flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 border-b border-slate-800/80 bg-[#121820] gap-2">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-sm font-semibold text-white truncate">Book Cab on Behalf of Guest</h3>
               <Badge tone={demo ? "amber" : "green"}>{demo ? "Demo" : "Production"}</Badge>
             </div>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-xs text-slate-400 mt-0.5 truncate">
               Direct dispatch from admin desk • Homestay host attribution, mountain route &amp; schedule
             </p>
           </div>
           <button
             type="button"
-            className="rounded-md p-1.5 text-slate-400 hover:text-white hover:bg-slate-800/80 transition-colors cursor-pointer"
+            className="rounded-md p-1.5 text-slate-400 hover:text-white hover:bg-slate-800/80 transition-colors cursor-pointer shrink-0"
             onClick={onClose}
             aria-label="Close dialog"
           >
@@ -2199,7 +2201,7 @@ function AdminBookCabModal({
         </div>
 
         {/* Form Body */}
-        <form onSubmit={submit} className="flex-1 overflow-y-auto p-6 space-y-5 text-xs">
+        <form onSubmit={submit} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-5 text-xs">
           {err && (
             <div className="rounded-lg bg-rose-950/40 border border-rose-800/50 px-3.5 py-2.5 text-rose-300 font-medium">
               {err}
@@ -2636,6 +2638,7 @@ function AdminBookCabModal({
 
 export function CabRequestsTab({ demo, initialTenantKey, initialFilter }: TabProps & { initialTenantKey?: string; initialFilter?: string }) {
   const [viewMode, setViewMode] = useState<"board" | "split">("board");
+  const [mobileSplitView, setMobileSplitView] = useState<"queue" | "details">("queue");
   const [stageFilter, setStageFilter] = useState<string>("all");
   const [tenantKey, setTenantKey] = useState(initialTenantKey || "");
   const [tenantQuery, setTenantQuery] = useState(initialTenantKey || "");
@@ -2691,6 +2694,7 @@ export function CabRequestsTab({ demo, initialTenantKey, initialFilter }: TabPro
   const openInspector = (c: Any) => {
     setSelectedId(rid(c));
     setViewMode("split");
+    setMobileSplitView("details");
   };
 
   return (
@@ -2702,13 +2706,13 @@ export function CabRequestsTab({ demo, initialTenantKey, initialFilter }: TabPro
       loading={loading}
       updatedAt={updatedAt}
       right={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           {/* View Mode Switcher */}
           <div className="flex items-center bg-[#0D1117] border border-slate-800 rounded-lg p-0.5 text-xs">
             <button
               type="button"
               onClick={() => setViewMode("board")}
-              className={`px-3 py-1.5 rounded-md font-medium transition ${
+              className={`px-3 py-1.5 rounded-md font-medium transition cursor-pointer ${
                 viewMode === "board"
                   ? "bg-[#1E7E4B] text-white"
                   : "text-slate-400 hover:text-slate-200"
@@ -2719,7 +2723,7 @@ export function CabRequestsTab({ demo, initialTenantKey, initialFilter }: TabPro
             <button
               type="button"
               onClick={() => setViewMode("split")}
-              className={`px-3 py-1.5 rounded-md font-medium transition ${
+              className={`px-3 py-1.5 rounded-md font-medium transition cursor-pointer ${
                 viewMode === "split"
                   ? "bg-[#1E7E4B] text-white"
                   : "text-slate-400 hover:text-slate-200"
@@ -2732,7 +2736,7 @@ export function CabRequestsTab({ demo, initialTenantKey, initialFilter }: TabPro
           <button
             type="button"
             onClick={() => setCreateOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1E7E4B] hover:bg-[#259A5C] text-white font-medium text-xs transition cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1E7E4B] hover:bg-[#259A5C] text-white font-medium text-xs transition cursor-pointer shrink-0"
           >
             <span>+ Book Cab for Guest</span>
           </button>
@@ -2749,80 +2753,82 @@ export function CabRequestsTab({ demo, initialTenantKey, initialFilter }: TabPro
       )}
 
       {/* TOP ACTION REQUIRED DECK */}
-      <div className="flex flex-wrap items-center gap-2 p-2.5 rounded-xl bg-[#0D1117] border border-slate-800">
-        <span className="text-xs font-medium text-slate-400 mr-1 flex items-center gap-1.5">
-          <span className="h-2 w-2 rounded-full bg-amber-400" />
-          Exceptions:
-        </span>
-        <button
-          type="button"
-          onClick={() => { setStageFilter(stageFilter === "needs" ? "all" : "needs"); setPage(0); }}
-          className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 transition cursor-pointer ${
-            stageFilter === "needs"
-              ? "bg-red-500/20 text-red-300 border border-red-500/40"
-              : (cabStats?.needsReassignment > 0
-                ? "bg-red-500/10 text-red-300 border border-red-500/20 hover:bg-red-500/20"
-                : "bg-slate-800/60 text-slate-400 hover:text-white")
-          }`}
-        >
-          <span>Needs Driver</span>
-          <span className="px-1.5 py-0.2 rounded-md bg-red-900/40 text-[10px] font-mono">{cabStats?.needsReassignment ?? 0}</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => { setStageFilter(stageFilter === "claims" ? "all" : "claims"); setPage(0); }}
-          className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 transition cursor-pointer ${
-            stageFilter === "claims"
-              ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
-              : (cabStats?.pendingClaims > 0
-                ? "bg-amber-500/10 text-amber-300 border border-amber-500/20 hover:bg-amber-500/20"
-                : "bg-slate-800/60 text-slate-400 hover:text-white")
-          }`}
-        >
-          <span>Guest Payment Claims</span>
-          <span className="px-1.5 py-0.2 rounded-md bg-amber-900/40 text-[10px] font-mono">{cabStats?.pendingClaims ?? 0}</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => { setStageFilter(stageFilter === "nopin" ? "all" : "nopin"); setPage(0); }}
-          className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
-            stageFilter === "nopin"
-              ? "bg-amber-600 text-white shadow-sm ring-1 ring-amber-400"
-              : (cabStats?.noPinToReview > 0
-                ? "bg-amber-950/80 text-amber-300 border border-amber-800/80 hover:bg-amber-900/60"
-                : "bg-slate-800/60 text-slate-400 hover:text-white")
-          }`}
-        >
-          <span>No-PIN Audits</span>
-          <span className="px-1.5 py-0.2 rounded-full bg-amber-900/60 text-[10px] font-mono">{cabStats?.noPinToReview ?? 0}</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => { setStageFilter(stageFilter === "refunds" ? "all" : "refunds"); setPage(0); }}
-          className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
-            stageFilter === "refunds"
-              ? "bg-purple-600 text-white shadow-sm ring-1 ring-purple-400"
-              : (cabStats?.refundsCount > 0
-                ? "bg-purple-950/80 text-purple-300 border border-purple-800/80 hover:bg-purple-900/60"
-                : "bg-slate-800/60 text-slate-400 hover:text-white")
-          }`}
-        >
-          <span>Pending Refunds</span>
-          <span className="px-1.5 py-0.2 rounded-full bg-purple-900/60 text-[10px] font-mono">{cabStats?.refundsCount ?? 0}</span>
-        </button>
-        <div className="ml-auto flex items-center gap-2">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 p-2.5 rounded-xl bg-[#0D1117] border border-slate-800">
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+          <span className="text-xs font-medium text-slate-400 mr-1 flex items-center gap-1.5 shrink-0">
+            <span className="h-2 w-2 rounded-full bg-amber-400" />
+            Exceptions:
+          </span>
+          <button
+            type="button"
+            onClick={() => { setStageFilter(stageFilter === "needs" ? "all" : "needs"); setPage(0); }}
+            className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 transition cursor-pointer ${
+              stageFilter === "needs"
+                ? "bg-red-500/20 text-red-300 border border-red-500/40"
+                : (cabStats?.needsReassignment > 0
+                  ? "bg-red-500/10 text-red-300 border border-red-500/20 hover:bg-red-500/20"
+                  : "bg-slate-800/60 text-slate-400 hover:text-white")
+            }`}
+          >
+            <span>Needs Driver</span>
+            <span className="px-1.5 py-0.2 rounded-md bg-red-900/40 text-[10px] font-mono">{cabStats?.needsReassignment ?? 0}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => { setStageFilter(stageFilter === "claims" ? "all" : "claims"); setPage(0); }}
+            className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 transition cursor-pointer ${
+              stageFilter === "claims"
+                ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                : (cabStats?.pendingClaims > 0
+                  ? "bg-amber-500/10 text-amber-300 border border-amber-500/20 hover:bg-amber-500/20"
+                  : "bg-slate-800/60 text-slate-400 hover:text-white")
+            }`}
+          >
+            <span>Guest Payment Claims</span>
+            <span className="px-1.5 py-0.2 rounded-md bg-amber-900/40 text-[10px] font-mono">{cabStats?.pendingClaims ?? 0}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => { setStageFilter(stageFilter === "nopin" ? "all" : "nopin"); setPage(0); }}
+            className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
+              stageFilter === "nopin"
+                ? "bg-amber-600 text-white shadow-sm ring-1 ring-amber-400"
+                : (cabStats?.noPinToReview > 0
+                  ? "bg-amber-950/80 text-amber-300 border border-amber-800/80 hover:bg-amber-900/60"
+                  : "bg-slate-800/60 text-slate-400 hover:text-white")
+            }`}
+          >
+            <span>No-PIN Audits</span>
+            <span className="px-1.5 py-0.2 rounded-full bg-amber-900/60 text-[10px] font-mono">{cabStats?.noPinToReview ?? 0}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => { setStageFilter(stageFilter === "refunds" ? "all" : "refunds"); setPage(0); }}
+            className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
+              stageFilter === "refunds"
+                ? "bg-purple-600 text-white shadow-sm ring-1 ring-purple-400"
+                : (cabStats?.refundsCount > 0
+                  ? "bg-purple-950/80 text-purple-300 border border-purple-800/80 hover:bg-purple-900/60"
+                  : "bg-slate-800/60 text-slate-400 hover:text-white")
+            }`}
+          >
+            <span>Pending Refunds</span>
+            <span className="px-1.5 py-0.2 rounded-full bg-purple-900/60 text-[10px] font-mono">{cabStats?.refundsCount ?? 0}</span>
+          </button>
+        </div>
+        <div className="flex items-center gap-2 w-full lg:w-auto">
           {stageFilter !== "all" && (
             <button
               type="button"
               onClick={() => { setStageFilter("all"); setPage(0); }}
-              className="text-xs text-blue-400 hover:underline"
+              className="text-xs text-blue-400 hover:underline shrink-0"
             >
               Clear Filter
             </button>
           )}
-          <form onSubmit={(e) => { e.preventDefault(); setPage(0); setTenantQuery(tenantKey.trim().toLowerCase()); }} className="flex gap-2">
-            <input className="h-8 rounded-lg border border-slate-700 bg-slate-900 px-2.5 text-xs text-white" placeholder="Filter by host email..." value={tenantKey} onChange={(e) => setTenantKey(e.target.value)} />
-            <button className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold">Filter</button>
+          <form onSubmit={(e) => { e.preventDefault(); setPage(0); setTenantQuery(tenantKey.trim().toLowerCase()); }} className="flex gap-2 w-full lg:w-auto">
+            <input className="h-8 rounded-lg border border-slate-700 bg-slate-900 px-2.5 text-xs text-white flex-1 min-w-0 lg:w-48" placeholder="Filter by host email..." value={tenantKey} onChange={(e) => setTenantKey(e.target.value)} />
+            <button className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold shrink-0 cursor-pointer">Filter</button>
           </form>
         </div>
       </div>
@@ -2936,44 +2942,82 @@ export function CabRequestsTab({ demo, initialTenantKey, initialFilter }: TabPro
         {/* VIEW 2: SPLIT-PANE FOCUSED INSPECTOR VIEW                       */}
         {/* =============================================================== */}
         {viewMode === "split" && data && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start pt-1">
-            {/* Left Queue (5 cols) */}
-            <div className="lg:col-span-5 space-y-2">
-              <div className="flex items-center justify-between text-xs text-slate-400 px-1 pb-1.5 border-b border-slate-800">
-                <span className="font-semibold text-slate-300">Request Queue ({items.length})</span>
-                <span className="text-[10px] text-slate-500">Select to inspect</span>
-              </div>
-              <div className="space-y-2 max-h-[750px] overflow-y-auto pr-1">
-                {items.map((c) => {
-                  const isSel = selectedId === rid(c);
-                  return (
-                    <PipelineCard
-                      key={rid(c)}
-                      c={c}
-                      selected={isSel}
-                      onInspect={() => setSelectedId(rid(c))}
-                    />
-                  );
-                })}
-              </div>
-              <Pager page={page} setPage={setPage} total={data?.total ?? null} count={items.length} />
+          <div className="pt-1">
+            {/* Mobile View Switcher between Queue & Selected Inspector */}
+            <div className="flex items-center gap-1.5 p-1 bg-[#0D1117] rounded-xl border border-slate-800 lg:hidden mb-3">
+              <button
+                type="button"
+                onClick={() => setMobileSplitView("queue")}
+                className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                  mobileSplitView === "queue" ? "bg-[#1E7E4B] text-white" : "text-slate-400 hover:text-white"
+                }`}
+              >
+                Queue ({items.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setMobileSplitView("details")}
+                className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                  mobileSplitView === "details" ? "bg-[#1E7E4B] text-white" : "text-slate-400 hover:text-white"
+                }`}
+              >
+                {selectedRequest ? `#${selectedRequest.reference}` : "Inspector"}
+              </button>
             </div>
 
-            {/* Right Inspector (7 cols, sticky) */}
-            <div className="lg:col-span-7 sticky top-4">
-              {selectedRequest ? (
-                <CabRequestCard
-                  key={rid(selectedRequest)}
-                  c={selectedRequest}
-                  demo={demo}
-                  onChanged={handleRefresh}
-                />
-              ) : (
-                <div className="p-12 text-center rounded-2xl border border-slate-800/80 bg-[#0D1117] text-slate-500">
-                  <p className="text-sm font-semibold text-slate-300">No request selected</p>
-                  <p className="text-xs text-slate-500 mt-1">Select any cab request from the queue to view full route details and admin actions.</p>
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+              {/* Left Queue (5 cols) */}
+              <div className={`lg:col-span-5 space-y-2 ${mobileSplitView === "details" ? "hidden lg:block" : "block"}`}>
+                <div className="flex items-center justify-between text-xs text-slate-400 px-1 pb-1.5 border-b border-slate-800">
+                  <span className="font-semibold text-slate-300">Request Queue ({items.length})</span>
+                  <span className="text-[10px] text-slate-500">Tap to inspect</span>
                 </div>
-              )}
+                <div className="space-y-2 max-h-[750px] overflow-y-auto pr-1 touch-scroll">
+                  {items.map((c) => {
+                    const isSel = selectedId === rid(c);
+                    return (
+                      <PipelineCard
+                        key={rid(c)}
+                        c={c}
+                        selected={isSel}
+                        onInspect={() => {
+                          setSelectedId(rid(c));
+                          setMobileSplitView("details");
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+                <Pager page={page} setPage={setPage} total={data?.total ?? null} count={items.length} />
+              </div>
+
+              {/* Right Inspector (7 cols, sticky) */}
+              <div className={`lg:col-span-7 sticky top-4 ${mobileSplitView === "queue" ? "hidden lg:block" : "block"}`}>
+                {/* Mobile Back to Queue Button */}
+                <div className="lg:hidden mb-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setMobileSplitView("queue")}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-800 bg-[#0D1117] text-xs font-medium text-slate-300 hover:text-white cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-sm">arrow_back</span>
+                    <span>Back to Request Queue</span>
+                  </button>
+                </div>
+                {selectedRequest ? (
+                  <CabRequestCard
+                    key={rid(selectedRequest)}
+                    c={selectedRequest}
+                    demo={demo}
+                    onChanged={handleRefresh}
+                  />
+                ) : (
+                  <div className="p-8 sm:p-12 text-center rounded-2xl border border-slate-800/80 bg-[#0D1117] text-slate-500">
+                    <p className="text-sm font-semibold text-slate-300">No request selected</p>
+                    <p className="text-xs text-slate-500 mt-1">Select any cab request from the queue to view full route details and admin actions.</p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -3737,8 +3781,8 @@ export function PayoutsTab({ demo }: TabProps) {
       loading={loading}
       updatedAt={updatedAt}
       right={
-        <select className={input} value={status} onChange={(e) => { setStatus(e.target.value); setPage(0); }}>
-          <option value="">All</option>
+        <select className={`${input} w-full sm:w-auto`} value={status} onChange={(e) => { setStatus(e.target.value); setPage(0); }}>
+          <option value="">All statuses</option>
           <option value="PENDING">Pending</option>
           <option value="SETTLED">Settled</option>
           <option value="REJECTED">Rejected</option>
@@ -3747,8 +3791,8 @@ export function PayoutsTab({ demo }: TabProps) {
     >
       {data &&
         (items.length ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+          <div className="overflow-x-auto touch-scroll -mx-3.5 px-3.5 sm:mx-0 sm:px-0">
+            <table className="w-full text-left text-xs min-w-[720px]">
               <thead className="border-b border-slate-800 text-slate-400 font-medium text-xs">
                 <tr>
                   <th className="p-3">{target === "HOMESTAY" ? "Homestay" : "Driver"}</th>
@@ -4130,9 +4174,9 @@ export function SettingsTab({ demo }: TabProps) {
       {/* Top Header & Sub-Navigation */}
       <Panel
         title={
-          <div className="flex items-center gap-3">
-            <span className="text-lg font-bold text-white">Platform Settings Control Tower</span>
-            {demo ? <Badge tone="amber">DEMO DATASET</Badge> : <Badge tone="green">PRODUCTION ACTIVE</Badge>}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm sm:text-base font-bold text-white">Platform Settings Control Tower</span>
+            {demo ? <Badge tone="amber">DEMO</Badge> : <Badge tone="green">PRODUCTION</Badge>}
             {dirty && <Badge tone="red">UNSAVED CHANGES</Badge>}
           </div>
         }
@@ -4143,24 +4187,24 @@ export function SettingsTab({ demo }: TabProps) {
         updatedAt={updatedAt}
         right={
           dirty ? (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
               <button type="button" onClick={resetAll} className={btn.ghost} disabled={saving}>
                 Discard Edits
               </button>
               <button
                 type="button"
                 onClick={() => saveAll()}
-                className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-lg shadow-emerald-900/40 hover:bg-emerald-500 disabled:opacity-50"
+                className="rounded-lg bg-[#1E7E4B] hover:bg-[#259A5C] px-3 py-1.5 text-xs font-bold text-white shadow-xs disabled:opacity-50 cursor-pointer"
                 disabled={saving}
               >
-                {saving ? "Saving All..." : "Save Platform Settings"}
+                {saving ? "Saving All..." : "Save Settings"}
               </button>
             </div>
           ) : undefined
         }
       >
         {/* Navigation Sub-Tabs */}
-        <div className="flex flex-wrap gap-1.5 border-b border-slate-800 pb-3">
+        <div className="flex items-center gap-1.5 border-b border-slate-800 pb-2.5 overflow-x-auto no-scrollbar touch-scroll -mx-3.5 px-3.5 sm:mx-0 sm:px-0">
           {[
             { id: "financials", label: "Commission & Splits", icon: "•", dirty: isFinancialsDirty },
             { id: "dispatch", label: "Mountain & Dispatch", icon: "•", dirty: isOpsDirty },
@@ -4177,7 +4221,7 @@ export function SettingsTab({ demo }: TabProps) {
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveSection(tab.id as SettingsSection)}
-                className={`relative flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                className={`relative shrink-0 flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition cursor-pointer whitespace-nowrap ${
                   active
                     ? "bg-[#1E7E4B] text-white"
                     : "bg-slate-900/80 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
@@ -5144,10 +5188,12 @@ export function AppealsTab({ demo }: TabProps) {
               <p className="text-slate-400">{a.ownerEmail} • {dt(a.createdAt)}</p>
               <p className="text-slate-300">“{a.reason}”</p>
               {a.status === "PENDING" ? (
-                <div className="flex flex-wrap gap-2">
-                  <input className={`${input} flex-1`} placeholder="Decision note" value={notes[rid(a)] || ""} onChange={(e) => setNotes({ ...notes, [rid(a)]: e.target.value })} />
-                  <button className={btn.ok} onClick={() => decide(a, "APPROVED")}>Approve</button>
-                  <button className={btn.danger} onClick={() => decide(a, "REJECTED")}>Reject</button>
+                <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                  <input className={`${input} flex-1 min-w-0`} placeholder="Decision note" value={notes[rid(a)] || ""} onChange={(e) => setNotes({ ...notes, [rid(a)]: e.target.value })} />
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button className={`${btn.ok} flex-1 sm:flex-initial`} onClick={() => decide(a, "APPROVED")}>Approve</button>
+                    <button className={`${btn.danger} flex-1 sm:flex-initial`} onClick={() => decide(a, "REJECTED")}>Reject</button>
+                  </div>
                 </div>
               ) : (
                 <p className="text-slate-500">Decided by {a.decidedBy || "—"} on {dt(a.decidedAt)}{a.decisionNote ? ` • ${a.decisionNote}` : ""}</p>
@@ -5279,25 +5325,25 @@ export function AuditTab({ demo }: TabProps) {
             <label className="text-xs font-medium text-slate-400 block mb-1">Driver ID</label>
             <input className={`${input} w-full`} placeholder="Driver ID" value={f.driverId} onChange={set("driverId")} />
           </div>
-          <div className="sm:col-span-2 flex items-end justify-end gap-2">
-            <button type="button" onClick={handleReset} className={btn.ghost}>Reset all</button>
-            <button type="submit" className={btn.primary}>Apply filters</button>
+          <div className="sm:col-span-2 flex flex-wrap items-end justify-end gap-2 pt-1 sm:pt-0">
+            <button type="button" onClick={handleReset} className={`${btn.ghost} flex-1 sm:flex-initial`}>Reset all</button>
+            <button type="submit" className={`${btn.primary} flex-1 sm:flex-initial`}>Apply filters</button>
           </div>
         </div>
       </form>
 
       {viewJson && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-lg rounded-2xl border border-slate-800/80 bg-[#121820] p-6 shadow-xl text-xs space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-3 sm:p-4 backdrop-blur-xs overflow-y-auto">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-800/80 bg-[#121820] p-4 sm:p-6 shadow-xl text-xs space-y-4 my-auto">
             <div className="flex items-center justify-between border-b border-slate-800 pb-2">
               <h4 className="font-semibold text-white text-sm">Audit Payload Details</h4>
-              <button type="button" onClick={() => setViewJson(null)} className="text-slate-400 hover:text-white font-bold">✕</button>
+              <button type="button" onClick={() => setViewJson(null)} className="p-1 text-slate-400 hover:text-white font-bold cursor-pointer">✕</button>
             </div>
-            <pre className="max-h-[60vh] overflow-y-auto rounded-xl bg-[#0D1117] p-3 font-mono text-[11px] text-emerald-400 whitespace-pre-wrap break-all border border-slate-800">
+            <pre className="max-h-[60vh] overflow-y-auto rounded-xl bg-[#0D1117] p-3 font-mono text-[11px] text-emerald-400 whitespace-pre-wrap break-all border border-slate-800 touch-scroll">
               {JSON.stringify(viewJson, null, 2)}
             </pre>
             <div className="text-right">
-              <button type="button" onClick={() => setViewJson(null)} className={btn.primary}>Close</button>
+              <button type="button" onClick={() => setViewJson(null)} className={`${btn.primary} w-full sm:w-auto`}>Close</button>
             </div>
           </div>
         </div>
@@ -5305,8 +5351,8 @@ export function AuditTab({ demo }: TabProps) {
 
       {data &&
         (items.length ? (
-          <div className="overflow-x-auto rounded-xl border border-slate-800">
-            <table className="w-full text-left text-xs">
+          <div className="overflow-x-auto touch-scroll -mx-3.5 px-3.5 sm:mx-0 sm:px-0 rounded-xl border border-slate-800">
+            <table className="w-full text-left text-xs min-w-[760px]">
               <thead className="border-b border-slate-800 text-slate-400 font-medium text-xs">
                 <tr>
                   <th className="p-3 w-40">When (IST)</th>
@@ -5376,21 +5422,21 @@ export function GuestsTab({ demo, initialSearch, initialTenant }: TabProps & { i
       loading={loading}
       updatedAt={updatedAt}
       right={
-        <form onSubmit={(e) => { e.preventDefault(); setPage(0); setQ(text.trim()); }} className="flex gap-2">
-          <input className={input} placeholder="Name, phone or homestay" value={text} onChange={(e) => setText(e.target.value)} />
-          <button className={btn.primary}>Search</button>
+        <form onSubmit={(e) => { e.preventDefault(); setPage(0); setQ(text.trim()); }} className="flex gap-2 w-full sm:w-auto">
+          <input className={`${input} flex-1 min-w-0 sm:w-60`} placeholder="Name, phone or homestay" value={text} onChange={(e) => setText(e.target.value)} />
+          <button className={`${btn.primary} shrink-0`}>Search</button>
         </form>
       }
     >
-      <div className="flex flex-wrap gap-2">
+      <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar touch-scroll -mx-3.5 px-3.5 sm:mx-0 sm:px-0">
         {Object.entries(GUEST_FILTERS).map(([key, v]) => (
-          <button key={key} onClick={() => { setFilter(key); setPage(0); }} className={chip(filter === key)}>{v.label}</button>
+          <button key={key} onClick={() => { setFilter(key); setPage(0); }} className={`${chip(filter === key)} shrink-0`}>{v.label}</button>
         ))}
       </div>
       {data &&
         (items.length ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+          <div className="overflow-x-auto touch-scroll -mx-3.5 px-3.5 sm:mx-0 sm:px-0 rounded-xl border border-slate-800">
+            <table className="w-full text-left text-xs min-w-[850px]">
               <thead className="border-b border-slate-800 text-slate-400 font-medium text-xs">
                 <tr>
                   <th className="p-3 min-w-[140px]">Guest</th>
@@ -5588,18 +5634,18 @@ export function NotificationBell({ demo, onOpen }: TabProps & { onOpen: (n: Any)
         )}
       </button>
       {open && (
-        <div className="absolute right-0 z-30 mt-2 w-80 rounded-xl border border-slate-800/80 bg-[#121820] p-3 text-xs shadow-2xl">
+        <div className="fixed sm:absolute right-3 sm:right-0 top-14 sm:top-auto z-50 mt-1 w-[calc(100vw-24px)] sm:w-80 max-w-sm rounded-xl border border-slate-800/80 bg-[#121820] p-3 text-xs shadow-2xl">
           <div className="mb-2 flex items-center justify-between">
             <span className="font-semibold text-white">Notifications</span>
             <button className={btn.ghost} onClick={markAll} disabled={!unread}>Mark all read</button>
           </div>
           {items.length ? (
-            <ul className="max-h-96 divide-y divide-slate-800/60 overflow-y-auto">
+            <ul className="max-h-[60vh] sm:max-h-96 divide-y divide-slate-800/60 overflow-y-auto touch-scroll">
               {items.map((i) => (
                 <li key={`${i.kind}:${i.id}`}>
-                  <button onClick={() => openItem(i)} className="w-full p-2 text-left hover:bg-slate-900">
+                  <button onClick={() => openItem(i)} className="w-full p-2.5 sm:p-2 text-left hover:bg-slate-900 rounded-lg transition-colors cursor-pointer">
                     <div className={isUnread(i) ? "font-bold text-white" : "text-slate-400"}>{i.title}</div>
-                    <div className="text-[10px] text-slate-500">{[i.sub, dt(i.at)].filter(Boolean).join(" • ")}</div>
+                    <div className="text-[10px] text-slate-500 mt-0.5">{[i.sub, dt(i.at)].filter(Boolean).join(" • ")}</div>
                   </button>
                 </li>
               ))}
