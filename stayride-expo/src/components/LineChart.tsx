@@ -69,7 +69,7 @@ export const LineChart: React.FC<LineChartProps> = ({
       <Svg width={width} height={height}>
         <Defs>
           <LinearGradient id="gradientFill" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0%" stopColor={Colors.brandPrimary} stopOpacity="0.4" />
+            <Stop offset="0%" stopColor={Colors.brandPrimary} stopOpacity="0.15" />
             <Stop offset="100%" stopColor={Colors.brandPrimary} stopOpacity="0.0" />
           </LinearGradient>
         </Defs>

@@ -18,8 +18,8 @@ export const RoomItem: React.FC<RoomItemProps> = ({ room, onPress }) => {
           <Text style={styles.number}>Room {room.number}</Text>
           {room.roomType === 'DORM' && (
             <View style={{ backgroundColor: '#E0F2FE', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, borderWidth: 1, borderColor: '#BAE6FD' }}>
-              <Text style={{ fontSize: 10, fontWeight: '700', color: '#0369A1' }}>
-                DORM ({room.bedCount || 4} BEDS)
+              <Text style={{ fontSize: 10, fontWeight: '600', color: '#0369A1' }}>
+                Dorm ({room.bedCount || 4} beds)
               </Text>
             </View>
           )}
@@ -73,7 +73,6 @@ const styles = StyleSheet.create({
   note: {
     fontSize: 12,
     color: Colors.textSecondary,
-    fontStyle: 'italic',
     marginTop: 3,
   },
   bottomRow: {

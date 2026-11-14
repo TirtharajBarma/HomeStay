@@ -53,7 +53,7 @@ export const BarChart: React.FC<BarChartProps> = ({ labels, values, height = 160
                 width={barWidth}
                 height={barHeight}
                 rx={6}
-                fill={idx % 2 === 0 ? Colors.brandPrimary : Colors.brandPrimaryDark}
+                fill={Colors.brandPrimary}
               />
               <SvgText
                 x={x + barWidth / 2}

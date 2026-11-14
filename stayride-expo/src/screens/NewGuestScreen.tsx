@@ -106,18 +106,18 @@ export const NewGuestScreen: React.FC = () => {
       }
       // Fix 6: Post-save options
       Alert.alert(
-        `✅ ${trimmedName} added!`,
+        `${trimmedName} added`,
         'What would you like to do next?',
         [
           {
-            text: '🛏  Book a Room',
+            text: 'Book a Room',
             onPress: () => {
               navigation.goBack();
               navigation.navigate('NewBooking', { guestId: createdGuest?.id });
             },
           },
           {
-            text: '🚗  Request a Cab',
+            text: 'Request a Cab',
             onPress: () => {
               navigation.goBack();
               navigation.navigate('FindDriver');

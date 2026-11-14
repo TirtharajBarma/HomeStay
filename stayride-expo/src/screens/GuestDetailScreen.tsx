@@ -169,7 +169,7 @@ export const GuestDetailScreen: React.FC = () => {
             style={[styles.actionBtn, styles.actionBtnCab]}
             onPress={handleRequestCab}
           >
-            <Text style={styles.actionBtnCabText}>🚗 Ask Cab</Text>
+            <Text style={styles.actionBtnCabText}>Ask Cab</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.actionBtn, styles.actionBtnOutline]}

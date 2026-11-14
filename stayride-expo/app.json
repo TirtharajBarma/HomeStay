@@ -2,7 +2,7 @@
   "expo": {
     "name": "StayCabs",
     "description": "StayCabs Console for Himalayan Homestay Hosts and Cab Drivers across Darjeeling, Kurseong, Kalimpong and Sikkim.",
-    "slug": "staycabs",
+    "slug": "stayride",
     "scheme": "staycabs",
     "version": "1.0.4",
     "orientation": "portrait",

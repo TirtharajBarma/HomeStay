@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { Colors, Radii, Shadows } from '../theme/colors';
 import { useStayRide } from '../data/store';
 import { GradientHeader } from '../components/GradientHeader';
@@ -133,10 +134,10 @@ export const HomeScreen: React.FC = () => {
           }
           badgeText={
             isDemoMode
-              ? 'GOLD HOST'
+              ? 'Verified Host'
               : totalBookings() === 0
-              ? 'NEW HOST'
-              : 'HOST'
+              ? 'New Host'
+              : 'Host'
           }
         />
 
@@ -242,7 +243,8 @@ export const HomeScreen: React.FC = () => {
           onPress={() => navigation.navigate('Campaign')}
           activeOpacity={0.7}
         >
-          <Text style={styles.moreActionsText}>📣  Campaign</Text>
+          <Ionicons name="megaphone-outline" size={14} color={Colors.textSecondary} style={{ marginRight: 6 }} />
+          <Text style={styles.moreActionsText}>Promote with Campaign</Text>
         </TouchableOpacity>
 
         {/* Performance Chart Card */}

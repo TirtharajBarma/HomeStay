@@ -2,8 +2,11 @@ import crypto from "crypto";
 import { Booking, type IBooking } from "../models/booking.model.js";
 import { Room } from "../models/room.model.js";
 import { Guest } from "../models/guest.model.js";
+import { User } from "../models/user.model.js";
+import { Property } from "../models/property.model.js";
 import { RoomService } from "./room.service.js";
 import { NotificationService } from "./notification.service.js";
+import { tenantManager } from "../stayride/store.js";
 import { logger } from "../utils/logger.js";
 
 export interface CreateBookingDTO {
@@ -56,7 +59,38 @@ export class BookingService {
       }
     }
 
-    // Check for overlapping bookings on this specific room
+    // Resolve property tenantKey for iCal OTA synchronization
+    let tenantKey: string | null = null;
+    try {
+      const owner = room.ownerId ? await User.findById(room.ownerId).select("email").lean() : null;
+      tenantKey = owner?.email || (room.propertyId ? (await Property.findById(room.propertyId).select("email").lean())?.email : null) || null;
+    } catch {}
+
+    // 1. Check for OTA / iCal imported calendar reservations in tenantManager
+    if (tenantKey) {
+      try {
+        const store = await tenantManager.load(tenantKey);
+        const reqStart = new Date(data.checkIn).getTime();
+        const reqEnd = new Date(data.checkOut).getTime();
+        const otaOverlap = store.bookings.find((b) => {
+          if (b.status !== "CONFIRMED" && b.status !== "CHECKED_IN") return false;
+          const roomMatches =
+            String(b.roomNumber) === String(room.code) ||
+            String(b.roomNumber) === String(room.name) ||
+            (b.roomNumber && String(room.code || "").includes(String(b.roomNumber)));
+          if (!roomMatches) return false;
+          return b.checkIn < reqEnd && b.checkOut > reqStart;
+        });
+        if (otaOverlap) {
+          const source = (otaOverlap as any).external?.source || "calendar sync (Airbnb/Booking.com)";
+          throw new Error(`Room '${room.name}' is already reserved via ${source} for the selected dates.`);
+        }
+      } catch (storeErr: any) {
+        if (storeErr.message?.includes("already reserved")) throw storeErr;
+      }
+    }
+
+    // 2. Check for overlapping bookings in canonical Booking collection
     const overlap = await Booking.findOne({
       roomId: room._id,
       status: { $in: ["confirmed", "checked_in"] },
@@ -128,6 +162,54 @@ export class BookingService {
       notes: data.notes || "",
     });
     await booking.save();
+
+    // Atomic post-save concurrency check: Ensure no concurrent reservation committed for the same room & dates
+    const concurrentOverlap = await Booking.findOne({
+      _id: { $ne: booking._id },
+      roomId: room._id,
+      status: { $in: ["confirmed", "checked_in"] },
+      checkIn: { $lt: data.checkOut },
+      checkOut: { $gt: data.checkIn },
+    });
+    if (concurrentOverlap) {
+      await Booking.deleteOne({ _id: booking._id });
+      throw new Error(`Room '${room.name}' was just reserved by another guest for these dates. Please select other dates.`);
+    }
+
+    // Sync direct booking to tenant store so iCal exports (Airbnb, Vrbo, Booking.com) block out these dates
+    if (tenantKey) {
+      await tenantManager
+        .mutate(tenantKey, (store) => {
+          const exists = store.bookings.some((b) => b.reference === booking.reference);
+          if (!exists) {
+            const guest = store.guestByPhone(booking.phone) || store.createGuest({
+              name: booking.guestName,
+              phone: booking.phone,
+              email: booking.email || "",
+              notes: "Direct web booking",
+              marketingConsent: false,
+            } as any);
+
+            store.bookings.unshift({
+              id: store.nextBookingIdForImport(),
+              guestId: guest.id,
+              guestName: booking.guestName,
+              phone: booking.phone,
+              roomNumber: room.code || room.name,
+              checkIn: new Date(booking.checkIn).getTime(),
+              checkOut: new Date(booking.checkOut).getTime(),
+              amount: booking.totalAmount,
+              guests: booking.party || 1,
+              status: "CONFIRMED",
+              paid: Boolean(booking.settled || booking.balanceDue === 0),
+              source: "Direct Web",
+              reference: booking.reference,
+              channel: "Direct Web",
+            });
+          }
+        })
+        .catch((err) => logger.warn(`[BookingService] Sync to tenant store notice: ${err?.message}`));
+    }
 
     // Automatically upsert or update the Guest record in the CRM
     try {
@@ -257,6 +339,20 @@ export class BookingService {
       { returnDocument: "after" }
     );
     if (booking) {
+      // Free the dates in tenant store and iCal export feeds
+      try {
+        const owner = booking.ownerId ? await User.findById(booking.ownerId).select("email").lean() : null;
+        const tenantKey = owner?.email || (booking.propertyId ? (await Property.findById(booking.propertyId).select("email").lean())?.email : null);
+        if (tenantKey) {
+          await tenantManager.mutate(tenantKey, (store) => {
+            const b = store.bookings.find((item) => item.reference === reference);
+            if (b) b.status = "CANCELLED";
+          });
+        }
+      } catch (syncErr: any) {
+        logger.warn(`[BOOKING CANCELLED] Tenant store sync notice: ${syncErr?.message}`);
+      }
+
       logger.info(
         `[BOOKING CANCELLED] Ref ${booking.reference} | Room: ${booking.roomName} (${booking.roomCode}) | Guest: ${booking.guestName} (${booking.email})`,
         {

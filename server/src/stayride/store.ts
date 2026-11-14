@@ -38,6 +38,8 @@ export interface StayRideBooking {
   paid: boolean;
   amount: number;
   source: string;
+  reference?: string;
+  channel?: string;
   // Set by the server: when the guest actually left (early checkout frees the remaining nights)
   actualCheckOut?: number;
   // Set by the server: how much of this stay is in the guest's total spending (paid money, once checked out).
@@ -289,7 +291,7 @@ export const FIELDS: Record<string, Record<string, FieldRule>> = {
   guest: { name: S(100), phone: S(20), email: S(120), notes: S(1000), marketingConsent: B },
   booking: {
     guestId: N({ int: true, nullable: true }), guestName: S(100), phone: S(20), checkIn: DATE, checkOut: DATE,
-    roomNumber: S(20), bedNumber: S(30), guests: N({ int: true, max: 50 }), amount: MONEY, source: S(60), paid: B,
+    roomNumber: S(20), bedNumber: S(30), guests: N({ int: true, max: 50 }), amount: MONEY, source: S(60), paid: B, reference: S(60),
   },
   driver: {
     name: S(100), phone: S(20), vehicle: S(60), vehicleType: E(VEHICLE_TYPES), seats: N({ int: true, max: 60 }),
@@ -1379,10 +1381,10 @@ export class StayRideTenantManager {
   }
 
   /** Load → mutate → save, retrying on concurrent writes. `fn` must only change the store. */
-  async mutate<T>(tenantId: string, fn: (store: StayRideMemoryStore) => T, attempts = 5): Promise<T> {
+  async mutate<T>(tenantId: string, fn: (store: StayRideMemoryStore) => T | Promise<T>, attempts = 5): Promise<T> {
     for (let i = 0; ; i++) {
       const store = await this.load(tenantId);
-      const result = fn(store);
+      const result = await fn(store);
       try {
         await this.save(store);
         return result;

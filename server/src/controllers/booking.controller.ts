@@ -28,7 +28,8 @@ export class BookingController {
 
   static async getBookings(req: Request, res: Response) {
     const user = (req as any).user;
-    const resolvedOwnerId = user?.role === "admin" && req.query.ownerId ? String(req.query.ownerId) : user?.id;
+    // Admins without ownerId in query can view all bookings; homestay owners are scoped to their own id
+    const resolvedOwnerId = user?.role === "admin" ? (req.query.ownerId ? String(req.query.ownerId) : undefined) : user?.id;
     const filters = {
       roomCode: req.query.roomCode as string,
       channel: req.query.channel as string,
@@ -53,12 +54,33 @@ export class BookingController {
         error: `Booking '${reference}' not found`,
       });
     }
-    // This route is public (a guest looks up their own booking). The door PIN is a secret used to
-    // authorise cancellation, so it is only returned to the property owner or an admin.
+
     const user = (req as any).user;
-    const authorized = Boolean(user) && (user.role === "admin" || String(user.id) === String(booking.ownerId));
+    const isStaff = Boolean(user) && (user.role === "admin" || String(user.id) === String(booking.ownerId));
+
+    // Zero-Trust verification: prevent unauthenticated IDOR enumeration of guest PII.
+    // Guests must provide matching phone (last 10 digits), matching email, or secret booking PIN.
+    const last10 = (p: unknown) => String(p || "").replace(/\D/g, "").slice(-10);
+    const queryPhone = last10(req.query.phone);
+    const queryEmail = String(req.query.email || "").trim().toLowerCase();
+    const queryPin = String(req.query.pin || req.headers["x-booking-pin"] || "").trim();
+
+    const pinMatches = Boolean(queryPin) && queryPin === String(booking.pin).trim();
+    const phoneMatches = queryPhone.length === 10 && queryPhone === last10(booking.phone);
+    const emailMatches = Boolean(queryEmail) && queryEmail === String(booking.email || "").trim().toLowerCase();
+
+    const isVerifiedGuest = pinMatches || phoneMatches || emailMatches;
+
+    if (!isStaff && !isVerifiedGuest) {
+      return res.status(401).json({
+        success: false,
+        error: "Verification required: please provide matching phone number, email, or PIN to view this booking.",
+      });
+    }
+
     const data: any = typeof (booking as any).toObject === "function" ? (booking as any).toObject() : { ...booking };
-    if (!authorized) delete data.pin;
+    // Only staff or a guest who explicitly supplied the matching PIN can see the PIN
+    if (!isStaff && !pinMatches) delete data.pin;
     res.json({ success: true, data });
   }
 

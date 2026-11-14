@@ -281,7 +281,9 @@ export const RoomsScreen: React.FC = () => {
         ) : activeTab === 'rooms' ? (
           filteredRooms.length === 0 ? (
             <View style={styles.emptyBox}>
-              <Text style={{ fontSize: 40, marginBottom: 8 }}>🛏️</Text>
+              <View style={styles.emptyIconCircle}>
+                <Ionicons name="bed-outline" size={26} color={Colors.brandPrimary} />
+              </View>
               <Text style={styles.emptyTitle}>No rooms match this filter</Text>
               <Text style={styles.emptyText}>Switch the filter chip above to see all homestay rooms.</Text>
             </View>
@@ -292,9 +294,11 @@ export const RoomsScreen: React.FC = () => {
           )
         ) : filteredBookings.length === 0 ? (
           <View style={styles.emptyBox}>
-            <Text style={{ fontSize: 40, marginBottom: 8 }}>📅</Text>
-            <Text style={styles.emptyTitle}>No bookings found</Text>
-            <Text style={styles.emptyText}>Create a new room reservation for your guest.</Text>
+            <View style={styles.emptyIconCircle}>
+              <Ionicons name="calendar-outline" size={26} color={Colors.brandPrimary} />
+            </View>
+              <Text style={styles.emptyTitle}>No bookings found</Text>
+              <Text style={styles.emptyText}>Create a new room reservation for your guest.</Text>
             <TouchableOpacity
               style={styles.emptyActionBtn}
               onPress={() => navigation.navigate('NewBooking')}
@@ -496,7 +500,16 @@ const styles = StyleSheet.create({
   },
   emptyBox: {
     alignItems: 'center',
-    paddingVertical: 40,
+    paddingVertical: 36,
+  },
+  emptyIconCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: Colors.brandPrimaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
   },
   emptyTitle: {
     fontSize: 15,

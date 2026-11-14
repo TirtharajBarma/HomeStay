@@ -308,7 +308,7 @@ export const LoginScreen: React.FC = () => {
     pendingProfile.current = forProfile;
     setGoogleLoading(true);
     try {
-      const redirectUrl = Linking.createURL('/dashboard', { scheme: process.env.EXPO_PUBLIC_SCHEME || 'staycabs' });
+      const redirectUrl = Linking.createURL('/dashboard', { scheme: process.env.EXPO_PUBLIC_SCHEME || 'stayride' });
       const { createdSessionId, setActive: setOAuthActive } = await startOAuthFlow({ redirectUrl });
       const activate = setOAuthActive || setActive;
       if (createdSessionId && activate) await activate({ session: createdSessionId }); // finishSignIn runs next
@@ -887,16 +887,16 @@ const styles = StyleSheet.create({
   hero: { backgroundColor: Colors.brandPrimaryDark, alignItems: 'center', paddingBottom: 56, paddingHorizontal: 24 },
   logo: { width: 52, height: 52, borderRadius: 16, backgroundColor: Colors.white, alignItems: 'center', justifyContent: 'center' },
   brand: { color: Colors.white, fontSize: 28, fontWeight: '800', marginTop: 12, letterSpacing: 0.3 },
-  tagline: { color: '#E2DAFF', fontSize: 14, marginTop: 4 },
-  card: { marginHorizontal: 16, marginTop: -36, backgroundColor: Colors.bgCard, borderRadius: Radii.dialog, padding: 18, ...Shadows.hover },
+  tagline: { color: '#D4E3D9', fontSize: 14, marginTop: 4 },
+  card: { marginHorizontal: 16, marginTop: -32, backgroundColor: Colors.bgCard, borderRadius: Radii.card, padding: 20, borderWidth: 1, borderColor: Colors.divider, ...Shadows.card },
   tabs: { flexDirection: 'row', backgroundColor: Colors.bgPage, borderRadius: 12, padding: 4, marginBottom: 16 },
   tab: { flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center' },
   tabActive: { backgroundColor: Colors.bgCard, ...Shadows.sm },
   tabText: { fontSize: 14, fontWeight: '600', color: Colors.textSecondary },
-  tabTextActive: { color: Colors.brandPrimaryDark, fontWeight: '800' },
-  title: { fontSize: 20, fontWeight: '800', color: Colors.textPrimary },
+  tabTextActive: { color: Colors.brandPrimaryDark, fontWeight: '700' },
+  title: { fontSize: 20, fontWeight: '700', color: Colors.textPrimary },
   subtitle: { fontSize: 14, color: Colors.textSecondary, lineHeight: 20 },
-  stepLabel: { fontSize: 12, fontWeight: '800', color: Colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.6 },
+  stepLabel: { fontSize: 12, fontWeight: '600', color: Colors.textSecondary },
   field: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: Colors.divider, borderRadius: 12, paddingHorizontal: 12, backgroundColor: Colors.white },
   fieldInput: { flex: 1, paddingVertical: 13, fontSize: 15, color: Colors.textPrimary },
   googleBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, borderWidth: 1, borderColor: Colors.divider, borderRadius: 12, paddingVertical: 13, backgroundColor: Colors.white },
@@ -921,7 +921,7 @@ const styles = StyleSheet.create({
   progressBarOn: { backgroundColor: Colors.brandPrimary },
   stepHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   stepTitle: { fontSize: 18, fontWeight: '800', color: Colors.textPrimary, marginTop: 2 },
-  roleCardActive: { borderColor: Colors.brandPrimary, backgroundColor: '#FAF8FF' },
+  roleCardActive: { borderColor: Colors.brandPrimary, backgroundColor: Colors.brandPrimaryLight },
   roleIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: Colors.brandPrimaryLight, alignItems: 'center', justifyContent: 'center' },
   roleTitle: { fontSize: 15, fontWeight: '800', color: Colors.textPrimary },
   roleDesc: { fontSize: 12, color: Colors.textSecondary, marginTop: 3, lineHeight: 16 },
@@ -954,7 +954,7 @@ const styles = StyleSheet.create({
   },
   otpDigitBoxFilled: {
     borderColor: Colors.brandPrimary,
-    backgroundColor: '#F5F3FF',
+    backgroundColor: Colors.brandPrimaryLight,
   },
   timerText: {
     fontSize: 12,

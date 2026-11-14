@@ -2676,6 +2676,7 @@ export function CabRequestsTab({ demo, initialTenantKey, initialFilter }: TabPro
   const stage2Awaiting = items.filter((c) => c.status === "AWAITING_ADVANCE_PAYMENT" || (c.status === "CONFIRMED" && !c.advancePaid));
   const stage3Active = items.filter((c) => ["CONFIRMED", "EN_ROUTE_PICKUP", "ARRIVED_HOMESTAY", "TRIP_STARTED"].includes(c.status) && c.advancePaid);
   const stage4Completed = items.filter((c) => c.status === "COMPLETED");
+  const stageCancelledOrRefund = items.filter((c) => c.status === "CANCELLED" || c.refundStatus === "PENDING" || (c.unmatchedPayments && c.unmatchedPayments.length > 0));
 
   // Auto-select first item when items load if none selected
   useEffect(() => {
@@ -2851,7 +2852,7 @@ export function CabRequestsTab({ demo, initialTenantKey, initialFilter }: TabPro
         {/* VIEW 1: LIVE 4-STAGE PIPELINE BOARD (SEE ALL RIDES ACROSS STAGES)*/}
         {/* =============================================================== */}
         {viewMode === "board" && data && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3.5 pt-1 items-start">
+          <div className={`grid grid-cols-1 ${stageFilter === "refunds" || stageCancelledOrRefund.length > 0 ? "md:grid-cols-2 lg:grid-cols-5" : "md:grid-cols-4"} gap-3.5 pt-1 items-start`}>
             {/* COLUMN 1: OPEN & BIDDING */}
             <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-3 space-y-2.5">
               <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
@@ -2935,6 +2936,29 @@ export function CabRequestsTab({ demo, initialTenantKey, initialFilter }: TabPro
                 )}
               </div>
             </div>
+
+            {/* COLUMN 5: CANCELLED & REFUNDS */}
+            {(stageFilter === "refunds" || stageCancelledOrRefund.length > 0) && (
+              <div className="rounded-xl border border-purple-800/80 bg-purple-950/20 p-3 space-y-2.5">
+                <div className="flex items-center justify-between border-b border-purple-800/60 pb-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-purple-400" />
+                    <span className="font-bold text-white text-xs">5. Cancelled / Refunds</span>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full bg-purple-900/80 text-purple-200 border border-purple-700/60 font-mono text-[11px] font-bold">
+                    {stageCancelledOrRefund.length}
+                  </span>
+                </div>
+                <div className="space-y-2 max-h-[720px] overflow-y-auto pr-0.5">
+                  {stageCancelledOrRefund.map((c) => (
+                    <PipelineCard key={rid(c)} c={c} onInspect={() => openInspector(c)} />
+                  ))}
+                  {stageCancelledOrRefund.length === 0 && (
+                    <p className="p-4 text-center text-xs text-slate-500">No cancelled or refund requests</p>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -3555,6 +3579,8 @@ function AssignForm({ c, demo, onDone }: { c: Any; demo: boolean; onDone: () => 
   async function selectQuote(q: Any) {
     const qFare = String(q.quotedFare);
     setDriverUserId(String(q.driverId));
+    setName(q.driverName || "");
+    setPhone(q.driverPhone || "");
     setPicked({ _id: String(q.driverId), name: q.driverName, phone: q.driverPhone });
     setFare(qFare);
     if (!locked && Number(qFare) > 0) {
@@ -3577,8 +3603,13 @@ function AssignForm({ c, demo, onDone }: { c: Any; demo: boolean; onDone: () => 
     if (!window.confirm(msg)) return;
     setBusy(true);
     const body: Any = { agreedFare: Number(fare), vehicleModel: model || undefined, vehiclePlate: plate || undefined };
-    if (driverUserId) body.driverUserId = driverUserId;
-    else Object.assign(body, { assignedDriverName: name.trim(), assignedDriverPhone: phone.trim() });
+    if (driverUserId) {
+      body.driverUserId = driverUserId;
+      body.assignedDriverName = (picked?.name || name || "").trim();
+      body.assignedDriverPhone = (picked?.phone || phone || "").trim();
+    } else {
+      Object.assign(body, { assignedDriverName: name.trim(), assignedDriverPhone: phone.trim() });
+    }
     await act(() => adminApi(`/cab-requests/${rid(c)}/assign-driver`, { method: "POST", body, demo }), onDone);
     setBusy(false);
   }
@@ -3949,6 +3980,7 @@ export function SettingsTab({ demo }: TabProps) {
   const [cfg, setCfg] = useState<Any | null>(null);
   const [presets, setPresets] = useState("");
   const [icalHosts, setIcalHosts] = useState("");
+  const [emailRecipients, setEmailRecipients] = useState("");
   const [features, setFeatures] = useState<Any>({});
 
   // Calculation & Save
@@ -3970,12 +4002,24 @@ export function SettingsTab({ demo }: TabProps) {
       setCfg(JSON.parse(JSON.stringify(data.platform)));
       setPresets((data.platform.sightseeingPresets || []).join("\n"));
       setIcalHosts((data.platform.icalAllowedHosts || []).join("\n"));
+      setEmailRecipients((Array.isArray(data.platform.emailAlerts?.recipients) ? data.platform.emailAlerts.recipients : []).join("\n"));
     }
     setFeatures(data.features || {});
   }, [data]);
 
-  // Clean Presets & Domains
+  // Clean Presets, Domains & Admin Emails
   const presetList = (text: string) => text.split("\n").map((p) => p.trim()).filter(Boolean);
+  const cleanEmailList = (text: string): string[] => {
+    if (!text || typeof text !== "string") return [];
+    return Array.from(
+      new Set(
+        text
+          .split(/[\n,]/)
+          .map((p) => p.trim().toLowerCase())
+          .filter(Boolean)
+      )
+    );
+  };
   const cleanDomainList = (text: string) =>
     text
       .split("\n")
@@ -3997,7 +4041,7 @@ export function SettingsTab({ demo }: TabProps) {
     setTestEmailLoading(true);
     setTestEmailStatus("");
     try {
-      const recipients = cfg?.emailAlerts?.recipients || [];
+      const recipients = cleanEmailList(emailRecipients);
       if (!recipients.length) {
         setTestEmailStatus("✕ Please enter at least one admin email in the box above.");
         setTestEmailLoading(false);
@@ -4036,7 +4080,15 @@ export function SettingsTab({ demo }: TabProps) {
   const isOpsDirty =
     !!data?.platform &&
     !!cfg &&
-    JSON.stringify({ ...cfg, sightseeingPresets: presetList(presets), icalAllowedHosts: cleanDomainList(icalHosts) }) !==
+    JSON.stringify({
+      ...cfg,
+      sightseeingPresets: presetList(presets),
+      icalAllowedHosts: cleanDomainList(icalHosts),
+      emailAlerts: {
+        ...(cfg.emailAlerts || {}),
+        recipients: cleanEmailList(emailRecipients),
+      },
+    }) !==
       JSON.stringify(data.platform);
 
   const isFeaturesDirty = !!data?.features && JSON.stringify(features) !== JSON.stringify(data.features);
@@ -4141,6 +4193,10 @@ export function SettingsTab({ demo }: TabProps) {
         routePresets: sanitizedRoutes,
         sightseeingPresets: presetList(presets),
         icalAllowedHosts: cleanDomainList(icalHosts),
+        emailAlerts: {
+          ...(cfg?.emailAlerts || {}),
+          recipients: cleanEmailList(emailRecipients),
+        },
       },
       changeReason: reason.trim(),
     };
@@ -4877,23 +4933,22 @@ vrbo.com"
                     Recipient Admin Email Addresses
                   </label>
                   <span className="text-[11px] text-slate-500 font-mono">
-                    {Array.isArray(cfg.emailAlerts?.recipients) ? cfg.emailAlerts.recipients.length : 0} configured
+                    {cleanEmailList(emailRecipients).length} configured
                   </span>
                 </div>
                 <textarea
                   rows={3}
                   className="w-full rounded-xl border border-slate-700/80 bg-[#0D1117] px-3.5 py-2.5 text-xs text-white font-mono placeholder:text-slate-600 focus:border-[#2EA043] focus:outline-none"
                   placeholder="admin@staycabs.in&#10;your.personal.email@gmail.com"
-                  value={Array.isArray(cfg.emailAlerts?.recipients) ? cfg.emailAlerts.recipients.join("\n") : ""}
+                  value={emailRecipients}
                   onChange={(e) => {
-                    const list = e.target.value
-                      .split(/[\n,]/)
-                      .map((x) => x.trim())
-                      .filter(Boolean);
-                    setCfg({
-                      ...cfg,
-                      emailAlerts: { ...(cfg.emailAlerts || {}), recipients: list },
-                    });
+                    const val = e.target.value;
+                    setEmailRecipients(val);
+                    const list = cleanEmailList(val);
+                    setCfg((c: Any) => ({
+                      ...c,
+                      emailAlerts: { ...(c?.emailAlerts || {}), recipients: list },
+                    }));
                   }}
                 />
                 <p className="text-[11px] text-slate-500">

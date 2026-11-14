@@ -1042,6 +1042,12 @@ async function createPlatformTrip(
     },
   });
   if (doc.dispatched !== false) await notifyNewRequest(isDemo, doc);
+  const schedDate = doc.date
+    ? (Number.isFinite(Number(doc.date)) && Number(doc.date) > 1000000000
+        ? new Date(Number(doc.date)).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })
+        : String(doc.date))
+    : '—';
+  const schedStr = doc.time ? `${schedDate} at ${doc.time}` : schedDate;
   NotificationService.sendAdminAlert('cabRequestCreated', `New Cab Request: #${doc.reference} (${doc.guestName})`, {
     badge: 'CAB REQUEST',
     reference: doc.reference,
@@ -1052,7 +1058,7 @@ async function createPlatformTrip(
       { label: 'Phone', value: doc.guestPhone },
       { label: 'Pickup Location', value: doc.pickupLocation?.address || '—' },
       { label: 'Destination', value: (doc.destinations || []).map((d: any) => d.address).join(' → ') || '—' },
-      { label: 'Schedule', value: `${doc.date} at ${doc.time}` },
+      { label: 'Schedule', value: schedStr },
       { label: 'Vehicle Class', value: doc.vehicleType || 'Any' },
       { label: 'Dispatch Source', value: source },
     ],
