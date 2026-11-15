@@ -8,38 +8,52 @@ import { MobileNav, type NavLink } from "./mobile-nav";
 
 const navLinks = [
   {
-    href: "/#accommodations",
-    label: "Homestays",
-    hint: "Verified local mountain stays",
-    icon: "cottage",
+    href: "/",
+    label: "Home",
+    hint: "Overview & homestay platform",
+    icon: "home",
     active: true,
   },
   {
-    href: "/#experiences",
-    label: "Experiences",
-    hint: "Local cuisine, trails & tea gardens",
-    icon: "spa",
+    href: "/#features",
+    label: "Features",
+    hint: "Rooms, guests & cabs in one place",
+    icon: "dashboard_customize",
     active: false,
   },
-  // {
-  //   href: "/cab-request",
-  //   label: "Mountain cabs",
-  //   hint: "Fixed-fare hill transfers & day tours",
-  //   icon: "local_taxi",
-  //   active: false,
-  // },
+  {
+    href: "/#how-it-works",
+    label: "How It Works",
+    hint: "3 simple steps to get started",
+    icon: "alt_route",
+    active: false,
+  },
+  {
+    href: "/#hills",
+    label: "Built for Hills",
+    hint: "Darjeeling, Kalimpong & Sikkim",
+    icon: "landscape",
+    active: false,
+  },
   {
     href: "/join-driver",
-    label: "Drive with us",
+    label: "For Drivers",
     hint: `Join the ${siteConfig.appName} driver network`,
     icon: "directions_car",
     active: false,
   },
   {
-    href: "/#story",
-    label: "About",
-    hint: "Himalayan hosts & local drivers",
-    icon: "menu_book",
+    href: "/#pricing",
+    label: "Pricing",
+    hint: "Completely free for homestay owners",
+    icon: "currency_rupee",
+    active: false,
+  },
+  {
+    href: "/#faq",
+    label: "FAQ",
+    hint: "Frequently asked questions",
+    icon: "help_outline",
     active: false,
   },
 ] satisfies (NavLink & { active: boolean })[];
@@ -49,45 +63,44 @@ export function SiteHeader() {
     <header className="sticky top-0 z-50 w-full border-b border-outline-variant/60 bg-surface/95 backdrop-blur-md shadow-navbar">
       <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between gap-4 px-4 sm:px-6">
         <Link href="/" className="group flex items-center gap-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-on-primary">
-            <Icon name="cottage" className="text-[18px]" />
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-on-primary shadow-sm shadow-primary/20 transition-transform group-hover:scale-105">
+            <Icon name="cottage" className="text-[20px]" />
           </span>
           <span className="flex flex-col">
-            <span className="truncate font-display text-headline-sm font-medium tracking-tight text-primary">
+            <span className="truncate font-display text-headline-sm font-semibold tracking-tight text-primary">
               {siteConfig.appName}
             </span>
-            <span className="-mt-0.5 hidden text-label-sm text-outline xs:block">
-              Himalayan stays &amp; cabs
+            <span className="-mt-0.5 hidden text-label-sm text-outline xs:block font-medium">
+              Your homestay. Your cabs. One platform.
             </span>
           </span>
         </Link>
 
-        <nav className="hidden items-center gap-7 lg:flex" aria-label="Primary">
+        <nav className="hidden items-center gap-6 lg:flex" aria-label="Primary">
           {navLinks.map((link) => (
             <Link
               key={link.href}
               href={link.href}
-              className={
-                link.active
-                  ? "relative inline-flex h-9 items-center text-body-md font-medium text-primary"
-                  : "relative inline-flex h-9 items-center text-body-md text-on-surface-variant transition-colors hover:text-primary"
-              }
+              className="relative inline-flex h-9 items-center text-body-sm font-medium text-on-surface-variant transition-colors hover:text-primary"
             >
               <span>{link.label}</span>
-              {link.active && (
-                <span className="absolute -bottom-1 left-0 right-0 h-[2px] rounded-full bg-primary" />
-              )}
             </Link>
           ))}
         </nav>
 
-        <div className="flex shrink-0 items-center gap-3">
+        <div className="flex shrink-0 items-center gap-2.5 sm:gap-3">
           <Link
-            href="/#accommodations"
-            className="inline-flex h-9 items-center rounded-md bg-primary px-3.5 text-label-md font-medium text-on-primary transition-colors hover:bg-primary-container"
+            href="/cab-request"
+            className="hidden sm:inline-flex h-9 items-center rounded-lg border border-primary/20 bg-primary-fixed px-3 text-label-md font-semibold text-primary transition-colors hover:bg-primary-fixed-dim"
           >
-            Book a stay
+            Guest Cabs
           </Link>
+          <a
+            href="#register"
+            className="inline-flex h-9 items-center rounded-lg bg-primary px-3.5 text-label-md font-semibold text-on-primary shadow-sm shadow-primary/25 transition-all hover:bg-primary-container active:scale-95"
+          >
+            Get Started Free
+          </a>
           <MobileNav links={navLinks} />
         </div>
       </div>
@@ -99,15 +112,15 @@ export function SiteHeader() {
 export function BrandLockup() {
   return (
     <Link href="/" className="group flex items-center gap-3">
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-on-primary">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary text-on-primary shadow-sm shadow-primary/20">
         <Icon name="cottage" className="text-[18px]" />
       </span>
       <span className="flex flex-col">
-        <span className="truncate font-display text-headline-sm font-medium leading-tight tracking-tight text-primary">
+        <span className="truncate font-display text-headline-sm font-semibold leading-tight tracking-tight text-primary">
           {siteConfig.appName}
         </span>
-        <span className="hidden text-label-sm text-outline sm:block">
-          Himalayan stays &amp; mountain cabs
+        <span className="hidden text-label-sm text-outline sm:block font-medium">
+          Your homestay. Your cabs. One platform.
         </span>
       </span>
     </Link>
@@ -121,7 +134,7 @@ export function CheckoutHeader() {
         <BrandLockup />
 
         <div className="flex shrink-0 items-center gap-2 sm:gap-6">
-          <div className="hidden items-center gap-1.5 rounded-full border border-outline-variant/30 bg-surface-container px-3 py-1.5 text-label-md text-primary md:flex">
+          <div className="hidden items-center gap-1.5 rounded-full border border-outline-variant/40 bg-surface-container px-3 py-1.5 text-label-md text-primary md:flex">
             <Icon name="lock" filled className="text-base" />
             <span>Secure direct booking</span>
           </div>

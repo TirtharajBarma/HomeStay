@@ -38,7 +38,7 @@ export default function GlobalError({
             !
           </div>
           <div>
-            <h2 className="text-xl font-medium text-[#183f2a]">Application temporarily unavailable</h2>
+            <h2 className="text-xl font-medium text-[#6D45C5]">Application temporarily unavailable</h2>
             <p className="text-xs text-[#57534e] mt-2 leading-relaxed">
               An unexpected system interruption occurred. Please reload to resume your reservation.
             </p>
@@ -46,7 +46,7 @@ export default function GlobalError({
           <button
             type="button"
             onClick={() => reset()}
-            className="w-full rounded-lg bg-[#183f2a] py-2.5 px-4 text-xs font-medium text-white hover:bg-[#24563b] transition-colors cursor-pointer"
+            className="w-full rounded-lg bg-[#6D45C5] py-2.5 px-4 text-xs font-medium text-white hover:bg-[#5832A8] transition-colors cursor-pointer"
           >
             Reload page
           </button>
