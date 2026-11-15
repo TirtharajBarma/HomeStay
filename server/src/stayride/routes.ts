@@ -1872,8 +1872,16 @@ stayrideV1Router.post('/auth/clerk-webhook', async (req: Request, res: Response)
     } else if (type === 'user.deleted') {
       const clerkId = data.id;
       if (clerkId) {
-        // Keep the account record (money history); just block sign-in.
-        await UserModel.updateOne({ clerkId }, { $set: { accountStatus: 'BLOCKED', statusReason: 'Deleted in Clerk' } });
+        // Mark blocked, stamp deletion date, unset clerkId and revoke sessions so the phone/email is freed up
+        await UserModel.updateOne(
+          { clerkId },
+          {
+            $set: { accountStatus: 'BLOCKED', statusReason: 'Deleted in Clerk', deletedAt: new Date() },
+            $unset: { clerkId: '' },
+            $inc: { tokenVersion: 1 },
+          }
+        );
+        console.log(`🔒 [Clerk Webhook] User ${clerkId} blocked and unlinked from Clerk`);
       }
     }
 

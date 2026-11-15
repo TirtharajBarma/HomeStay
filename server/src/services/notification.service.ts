@@ -88,36 +88,43 @@ export class NotificationService {
     event: AdminAlertEvent,
     title: string,
     details: AdminAlertDetails,
-    isDemo = false
+    isDemo = false,
+    overrideRecipients?: string[]
   ): Promise<{ success: boolean; recipients: string[]; error?: string }> {
     try {
       const cfg = await CommissionService.getPlatformConfig(isDemo);
       const emailConfig = cfg.emailAlerts;
 
-      if (!emailConfig?.enabled) {
+      const hasOverride = Array.isArray(overrideRecipients) && overrideRecipients.length > 0;
+
+      if (!hasOverride && !emailConfig?.enabled) {
         logger.info(`[ADMIN ALERT SKIPPED] Email alerts globally disabled in platform settings for ${event}`);
         return { success: false, recipients: [], error: "Alerts disabled" };
       }
 
-      if (emailConfig.triggers && emailConfig.triggers[event] === false) {
+      if (!hasOverride && emailConfig.triggers && emailConfig.triggers[event] === false) {
         logger.info(`[ADMIN ALERT SKIPPED] Event trigger ${event} is toggled off in platform settings`);
         return { success: false, recipients: [], error: `Trigger ${event} disabled` };
       }
 
-      const recipients = (emailConfig.recipients || [])
-        .map((e) => (typeof e === "string" ? e.trim().toLowerCase() : ""))
-        .filter((e) => e && e.includes("@") && e.includes("."));
+      const recipients = hasOverride
+        ? overrideRecipients
+            .map((e) => (typeof e === "string" ? e.trim().toLowerCase() : ""))
+            .filter((e) => e && e.includes("@") && e.includes("."))
+        : (emailConfig.recipients || [])
+            .map((e) => (typeof e === "string" ? e.trim().toLowerCase() : ""))
+            .filter((e) => e && e.includes("@") && e.includes("."));
 
       if (recipients.length === 0) {
         logger.warn(`[ADMIN ALERT SKIPPED] No valid admin recipient emails configured for ${event}`);
-        return { success: false, recipients: [], error: "No recipients" };
+        return { success: false, recipients: [], error: "No recipients configured" };
       }
 
       const resendApiKey = process.env.RESEND_API_KEY || (process.env.SMTP_PASS?.startsWith("re_") ? process.env.SMTP_PASS : "");
       const transporter = this.getTransporter();
       if (!resendApiKey && !transporter) {
         logger.warn(`[ADMIN ALERT] Neither Resend API key nor SMTP configured. Alert logged to console for ${recipients.join(", ")}`);
-        return { success: false, recipients, error: "Email service not configured" };
+        return { success: false, recipients, error: "RESEND_API_KEY is not configured in server environment variables." };
       }
 
       const defaultFrom = process.env.SMTP_FROM || `"StayCabs Bookings" <booking@send.${config.appDomain || "staycabs.in"}>`;

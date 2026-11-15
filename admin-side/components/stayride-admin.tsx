@@ -525,7 +525,7 @@ const ROLES = ["owner", "driver", "admin", "guest"];
 const statusBadge = (s: string) => <Badge tone={s === "ACTIVE" ? "green" : s === "BLOCKED" ? "red" : "amber"}>{s || "—"}</Badge>;
 const ratingText = (r: Any) => (typeof r.rating === "number" ? `★ ${r.rating} (${r.ratingCount ?? 0})` : "No ratings");
 
-type UserAction = "block" | "unblock" | "approve" | "pending" | "role" | "revoke" | "delete";
+type UserAction = "block" | "unblock" | "approve" | "pending" | "role" | "revoke" | "delete" | "hard_delete";
 
 export function UsersTab({ demo }: TabProps) {
   const [role, setRole] = useState("");
@@ -632,8 +632,9 @@ export function UsersTab({ demo }: TabProps) {
                         )}
                         <button className={btn.ghost} title="Revoke all active logins" onClick={() => setDialog({ u, kind: "revoke" })}>Sign out</button>
                         {!u.deletedAt && (
-                          <button className="rounded border border-red-900/50 bg-red-950/40 px-2 py-1 text-[11px] font-semibold text-red-300 hover:bg-red-900/60 transition cursor-pointer" onClick={() => setDialog({ u, kind: "delete" })}>Delete</button>
+                          <button className="rounded border border-amber-900/50 bg-amber-950/40 px-2 py-1 text-[11px] font-semibold text-amber-300 hover:bg-amber-900/60 transition cursor-pointer" title="Suspend account (soft-delete, keep records)" onClick={() => setDialog({ u, kind: "delete" })}>Suspend</button>
                         )}
+                        <button className="rounded border border-red-900/60 bg-red-950/60 px-2 py-1 text-[11px] font-semibold text-red-300 hover:bg-red-900/80 transition cursor-pointer" title="Permanently delete from MongoDB & Clerk" onClick={() => setDialog({ u, kind: "hard_delete" })}>Purge</button>
                       </div>
                     </td>
                   </tr>
@@ -662,7 +663,8 @@ function UserDialog({ u, kind, demo, onClose }: { u: Any; kind: UserAction; demo
     pending: { title: "Set pending", message: `Set ${who} back to PENDING_APPROVAL?`, label: "Set pending", reason: "required", run: setStatus("PENDING_APPROVAL") },
     role: { title: "Change role", message: `Change the role of ${who}.`, label: "Change role", reason: "optional", run: (reason) => adminApi(`${base}/role`, { method: "PATCH", body: { role, reason }, demo }) },
     revoke: { title: "Revoke sessions", message: `Sign ${who} out on every device? They must log in again.`, label: "Revoke sessions", danger: true, reason: "optional", run: (reason) => adminApi(`${base}/revoke-sessions`, { method: "POST", body: { reason }, demo }) },
-    delete: { title: "Delete user", message: `Soft-delete ${who}? The account is blocked and signed out; money history is kept.`, label: "Delete", danger: true, reason: "required", run: (reason) => adminApi(base, { method: "DELETE", body: { reason }, demo }) },
+    delete: { title: "Suspend user", message: `Suspend / Soft-delete ${who}? The account is blocked and signed out; money history and database records are kept.`, label: "Suspend", danger: true, reason: "required", run: (reason) => adminApi(base, { method: "DELETE", body: { reason }, demo }) },
+    hard_delete: { title: "Permanently Purge User (DB + Clerk)", message: `PERMANENTLY delete ${who} from both MongoDB Atlas and Clerk cloud? Their profile, auth credentials, and database record will be completely erased. This frees up their email and phone to re-register cleanly. THIS CANNOT BE UNDONE.`, label: "Permanently Purge (DB + Clerk)", danger: true, reason: "required", run: (reason) => adminApi(`${base}?hard=true`, { method: "DELETE", body: { reason, hard: true }, demo }) },
   };
   const c = cfg[kind];
   return (
@@ -1761,7 +1763,7 @@ export function DriversTab({ demo }: TabProps) {
   }
 
   function deleteDriver(d: Any) {
-    if (!window.confirm(`Permanently delete driver "${d.name}" (${d.phone || "No phone"})?\n\nThis will release any unstarted trips, reject pending quotes, and permanently remove the driver account. This cannot be undone.`)) return;
+    if (!window.confirm(`Permanently delete driver "${d.name}" (${d.phone || "No phone"})?\n\nThis will release any unstarted trips, reject pending quotes, and permanently remove the driver account from both MongoDB and Clerk. This cannot be undone.`)) return;
     act(() => adminApi(`/stayride/drivers/${rid(d)}?hard=true`, { method: "DELETE", demo }), reload);
   }
 
@@ -4047,20 +4049,15 @@ export function SettingsTab({ demo }: TabProps) {
         setTestEmailLoading(false);
         return;
       }
-      const res = await fetch("/api/email-alerts/test", {
+      const res = await adminApi("/email-alerts/test", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ recipients }),
+        body: { recipients },
+        demo,
       });
-      const json = await res.json().catch(() => ({}));
-      if (res.ok && json.success) {
-        const sentTo = json.recipients || recipients;
-        setTestEmailStatus(`✓ Test alert sent to: ${sentTo.join(", ")}`);
-      } else {
-        setTestEmailStatus(`✕ Delivery error: ${json.message || "Failed to send email"}`);
-      }
+      const sentTo = res?.data?.recipients || recipients;
+      setTestEmailStatus(`✓ Test alert sent to: ${sentTo.join(", ")}`);
     } catch (err: any) {
-      setTestEmailStatus(`✕ Error: ${err?.message || "Failed to send test email"}`);
+      setTestEmailStatus(`✕ Delivery error: ${err?.message || "Failed to send test email"}`);
     } finally {
       setTestEmailLoading(false);
     }
