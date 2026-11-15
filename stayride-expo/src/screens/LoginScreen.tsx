@@ -1004,7 +1004,7 @@ const styles = StyleSheet.create({
   hero: { backgroundColor: Colors.brandPrimaryDark, alignItems: 'center', paddingBottom: 56, paddingHorizontal: 24 },
   logo: { width: 52, height: 52, borderRadius: 16, backgroundColor: Colors.white, alignItems: 'center', justifyContent: 'center' },
   brand: { color: Colors.white, fontSize: 28, fontWeight: '800', marginTop: 12, letterSpacing: 0.3 },
-  tagline: { color: '#D4E3D9', fontSize: 14, marginTop: 4 },
+  tagline: { color: '#DDD6FE', fontSize: 14, marginTop: 4 },
   card: { marginHorizontal: 16, marginTop: -32, backgroundColor: Colors.bgCard, borderRadius: Radii.card, padding: 20, borderWidth: 1, borderColor: Colors.divider, ...Shadows.card },
   tabs: { flexDirection: 'row', backgroundColor: Colors.bgPage, borderRadius: 12, padding: 4, marginBottom: 16 },
   tab: { flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center' },

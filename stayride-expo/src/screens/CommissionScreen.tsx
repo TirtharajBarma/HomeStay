@@ -432,7 +432,7 @@ const styles = StyleSheet.create({
   },
   balanceLabel: {
     fontSize: 12,
-    color: '#D4E3D9',
+    color: '#DDD6FE',
     fontWeight: '600',
   },
   escrowBadge: {
@@ -444,7 +444,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.16)',
   },
   escrowBadgeText: {
-    color: '#FAF8F5',
+    color: '#FFFFFF',
     fontSize: 11,
     fontWeight: '600',
   },
@@ -456,7 +456,7 @@ const styles = StyleSheet.create({
   },
   summaryMeta: {
     fontSize: 12,
-    color: '#D4E3D9',
+    color: '#DDD6FE',
     marginTop: 6,
     lineHeight: 16,
   },
