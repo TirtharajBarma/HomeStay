@@ -691,10 +691,10 @@ export const FindDriverScreen: React.FC = () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.bgPage },
-  tabs: { flexDirection: 'row', backgroundColor: Colors.bgCard, padding: 4, marginHorizontal: 16, marginTop: 10, borderRadius: Radii.button, ...Shadows.card },
+  tabs: { flexDirection: 'row', backgroundColor: '#EDE9FE', padding: 4, marginHorizontal: 16, marginTop: 10, borderRadius: Radii.button, borderWidth: 1, borderColor: '#DDD6FE' },
   tab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 11, borderRadius: 11 },
-  tabActive: { backgroundColor: Colors.brandPrimary },
-  tabText: { fontSize: 14, fontWeight: '600', color: Colors.textSecondary },
+  tabActive: { backgroundColor: Colors.brandPrimary, ...Shadows.sm },
+  tabText: { fontSize: 14, fontWeight: '600', color: '#5A556B' },
   tabTextActive: { color: Colors.white, fontWeight: '800' },
   scrollContent: { padding: 16, paddingBottom: 32, gap: 12 },
   intro: { flexDirection: 'row', gap: 8, alignItems: 'flex-start', backgroundColor: Colors.brandPrimaryLight, borderRadius: 12, padding: 12 },

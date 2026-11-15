@@ -409,17 +409,20 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   chip: {
-    backgroundColor: '#F3F4F6',
+    backgroundColor: '#EDE9FE',
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
   },
   chipActive: {
     backgroundColor: Colors.brandPrimary,
+    borderColor: Colors.brandPrimary,
   },
   chipText: {
     fontSize: 13,
-    color: Colors.textPrimary,
+    color: '#5A556B',
   },
   chipTextActive: {
     color: '#FFFFFF',

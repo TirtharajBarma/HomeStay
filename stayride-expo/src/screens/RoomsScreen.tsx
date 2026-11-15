@@ -437,11 +437,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     marginHorizontal: 14,
     marginTop: 12,
-    backgroundColor: Colors.bgCard,
+    backgroundColor: '#EDE9FE',
     borderRadius: Radii.button,
     padding: 3,
     borderWidth: 1,
-    borderColor: Colors.divider,
+    borderColor: '#DDD6FE',
   },
   toggleBtn: {
     flex: 1,
@@ -451,14 +451,16 @@ const styles = StyleSheet.create({
   },
   toggleBtnActive: {
     backgroundColor: Colors.brandPrimary,
+    ...Shadows.sm,
   },
   toggleBtnText: {
     fontSize: 14,
-    fontWeight: 'bold',
-    color: Colors.textSecondary,
+    fontWeight: '600',
+    color: '#5A556B',
   },
   toggleBtnTextActive: {
     color: Colors.white,
+    fontWeight: '800',
   },
   chipsContainer: {
     marginTop: 10,
