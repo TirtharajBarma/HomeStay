@@ -4,6 +4,7 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Header } from '../components/Header';
 import { Colors, Radii, Shadows } from '../theme/colors';
 import { api } from '../data/api';
+import { getFallbackLegalDoc } from '../constants/legalContent';
 
 export type LegalDoc = 'privacy' | 'terms' | 'refunds';
 
@@ -19,7 +20,8 @@ export const LegalScreen: React.FC<{ doc?: LegalDoc; onClose?: () => void }> = (
   const navigation = useNavigation<any>();
   const routeDoc = (useRoute<RouteProp<{ p: { doc?: LegalDoc } }, 'p'>>().params as { doc?: LegalDoc } | undefined)?.doc;
   const doc: LegalDoc = props.doc || routeDoc || 'privacy';
-  const [page, setPage] = useState<LegalPage | null>(null);
+  const fallback = getFallbackLegalDoc(doc);
+  const [page, setPage] = useState<LegalPage | null>(fallback);
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
 
@@ -28,15 +30,18 @@ export const LegalScreen: React.FC<{ doc?: LegalDoc; onClose?: () => void }> = (
     api
       .get(`/public/legal/${doc}`)
       .then((p: LegalPage) => {
-        if (!cancelled) setPage(p);
+        if (!cancelled && p && Array.isArray(p.sections)) {
+          setPage(p);
+          setError('');
+        }
       })
       .catch((e: any) => {
-        if (!cancelled) setError(e?.message || 'Could not load this page.');
+        if (!cancelled && !fallback) setError(e?.message || 'Could not load this page.');
       });
     return () => {
       cancelled = true;
     };
-  }, [doc, attempt]);
+  }, [doc, attempt, fallback]);
 
   return (
     <View style={styles.container}>

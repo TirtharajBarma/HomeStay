@@ -43,14 +43,14 @@ export const GradientHeader: React.FC<GradientHeaderProps> = ({
       <View style={styles.bottomRow}>
         {!!location && (
           <View style={styles.locationContainer}>
-            <Ionicons name="location-outline" size={14} color="#D4E3D9" />
+            <Ionicons name="location-outline" size={14} color="#DDD6FE" />
             <Text style={styles.locationText} numberOfLines={1}>
               {location}
             </Text>
           </View>
         )}
         <View style={styles.ratingContainer}>
-          <Ionicons name="star" size={13} color="#EAB308" />
+          <Ionicons name="star" size={13} color="#F59E0B" />
           <Text style={styles.ratingText}>{ratingText}</Text>
         </View>
       </View>
@@ -71,7 +71,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   greeting: {
-    color: '#D4E3D9',
+    color: '#DDD6FE',
     fontSize: 13,
     fontWeight: '500',
   },
@@ -84,19 +84,19 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.16)',
   },
   badgeText: {
-    color: '#FAF8F5',
+    color: '#FFFFFF',
     fontSize: 11,
     fontWeight: '600',
   },
   title: {
-    color: '#FAF8F5',
+    color: '#FFFFFF',
     fontSize: 22,
     fontWeight: '700',
     marginTop: 8,
     letterSpacing: -0.3,
   },
   tagline: {
-    color: '#D4E3D9',
+    color: '#DDD6FE',
     fontSize: 13,
     lineHeight: 18,
     marginTop: 4,
@@ -117,7 +117,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   locationText: {
-    color: '#FAF8F5',
+    color: '#FFFFFF',
     fontSize: 13,
     marginLeft: 4,
     fontWeight: '500',
@@ -127,7 +127,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   ratingText: {
-    color: '#FAF8F5',
+    color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '600',
     marginLeft: 4,

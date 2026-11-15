@@ -90,6 +90,9 @@ function DriverQuoteContent() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
+  const [quoteSubmitted, setQuoteSubmitted] = useState(false);
+  const [submittedFare, setSubmittedFare] = useState<number>(0);
+  const [rideActionMessage, setRideActionMessage] = useState("");
 
   // Driver Wallet & Payouts State
   const [wallet, setWallet] = useState<WalletData | null>(null);
@@ -302,7 +305,11 @@ function DriverQuoteContent() {
               body: JSON.stringify({ t: token }),
             });
       setView(v);
-      setMessage(kind === "quote" ? "Your fare quote was submitted successfully." : "Offer accepted. Trip is confirmed once advance payment is recorded.");
+      if (kind === "quote") {
+        setSubmittedFare(cashAmount);
+        setQuoteSubmitted(true);
+      }
+      setMessage(kind === "quote" ? "Thank you for submitting your quotation. If the guest accepts your price, you will be notified." : "Offer accepted. Trip is confirmed once advance payment is recorded.");
     } catch (e) {
       const msg = e instanceof Error ? e.message : "";
       setMessage(
@@ -326,7 +333,13 @@ function DriverQuoteContent() {
       });
       setView(v);
       setShowOtpModal(false);
-      setMessage(action === "start" ? "Trip started." : "Trip completed. Excess advance credited to your wallet!");
+      if (action === "start") {
+        setRideActionMessage("Ride Started!");
+        setMessage("Ride Started!");
+      } else {
+        setRideActionMessage("Ride Completed. Good job!");
+        setMessage("Ride Completed. Good job!");
+      }
       fetchWallet();
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "Action failed. Please try again.");
@@ -464,48 +477,15 @@ function DriverQuoteContent() {
             )}
           </div>
         </div>
-
-        {/* Segmented Tab Switcher */}
-        <div className="mx-auto max-w-md mt-3 pt-2.5 border-t border-outline-variant/60">
-          <div className="flex rounded-2xl bg-surface-container p-1 gap-1">
-            <button
-              type="button"
-              onClick={() => setActiveTab("trip")}
-              className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer  ${
-                activeTab === "trip"
-                  ? "bg-primary text-white shadow-xs"
-                  : "text-outline hover:text-on-surface"
-              }`}
-            >
-              <Icon name="local_taxi" className="text-sm" /> Trip console
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab("wallet");
-                fetchWallet();
-              }}
-              className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer  ${
-                activeTab === "wallet"
-                  ? "bg-primary text-white shadow-xs"
-                  : "text-outline hover:text-on-surface"
-              }`}
-            >
-              <Icon name="account_balance_wallet" className="text-sm" />
-              <span>Wallet</span>
-              {wallet && wallet.available > 0 && (
-                <span className={`px-2 py-0.5 text-[10px] font-extrabold rounded-full ${
-                  activeTab === "wallet" ? "bg-white/20 text-white" : "bg-primary text-white"
-                }`}>
-                  {inr(wallet.available)}
-                </span>
-              )}
-            </button>
-          </div>
-        </div>
       </header>
 
       <main className="mx-auto w-full max-w-md px-4 py-6 space-y-4">
+        {rideActionMessage && (
+          <div className="rounded-2xl bg-emerald-600 text-white p-4 text-center font-bold text-sm shadow-md flex items-center justify-center gap-2">
+            <Icon name="check_circle" className="text-xl" />
+            <span>{rideActionMessage}</span>
+          </div>
+        )}
         {activeTab === "wallet" ? (
           /* SOVEREIGN DRIVER WALLET & UPI PAYOUT CONSOLE */
           <div className="space-y-4">
@@ -855,87 +835,101 @@ function DriverQuoteContent() {
                   </div>
                 )}
 
-                {/* Start ride / Complete Ride Actions */}
+                {/* Start ride / Complete Ride Actions (Green Start, Red Complete) */}
                 {view.status !== "COMPLETED" && (
-                  <div className="space-y-2.5 pt-1">
-                    {view.status !== "TRIP_STARTED" && (
-                      <>
-                        {showOtpModal ? (
-                          <div className="rounded-2xl border border-primary/30 bg-emerald-50/70 p-4 space-y-3">
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs font-bold text-primary">Enter passenger boarding PIN:</span>
-                              <button
-                                type="button"
-                                onClick={() => { setShowOtpModal(false); setOtpDigits(["","","",""]); }}
-                                className="text-xs text-outline hover:underline cursor-pointer"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                            <p className="text-xs text-outline leading-relaxed">
-                              Ask passenger for the 4-digit PIN displayed on their booking confirmation.
-                            </p>
-                            <div className="flex gap-2.5 justify-center">
-                              {[0, 1, 2, 3].map((i) => (
-                                <input
-                                  key={i}
-                                  id={`otp-d-${i}`}
-                                  type="text"
-                                  inputMode="numeric"
-                                  maxLength={1}
-                                  value={otpDigits[i]}
-                                  onChange={(e) => handleOtpDigitChange(i, e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Backspace" && !otpDigits[i] && i > 0) {
-                                      const prev = document.getElementById(`otp-d-${i - 1}`);
-                                      if (prev) (prev as HTMLInputElement).focus();
-                                    }
-                                  }}
-                                  className="w-12 h-14 font-mono text-center text-2xl font-bold rounded-2xl border-2 border-outline-variant bg-white text-on-surface focus:border-primary focus:ring-2 focus:ring-primary/15 focus:outline-none transition-all"
-                                />
-                              ))}
-                            </div>
-                            <button
-                              type="button"
-                              disabled={busy || otp.length < 4}
-                              onClick={() => handleTripAction("start", otp)}
-                              className="w-full rounded-2xl bg-primary px-4 py-3 text-xs font-bold text-white shadow-xs hover:bg-primary-container disabled:opacity-50 cursor-pointer transition-all"
-                            >
-                              {busy ? "Verifying…" : "Verify & start ride"}
-                            </button>
-                          </div>
-                        ) : (
+                  <div className="space-y-3 pt-2">
+                    <div className="grid grid-cols-2 gap-3">
+                      {/* 1. Start Ride Button (Green) */}
+                      <button
+                        type="button"
+                        disabled={busy || view.status === "TRIP_STARTED"}
+                        onClick={() => {
+                          if (view.pickupOtpRequired && view.status !== "TRIP_STARTED") {
+                            setShowOtpModal(true);
+                          } else {
+                            handleTripAction("start");
+                          }
+                        }}
+                        className={`w-full inline-flex items-center justify-center gap-2 rounded-2xl py-3.5 text-xs font-bold text-white shadow-sm transition-all ${
+                          view.status === "TRIP_STARTED"
+                            ? "bg-emerald-700/60 opacity-80 cursor-default"
+                            : "bg-emerald-600 hover:bg-emerald-700 cursor-pointer active:scale-[0.99]"
+                        }`}
+                      >
+                        <Icon name={view.status === "TRIP_STARTED" ? "check" : "play_arrow"} className="text-sm" />
+                        <span>{view.status === "TRIP_STARTED" ? "Ride Started" : busy ? "Starting…" : "Start Ride"}</span>
+                      </button>
+
+                      {/* 2. Complete Ride Button (Red - Enabled only after trip starts) */}
+                      <button
+                        type="button"
+                        disabled={busy || view.status !== "TRIP_STARTED"}
+                        onClick={() => setShowCompleteConfirm(true)}
+                        className={`w-full inline-flex items-center justify-center gap-2 rounded-2xl py-3.5 text-xs font-bold text-white shadow-sm transition-all ${
+                          view.status !== "TRIP_STARTED"
+                            ? "bg-red-400 opacity-40 cursor-not-allowed"
+                            : "bg-red-600 hover:bg-red-700 cursor-pointer active:scale-[0.99]"
+                        }`}
+                      >
+                        <Icon name="done_all" className="text-sm" />
+                        <span>{busy ? "Completing…" : "Complete Ride"}</span>
+                      </button>
+                    </div>
+
+                    {showOtpModal && (
+                      <div className="rounded-2xl border border-primary/30 bg-emerald-50/70 p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-primary">Enter passenger boarding PIN:</span>
                           <button
                             type="button"
-                            disabled={busy}
-                            onClick={() => {
-                              if (view.pickupOtpRequired) {
-                                setShowOtpModal(true);
-                              } else {
-                                handleTripAction("start");
-                              }
-                            }}
-                            className="w-full inline-flex items-center justify-center gap-2 rounded-2xl border border-outline-variant bg-white py-3 text-xs font-bold text-on-surface hover:bg-surface-container cursor-pointer disabled:opacity-50 transition-all shadow-xs"
+                            onClick={() => { setShowOtpModal(false); setOtpDigits(["","","",""]); }}
+                            className="text-xs text-outline hover:underline cursor-pointer"
                           >
-                            <Icon name="play_arrow" className="text-sm text-primary" />
-                            <span>{busy ? "Updating…" : "Start ride"}</span>
+                            Cancel
                           </button>
-                        )}
-                      </>
+                        </div>
+                        <p className="text-xs text-outline leading-relaxed">
+                          Ask passenger for the 4-digit PIN displayed on their booking confirmation.
+                        </p>
+                        <div className="flex gap-2.5 justify-center">
+                          {[0, 1, 2, 3].map((i) => (
+                            <input
+                              key={i}
+                              id={`otp-d-${i}`}
+                              type="text"
+                              inputMode="numeric"
+                              maxLength={1}
+                              value={otpDigits[i]}
+                              onChange={(e) => handleOtpDigitChange(i, e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Backspace" && !otpDigits[i] && i > 0) {
+                                  const prev = document.getElementById(`otp-d-${i - 1}`);
+                                  if (prev) (prev as HTMLInputElement).focus();
+                                }
+                              }}
+                              className="w-12 h-14 font-mono text-center text-2xl font-bold rounded-2xl border-2 border-outline-variant bg-white text-on-surface focus:border-primary focus:ring-2 focus:ring-primary/15 focus:outline-none transition-all"
+                            />
+                          ))}
+                        </div>
+                        <button
+                          type="button"
+                          disabled={busy || otp.length < 4}
+                          onClick={() => handleTripAction("start", otp)}
+                          className="w-full rounded-2xl bg-emerald-600 px-4 py-3 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50 cursor-pointer transition-all"
+                        >
+                          {busy ? "Verifying…" : "Verify & start ride"}
+                        </button>
+                      </div>
                     )}
 
-                    {showCompleteConfirm ? (
-                      <div className="rounded-2xl border border-primary bg-emerald-50/80 p-5 space-y-3">
+                    {showCompleteConfirm && (
+                      <div className="rounded-2xl border border-red-300 bg-red-50/90 p-5 space-y-3">
                         <div className="flex items-center gap-2">
-                          <Icon name="check_circle" className="text-primary text-lg" />
-                          <span className="text-xs font-bold text-primary">Confirm ride completion & cash collection</span>
+                          <Icon name="check_circle" className="text-red-700 text-lg" />
+                          <span className="text-xs font-bold text-red-950">Confirm Ride Completion</span>
                         </div>
                         <p className="text-xs text-on-surface leading-relaxed">
-                          Did you drop off the passenger and collect{" "}
-                          <strong className="font-extrabold text-primary">
-                            {view.remainingCashAmount ? inr(view.remainingCashAmount) : "cash balance"}
-                          </strong>
-                          ?
+                          Have you dropped off the passenger and completed this ride?
                         </p>
                         <div className="flex gap-2.5 pt-1">
                           <button
@@ -945,9 +939,9 @@ function DriverQuoteContent() {
                               setShowCompleteConfirm(false);
                               handleTripAction("complete");
                             }}
-                            className="flex-1 rounded-2xl bg-primary py-3 text-xs font-bold text-white shadow-xs hover:bg-primary-container disabled:opacity-50 cursor-pointer transition-all"
+                            className="flex-1 rounded-2xl bg-red-600 py-3 text-xs font-bold text-white shadow-xs hover:bg-red-700 disabled:opacity-50 cursor-pointer transition-all"
                           >
-                            {busy ? "Completing…" : "Yes, Completed & Collected"}
+                            {busy ? "Completing…" : "Yes, Complete Ride"}
                           </button>
                           <button
                             type="button"
@@ -958,16 +952,6 @@ function DriverQuoteContent() {
                           </button>
                         </div>
                       </div>
-                    ) : (
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => setShowCompleteConfirm(true)}
-                        className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-primary py-3.5 text-xs font-bold text-white shadow-sm hover:bg-primary-container cursor-pointer disabled:opacity-50 transition-all"
-                      >
-                        <Icon name="done_all" className="text-sm" />
-                        <span>{busy ? "Completing…" : "Complete ride & confirm cash"}</span>
-                      </button>
                     )}
                   </div>
                 )}
@@ -1033,6 +1017,34 @@ function DriverQuoteContent() {
                 <span className="font-serif font-bold text-sm block">Trip awarded to you</span>
                 <p className="text-outline leading-relaxed">Waiting for guest advance payment. Passenger contact and cash collection will unlock here immediately upon payment.</p>
               </div>
+            ) : quoteSubmitted ? (
+              <div className="rounded-2xl border border-emerald-200 bg-white p-6 sm:p-8 shadow-ambient text-center space-y-5">
+                <div className="mx-auto h-16 w-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shadow-inner">
+                  <Icon name="check_circle" className="text-4xl" />
+                </div>
+                <div className="space-y-2">
+                  <h3 className="text-lg font-bold text-on-surface">Quotation Submitted!</h3>
+                  <p className="text-sm text-outline max-w-sm mx-auto leading-relaxed">
+                    Thank you for submitting your quotation. If the guest accepts your price, you will be notified.
+                  </p>
+                </div>
+                {submittedFare > 0 && (
+                  <div className="rounded-xl bg-surface-container p-4 border border-outline-variant/60 max-w-xs mx-auto space-y-1">
+                    <span className="text-[11px] text-outline block">Total Quoted Fare</span>
+                    <span className="text-2xl font-bold font-serif text-primary">{inr(submittedFare)}</span>
+                    <span className="text-[11px] text-outline block mt-1">{view.pickup} → {view.destination}</span>
+                  </div>
+                )}
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setQuoteSubmitted(false)}
+                    className="text-xs text-primary font-semibold hover:underline cursor-pointer"
+                  >
+                    Need to change your quote? Click here
+                  </button>
+                </div>
+              </div>
             ) : !view.canQuote ? (
               counterOffer || (
                 <div className="rounded-2xl border border-outline-variant bg-white p-6 text-center text-xs text-outline">
@@ -1040,11 +1052,11 @@ function DriverQuoteContent() {
                 </div>
               )
             ) : (
-              /* FARE QUOTATION FORM WITH ALL-INCLUSIVE MATHEMATICAL BREAKDOWN */
+              /* FARE QUOTATION FORM */
               <div className="rounded-2xl border border-outline-variant bg-white p-6 shadow-ambient space-y-5">
                 <div>
                   <h3 className="font-serif font-bold text-base text-on-surface">Submit your total fare quote</h3>
-                  <p className="text-xs text-outline mt-0.5">Quote the total fare. Guest pays flat all-inclusive rate with zero extra booking fee.</p>
+                  <p className="text-xs text-outline mt-0.5">Quote your total fare for this complete trip.</p>
                 </div>
 
                 {view.guestBudget && (
@@ -1101,7 +1113,7 @@ function DriverQuoteContent() {
                     Total ride fare (₹) *
                   </label>
                   <span className="text-[11px] text-outline block">
-                    Enter the total price. Guest pays {advPct}% (min {inr(minAdv)}) online advance, the rest in cash directly to you.
+                    Enter the total trip price.
                   </span>
                   <div className="flex gap-2.5">
                     <span className="flex items-center rounded-2xl bg-surface-container border border-outline-variant px-4 text-sm font-serif font-bold text-primary">
@@ -1116,54 +1128,6 @@ function DriverQuoteContent() {
                       className="w-full rounded-2xl border border-outline-variant px-4 py-3 text-sm font-bold text-on-surface focus:border-primary focus:ring-2 focus:ring-primary/15 focus:outline-none transition-all"
                     />
                   </div>
-
-                  {/* Real-time Math Breakdown */}
-                  {enteredFare > 0 && (
-                    <div className="mt-3 rounded-2xl bg-surface-container-low border border-primary/25 p-4 space-y-2.5 text-xs">
-                      <div className="flex justify-between items-center text-on-surface pb-2 border-b border-primary/20">
-                        <span className="font-bold">Total fare quoted (all-inclusive):</span>
-                        <strong className="text-base font-serif font-bold text-primary">{inr(enteredFare)}</strong>
-                      </div>
-
-                      <div className="space-y-2 text-[11px] text-on-surface">
-                        <div className="flex justify-between items-center">
-                          <span className="flex items-center gap-1.5">
-                            <Icon name="payments" className="text-xs text-amber-600" />
-                            <span>1. Cash you collect in car at drop-off:</span>
-                          </span>
-                          <strong className="font-extrabold text-on-surface">{inr(calculatedCashToCollect)}</strong>
-                        </div>
-
-                        <div className="flex justify-between items-center">
-                          <span className="flex items-center gap-1.5">
-                            <Icon name="account_balance_wallet" className="text-xs text-primary" />
-                            <span>2. Credited to your platform wallet:</span>
-                          </span>
-                          <strong className="font-extrabold text-primary">+{inr(calculatedWalletExcess)}</strong>
-                        </div>
-
-                        <div className="flex justify-between items-center text-outline">
-                          <span className="flex items-center gap-1.5">
-                            <Icon name="percent" className="text-xs" />
-                            <span>Platform & Homestay Commission ({commPct}%):</span>
-                          </span>
-                          <span className="font-semibold text-red-600">-{inr(calculatedCommission)}</span>
-                        </div>
-                      </div>
-
-                      <div className="pt-2 border-t border-primary/20 flex justify-between items-center">
-                        <span className="font-extrabold text-on-surface text-xs">Your Net Total In-Hand:</span>
-                        <span className="text-lg font-serif font-bold text-primary">
-                          {inr(calculatedTotalEarnings)} ({100 - commPct}%)
-                        </span>
-                      </div>
-
-                      <p className="pt-1 text-[11px] text-primary leading-relaxed flex items-center gap-1.5">
-                        <Icon name="verified_user" className="text-xs" />
-                        <span>Zero extra fee on top. The guest sees flat {inr(enteredFare)}. You collect {inr(calculatedCashToCollect)} cash, and {inr(calculatedWalletExcess)} is in your wallet for 1-tap UPI withdrawal.</span>
-                      </p>
-                    </div>
-                  )}
                 </div>
 
                 <div className="space-y-1.5">

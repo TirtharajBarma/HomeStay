@@ -1,21 +1,21 @@
 export const Colors = {
-  brandPrimary: '#183F2A',
-  brandPrimaryDark: '#0F2B1D',
-  brandPrimaryLight: '#E8F2EC',
-  brandAccent: '#9C411E',
-  brandAccentLight: '#FCE8DC',
+  brandPrimary: '#3B1A78', // Royal Mountain Violet
+  brandPrimaryDark: '#1E1837', // Midnight Violet (matches logo & native splash)
+  brandPrimaryLight: '#F3E8FF', // Soft Lavender Lilac
+  brandAccent: '#D97706', // Sunrise Gold / Warm Amber
+  brandAccentLight: '#FEF3C7', // Warm Sunrise Cream
 
-  bgPage: '#FAF8F5',
-  pageBackground: '#FAF8F5',
+  bgPage: '#FAF9FD', // Soft Clean Pearl
+  pageBackground: '#FAF9FD',
   bgCard: '#FFFFFF',
-  textPrimary: '#1C1B18',
-  textSecondary: '#57534E',
-  textTertiary: '#8C857B',
-  divider: '#EBE6DE',
-  iconDefault: '#57534E',
-  shadow: '#1C1B18',
+  textPrimary: '#1A162B', // Deep Midnight Charcoal
+  textSecondary: '#5A556B', // Soft Slate Heather
+  textTertiary: '#8C869E', // Muted Twilight Gray
+  divider: '#ECE8F5', // Subtle Lavender Divider
+  iconDefault: '#5A556B',
+  shadow: '#1A162B',
 
-  statusGreen: '#16A34A',
+  statusGreen: '#16A34A', // Emerald Success Green
   statusGreenBg: '#DCFCE7',
   statusBlue: '#2563EB',
   statusBlueBg: '#EFF6FF',
@@ -23,8 +23,8 @@ export const Colors = {
   statusOrangeBg: '#FEF3C7',
   statusRed: '#DC2626',
   statusRedBg: '#FEE2E2',
-  statusPurple: '#3B6B52',
-  statusPurpleBg: '#E8F2EC',
+  statusPurple: '#7C3AED',
+  statusPurpleBg: '#EDE9FE',
   statusGrey: '#78716C',
   statusGreyBg: '#F5F2EC',
 
@@ -41,28 +41,28 @@ export const Radii = {
 
 export const Shadows = {
   card: {
-    shadowColor: '#1C1B18',
+    shadowColor: '#1A162B',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 6,
     elevation: 2,
   },
   hover: {
-    shadowColor: '#1C1B18',
+    shadowColor: '#1A162B',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
     shadowRadius: 10,
     elevation: 4,
   },
   sm: {
-    shadowColor: '#1C1B18',
+    shadowColor: '#1A162B',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
     shadowRadius: 3,
     elevation: 1,
   },
   md: {
-    shadowColor: '#1C1B18',
+    shadowColor: '#1A162B',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
     shadowRadius: 8,

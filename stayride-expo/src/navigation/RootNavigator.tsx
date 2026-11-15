@@ -218,23 +218,23 @@ const UnifiedAppTabs: React.FC = () => {
   if (session?.role === 'driver') {
     if (session.driver?.status === 'PENDING_APPROVAL') {
       return (
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: '#0F2B1D' }}>
-          <Ionicons name="time-outline" size={42} color="#D4E3D9" />
-          <Text style={{ fontSize: 20, fontWeight: '700', color: '#FAF8F5', textAlign: 'center', marginTop: 14 }}>
-            Awaiting StayRide Approval
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: Colors.brandPrimaryDark }}>
+          <Ionicons name="time-outline" size={42} color="#DDD6FE" />
+          <Text style={{ fontSize: 20, fontWeight: '700', color: '#FAF9FD', textAlign: 'center', marginTop: 14 }}>
+            Awaiting StayCabs Approval
           </Text>
-          <Text style={{ fontSize: 14, color: '#C5D6CC', textAlign: 'center', marginTop: 8, lineHeight: 20, maxWidth: 300 }}>
-            StayRide is reviewing your driver credentials. Assigned trips and ride requests will appear here once approved.
+          <Text style={{ fontSize: 14, color: '#C4B5FD', textAlign: 'center', marginTop: 8, lineHeight: 20, maxWidth: 300 }}>
+            StayCabs is reviewing your driver credentials. Assigned trips and ride requests will appear here once approved.
           </Text>
           <TouchableOpacity
             onPress={() => sync().catch(() => {})}
             disabled={syncing}
-            style={{ marginTop: 24, backgroundColor: Colors.brandPrimary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: '#2E5D42' }}
+            style={{ marginTop: 24, backgroundColor: Colors.brandPrimary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: '#5B21B6' }}
           >
-            <Text style={{ color: '#FAF8F5', fontWeight: '600', fontSize: 14 }}>{syncing ? 'Checking…' : 'Check status'}</Text>
+            <Text style={{ color: '#FAF9FD', fontWeight: '600', fontSize: 14 }}>{syncing ? 'Checking…' : 'Check status'}</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={logout} style={{ marginTop: 12, paddingHorizontal: 24, paddingVertical: 12 }}>
-            <Text style={{ color: '#E8A393', fontWeight: '600', fontSize: 14 }}>Sign out</Text>
+            <Text style={{ color: '#FCA5A5', fontWeight: '600', fontSize: 14 }}>Sign out</Text>
           </TouchableOpacity>
         </View>
       );
@@ -243,14 +243,14 @@ const UnifiedAppTabs: React.FC = () => {
   }
   if (session?.role === 'admin') {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: '#0F2B1D' }}>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: Colors.brandPrimaryDark }}>
         <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: 'rgba(255, 255, 255, 0.1)', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
-          <Ionicons name="shield-outline" size={30} color="#FAF8F5" />
+          <Ionicons name="shield-outline" size={30} color="#FAF9FD" />
         </View>
-        <Text style={{ fontSize: 20, fontWeight: '700', color: '#FAF8F5', textAlign: 'center' }}>
+        <Text style={{ fontSize: 20, fontWeight: '700', color: '#FAF9FD', textAlign: 'center' }}>
           Administrator Control Tower
         </Text>
-        <Text style={{ fontSize: 14, color: '#C5D6CC', textAlign: 'center', marginTop: 8, lineHeight: 20, maxWidth: 320 }}>
+        <Text style={{ fontSize: 14, color: '#C4B5FD', textAlign: 'center', marginTop: 8, lineHeight: 20, maxWidth: 320 }}>
           Super Admin controls are available via the Web Control Tower. This mobile companion is tailored for Homestay Hosts and Cab Drivers.
         </Text>
         <TouchableOpacity

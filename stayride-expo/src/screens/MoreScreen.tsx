@@ -502,7 +502,7 @@ const styles = StyleSheet.create({
   },
   profileLink: {
     fontSize: 12,
-    color: '#D4E3D9',
+    color: '#DDD6FE',
     marginTop: 4,
   },
   openProfileBtn: {

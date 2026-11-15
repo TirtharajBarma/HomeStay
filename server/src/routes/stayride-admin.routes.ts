@@ -426,25 +426,120 @@ router.delete("/stayride/users/:id", async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// Platform drivers: approve / block
+// Platform drivers: approve / block (combines independent & homestay drivers)
 // ---------------------------------------------------------------------------
 router.get("/stayride/drivers", async (req, res) => {
   const demo = isDemo(req);
+  const statusFilter = String(req.query.status || "");
   const filter: any = { role: "driver" };
-  if (["ACTIVE", "PENDING_APPROVAL", "BLOCKED"].includes(String(req.query.status))) filter.accountStatus = req.query.status;
+  if (["ACTIVE", "PENDING_APPROVAL", "BLOCKED"].includes(statusFilter)) {
+    filter.accountStatus = statusFilter;
+  }
   const q = search(req);
   if (q) {
     const regex = new RegExp(escapeRegex(q), "i");
     filter.$or = [{ name: regex }, { email: regex }, { phone: regex }, { "vehicle.plate": regex }];
   }
-  await sendPage(req, res, userModel(demo), filter, { createdAt: -1 }, "name email phone accountStatus statusReason vehicle createdAt deletedAt ratingSum ratingCount isAvailable driverCategory unionName",
-    ({ ratingSum, ...d }: any) => ({ ...d, id: String(d._id), rating: ratingOf({ ratingSum, ratingCount: d.ratingCount }), ratingCount: d.ratingCount || 0 }));
+
+  // 1. Independent registered drivers
+  const UserModel = userModel(demo);
+  const independentDriversDocs = await UserModel.find(filter)
+    .select("name email phone accountStatus statusReason vehicle createdAt deletedAt ratingSum ratingCount isAvailable driverCategory unionName")
+    .lean();
+
+  const independentDrivers = independentDriversDocs.map(({ ratingSum, ...d }: any) => ({
+    ...d,
+    id: String(d._id),
+    isHomestayDriver: false,
+    homestayName: null,
+    rating: ratingOf({ ratingSum, ratingCount: d.ratingCount }),
+    ratingCount: d.ratingCount || 0,
+  }));
+
+  // 2. Homestay-added fleet drivers from tenant stores
+  let homestayDrivers: any[] = [];
+  try {
+    const TenantModel = getStayRideTenantModel(demo);
+    const tenants = await TenantModel.find(
+      { "data.drivers.0": { $exists: true } },
+      { "data.drivers": 1, homestayName: 1, tenantId: 1, "data.homestay": 1, createdAt: 1 }
+    ).lean();
+
+    for (const tenant of tenants as any[]) {
+      const hName = tenant.homestayName || tenant.data?.homestay?.name || tenant.tenantId;
+      const driversList = Array.isArray(tenant.data?.drivers) ? tenant.data.drivers : [];
+      for (const d of driversList) {
+        const dActive = d.active !== false;
+        const dStatus = dActive ? "ACTIVE" : "BLOCKED";
+        if (statusFilter && dStatus !== statusFilter) continue;
+
+        if (q) {
+          const qLower = q.toLowerCase();
+          const match =
+            (d.name && d.name.toLowerCase().includes(qLower)) ||
+            (d.phone && d.phone.toLowerCase().includes(qLower)) ||
+            (hName && hName.toLowerCase().includes(qLower)) ||
+            (d.vehicle && d.vehicle.toLowerCase().includes(qLower)) ||
+            (d.vehicleNumber && d.vehicleNumber.toLowerCase().includes(qLower));
+          if (!match) continue;
+        }
+
+        homestayDrivers.push({
+          id: `homestay_${tenant.tenantId}_${d.id}`,
+          _id: `homestay_${tenant.tenantId}_${d.id}`,
+          name: d.name,
+          email: d.email || "",
+          phone: d.phone || "",
+          accountStatus: dStatus,
+          statusReason: dActive ? "" : "Deactivated by homestay host",
+          vehicle: {
+            type: d.vehicleType || "SUV",
+            model: d.vehicle || "",
+            plate: d.vehicleNumber || d.vehicle || "—",
+            seats: d.seats || 4,
+            area: d.area || "",
+          },
+          isHomestayDriver: true,
+          homestayName: hName,
+          tenantId: tenant.tenantId,
+          driverCategory: "HOMESTAY",
+          rating: d.rating || 5,
+          ratingCount: d.ratingCount || 0,
+          createdAt: d.createdAt || tenant.createdAt || new Date(),
+        });
+      }
+    }
+  } catch (err: any) {
+    logger.warn(`[Admin] Failed to load homestay drivers: ${err?.message}`);
+  }
+
+  const allDrivers = [...independentDrivers, ...homestayDrivers].sort((a, b) => {
+    const da = new Date(a.createdAt || 0).getTime();
+    const db = new Date(b.createdAt || 0).getTime();
+    return db - da;
+  });
+
+  const { page, limit, skip } = paging(req);
+  const paginated = allDrivers.slice(skip, skip + limit);
+  res.json({ success: true, items: paginated, total: allDrivers.length, page, limit });
 });
 
 router.patch("/stayride/drivers/:id/status", async (req, res) => {
   const status = String(req.body.status);
   if (!["ACTIVE", "PENDING_APPROVAL", "BLOCKED"].includes(status)) throw httpError(400, "Status must be ACTIVE, PENDING_APPROVAL or BLOCKED.");
-  if (!mongoose.Types.ObjectId.isValid(String(req.params.id))) throw httpError(404, "Driver not found.");
+  const idStr = String(req.params.id);
+
+  if (idStr.startsWith("homestay_")) {
+    const parts = idStr.split("_");
+    const tenantId = parts[1];
+    const driverId = Number(parts[2]);
+    await tenantManager.mutate(tenantId, (s) => {
+      s.updateDriver(driverId, { active: status === "ACTIVE" });
+    });
+    return ok(res, { id: idStr, accountStatus: status }, `Homestay driver ${status === "ACTIVE" ? "approved" : "blocked"}.`);
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(idStr)) throw httpError(404, "Driver not found.");
   // A deleted driver can only stay blocked (the filter refuses anything else)
   const prev = await userModel(isDemo(req)).findOneAndUpdate(
     { _id: String(req.params.id), role: "driver", ...(status === "BLOCKED" ? {} : { deletedAt: null }) },
@@ -469,6 +564,17 @@ router.patch("/stayride/drivers/:id/status", async (req, res) => {
 router.delete("/stayride/drivers/:id", async (req, res) => {
   const demo = isDemo(req);
   const id = String(req.params.id);
+
+  if (id.startsWith("homestay_")) {
+    const parts = id.split("_");
+    const tenantId = parts[1];
+    const driverId = Number(parts[2]);
+    await tenantManager.mutate(tenantId, (s) => {
+      s.deleteDriver(driverId);
+    });
+    return ok(res, { id }, "Homestay driver permanently removed.");
+  }
+
   if (!mongoose.Types.ObjectId.isValid(id)) throw httpError(404, "Driver not found.");
 
   const target: any = await userModel(demo).findOne({ _id: id, role: "driver" }).lean();

@@ -34,7 +34,7 @@ export const AccountScreen: React.FC = () => {
     if (!user) return;
     setBusy('google');
     try {
-      const redirectUrl = Linking.createURL('/dashboard', { scheme: process.env.EXPO_PUBLIC_SCHEME || 'partner-app' });
+      const redirectUrl = Linking.createURL('/dashboard', { scheme: process.env.EXPO_PUBLIC_SCHEME || 'staycabs' });
       const ext: any = await (user as any).createExternalAccount({ strategy: 'oauth_google', redirectUrl });
       const url = ext?.verification?.externalVerificationRedirectURL?.toString();
       if (!url) throw new Error('Google did not return a sign-in page.');

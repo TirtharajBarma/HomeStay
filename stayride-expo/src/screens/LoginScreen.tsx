@@ -33,7 +33,8 @@ import { VehicleType } from '../types';
 // Complete any pending auth session (required for Clerk OAuth in Expo)
 WebBrowser.maybeCompleteAuthSession();
 
-const APP_NAME = process.env.EXPO_PUBLIC_APP_NAME || 'Platform';
+const APP_NAME = process.env.EXPO_PUBLIC_APP_NAME || 'StayCabs';
+const OPERATING_AREAS = ['Darjeeling', 'Kalimpong', 'Sikkim'] as const;
 const DEMO_HOST_EMAIL = process.env.EXPO_PUBLIC_DEMO_HOST_EMAIL || 'demo@stayride.in';
 const DEMO_DRIVER_EMAIL = process.env.EXPO_PUBLIC_DEMO_DRIVER_EMAIL || 'driver@stayride.in';
 
@@ -154,6 +155,7 @@ export const LoginScreen: React.FC = () => {
   const [vehicleType, setVehicleType] = useState<VehicleType>('SUV');
   const [vehicleNumber, setVehicleNumber] = useState('');
   const [area, setArea] = useState('');
+  const [selectedAreas, setSelectedAreas] = useState<string[]>(['Darjeeling']);
   const [consent, setConsent] = useState(false);
   const [mapVisible, setMapVisible] = useState(false);
   // Create account runs in short steps: 1 role, 2 details, 3 consent + login (the Google sheet: 1, 2)
@@ -173,7 +175,7 @@ export const LoginScreen: React.FC = () => {
     if (phone.replace(/\D/g, '').length < 10) return 'Enter a 10-digit mobile number.';
     if (role === 'owner' && !homestayName.trim()) return 'Your homestay name is required.';
     if (role === 'driver' && !vehicleNumber.trim()) return 'Your vehicle number is required.';
-    if (role === 'driver' && !area.trim()) return 'Enter the area where you drive.';
+    if (role === 'driver' && selectedAreas.length === 0 && !area.trim()) return 'Please select at least one operating area (Darjeeling, Kalimpong, Sikkim).';
     return null;
   };
   const validateProfile = (): string | null =>
@@ -209,7 +211,7 @@ export const LoginScreen: React.FC = () => {
           longitude: coords?.longitude,
           mapQuery: coords ? `${coords.latitude},${coords.longitude}` : location.trim(),
         }
-      : { vehicleType, vehicleNumber: vehicleNumber.trim().toUpperCase(), area: area.trim() }),
+      : { vehicleType, vehicleNumber: vehicleNumber.trim().toUpperCase(), area: (selectedAreas.length > 0 ? selectedAreas.join(', ') : area.trim()) || 'Darjeeling' }),
     acceptedTerms: true,
   });
 
@@ -239,6 +241,7 @@ export const LoginScreen: React.FC = () => {
         const wasCreating = Boolean(pendingProfile.current);
         await syncClerkUser(user, token, { role: status.role });
         pendingProfile.current = null;
+        syncing.current = false;
         navigation.replace('Main');
         if (wasCreating) Alert.alert('Welcome back', 'You already had an account, so we signed you in.');
         return;
@@ -247,6 +250,7 @@ export const LoginScreen: React.FC = () => {
       if (profile) {
         await syncClerkUser(user, token, profile);
         pendingProfile.current = null;
+        syncing.current = false;
         navigation.replace('Main');
         return;
       }
@@ -256,6 +260,7 @@ export const LoginScreen: React.FC = () => {
       setRole(null);
       setConsent(false);
       setStep(1);
+      syncing.current = false;
       setFinishVisible(true);
     } catch (err: any) {
       await signOut().catch(() => {});
@@ -286,6 +291,7 @@ export const LoginScreen: React.FC = () => {
       await user.update({ unsafeMetadata: { ...(user.unsafeMetadata || {}), ...profile } }).catch(() => {});
       await syncClerkUser(user, token, profile);
       setFinishVisible(false);
+      syncing.current = false;
       navigation.replace('Main');
     } catch (err: any) {
       Alert.alert('Could not create your account', clerkMessage(err, 'Please try again.'));
@@ -308,10 +314,14 @@ export const LoginScreen: React.FC = () => {
     pendingProfile.current = forProfile;
     setGoogleLoading(true);
     try {
-      const redirectUrl = Linking.createURL('/dashboard', { scheme: process.env.EXPO_PUBLIC_SCHEME || 'stayride' });
-      const { createdSessionId, setActive: setOAuthActive } = await startOAuthFlow({ redirectUrl });
+      const appScheme = process.env.EXPO_PUBLIC_SCHEME || 'staycabs';
+      const redirectUrl = Linking.createURL('/dashboard', { scheme: appScheme });
+      const { createdSessionId, signIn, signUp, setActive: setOAuthActive } = await startOAuthFlow({ redirectUrl });
+      const sessionId = createdSessionId || signIn?.createdSessionId || signUp?.createdSessionId;
       const activate = setOAuthActive || setActive;
-      if (createdSessionId && activate) await activate({ session: createdSessionId }); // finishSignIn runs next
+      if (sessionId && activate) {
+        await activate({ session: sessionId }); // finishSignIn runs next
+      }
     } catch (err: any) {
       pendingProfile.current = null;
       Alert.alert('Google sign-in', clerkMessage(err, 'Could not complete Google sign-in.'));
@@ -355,8 +365,35 @@ export const LoginScreen: React.FC = () => {
     setLoading(true);
     try {
       const result = await signIn.create({ identifier: cleanEmail, password });
-      if (result.status === 'complete' && setActive) await setActive({ session: result.createdSessionId });
-      else Alert.alert('Sign in', `Additional verification required (${result.status}).`);
+      if (result.status === 'complete' && setActive) {
+        await setActive({ session: result.createdSessionId });
+      } else if (result.status === 'needs_client_trust' || result.status === 'needs_second_factor') {
+        // Device trust verification (new phone/client login)
+        const emailSecondFactor: any = result.supportedSecondFactors?.find((f: any) => f.strategy === 'email_code');
+        if (emailSecondFactor) {
+          await signIn.prepareSecondFactor({ strategy: 'email_code' }).catch(() => {});
+        } else {
+          const emailFirstFactor: any = result.supportedFirstFactors?.find((f: any) => f.strategy === 'email_code');
+          if (emailFirstFactor?.emailAddressId) {
+            await signIn.prepareFirstFactor({ strategy: 'email_code', emailAddressId: emailFirstFactor.emailAddressId }).catch(() => {});
+          } else {
+            await (signIn as any).prepareFirstFactor?.({ strategy: 'email_code' }).catch(() => {});
+          }
+        }
+        setCode('');
+        setOtpDigits(['', '', '', '', '', '']);
+        setMode('verify');
+      } else if (result.status === 'needs_first_factor') {
+        const factor: any = result.supportedFirstFactors?.find((f: any) => f.strategy === 'email_code');
+        if (factor?.emailAddressId) {
+          await signIn.prepareFirstFactor({ strategy: 'email_code', emailAddressId: factor.emailAddressId });
+        }
+        setCode('');
+        setOtpDigits(['', '', '', '', '', '']);
+        setMode('verify');
+      } else {
+        Alert.alert('Sign in', `Additional verification required (${result.status}).`);
+      }
     } catch (err: any) {
       // Accounts created before Clerk exist only in StayRide: fall back to its own login
       if (err?.errors?.[0]?.code === 'form_identifier_not_found') {
@@ -403,13 +440,43 @@ export const LoginScreen: React.FC = () => {
 
   const verifyEmailWithCode = async (overrideCode?: string) => {
     const codeToVerify = (overrideCode || code).trim();
-    if (!codeToVerify) return Alert.alert('Verify email', 'Enter the 6-digit code.');
-    if (!signUp) return;
+    if (!codeToVerify) return Alert.alert('Verify code', 'Enter the 6-digit verification code.');
     setLoading(true);
     try {
-      const done = await signUp.attemptEmailAddressVerification({ code: codeToVerify });
-      if (done.status === 'complete' && setActive) await setActive({ session: done.createdSessionId });
-      else Alert.alert('Not verified', 'The code could not be verified. Please check it and try again.');
+      // 1. Device Trust or Second Factor verification for Sign-in
+      if (signIn && (signIn.status === 'needs_client_trust' || signIn.status === 'needs_second_factor')) {
+        let done: any = null;
+        try {
+          done = await signIn.attemptSecondFactor({ strategy: 'email_code', code: codeToVerify });
+        } catch {
+          done = await signIn.attemptFirstFactor({ strategy: 'email_code', code: codeToVerify });
+        }
+        if (done?.status === 'complete' && setActive) {
+          await setActive({ session: done.createdSessionId });
+        } else {
+          Alert.alert('Not verified', 'Invalid or expired code.');
+        }
+        return;
+      }
+      // 2. First factor verification for Sign-in
+      if (signIn && signIn.status === 'needs_first_factor') {
+        const done = await signIn.attemptFirstFactor({ strategy: 'email_code', code: codeToVerify });
+        if (done.status === 'complete' && setActive) {
+          await setActive({ session: done.createdSessionId });
+        } else {
+          Alert.alert('Not verified', 'Invalid or expired code.');
+        }
+        return;
+      }
+      // 3. New User Registration Sign-up Email Verification
+      if (signUp) {
+        const done = await signUp.attemptEmailAddressVerification({ code: codeToVerify });
+        if (done.status === 'complete' && setActive) {
+          await setActive({ session: done.createdSessionId });
+        } else {
+          Alert.alert('Not verified', 'The code could not be verified. Please check it and try again.');
+        }
+      }
     } catch (err: any) {
       Alert.alert('Not verified', clerkMessage(err, 'Invalid or expired code.'));
     } finally {
@@ -449,8 +516,15 @@ export const LoginScreen: React.FC = () => {
 
   const resendCode = async () => {
     try {
-      await signUp?.prepareEmailAddressVerification({ strategy: 'email_code' });
-      Alert.alert('Code sent', 'A new code is on its way to your email.');
+      if (signIn && (signIn.status === 'needs_client_trust' || signIn.status === 'needs_second_factor')) {
+        await signIn.prepareSecondFactor({ strategy: 'email_code' });
+        Alert.alert('Code sent', 'A new verification code was sent to your email.');
+        return;
+      }
+      if (signUp) {
+        await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
+        Alert.alert('Code sent', 'A new code is on its way to your email.');
+      }
     } catch (err: any) {
       Alert.alert('Could not resend', clerkMessage(err, 'Please try again.'));
     }
@@ -602,7 +676,50 @@ export const LoginScreen: React.FC = () => {
             onSelect={(v) => setVehicleType(v as VehicleType)}
           />
           {field('reader-outline', { placeholder: 'Vehicle number, e.g. WB-76-A-1234', value: vehicleNumber, onChangeText: setVehicleNumber, autoCapitalize: 'characters' })}
-          {field('map-outline', { placeholder: 'Area you drive in, e.g. Darjeeling, NJP', value: area, onChangeText: setArea })}
+          <View style={{ gap: 8, marginTop: 4 }}>
+            <Text style={{ fontSize: 13, fontWeight: '600', color: Colors.textSecondary }}>
+              Operating Areas (Select all that apply) *
+            </Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              {OPERATING_AREAS.map((a) => {
+                const active = selectedAreas.includes(a);
+                return (
+                  <TouchableOpacity
+                    key={a}
+                    onPress={() => {
+                      if (active) {
+                        if (selectedAreas.length > 1) {
+                          setSelectedAreas(selectedAreas.filter((item) => item !== a));
+                        }
+                      } else {
+                        setSelectedAreas([...selectedAreas, a]);
+                      }
+                    }}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 6,
+                      paddingVertical: 9,
+                      paddingHorizontal: 14,
+                      borderRadius: 10,
+                      borderWidth: 1.5,
+                      borderColor: active ? Colors.brandPrimary : Colors.divider,
+                      backgroundColor: active ? '#EBF5EE' : Colors.white,
+                    }}
+                  >
+                    <Ionicons
+                      name={active ? 'checkbox' : 'square-outline'}
+                      size={18}
+                      color={active ? Colors.brandPrimary : Colors.textSecondary}
+                    />
+                    <Text style={{ fontSize: 13, fontWeight: active ? '700' : '500', color: active ? Colors.brandPrimaryDark : Colors.textPrimary }}>
+                      {a}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
           <Text style={styles.hint}>Driver accounts are reviewed by operations before you get trip requests.</Text>
         </>
       )}
@@ -887,7 +1004,7 @@ const styles = StyleSheet.create({
   hero: { backgroundColor: Colors.brandPrimaryDark, alignItems: 'center', paddingBottom: 56, paddingHorizontal: 24 },
   logo: { width: 52, height: 52, borderRadius: 16, backgroundColor: Colors.white, alignItems: 'center', justifyContent: 'center' },
   brand: { color: Colors.white, fontSize: 28, fontWeight: '800', marginTop: 12, letterSpacing: 0.3 },
-  tagline: { color: '#D4E3D9', fontSize: 14, marginTop: 4 },
+  tagline: { color: '#DDD6FE', fontSize: 14, marginTop: 4 },
   card: { marginHorizontal: 16, marginTop: -32, backgroundColor: Colors.bgCard, borderRadius: Radii.card, padding: 20, borderWidth: 1, borderColor: Colors.divider, ...Shadows.card },
   tabs: { flexDirection: 'row', backgroundColor: Colors.bgPage, borderRadius: 12, padding: 4, marginBottom: 16 },
   tab: { flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center' },

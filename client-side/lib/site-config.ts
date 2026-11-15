@@ -31,7 +31,7 @@ const getHost = (): string => {
 };
 
 export const siteConfig = {
-  appName: process.env.NEXT_PUBLIC_APP_NAME?.trim() || "Homestay & Cab Network",
+  appName: process.env.NEXT_PUBLIC_APP_NAME?.trim() || "StayCabs",
   appUrl: getOrigin(),
   domain: getHost(),
   supportEmail: process.env.NEXT_PUBLIC_SUPPORT_EMAIL?.trim() || "",
