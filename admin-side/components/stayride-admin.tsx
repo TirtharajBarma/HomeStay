@@ -1729,7 +1729,7 @@ function AddDriverModal({ demo, initialDriver, onClose, onAdded }: { demo: boole
 
 export function DriversTab({ demo }: TabProps) {
   const [status, setStatus] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<"ALL" | "INDIVIDUAL" | "UNION">("ALL");
+  const [categoryFilter, setCategoryFilter] = useState<"ALL" | "INDIVIDUAL" | "HOMESTAY" | "UNION">("ALL");
   const [search, setSearch] = useState("");
   const [q, setQ] = useState("");
   const [page, setPage] = useState(0);
@@ -1741,16 +1741,25 @@ export function DriversTab({ demo }: TabProps) {
     true
   );
 
+  const isHomestayDriver = (d: Any) =>
+    Boolean(d.isHomestayDriver) || Boolean(d.homestayName) || d.driverCategory === "HOMESTAY";
+
   const isUnionDriver = (d: Any) =>
-    d.driverCategory === "UNION" ||
-    d.vehicle?.type === "Fleet" ||
-    d.vehicle?.plate === "UNION-FLEET" ||
-    Boolean(d.unionName);
+    !isHomestayDriver(d) && (
+      d.driverCategory === "UNION" ||
+      d.vehicle?.type === "Fleet" ||
+      d.vehicle?.plate === "UNION-FLEET" ||
+      Boolean(d.unionName)
+    );
 
   const rawItems = data?.items || [];
   const items = categoryFilter === "ALL"
     ? rawItems
-    : rawItems.filter((d) => (categoryFilter === "UNION" ? isUnionDriver(d) : !isUnionDriver(d)));
+    : rawItems.filter((d) => {
+        if (categoryFilter === "HOMESTAY") return isHomestayDriver(d);
+        if (categoryFilter === "UNION") return isUnionDriver(d);
+        return !isHomestayDriver(d) && !isUnionDriver(d);
+      });
 
   function setDriverStatus(d: Any, next: "ACTIVE" | "PENDING_APPROVAL" | "BLOCKED") {
     let reason = "";
@@ -1819,6 +1828,13 @@ export function DriversTab({ demo }: TabProps) {
           </button>
           <button
             type="button"
+            onClick={() => setCategoryFilter("HOMESTAY")}
+            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition cursor-pointer ${categoryFilter === "HOMESTAY" ? "bg-purple-950 border border-purple-700/60 text-purple-300 font-bold" : "text-slate-400 hover:text-white"}`}
+          >
+            Homestay Added Fleet
+          </button>
+          <button
+            type="button"
             onClick={() => setCategoryFilter("UNION")}
             className={`px-2.5 py-1 rounded-lg text-xs font-medium transition cursor-pointer ${categoryFilter === "UNION" ? "bg-slate-800 border border-slate-700 text-white font-medium" : "text-slate-400 hover:text-white"}`}
           >
@@ -1848,7 +1864,11 @@ export function DriversTab({ demo }: TabProps) {
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <p className="font-medium text-white">{d.name}</p>
                         {d.deletedAt && <Badge tone="red">deleted</Badge>}
-                        {isUnionDriver(d) ? (
+                        {isHomestayDriver(d) ? (
+                          <span className="rounded-md bg-purple-500/10 text-purple-300 border border-purple-500/30 px-2 py-0.5 text-[11px] font-medium flex items-center gap-1">
+                            <span>🏠</span> Homestay: {d.homestayName || "Host Added"}
+                          </span>
+                        ) : isUnionDriver(d) ? (
                           <span className="rounded-md bg-slate-800/80 text-slate-200 border border-slate-700/60 px-2 py-0.5 text-[11px] font-medium">
                             Union: {d.unionName || (d.vehicle?.type === "Fleet" ? d.vehicle?.model : "") || "Taxi Syndicate"}
                           </span>

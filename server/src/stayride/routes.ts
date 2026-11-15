@@ -247,6 +247,9 @@ stayrideV1Router.post('/auth/login', async (req: Request, res: Response) => {
   if (!cleanPass) {
     return res.status(400).json({ error: { message: 'Password is required.' } });
   }
+  if (cleanPass.length < 8) {
+    return res.status(400).json({ error: { message: 'Password must be at least 8 characters.' } });
+  }
 
   try {
     const UserModel = getUserModel(false); // Production DB
@@ -393,6 +396,9 @@ stayrideV1Router.post('/auth/signup', async (req: Request, res: Response) => {
   }
   if (!cleanPass) {
     return res.status(400).json({ error: { message: 'Password is required.' } });
+  }
+  if (cleanPass.length < 8) {
+    return res.status(400).json({ error: { message: 'Password must be at least 8 characters.' } });
   }
 
   if (isDemoKey(cleanEmail) || cleanEmail === 'driver@stayride.in' || cleanEmail === 'demo-driver@stayride.in') {

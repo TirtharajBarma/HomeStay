@@ -64,12 +64,17 @@ export const welcomeSightseeingMessage = (guestName: string, homestayName: strin
 
 /** quoteLink: the driver's own page to quote without opening the app (WhatsApp-only drivers). */
 export const newRequestMessage = (doc: any, quoteLink: string): Built => {
-  const budgetInfo = doc.guestBudget ? `\nGuest Target Budget: ₹${Number(doc.guestBudget).toLocaleString('en-IN')}` : '';
-  const tourNotesInfo = doc.guestNotes ? `\nTrip Notes: ${doc.guestNotes}` : '';
-  const roundTripInfo = doc.isRoundTrip
-    ? `\nTrip Type: Round Trip (Driver waits during tour & returns guest)${doc.returnTime ? `\nReturn: ${doc.returnDate ? new Date(Number(doc.returnDate)).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' }) : 'Same Day'} at ${doc.returnTime}` : ''}`
+  const budgetInfo = doc.guestBudget ? `\nTarget Budget: ₹${Number(doc.guestBudget).toLocaleString('en-IN')}` : '';
+  const tourNotesInfo = doc.guestNotes ? `\nItinerary / Notes: ${doc.guestNotes}` : '';
+  let tripTypeInfo = doc.isRoundTrip
+    ? `\nTrip Type: Round Trip (Wait & Return)${doc.returnTime ? `\nReturn: ${doc.returnDate ? new Date(Number(doc.returnDate)).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' }) : 'Same Day'} at ${doc.returnTime}` : ''}`
     : '\nTrip Type: One-Way Drop';
-  const params = [doc.homestayName || 'a homestay', routeText(doc), whenText(doc), doc.vehicleType || 'Cab', quoteLink];
+
+  if (doc.itinerary && Array.isArray(doc.itinerary) && doc.itinerary.length > 0) {
+    tripTypeInfo += `\nMulti-Day Itinerary:\n` + doc.itinerary.map((step: any, idx: number) => `• Day ${idx + 1}: ${step.title || step.route || step}`).join('\n');
+  }
+
+  const params = [doc.homestayName || 'StayCabs Partner', routeText(doc), whenText(doc), doc.vehicleType || 'Cab', quoteLink];
   return {
     event: 'NEW_REQUEST',
     context: ctxOf(doc),
@@ -78,9 +83,8 @@ export const newRequestMessage = (doc: any, quoteLink: string): Built => {
       `New trip request from ${params[0]}.\n` +
       `Route: ${params[1]}\n` +
       `Pickup: ${params[2]}\n` +
-      `Vehicle: ${params[3]}${roundTripInfo}${tourNotesInfo}${budgetInfo}\n\n` +
-      `Submit your total trip fare quote here: ${params[4]}\n\n` +
-      `Guest pays advance online; you collect the rest directly in cash from the guest.`,
+      `Vehicle: ${params[3]}${tripTypeInfo}${tourNotesInfo}${budgetInfo}\n\n` +
+      `Submit your total trip fare quotation here: ${params[4]}`,
   };
 };
 

@@ -33,7 +33,8 @@ import { VehicleType } from '../types';
 // Complete any pending auth session (required for Clerk OAuth in Expo)
 WebBrowser.maybeCompleteAuthSession();
 
-const APP_NAME = process.env.EXPO_PUBLIC_APP_NAME || 'Platform';
+const APP_NAME = process.env.EXPO_PUBLIC_APP_NAME || 'StayCabs';
+const OPERATING_AREAS = ['Darjeeling', 'Kalimpong', 'Sikkim'] as const;
 const DEMO_HOST_EMAIL = process.env.EXPO_PUBLIC_DEMO_HOST_EMAIL || 'demo@stayride.in';
 const DEMO_DRIVER_EMAIL = process.env.EXPO_PUBLIC_DEMO_DRIVER_EMAIL || 'driver@stayride.in';
 
@@ -154,6 +155,7 @@ export const LoginScreen: React.FC = () => {
   const [vehicleType, setVehicleType] = useState<VehicleType>('SUV');
   const [vehicleNumber, setVehicleNumber] = useState('');
   const [area, setArea] = useState('');
+  const [selectedAreas, setSelectedAreas] = useState<string[]>(['Darjeeling']);
   const [consent, setConsent] = useState(false);
   const [mapVisible, setMapVisible] = useState(false);
   // Create account runs in short steps: 1 role, 2 details, 3 consent + login (the Google sheet: 1, 2)
@@ -173,7 +175,7 @@ export const LoginScreen: React.FC = () => {
     if (phone.replace(/\D/g, '').length < 10) return 'Enter a 10-digit mobile number.';
     if (role === 'owner' && !homestayName.trim()) return 'Your homestay name is required.';
     if (role === 'driver' && !vehicleNumber.trim()) return 'Your vehicle number is required.';
-    if (role === 'driver' && !area.trim()) return 'Enter the area where you drive.';
+    if (role === 'driver' && selectedAreas.length === 0 && !area.trim()) return 'Please select at least one operating area (Darjeeling, Kalimpong, Sikkim).';
     return null;
   };
   const validateProfile = (): string | null =>
@@ -209,7 +211,7 @@ export const LoginScreen: React.FC = () => {
           longitude: coords?.longitude,
           mapQuery: coords ? `${coords.latitude},${coords.longitude}` : location.trim(),
         }
-      : { vehicleType, vehicleNumber: vehicleNumber.trim().toUpperCase(), area: area.trim() }),
+      : { vehicleType, vehicleNumber: vehicleNumber.trim().toUpperCase(), area: (selectedAreas.length > 0 ? selectedAreas.join(', ') : area.trim()) || 'Darjeeling' }),
     acceptedTerms: true,
   });
 
@@ -239,6 +241,7 @@ export const LoginScreen: React.FC = () => {
         const wasCreating = Boolean(pendingProfile.current);
         await syncClerkUser(user, token, { role: status.role });
         pendingProfile.current = null;
+        syncing.current = false;
         navigation.replace('Main');
         if (wasCreating) Alert.alert('Welcome back', 'You already had an account, so we signed you in.');
         return;
@@ -247,6 +250,7 @@ export const LoginScreen: React.FC = () => {
       if (profile) {
         await syncClerkUser(user, token, profile);
         pendingProfile.current = null;
+        syncing.current = false;
         navigation.replace('Main');
         return;
       }
@@ -256,6 +260,7 @@ export const LoginScreen: React.FC = () => {
       setRole(null);
       setConsent(false);
       setStep(1);
+      syncing.current = false;
       setFinishVisible(true);
     } catch (err: any) {
       await signOut().catch(() => {});
@@ -286,6 +291,7 @@ export const LoginScreen: React.FC = () => {
       await user.update({ unsafeMetadata: { ...(user.unsafeMetadata || {}), ...profile } }).catch(() => {});
       await syncClerkUser(user, token, profile);
       setFinishVisible(false);
+      syncing.current = false;
       navigation.replace('Main');
     } catch (err: any) {
       Alert.alert('Could not create your account', clerkMessage(err, 'Please try again.'));
@@ -308,10 +314,14 @@ export const LoginScreen: React.FC = () => {
     pendingProfile.current = forProfile;
     setGoogleLoading(true);
     try {
-      const redirectUrl = Linking.createURL('/dashboard', { scheme: process.env.EXPO_PUBLIC_SCHEME || 'stayride' });
-      const { createdSessionId, setActive: setOAuthActive } = await startOAuthFlow({ redirectUrl });
+      const appScheme = process.env.EXPO_PUBLIC_SCHEME || 'staycabs';
+      const redirectUrl = Linking.createURL('/dashboard', { scheme: appScheme });
+      const { createdSessionId, signIn, signUp, setActive: setOAuthActive } = await startOAuthFlow({ redirectUrl });
+      const sessionId = createdSessionId || signIn?.createdSessionId || signUp?.createdSessionId;
       const activate = setOAuthActive || setActive;
-      if (createdSessionId && activate) await activate({ session: createdSessionId }); // finishSignIn runs next
+      if (sessionId && activate) {
+        await activate({ session: sessionId }); // finishSignIn runs next
+      }
     } catch (err: any) {
       pendingProfile.current = null;
       Alert.alert('Google sign-in', clerkMessage(err, 'Could not complete Google sign-in.'));
@@ -602,7 +612,50 @@ export const LoginScreen: React.FC = () => {
             onSelect={(v) => setVehicleType(v as VehicleType)}
           />
           {field('reader-outline', { placeholder: 'Vehicle number, e.g. WB-76-A-1234', value: vehicleNumber, onChangeText: setVehicleNumber, autoCapitalize: 'characters' })}
-          {field('map-outline', { placeholder: 'Area you drive in, e.g. Darjeeling, NJP', value: area, onChangeText: setArea })}
+          <View style={{ gap: 8, marginTop: 4 }}>
+            <Text style={{ fontSize: 13, fontWeight: '600', color: Colors.textSecondary }}>
+              Operating Areas (Select all that apply) *
+            </Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              {OPERATING_AREAS.map((a) => {
+                const active = selectedAreas.includes(a);
+                return (
+                  <TouchableOpacity
+                    key={a}
+                    onPress={() => {
+                      if (active) {
+                        if (selectedAreas.length > 1) {
+                          setSelectedAreas(selectedAreas.filter((item) => item !== a));
+                        }
+                      } else {
+                        setSelectedAreas([...selectedAreas, a]);
+                      }
+                    }}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 6,
+                      paddingVertical: 9,
+                      paddingHorizontal: 14,
+                      borderRadius: 10,
+                      borderWidth: 1.5,
+                      borderColor: active ? Colors.brandPrimary : Colors.divider,
+                      backgroundColor: active ? '#EBF5EE' : Colors.white,
+                    }}
+                  >
+                    <Ionicons
+                      name={active ? 'checkbox' : 'square-outline'}
+                      size={18}
+                      color={active ? Colors.brandPrimary : Colors.textSecondary}
+                    />
+                    <Text style={{ fontSize: 13, fontWeight: active ? '700' : '500', color: active ? Colors.brandPrimaryDark : Colors.textPrimary }}>
+                      {a}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
           <Text style={styles.hint}>Driver accounts are reviewed by operations before you get trip requests.</Text>
         </>
       )}

@@ -287,10 +287,30 @@ export const MyDriversScreen: React.FC = () => {
                 onChangeText={setSeats}
               />
 
-              <Text style={styles.label}>Base Location / Area</Text>
+              <Text style={styles.label}>Operating Areas (Select all that apply)</Text>
+              <View style={[styles.chipRow, { marginBottom: 8 }]}>
+                {['Darjeeling', 'Kalimpong', 'Sikkim'].map((loc) => {
+                  const parts = area.split(',').map((s) => s.trim()).filter(Boolean);
+                  const active = parts.includes(loc);
+                  return (
+                    <TouchableOpacity
+                      key={loc}
+                      style={[styles.typeChip, active && styles.typeChipActive]}
+                      onPress={() => {
+                        const newParts = active ? parts.filter((p) => p !== loc) : [...parts, loc];
+                        setArea(newParts.join(', '));
+                      }}
+                    >
+                      <Text style={[styles.typeChipText, active && styles.typeChipTextActive]}>
+                        {active ? `✓ ${loc}` : loc}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
               <TextInput
                 style={styles.input}
-                placeholder="e.g. Gangtok, Deorali"
+                placeholder="e.g. Darjeeling, Kalimpong, Sikkim"
                 placeholderTextColor={Colors.textSecondary}
                 value={area}
                 onChangeText={setArea}

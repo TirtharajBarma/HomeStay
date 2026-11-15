@@ -3,7 +3,7 @@ import { z } from "zod";
 export const RegisterSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
   email: z.string().email("Valid email is required"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
   role: z.enum(["guest", "owner"]).default("owner"),
   phone: z.string().optional(),
   homestayName: z.string().optional(),

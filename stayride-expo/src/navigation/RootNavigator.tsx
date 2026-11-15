@@ -221,10 +221,10 @@ const UnifiedAppTabs: React.FC = () => {
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: '#0F2B1D' }}>
           <Ionicons name="time-outline" size={42} color="#D4E3D9" />
           <Text style={{ fontSize: 20, fontWeight: '700', color: '#FAF8F5', textAlign: 'center', marginTop: 14 }}>
-            Awaiting StayRide Approval
+            Awaiting StayCabs Approval
           </Text>
           <Text style={{ fontSize: 14, color: '#C5D6CC', textAlign: 'center', marginTop: 8, lineHeight: 20, maxWidth: 300 }}>
-            StayRide is reviewing your driver credentials. Assigned trips and ride requests will appear here once approved.
+            StayCabs is reviewing your driver credentials. Assigned trips and ride requests will appear here once approved.
           </Text>
           <TouchableOpacity
             onPress={() => sync().catch(() => {})}
