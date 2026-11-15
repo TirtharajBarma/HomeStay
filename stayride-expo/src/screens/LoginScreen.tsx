@@ -365,8 +365,35 @@ export const LoginScreen: React.FC = () => {
     setLoading(true);
     try {
       const result = await signIn.create({ identifier: cleanEmail, password });
-      if (result.status === 'complete' && setActive) await setActive({ session: result.createdSessionId });
-      else Alert.alert('Sign in', `Additional verification required (${result.status}).`);
+      if (result.status === 'complete' && setActive) {
+        await setActive({ session: result.createdSessionId });
+      } else if (result.status === 'needs_client_trust' || result.status === 'needs_second_factor') {
+        // Device trust verification (new phone/client login)
+        const emailSecondFactor: any = result.supportedSecondFactors?.find((f: any) => f.strategy === 'email_code');
+        if (emailSecondFactor) {
+          await signIn.prepareSecondFactor({ strategy: 'email_code' }).catch(() => {});
+        } else {
+          const emailFirstFactor: any = result.supportedFirstFactors?.find((f: any) => f.strategy === 'email_code');
+          if (emailFirstFactor?.emailAddressId) {
+            await signIn.prepareFirstFactor({ strategy: 'email_code', emailAddressId: emailFirstFactor.emailAddressId }).catch(() => {});
+          } else {
+            await (signIn as any).prepareFirstFactor?.({ strategy: 'email_code' }).catch(() => {});
+          }
+        }
+        setCode('');
+        setOtpDigits(['', '', '', '', '', '']);
+        setMode('verify');
+      } else if (result.status === 'needs_first_factor') {
+        const factor: any = result.supportedFirstFactors?.find((f: any) => f.strategy === 'email_code');
+        if (factor?.emailAddressId) {
+          await signIn.prepareFirstFactor({ strategy: 'email_code', emailAddressId: factor.emailAddressId });
+        }
+        setCode('');
+        setOtpDigits(['', '', '', '', '', '']);
+        setMode('verify');
+      } else {
+        Alert.alert('Sign in', `Additional verification required (${result.status}).`);
+      }
     } catch (err: any) {
       // Accounts created before Clerk exist only in StayRide: fall back to its own login
       if (err?.errors?.[0]?.code === 'form_identifier_not_found') {
@@ -413,13 +440,43 @@ export const LoginScreen: React.FC = () => {
 
   const verifyEmailWithCode = async (overrideCode?: string) => {
     const codeToVerify = (overrideCode || code).trim();
-    if (!codeToVerify) return Alert.alert('Verify email', 'Enter the 6-digit code.');
-    if (!signUp) return;
+    if (!codeToVerify) return Alert.alert('Verify code', 'Enter the 6-digit verification code.');
     setLoading(true);
     try {
-      const done = await signUp.attemptEmailAddressVerification({ code: codeToVerify });
-      if (done.status === 'complete' && setActive) await setActive({ session: done.createdSessionId });
-      else Alert.alert('Not verified', 'The code could not be verified. Please check it and try again.');
+      // 1. Device Trust or Second Factor verification for Sign-in
+      if (signIn && (signIn.status === 'needs_client_trust' || signIn.status === 'needs_second_factor')) {
+        let done: any = null;
+        try {
+          done = await signIn.attemptSecondFactor({ strategy: 'email_code', code: codeToVerify });
+        } catch {
+          done = await signIn.attemptFirstFactor({ strategy: 'email_code', code: codeToVerify });
+        }
+        if (done?.status === 'complete' && setActive) {
+          await setActive({ session: done.createdSessionId });
+        } else {
+          Alert.alert('Not verified', 'Invalid or expired code.');
+        }
+        return;
+      }
+      // 2. First factor verification for Sign-in
+      if (signIn && signIn.status === 'needs_first_factor') {
+        const done = await signIn.attemptFirstFactor({ strategy: 'email_code', code: codeToVerify });
+        if (done.status === 'complete' && setActive) {
+          await setActive({ session: done.createdSessionId });
+        } else {
+          Alert.alert('Not verified', 'Invalid or expired code.');
+        }
+        return;
+      }
+      // 3. New User Registration Sign-up Email Verification
+      if (signUp) {
+        const done = await signUp.attemptEmailAddressVerification({ code: codeToVerify });
+        if (done.status === 'complete' && setActive) {
+          await setActive({ session: done.createdSessionId });
+        } else {
+          Alert.alert('Not verified', 'The code could not be verified. Please check it and try again.');
+        }
+      }
     } catch (err: any) {
       Alert.alert('Not verified', clerkMessage(err, 'Invalid or expired code.'));
     } finally {
@@ -459,8 +516,15 @@ export const LoginScreen: React.FC = () => {
 
   const resendCode = async () => {
     try {
-      await signUp?.prepareEmailAddressVerification({ strategy: 'email_code' });
-      Alert.alert('Code sent', 'A new code is on its way to your email.');
+      if (signIn && (signIn.status === 'needs_client_trust' || signIn.status === 'needs_second_factor')) {
+        await signIn.prepareSecondFactor({ strategy: 'email_code' });
+        Alert.alert('Code sent', 'A new verification code was sent to your email.');
+        return;
+      }
+      if (signUp) {
+        await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
+        Alert.alert('Code sent', 'A new code is on its way to your email.');
+      }
     } catch (err: any) {
       Alert.alert('Could not resend', clerkMessage(err, 'Please try again.'));
     }

@@ -154,8 +154,9 @@ console.log(`\x1b[36m🚀 Publishing EAS Update to branch ${branch}...\x1b[0m\n`
 // 6. Run eas update via spawnSync to avoid shell quoting issues
 const result = spawnSync(
   'npx',
-  ['eas', 'update', '--branch', branch, '--environment', branch, '--non-interactive', '--message', messageArg],
+  ['--yes', 'eas', 'update', '--branch', branch, '--environment', branch, '--non-interactive', '--message', messageArg],
   {
+    cwd: path.join(__dirname, '..'),
     stdio: 'inherit',
     shell: process.platform === 'win32',
   }
