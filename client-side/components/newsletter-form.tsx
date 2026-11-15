@@ -72,7 +72,7 @@ export function NewsletterForm() {
             setEmail(event.target.value);
             if (error) setError(null);
           }}
-          placeholder="you@meadowfallretreat.com"
+          placeholder="you@example.com"
           aria-invalid={Boolean(error)}
           aria-describedby={error ? "newsletter-error" : undefined}
           className="min-h-11 min-w-0 flex-1 rounded-lg border border-outline-variant/50 bg-surface-container-lowest px-3 text-body-sm text-on-surface placeholder:text-outline focus:border-primary focus:outline-none"

@@ -310,7 +310,9 @@ export const DriverTripsScreen: React.FC = () => {
           <>
             {filteredRequests.length === 0 ? (
               <View style={styles.emptyCard}>
-                <Text style={{ fontSize: 48 }}>🚗</Text>
+                <View style={styles.emptyIconCircle}>
+                  <Ionicons name="car-outline" size={28} color={Colors.brandPrimary} />
+                </View>
                 <Text style={styles.emptyTitle}>{searchQuery ? 'No matching requests' : 'No pending ride requests'}</Text>
                 <Text style={styles.emptySubtitle}>
                   {searchQuery
@@ -333,7 +335,7 @@ export const DriverTripsScreen: React.FC = () => {
                     <View style={styles.cardHeader}>
                       <View style={styles.badgeNew}>
                         <Text style={styles.badgeNewText}>
-                          {t.isRoundTrip ? '🔄 Round Trip' : '🚗 One-Way'}
+                          {t.isRoundTrip ? 'Round Trip' : 'One-Way'}
                         </Text>
                       </View>
                       <Text style={styles.fareEst}>{t.homestayName || ''}</Text>
@@ -376,14 +378,23 @@ export const DriverTripsScreen: React.FC = () => {
                     </View>
 
                     <View style={styles.metaRow}>
-                      <Text style={styles.metaText}>
-                        📅 {new Date(t.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} at {t.time}
-                      </Text>
-                      <Text style={styles.metaText}>👥 {t.passengers} Pax • {t.vehicleType}</Text>
-                      {t.isRoundTrip && (
-                        <Text style={[styles.metaText, { color: '#047857', fontWeight: '600' }]}>
-                          🔄 Round Trip: Driver waits during tour
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <Ionicons name="calendar-outline" size={13} color={Colors.textSecondary} />
+                        <Text style={styles.metaText}>
+                          {new Date(t.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} at {t.time}
                         </Text>
+                      </View>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <Ionicons name="people-outline" size={13} color={Colors.textSecondary} />
+                        <Text style={styles.metaText}>{t.passengers} Pax • {t.vehicleType}</Text>
+                      </View>
+                      {t.isRoundTrip && (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                          <Ionicons name="repeat-outline" size={13} color="#047857" />
+                          <Text style={[styles.metaText, { color: '#047857', fontWeight: '600' }]}>
+                            Round Trip: Driver waits during tour
+                          </Text>
+                        </View>
                       )}
                     </View>
 
@@ -411,13 +422,13 @@ export const DriverTripsScreen: React.FC = () => {
                       <View style={styles.quotedBox}>
                         <Ionicons name="checkmark-circle" size={18} color="#059669" />
                         <Text style={styles.quotedText}>
-                          Quoted ₹{Math.round((myQuote?.quotedFare ?? 0) * 0.90).toLocaleString()} in-hand (Passenger bill: ₹{myQuote?.quotedFare.toLocaleString()}) —{' '}
+                          Quoted ₹{Math.round((myQuote?.quotedFare ?? 0) * 0.90).toLocaleString('en-IN')} in-hand (Passenger bill: ₹{(myQuote?.quotedFare ?? 0).toLocaleString('en-IN')}) —{' '}
                           {myQuote?.status === 'REJECTED' ? 'Not selected' : myQuote?.status === 'EXPIRED' ? 'Expired, quote again' : 'Awaiting Host Confirmation'}
                         </Text>
                         {canRevise && (
                           <TouchableOpacity
                             onPress={() => {
-                              handleQuoteChange(t.reference, String(Math.round((myQuote?.quotedFare ?? 0) * 0.90)));
+                              handleQuoteChange(t.reference, String(myQuote?.quotedFare ?? ''));
                               setRevising((prev) => ({ ...prev, [t.reference]: true }));
                             }}
                           >
@@ -493,10 +504,10 @@ export const DriverTripsScreen: React.FC = () => {
                     <View style={styles.badgeConfirmed}>
                       <Text style={styles.badgeConfirmedText}>
                         {t.status === 'TRIP_STARTED'
-                          ? '🟢 TRIP IN PROGRESS'
+                          ? 'Trip in progress'
                           : t.status === 'AWAITING_ADVANCE'
-                          ? 'AWAITING GUEST ADVANCE'
-                          : 'CONFIRMED RIDE'}
+                          ? 'Awaiting guest advance'
+                          : 'Confirmed ride'}
                       </Text>
                     </View>
                     <Text style={styles.fareConfirmed}>Fare: {t.fare ? `₹${t.fare.toLocaleString()}` : '—'}</Text>
@@ -512,9 +523,12 @@ export const DriverTripsScreen: React.FC = () => {
                   )}
                   <Text style={styles.pickupDetail}>Pickup: {t.pickup}</Text>
                   <Text style={styles.dropDetail}>Destination: {t.destination}</Text>
-                  <Text style={styles.timeDetail}>
-                    📅 {new Date(t.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} at {t.time}
-                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginVertical: 3 }}>
+                    <Ionicons name="calendar-outline" size={13} color={Colors.textSecondary} />
+                    <Text style={styles.timeDetail}>
+                      {new Date(t.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} at {t.time}
+                    </Text>
+                  </View>
 
                   {/* Cash breakdown (server sends it only after the advance is paid) */}
                   {typeof t.remainingCashAmount === 'number' && (
@@ -604,7 +618,7 @@ export const DriverTripsScreen: React.FC = () => {
                 {statusFilter !== 'Cancelled' && filteredCompleted.map((t) => (
                   <View key={t.reference} style={styles.card}>
                     <View style={styles.cardHeader}>
-                      <Text style={styles.completedTag}>COMPLETED</Text>
+                      <Text style={styles.completedTag}>Completed</Text>
                       <Text style={styles.fareEst}>{t.fare ? `₹${t.fare.toLocaleString()}` : '—'}</Text>
                     </View>
                     {!!t.guestName && <Text style={styles.passengerName}>{t.guestName}</Text>}
@@ -1036,6 +1050,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 48,
     paddingHorizontal: 24,
+  },
+  emptyIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: Colors.brandPrimaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
   },
   emptyTitle: {
     fontSize: 16,

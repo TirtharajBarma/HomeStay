@@ -238,7 +238,7 @@ export const CommissionScreen: React.FC = () => {
                       p.status === 'SETTLED' ? styles.textSettled : p.status === 'REJECTED' ? styles.textRejected : styles.textPending,
                     ]}
                   >
-                    {p.status === 'SETTLED' ? '✓ SETTLED' : p.status === 'REJECTED' ? 'REJECTED' : '⏳ PENDING'}
+                    {p.status === 'SETTLED' ? 'Settled' : p.status === 'REJECTED' ? 'Rejected' : 'Pending'}
                   </Text>
                 </View>
               </View>
@@ -432,21 +432,21 @@ const styles = StyleSheet.create({
   },
   balanceLabel: {
     fontSize: 12,
-    color: '#EDE9FE',
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    color: '#D4E3D9',
+    fontWeight: '600',
   },
   escrowBadge: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.16)',
   },
   escrowBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: '700',
+    color: '#FAF8F5',
+    fontSize: 11,
+    fontWeight: '600',
   },
   balanceVal: {
     fontSize: 34,
@@ -456,7 +456,7 @@ const styles = StyleSheet.create({
   },
   summaryMeta: {
     fontSize: 12,
-    color: '#EDE9FE',
+    color: '#D4E3D9',
     marginTop: 6,
     lineHeight: 16,
   },

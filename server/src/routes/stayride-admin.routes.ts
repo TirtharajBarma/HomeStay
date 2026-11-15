@@ -12,7 +12,7 @@ import {
   OPEN_STATUSES, cabModel, payoutModel, userModel, parseFare, cancelRequest, startTrip, completeTrip,
   adminAssignDriver, adminRecordPayment, adminRejectPaymentClaim, adminVoidPayment, adminMarkRefunded, adminSettleDriver, adminReviewNoPin,
   settlePayout, rejectPayout, expireStaleRequests, overlayTrips, onDriverStatusChange, releaseDriverTrips, adminRefundUnmatched, maskPhone,
-  sendAskCab, autoAskCab, askCabConfirmText, askCabLine, stayOrder, last10, dispatchFields, notifyNewRequest,
+  sendAskCab, autoAskCab, askCabConfirmText, askCabLine, stayOrder, last10, dispatchFields, notifyNewRequest, istDateTime,
 } from "../stayride/platform.js";
 import { logger } from "../utils/logger.js";
 import { getGuestLinkModel } from "../models/guest-link.model.js";
@@ -20,6 +20,8 @@ import { Property } from "../models/property.model.js";
 import { toWhatsAppNumber } from "../services/whatsapp.service.js";
 import { httpError } from "../middlewares/error-handler.js";
 import { config } from "../config/env.js";
+import { NotificationService } from "../services/notification.service.js";
+import { clerkClient } from "@clerk/express";
 
 const router = Router();
 
@@ -50,7 +52,50 @@ async function sendPage(req: Request, res: Response, Model: mongoose.Model<any>,
 }
 
 const ratingOf = (u: any) => (u.ratingCount ? Math.round((u.ratingSum / u.ratingCount) * 10) / 10 : null);
-const USER_FIELDS = "name email phone role accountStatus statusReason vehicle driverCategory unionName createdAt deletedAt ratingSum ratingCount";
+const USER_FIELDS = "name email phone role accountStatus statusReason vehicle driverCategory unionName createdAt deletedAt ratingSum ratingCount clerkId";
+
+async function syncDeleteClerkUser(target: { clerkId?: string; email?: string; phone?: string }) {
+  if (!config.clerkSecretKey) return;
+  try {
+    if (target.clerkId) {
+      await clerkClient.users.deleteUser(target.clerkId).catch((err: any) => {
+        if (err?.status !== 404 && err?.status !== 400) {
+          logger.warn(`[Admin] Clerk deleteUser failed for ${target.clerkId}: ${err?.message}`);
+        }
+      });
+      return;
+    }
+    // Fallback: search and purge by email
+    if (target.email) {
+      try {
+        const list = await clerkClient.users.getUserList({ emailAddress: [target.email] });
+        const users = (list as any)?.data || list;
+        if (Array.isArray(users)) {
+          for (const cu of users) {
+            if (cu?.id) await clerkClient.users.deleteUser(cu.id).catch(() => {});
+          }
+        }
+      } catch (err: any) {
+        logger.warn(`[Admin] Clerk email lookup failed for ${target.email}: ${err?.message}`);
+      }
+    }
+    // Fallback: search and purge by phone
+    if (target.phone) {
+      try {
+        const cleanPhone = target.phone.startsWith("+") ? target.phone : `+91${target.phone.replace(/\D/g, "").slice(-10)}`;
+        const list = await clerkClient.users.getUserList({ phoneNumber: [cleanPhone] });
+        const users = (list as any)?.data || list;
+        if (Array.isArray(users)) {
+          for (const cu of users) {
+            if (cu?.id) await clerkClient.users.deleteUser(cu.id).catch(() => {});
+          }
+        }
+      } catch {}
+    }
+  } catch (err: any) {
+    logger.warn(`[Admin] Clerk sync delete failed: ${err?.message}`);
+  }
+}
 const userItem = (demo: boolean) => (u: any) => ({
   id: String(u._id),
   name: u.name,
@@ -101,6 +146,39 @@ router.post("/commission/preview", async (req, res) => {
   const cfg = await CommissionService.getPlatformConfig(isDemo(req));
   const fare = parseFare(req.body.fare, cfg.maxFare);
   ok(res, await CommissionService.calculateSplit(fare, req.body.tenantKey || req.body.propertyId, isDemo(req)));
+});
+
+router.post("/email-alerts/test", async (req, res) => {
+  const demo = isDemo(req);
+  const rawRecipients: any = req.body?.recipients;
+  const customRecipients = Array.isArray(rawRecipients)
+    ? rawRecipients.map((e: any) => String(e).trim().toLowerCase()).filter((e: string) => e.includes("@") && e.includes("."))
+    : undefined;
+  const result = await NotificationService.sendAdminAlert(
+    "bookingCreated",
+    "Test Operational Alert from StayRide Operations",
+    {
+      badge: "TEST ALERT",
+      reference: "TEST-001",
+      summary: "This is a real-time verification email dispatched from your StayRide Platform Settings.",
+      items: [
+        { label: "Dispatch Timestamp", value: new Date().toLocaleString("en-IN") },
+        { label: "Initiated By", value: actor(req) || "Platform Administrator" },
+        { label: "SMTP Provider", value: "Resend Transactional Mail Engine" },
+        { label: "Recipient Count", value: `${customRecipients?.length || "Active"} Verified Recipient(s)` },
+      ],
+      actionUrl: "https://admin.staycabs.in",
+      actionText: "Open Admin Dashboard →",
+    },
+    demo,
+    customRecipients
+  );
+
+  if (!result.success) {
+    throw httpError(400, result.error || "Failed to send test email. Check your SMTP settings and recipient list.");
+  }
+
+  ok(res, { success: true, recipients: result.recipients }, `Test operational alert sent to ${result.recipients.join(", ")}.`);
 });
 
 // ---------------------------------------------------------------------------
@@ -277,11 +355,65 @@ router.post("/stayride/users/:id/revoke-sessions", async (req, res) => {
   ok(res, userItem(demo)(target), "All sessions revoked.");
 });
 
-// Soft delete: the account is blocked and marked deleted; its money history stays.
+// Soft or Hard delete for users: with ?hard=true (or body.hard=true), permanently purges from DB & Clerk
 router.delete("/stayride/users/:id", async (req, res) => {
   const demo = isDemo(req);
   const target = await loadTargetUser(req, demo);
   await protectAdmins(req, demo, target, "delete");
+  const isHard = req.query.hard === "true" || req.body?.hard === true;
+
+  if (isHard) {
+    // 1. Safety check: Check if user is on an active trip (as driver)
+    if (target.role === "driver") {
+      const activeRide = await cabModel(demo).findOne({
+        assignedDriverUserId: String(target._id),
+        status: "TRIP_STARTED",
+      }).select("reference").lean();
+      if (activeRide) {
+        throw httpError(409, `Cannot permanently delete driver ${target.name} while on active started trip #${activeRide.reference}. Complete or cancel the trip first.`);
+      }
+      // Release unstarted trips and reject quotes
+      await releaseDriverTrips(demo, String(target._id), actor(req));
+      await cabModel(demo).updateMany(
+        { "quotes.driverId": String(target._id), "quotes.status": "PENDING" },
+        { $set: { "quotes.$[q].status": "REJECTED" } },
+        { arrayFilters: [{ "q.driverId": String(target._id), "q.status": "PENDING" }] }
+      );
+    }
+
+    // 2. If homestay owner: clean up property and tenant records
+    if (target.role === "owner" && target.email) {
+      await Property.deleteMany({ email: target.email });
+      await getStayRideTenantModel(demo).deleteMany({
+        $or: [{ email: target.email }, { tenantId: target.email }]
+      });
+      await getTenantControlModel(demo).deleteMany({
+        $or: [{ tenantKey: target.email }, { tenantKey: String(target._id) }]
+      });
+    }
+
+    // 3. Purge user from Clerk cloud (releases phone and email)
+    await syncDeleteClerkUser(target);
+
+    // 4. Permanently delete from MongoDB
+    await userModel(demo).findByIdAndDelete(target._id);
+
+    const reason = String(req.body?.reason || req.query?.reason || "Permanently purged by platform admin").slice(0, 300);
+    await audit(actor(req), "user.hard_delete", "User", String(target._id), {
+      targetName: target.name,
+      targetEmail: target.email,
+      role: target.role,
+      reason,
+    }, demo, { actorRole: "ADMIN" });
+
+    if (target.role === "driver") {
+      await onDriverStatusChange(demo, String(target._id), "BLOCKED", actor(req));
+    }
+
+    return ok(res, { id: String(target._id), name: target.name, email: target.email, hard: true }, `User ${target.name || target.email} permanently purged from database and Clerk.`);
+  }
+
+  // Soft delete: the account is blocked and marked deleted; its money history stays.
   const updated = await userModel(demo).findByIdAndUpdate(
     target._id,
     { $set: { accountStatus: "BLOCKED", statusReason: String(req.body?.reason || "Deleted by platform admin").slice(0, 300), deletedAt: target.deletedAt || new Date() }, $inc: { tokenVersion: 1 } },
@@ -290,7 +422,7 @@ router.delete("/stayride/users/:id", async (req, res) => {
   if (!updated) throw httpError(404, "User not found.");
   await audit(actor(req), "user.delete", "User", String(target._id), { targetName: target.name, targetEmail: target.email, email: target.email, role: target.role, reason: String(req.body?.reason || "").slice(0, 300) }, demo, { actorRole: "ADMIN" });
   if (target.role === "driver" && target.accountStatus !== "BLOCKED") await onDriverStatusChange(demo, String(target._id), "BLOCKED", actor(req));
-  ok(res, userItem(demo)(updated), "User deleted.");
+  ok(res, userItem(demo)(updated), "User account suspended / soft-deleted.");
 });
 
 // ---------------------------------------------------------------------------
@@ -361,6 +493,9 @@ router.delete("/stayride/drivers/:id", async (req, res) => {
     { arrayFilters: [{ "q.driverId": id, "q.status": "PENDING" }] }
   );
 
+  // Purge driver from Clerk cloud (releases phone and email)
+  await syncDeleteClerkUser(target);
+
   // Permanently delete user document from database
   await userModel(demo).findByIdAndDelete(id);
 
@@ -375,7 +510,7 @@ router.delete("/stayride/drivers/:id", async (req, res) => {
     { actorRole: "ADMIN", driverId: id }
   );
 
-  ok(res, { id, name: target.name, phone: target.phone }, `Driver ${target.name} has been permanently deleted.`);
+  ok(res, { id, name: target.name, phone: target.phone }, `Driver ${target.name} has been permanently deleted from database and Clerk.`);
 });
 
 router.post("/stayride/drivers", async (req, res) => {
@@ -544,8 +679,13 @@ router.post("/cab-requests/create", async (req: Request, res: Response) => {
     : [{ address: destination || "Destination", order: 0 }];
 
   const tripDate = typeof date === "number" ? date : new Date(date || Date.now()).getTime();
+  const timeStr = String(time || "10:00 AM").trim();
+  const pickupAt = istDateTime(tripDate, timeStr) ?? tripDate;
+  if (pickupAt < Date.now() - 5 * 60 * 1000) {
+    throw httpError(400, "Pickup date and time cannot be in the past. Please select a future time.");
+  }
   const returnTimestamp = req.body.returnDate ? (typeof req.body.returnDate === "number" ? req.body.returnDate : new Date(req.body.returnDate).getTime()) : undefined;
-  const dispatch = await dispatchFields(targetTenant, demo, tripDate, time || "10:00 AM");
+  const dispatch = await dispatchFields(targetTenant, demo, tripDate, timeStr);
 
   const doc = await Cab.create({
     reference,

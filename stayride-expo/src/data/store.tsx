@@ -294,10 +294,8 @@ export const StayRideProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   // Point the outbox at the given account and reflect its depth in state
   const bindOutbox = (email?: string) => {
     outbox.configure(getOutboxKey(email));
-    // Writes are online-only now; anything left from an older build could carry local ids or
-    // a stale price, so it is discarded rather than replayed.
-    outbox.clear().catch(() => {});
-    setOutboxCount(outbox.count());
+    // Preserve offline queue across session checks so low-signal mountain drop-offs flush upon reconnect
+    outbox.list().then(() => setOutboxCount(outbox.count())).catch(() => {});
   };
 
   // Refs so async code (persist, sync, timers) never reads a stale session from a closure

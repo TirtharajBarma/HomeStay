@@ -91,7 +91,8 @@ export function buildIcs(store: StayRideMemoryStore, roomId: number): string {
     out.push(`X-WR-CALNAME:${(store.homestay.name || 'Homestay').replace(/[,;\n]/g, ' ')} - Room ${room.number}`);
     const from = istDayStart(Date.now()) - 86400000;
     for (const b of store.bookings) {
-      if (b.roomNumber !== room.number || b.checkOut <= from || b.external) continue;
+      const roomMatch = String(b.roomNumber) === String(room.number);
+      if (!roomMatch || b.checkOut <= from || b.external) continue;
       if (b.status !== 'CONFIRMED' && b.status !== 'CHECKED_IN') continue;
       out.push('BEGIN:VEVENT', `UID:stayride-${roomId}-${b.id}@stayride`, `DTSTAMP:${stamp}`, `DTSTART;VALUE=DATE:${ymd(b.checkIn)}`, `DTEND;VALUE=DATE:${ymd(b.checkOut)}`, 'SUMMARY:Not available', 'END:VEVENT');
     }

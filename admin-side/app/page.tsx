@@ -190,37 +190,39 @@ export default function AdminDashboardPage() {
   const k = data?.kpis;
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100">
+    <div className="min-h-screen bg-[#0B0F14] text-[#E6EDF3]">
       {/* 1. TOP HEADER */}
-      <header className="sticky top-0 z-20 border-b border-slate-800 bg-slate-950/90 px-6 py-4 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white shadow-md shadow-blue-600/30">
-              <span className="material-symbols-outlined text-2xl">shield</span>
+      <header className="sticky top-0 z-20 border-b border-slate-800/80 bg-[#0B0F14]/95 px-3 py-2.5 sm:px-6 sm:py-3.5 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-lg border border-[#2EA043]/30 bg-[#2EA043]/10 text-[#3FB950]">
+              <span className="material-symbols-outlined text-lg sm:text-xl">terrain</span>
             </div>
-            <div>
-              <h1 className="text-lg font-bold text-white leading-tight">
-                Super Admin Control Tower
+            <div className="min-w-0">
+              <h1 className="text-xs sm:text-sm font-semibold text-white leading-tight truncate">
+                StayRide Operations
               </h1>
-              <p className="text-xs text-slate-400">
-                Logged in as {admin?.email || "—"}{" "}
+              <p className="text-[11px] sm:text-xs text-slate-400 truncate flex items-center gap-1">
+                <span className="truncate max-w-[130px] sm:max-w-none">{admin?.email || "—"}</span>
                 {demo && activeTab !== "legacy" && (
-                  <span className="ml-1 rounded-full border border-amber-600/50 bg-amber-950 px-2 py-0.5 text-[10px] font-bold text-amber-300">DEMO DATASET</span>
+                  <span className="shrink-0 rounded-md border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.2 text-[10px] font-medium text-amber-300">
+                    Demo
+                  </span>
                 )}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
             {activeTab !== "legacy" && (
-              <label className="flex items-center gap-2 rounded-xl border border-amber-600/40 bg-amber-950/40 px-3 py-1.5 text-xs font-semibold text-amber-300 cursor-pointer hover:bg-amber-900/30 transition">
+              <label className="flex items-center gap-1.5 sm:gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-2 py-1 sm:px-2.5 sm:py-1.5 text-[11px] sm:text-xs text-amber-300 cursor-pointer hover:bg-amber-500/10 transition select-none">
                 <input
                   type="checkbox"
-                  className="rounded border-amber-500 accent-amber-500 cursor-pointer"
+                  className="rounded border-amber-500/40 accent-[#2EA043] cursor-pointer"
                   checked={demo}
                   onChange={(e) => handleDemoToggle(e.target.checked)}
                 />
-                <span>Demo dataset</span>
+                <span className="hidden xs:inline sm:inline">Demo data</span>
               </label>
             )}
             {activeTab !== "legacy" && (
@@ -241,158 +243,195 @@ export default function AdminDashboardPage() {
                 }}
               />
             )}
-            {activeTab === "legacy" && <button
-              onClick={fetchOverview}
-              className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-3.5 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-700"
-            >
-              <span className="material-symbols-outlined text-sm">refresh</span>
-              <span>Refresh Legacy</span>
-            </button>}
+            {activeTab === "legacy" && (
+              <button
+                onClick={fetchOverview}
+                className="flex items-center gap-1.5 rounded-lg border border-slate-700/80 bg-slate-800/60 px-2.5 py-1.5 sm:px-3 text-xs font-medium text-slate-200 hover:bg-slate-800 transition"
+              >
+                <span className="material-symbols-outlined text-sm">refresh</span>
+                <span className="hidden sm:inline">Refresh</span>
+              </button>
+            )}
             <button
               onClick={logout}
-              className="flex items-center gap-1.5 rounded-xl border border-red-500/30 bg-red-950/40 px-3.5 py-2 text-xs font-semibold text-red-400 hover:bg-red-900/40"
+              className="flex items-center gap-1 sm:gap-1.5 rounded-lg border border-red-500/20 bg-red-500/10 px-2.5 py-1.5 sm:px-3 text-xs font-medium text-red-300 hover:bg-red-500/20 transition cursor-pointer"
+              title="Sign out"
             >
               <span className="material-symbols-outlined text-sm">logout</span>
-              <span>Exit Tower</span>
+              <span className="hidden sm:inline">Sign out</span>
             </button>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl p-6 space-y-6">
+      <main className="mx-auto max-w-7xl px-3 py-3 sm:px-6 sm:py-6 space-y-4 sm:space-y-6">
         {activeTab === "legacy" && overviewError && (
-          <div className="rounded-xl border border-red-800/40 bg-red-950/40 px-4 py-3 text-xs font-semibold text-red-300">
+          <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-xs text-red-300">
             {overviewError}
           </div>
         )}
 
         {/* 3. DESK TABS SWITCHER */}
-        <div className="flex items-center border-b border-slate-800 overflow-x-auto no-scrollbar">
+        <div className="flex items-center border-b border-slate-800 overflow-x-auto no-scrollbar touch-scroll -mx-3 px-3 sm:mx-0 sm:px-0">
           {TABS.map(([key, icon, label]) => (
             <button
               key={key}
               onClick={() => handleTabChange(key)}
-              className={`flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-bold transition whitespace-nowrap ${
+              className={`flex shrink-0 items-center gap-1.5 sm:gap-2 border-b-2 px-3 py-2 sm:px-3.5 sm:py-2.5 text-xs font-medium transition whitespace-nowrap cursor-pointer ${
                 activeTab === key
-                  ? "border-blue-500 text-blue-400"
+                  ? "border-[#2EA043] text-white"
                   : "border-transparent text-slate-400 hover:text-slate-200"
               }`}
             >
-              <span className="material-symbols-outlined text-lg">{icon}</span>
+              <span className="material-symbols-outlined text-base">{icon}</span>
               <span>{label}</span>
             </button>
           ))}
         </div>
 
-        {activeTab === "dashboard" && <DashboardTab demo={demo} />}
-        {activeTab === "users" && <UsersTab demo={demo} />}
-        {activeTab === "homestays" && (
-          <HomestaysTab
-            demo={demo}
-            onOpenCabRequests={(tenantKey) => {
-              handleTabChange("cab-requests"); // first: it clears the filter
-              setCabTenant(tenantKey);
-            }}
-          />
-        )}
-        {activeTab === "guests" && <GuestsTab key={`${guestTenant}|${guestSearch}`} demo={demo} initialSearch={guestSearch || undefined} initialTenant={guestTenant || undefined} />}
-        {activeTab === "drivers" && <DriversTab demo={demo} />}
-        {activeTab === "cab-requests" && <CabRequestsTab key={`${cabTenant}|${cabFilter}`} demo={demo} initialTenantKey={cabTenant || undefined} initialFilter={cabFilter || undefined} />}
-        {activeTab === "payouts" && <PayoutsTab demo={demo} />}
-        {activeTab === "settings" && <SettingsTab demo={demo} />}
-        {activeTab === "appeals" && <AppealsTab demo={demo} />}
-        {activeTab === "audit" && <AuditTab demo={demo} />}
+        <div className={activeTab === "dashboard" ? "block" : "hidden"}>
+          {visitedTabs.has("dashboard") && <DashboardTab demo={demo} />}
+        </div>
+        <div className={activeTab === "users" ? "block" : "hidden"}>
+          {visitedTabs.has("users") && <UsersTab demo={demo} />}
+        </div>
+        <div className={activeTab === "homestays" ? "block" : "hidden"}>
+          {visitedTabs.has("homestays") && (
+            <HomestaysTab
+              demo={demo}
+              onOpenCabRequests={(tenantKey) => {
+                handleTabChange("cab-requests"); // first: it clears the filter
+                setCabTenant(tenantKey);
+              }}
+            />
+          )}
+        </div>
+        <div className={activeTab === "guests" ? "block" : "hidden"}>
+          {visitedTabs.has("guests") && (
+            <GuestsTab
+              key={`${guestTenant}|${guestSearch}`}
+              demo={demo}
+              initialSearch={guestSearch || undefined}
+              initialTenant={guestTenant || undefined}
+            />
+          )}
+        </div>
+        <div className={activeTab === "drivers" ? "block" : "hidden"}>
+          {visitedTabs.has("drivers") && <DriversTab demo={demo} />}
+        </div>
+        <div className={activeTab === "cab-requests" ? "block" : "hidden"}>
+          {visitedTabs.has("cab-requests") && (
+            <CabRequestsTab
+              key={`${cabTenant}|${cabFilter}`}
+              demo={demo}
+              initialTenantKey={cabTenant || undefined}
+              initialFilter={cabFilter || undefined}
+            />
+          )}
+        </div>
+        <div className={activeTab === "payouts" ? "block" : "hidden"}>
+          {visitedTabs.has("payouts") && <PayoutsTab demo={demo} />}
+        </div>
+        <div className={activeTab === "settings" ? "block" : "hidden"}>
+          {visitedTabs.has("settings") && <SettingsTab demo={demo} />}
+        </div>
+        <div className={activeTab === "appeals" ? "block" : "hidden"}>
+          {visitedTabs.has("appeals") && <AppealsTab demo={demo} />}
+        </div>
+        <div className={activeTab === "audit" ? "block" : "hidden"}>
+          {visitedTabs.has("audit") && <AuditTab demo={demo} />}
+        </div>
 
         {activeTab === "legacy" && (
           <>
         {/* LEGACY PORTAL KPIS */}
         {/* 2. GLOBAL PLATFORM KPIS */}
-        <section className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
-          <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4 shadow">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-              Gross Volume
+        <section className="grid grid-cols-2 gap-2.5 sm:gap-3 md:grid-cols-3 lg:grid-cols-6">
+          <div className="rounded-xl border border-slate-800/80 bg-[#121820] p-3 sm:p-4 shadow-xs">
+            <span className="text-xs font-medium text-slate-400">
+              Gross volume
             </span>
-            <p className="mt-1 font-mono text-xl font-black text-white">
+            <p className="mt-1 font-mono text-base sm:text-lg font-semibold tabular-nums text-white">
               {inr(k?.totalGrossRevenue)}
             </p>
-            <span className="text-[10px] text-slate-500">Total room &amp; cab spend</span>
+            <span className="text-[10px] sm:text-[11px] text-slate-500">Total room &amp; cab spend</span>
           </div>
 
-          <div className="rounded-2xl border border-emerald-900/40 bg-emerald-950/30 p-4 shadow">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">
-              Platform Cut
+          <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 sm:p-4 shadow-xs">
+            <span className="text-xs font-medium text-emerald-400">
+              Platform cut
             </span>
-            <p className="mt-1 font-mono text-xl font-black text-emerald-300">
+            <p className="mt-1 font-mono text-base sm:text-lg font-semibold tabular-nums text-emerald-300">
               {inr(k?.totalPlatformCommission)}
             </p>
-            <span className="text-[10px] text-emerald-500">Net revenue earned</span>
+            <span className="text-[10px] sm:text-[11px] text-emerald-500/80">Net revenue earned</span>
           </div>
 
-          <div className="rounded-2xl border border-amber-900/40 bg-amber-950/30 p-4 shadow">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-amber-400">
-              Pending Payouts
+          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 sm:p-4 shadow-xs">
+            <span className="text-xs font-medium text-amber-400">
+              Pending payouts
             </span>
-            <p className="mt-1 font-mono text-xl font-black text-amber-300">
+            <p className="mt-1 font-mono text-base sm:text-lg font-semibold tabular-nums text-amber-300">
               {inr(k?.pendingPayouts)}
             </p>
-            <span className="text-[10px] text-amber-500">Awaiting UPI settlement</span>
+            <span className="text-[10px] sm:text-[11px] text-amber-500/80">Awaiting UPI settlement</span>
           </div>
 
-          <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4 shadow">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-              Registered Stays
+          <div className="rounded-xl border border-slate-800/80 bg-[#121820] p-3 sm:p-4 shadow-xs">
+            <span className="text-xs font-medium text-slate-400">
+              Registered stays
             </span>
-            <p className="mt-1 font-mono text-xl font-black text-white">
+            <p className="mt-1 font-mono text-base sm:text-lg font-semibold tabular-nums text-white">
               {k?.totalProperties ?? "—"}
             </p>
-            <span className="text-[10px] text-slate-500">Homestays in network</span>
+            <span className="text-[10px] sm:text-[11px] text-slate-500">Homestays in network</span>
           </div>
 
-          <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4 shadow">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-              Fleet Drivers
+          <div className="rounded-xl border border-slate-800/80 bg-[#121820] p-3 sm:p-4 shadow-xs">
+            <span className="text-xs font-medium text-slate-400">
+              Fleet drivers
             </span>
-            <p className="mt-1 font-mono text-xl font-black text-white">
+            <p className="mt-1 font-mono text-base sm:text-lg font-semibold tabular-nums text-white">
               {k?.totalDrivers ?? "—"}
             </p>
-            <span className="text-[10px] text-slate-500">Active hill partners</span>
+            <span className="text-[10px] sm:text-[11px] text-slate-500">Active hill partners</span>
           </div>
 
-          <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4 shadow">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-              Total Trips
+          <div className="rounded-xl border border-slate-800/80 bg-[#121820] p-3 sm:p-4 shadow-xs">
+            <span className="text-xs font-medium text-slate-400">
+              Total trips
             </span>
-            <p className="mt-1 font-mono text-xl font-black text-white">
+            <p className="mt-1 font-mono text-base sm:text-lg font-semibold tabular-nums text-white">
               {k?.totalTrips ?? "—"}
             </p>
-            <span className="text-[10px] text-slate-500">Dispatched transfers</span>
+            <span className="text-[10px] sm:text-[11px] text-slate-500">Dispatched transfers</span>
           </div>
         </section>
         {/* 4. TAB 1: DRIVER PAYOUT SETTLEMENT DESK */}
         {(
-          <section className="rounded-2xl border border-slate-800 bg-slate-950 p-6 shadow">
-            <div className="mb-4 flex items-center justify-between">
+          <section className="rounded-2xl border border-slate-800/80 bg-[#121820] p-4 sm:p-6 shadow-xs space-y-4">
+            <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-base font-bold text-white">
+                <h2 className="text-sm font-semibold text-white">
                   Hill Cab Transfers &amp; Driver Settlement Ledger
                 </h2>
-                <p className="text-xs text-slate-400">
-                  Drivers collect cash or UPI from passengers directly. Super admin reconciles driver take-home vs platform fee.
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Drivers collect cash or UPI from passengers directly. Reconciles driver take-home vs platform fee.
                 </p>
               </div>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="border-b border-slate-800 bg-slate-900/60 text-slate-400 font-semibold uppercase tracking-wider">
+            <div className="overflow-x-auto touch-scroll -mx-4 px-4 sm:mx-0 sm:px-0">
+              <table className="w-full text-left text-xs min-w-[760px]">
+                <thead className="border-b border-slate-800 text-slate-400 font-medium">
                   <tr>
                     <th className="p-3">Ref</th>
                     <th className="p-3">Driver</th>
                     <th className="p-3">Passenger</th>
                     <th className="p-3">Route</th>
-                    <th className="p-3">Total Fare</th>
-                    <th className="p-3">Platform Cut</th>
-                    <th className="p-3">Driver Payout</th>
+                    <th className="p-3">Total fare</th>
+                    <th className="p-3">Platform cut</th>
+                    <th className="p-3">Driver payout</th>
                     <th className="p-3">Settlement</th>
                     <th className="p-3 text-right">Action</th>
                   </tr>
@@ -401,7 +440,7 @@ export default function AdminDashboardPage() {
                   {data?.recentTrips?.length ? (
                     data.recentTrips.map((trip) => (
                       <tr key={trip.id} className="hover:bg-slate-900/40">
-                        <td className="p-3 font-mono font-bold text-slate-300">
+                        <td className="p-3 font-mono font-medium text-slate-300">
                           #{trip.reference}
                         </td>
                         <td className="p-3 font-medium text-white">{trip.driverName}</td>
@@ -409,23 +448,23 @@ export default function AdminDashboardPage() {
                         <td className="p-3 text-slate-400 max-w-xs truncate">
                           {trip.pickup} ➔ {trip.dropoff}
                         </td>
-                        <td className="p-3 font-mono font-semibold text-slate-200">
+                        <td className="p-3 font-mono font-medium tabular-nums text-slate-200">
                           {inr(trip.fare)}
                         </td>
-                        <td className="p-3 font-mono text-emerald-400 font-semibold">
+                        <td className="p-3 font-mono text-emerald-400 font-medium tabular-nums">
                           {inr(trip.commission)}
                         </td>
-                        <td className="p-3 font-mono text-blue-300 font-bold">
+                        <td className="p-3 font-mono text-slate-200 font-medium tabular-nums">
                           {inr(trip.payout)}
                         </td>
                         <td className="p-3">
                           {trip.payoutStatus === "settled" ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-950 px-2 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-800/40">
+                            <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-400 border border-emerald-500/20">
                               <span className="material-symbols-outlined text-xs">check</span>
                               {trip.settlementReference || "Settled"}
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-950 px-2 py-0.5 text-[10px] font-bold text-amber-400 border border-amber-800/40">
+                            <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-300 border border-amber-500/20">
                               <span className="material-symbols-outlined text-xs">schedule</span>
                               Pending
                             </span>
@@ -435,7 +474,7 @@ export default function AdminDashboardPage() {
                           {trip.payoutStatus === "pending" ? (
                             <button
                               onClick={() => setSettlingTrip(trip)}
-                              className="rounded-lg bg-blue-600 px-3 py-1.5 font-bold text-white shadow hover:bg-blue-500"
+                              className="rounded-md bg-[#1E7E4B] hover:bg-[#259A5C] px-3 py-1.5 font-medium text-white transition text-xs cursor-pointer"
                             >
                               Settle UPI
                             </button>
@@ -460,25 +499,25 @@ export default function AdminDashboardPage() {
 
         {/* 5. TAB 2: HOMESTAY PROPERTY VERIFICATION DESK */}
         {(
-          <section className="rounded-2xl border border-slate-800 bg-slate-950 p-6 shadow">
-            <div className="mb-4">
-              <h2 className="text-base font-bold text-white">
+          <section className="rounded-2xl border border-slate-800/80 bg-[#121820] p-4 sm:p-6 shadow-xs space-y-4">
+            <div>
+              <h2 className="text-sm font-semibold text-white">
                 Network Properties &amp; Host Moderation
               </h2>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-slate-400 mt-0.5">
                 Homestays listed on the platform. Approve new applications or suspend inactive properties.
               </p>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="border-b border-slate-800 bg-slate-900/60 text-slate-400 font-semibold uppercase tracking-wider">
+            <div className="overflow-x-auto touch-scroll -mx-4 px-4 sm:mx-0 sm:px-0">
+              <table className="w-full text-left text-xs min-w-[720px]">
+                <thead className="border-b border-slate-800 text-slate-400 font-medium">
                   <tr>
-                    <th className="p-3">Property Name</th>
-                    <th className="p-3">Host / Owner</th>
+                    <th className="p-3">Property name</th>
+                    <th className="p-3">Host / owner</th>
                     <th className="p-3">Location</th>
                     <th className="p-3">Rooms</th>
-                    <th className="p-3">Platform Rate</th>
+                    <th className="p-3">Platform rate</th>
                     <th className="p-3">Status</th>
                     <th className="p-3 text-right">Moderation</th>
                   </tr>
@@ -487,24 +526,24 @@ export default function AdminDashboardPage() {
                   {data?.properties?.length ? (
                     data.properties.map((prop) => (
                       <tr key={prop.id} className="hover:bg-slate-900/40">
-                        <td className="p-3 font-semibold text-white">{prop.name}</td>
+                        <td className="p-3 font-medium text-white">{prop.name}</td>
                         <td className="p-3">
                           <p className="font-medium text-slate-200">{prop.ownerName}</p>
-                          <p className="text-slate-500">{prop.email} • {prop.phone}</p>
+                          <p className="text-slate-500 text-[11px]">{prop.email} • {prop.phone}</p>
                         </td>
                         <td className="p-3 text-slate-400">{prop.town || "—"}</td>
                         <td className="p-3 font-mono text-slate-300">{prop.roomsCount} units</td>
-                        <td className="p-3 font-mono text-emerald-400">
+                        <td className="p-3 font-mono text-emerald-400 font-medium">
                           {typeof prop.commissionRate === "number" ? `${Math.round(prop.commissionRate * 100)}%` : "—"}
                         </td>
                         <td className="p-3">
                           <span
-                            className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                            className={`inline-block rounded-md border px-2 py-0.5 text-[11px] font-medium ${
                               prop.status === "active"
-                                ? "bg-emerald-950 text-emerald-400 border border-emerald-800/40"
+                                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                                 : prop.status === "suspended"
-                                  ? "bg-red-950 text-red-400 border border-red-800/40"
-                                  : "bg-amber-950 text-amber-400 border border-amber-800/40"
+                                  ? "bg-red-500/10 text-red-300 border-red-500/20"
+                                  : "bg-amber-500/10 text-amber-300 border-amber-500/20"
                             }`}
                           >
                             {prop.status}
@@ -514,7 +553,7 @@ export default function AdminDashboardPage() {
                           {prop.status !== "active" && (
                             <button
                               onClick={() => handlePropertyStatus(prop.id, "active", prop.name)}
-                              className="rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-emerald-500"
+                              className="rounded-md bg-[#1E7E4B] hover:bg-[#259A5C] px-2.5 py-1 text-xs font-medium text-white transition cursor-pointer"
                             >
                               Approve
                             </button>
@@ -522,7 +561,7 @@ export default function AdminDashboardPage() {
                           {prop.status === "active" && (
                             <button
                               onClick={() => handlePropertyStatus(prop.id, "suspended", prop.name)}
-                              className="rounded-lg border border-red-500/40 bg-red-950/40 px-2.5 py-1 text-[11px] font-bold text-red-400 hover:bg-red-900/60"
+                              className="rounded-md border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 px-2.5 py-1 text-xs font-medium text-red-300 transition cursor-pointer"
                             >
                               Suspend
                             </button>
@@ -533,7 +572,7 @@ export default function AdminDashboardPage() {
                   ) : (
                     <tr>
                       <td colSpan={7} className="p-8 text-center text-slate-500">
-                        No properties found.
+                        No registered properties found in database.
                       </td>
                     </tr>
                   )}
@@ -548,19 +587,19 @@ export default function AdminDashboardPage() {
 
       {/* 9. UPI SETTLEMENT MODAL */}
       {settlingTrip && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
-          <div className="w-full max-w-sm rounded-2xl border border-slate-800 bg-slate-950 p-6 shadow-2xl">
-            <h3 className="text-base font-bold text-white">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-3 sm:p-4 backdrop-blur-xs overflow-y-auto">
+          <div className="w-full max-w-sm rounded-2xl border border-slate-800/80 bg-[#121820] p-4 sm:p-6 shadow-xl my-auto">
+            <h3 className="text-sm font-semibold text-white">
               Settle Driver Payout via UPI
             </h3>
             <p className="mt-1 text-xs text-slate-400">
               Trip #{settlingTrip.reference} • Driver: {settlingTrip.driverName}
             </p>
 
-            <div className="my-4 rounded-xl border border-blue-900/40 bg-blue-950/30 p-3 text-xs">
+            <div className="my-4 rounded-lg border border-slate-700/60 bg-[#0D1117] p-3 text-xs">
               <div className="flex justify-between text-slate-300">
-                <span>Driver Payout:</span>
-                <span className="font-mono font-bold text-blue-300">
+                <span>Driver payout:</span>
+                <span className="font-mono font-medium text-white tabular-nums">
                   {inr(settlingTrip.payout)}
                 </span>
               </div>
@@ -568,7 +607,7 @@ export default function AdminDashboardPage() {
 
             <form onSubmit={handleSettlePayout} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-300">
+                <label className="block text-xs font-medium text-slate-300">
                   Bank / UPI Transaction Reference ID *
                 </label>
                 <input
@@ -577,24 +616,24 @@ export default function AdminDashboardPage() {
                   value={upiRef}
                   onChange={(e) => setUpiRef(e.target.value)}
                   placeholder="e.g. UPI-202610-849204"
-                  className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-xs text-white shadow-inner focus:border-blue-500 focus:outline-none"
+                  className="mt-1.5 w-full rounded-lg border border-slate-800 bg-[#0D1117] px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:border-[#2EA043] focus:outline-none focus:ring-1 focus:ring-[#2EA043]"
                 />
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex flex-col-reverse sm:flex-row gap-2 pt-1">
                 <button
                   type="button"
                   onClick={() => setSettlingTrip(null)}
-                  className="flex-1 rounded-xl border border-slate-700 bg-slate-800 py-2.5 text-xs font-bold text-slate-300 hover:bg-slate-700"
+                  className="w-full sm:flex-1 rounded-lg border border-slate-700/80 bg-slate-800/60 py-2.5 text-xs font-medium text-slate-300 hover:bg-slate-800 transition cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={settleLoading || !upiRef.trim()}
-                  className="flex-1 rounded-xl bg-blue-600 py-2.5 text-xs font-bold text-white shadow hover:bg-blue-500 disabled:opacity-50"
+                  className="w-full sm:flex-1 rounded-lg bg-[#1E7E4B] hover:bg-[#259A5C] py-2.5 text-xs font-semibold text-white transition disabled:opacity-50 cursor-pointer"
                 >
-                  {settleLoading ? "Recording..." : "Confirm Settlement"}
+                  {settleLoading ? "Recording..." : "Confirm settlement"}
                 </button>
               </div>
             </form>

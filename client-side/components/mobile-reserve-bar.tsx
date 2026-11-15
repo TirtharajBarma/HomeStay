@@ -68,7 +68,7 @@ export function MobileReserveBar({ stay, booking }: { stay: Stay; booking: Booki
             ) : null}
           </p>
           <p className="truncate text-label-sm text-outline">
-            {formatNights(booking.nights)} • {booking.guests} Adult
+            {formatNights(booking.nights)} • {booking.guests} adult
             {booking.guests === 1 ? "" : "s"} • {stay.occupancy}
           </p>
         </div>
@@ -76,7 +76,7 @@ export function MobileReserveBar({ stay, booking }: { stay: Stay; booking: Booki
         {stay.price > 0 ? (
           <Link
             href={checkoutHref(stay.slug, booking)}
-            className="ml-auto flex min-h-12 shrink-0 items-center gap-2 rounded-xl bg-primary-container px-5 text-label-md font-bold text-on-primary shadow-md tap-spring active:scale-95 transition-all"
+            className="ml-auto flex min-h-12 shrink-0 items-center gap-2 rounded-xl bg-primary px-5 text-label-md font-medium text-on-primary shadow-sm active:opacity-85 transition-opacity"
           >
             <span>Reserve</span>
             <Icon name="arrow_forward" className="text-base" />
@@ -86,10 +86,10 @@ export function MobileReserveBar({ stay, booking }: { stay: Stay; booking: Booki
             href={waInquiryUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="ml-auto flex min-h-12 shrink-0 items-center gap-1.5 rounded-xl bg-emerald-700 px-4 text-label-md font-bold text-white shadow-md tap-spring active:scale-95 transition-all"
+            className="ml-auto flex min-h-12 shrink-0 items-center gap-1.5 rounded-xl bg-primary px-4 text-label-md font-medium text-on-primary shadow-sm active:opacity-85 transition-opacity"
           >
             <Icon name="chat" className="text-base" />
-            <span>Ask Host</span>
+            <span>Ask host</span>
           </a>
         )}
       </div>

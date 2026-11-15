@@ -5,7 +5,7 @@ import { Booking, Guest } from '../types';
 export function cabSentText(b: Booking): string | null {
   const last = b.askCab?.[b.askCab.length - 1];
   if (!last) return null;
-  const who = last.by === 'auto' ? 'automatic' : last.by === 'owner' ? 'by you' : 'by Staycabs';
+  const who = last.by === 'auto' ? 'automatic' : last.by === 'owner' ? 'by you' : 'by StayRide';
   const d = new Date(last.at);
   const when = `${d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' })} ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' })}`;
   return `Cab link sent · ${who} · ${when}`;

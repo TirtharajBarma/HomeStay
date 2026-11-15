@@ -21,16 +21,16 @@ import { Icon } from "./icon";
 const initialState: CheckoutState = { status: "idle" };
 
 const field =
-  "mt-1.5 w-full rounded-xl border border-outline-variant/60 bg-surface-container-lowest px-3.5 py-2.5 text-body-md text-on-surface transition-colors placeholder:text-outline focus:border-primary focus:outline-none";
+  "mt-1.5 w-full rounded-lg border border-outline-variant/60 bg-surface-container-lowest px-3 py-2 text-body-md text-on-surface transition-colors placeholder:text-outline focus:border-primary focus:outline-none";
 
-const label = "text-xs font-semibold uppercase tracking-wider text-on-surface-variant";
+const label = "text-label-sm font-medium text-on-surface-variant";
 
 const submitClass =
-  "group flex items-center justify-center gap-2.5 rounded-xl bg-primary text-title-md font-semibold text-on-primary shadow-md transition-all duration-200 hover:bg-primary-container active:scale-[0.98] disabled:cursor-wait disabled:opacity-80";
+  "group flex items-center justify-center gap-2 rounded-lg bg-primary text-body-md font-medium text-on-primary transition-colors hover:bg-primary-container disabled:cursor-wait disabled:opacity-80";
 
 function SubmitButton({ pending, labelText }: { pending: boolean; labelText: string }) {
   return (
-    <button type="submit" disabled={pending} className={`${submitClass} w-full py-3.5`}>
+    <button type="submit" disabled={pending} className={`${submitClass} w-full py-3`}>
       <Icon
         name={pending ? "progress_activity" : "lock"}
         className={`text-base ${pending ? "animate-spin" : ""}`}
@@ -53,33 +53,33 @@ function Confirmation({
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border border-emerald-600/30 bg-emerald-50 dark:bg-emerald-950/20 p-6 text-center">
-        <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-700 text-white shadow-md">
-          <Icon name="check" className="text-3xl" />
+      <div className="rounded-xl border border-outline-variant/60 bg-surface-container-low p-6 text-center shadow-ambient">
+        <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-primary text-on-primary">
+          <Icon name="check" className="text-xl" />
         </div>
-        <span className="text-label-sm font-bold uppercase tracking-widest text-emerald-800 dark:text-emerald-300">
-          Booking Confirmed
+        <span className="text-label-sm font-medium text-outline">
+          Reservation confirmed
         </span>
-        <h2 className="mt-1 font-display text-headline-md text-primary">
-          Your Himalayan retreat awaits, {reservation.guestName.split(" ")[0]}!
+        <h2 className="mt-1 font-display text-headline-sm font-medium text-primary">
+          Your stay is booked, {reservation.guestName.split(" ")[0]}
         </h2>
         <p className="mx-auto mt-2 max-w-md text-body-sm text-on-surface-variant">
-          Your reservation voucher and pre-arrival guide have been sent to{" "}
-          <span className="font-semibold text-on-surface">{reservation.email}</span>.
+          Your reservation voucher and arrival guide have been sent to{" "}
+          <span className="font-medium text-on-surface">{reservation.email}</span>.
         </p>
       </div>
 
-      <div className="sunlit-card-shadow overflow-hidden rounded-2xl border border-outline-variant/40 bg-surface-container-lowest">
-        <div className="flex flex-col gap-3 border-b border-outline-variant/30 bg-surface-container-low p-5 sm:flex-row sm:items-center sm:justify-between">
+      <div className="overflow-hidden rounded-xl border border-outline-variant/60 bg-surface-container-lowest shadow-ambient">
+        <div className="flex flex-col gap-3 border-b border-outline-variant/40 bg-surface-container-low p-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-label-xs uppercase tracking-widest text-outline">Reservation Reference</p>
-            <p className="font-display text-headline-lg font-bold text-primary">
+            <p className="text-label-sm text-outline">Reservation reference</p>
+            <p className="font-display text-headline-sm font-medium text-primary tabular-nums">
               {reservation.reference}
             </p>
           </div>
-          <div className="rounded-xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-2.5 text-center">
-            <p className="text-label-xs uppercase tracking-widest text-outline">Arrival PIN</p>
-            <p className="font-mono text-title-lg font-bold text-primary">{reservation.pin}</p>
+          <div className="rounded-md border border-outline-variant/50 bg-surface-container-lowest px-3 py-1.5 text-center">
+            <p className="text-label-sm text-outline">Arrival PIN</p>
+            <p className="font-mono text-body-md font-medium text-primary tabular-nums">{reservation.pin}</p>
           </div>
         </div>
 
@@ -87,24 +87,24 @@ function Confirmation({
           {[
             { label: "Homestay", value: reservation.stayName },
             { label: "Guests", value: reservation.guests },
-            { label: "Dates", value: `${reservation.dates} • ${formatNights(reservation.nights)}` },
-            { label: "Arrival Window", value: reservation.arrivalWindow },
-            { label: "Hill Breakfast", value: "Fresh local hill breakfast daily (Included)" },
-            { label: "Total Booking Value", value: reservation.total },
+            { label: "Dates", value: `${reservation.dates} · ${formatNights(reservation.nights)}` },
+            { label: "Arrival window", value: reservation.arrivalWindow },
+            { label: "Hill breakfast", value: "Fresh local hill breakfast daily (Included)" },
+            { label: "Total booking value", value: reservation.total },
             {
-              label: reservation.plan === "deposit" ? "Paid Today (50% Deposit)" : "Paid Today (Full Settlement)",
+              label: reservation.plan === "deposit" ? "Paid today (50% deposit)" : "Paid today (Full settlement)",
               value: reservation.dueToday,
             },
           ].map((row) => (
             <div key={row.label} className="flex items-baseline justify-between gap-4 px-5 py-3">
               <dt className="text-body-sm text-on-surface-variant">{row.label}</dt>
-              <dd className="text-right text-body-sm font-semibold text-on-surface">{row.value}</dd>
+              <dd className="text-right text-body-sm font-medium text-on-surface tabular-nums">{row.value}</dd>
             </div>
           ))}
           {!reservation.settled && (
-            <div className="flex items-baseline justify-between gap-4 px-5 py-3 bg-amber-500/5">
-              <dt className="text-body-sm text-on-surface-variant">Balance Due at Check-in</dt>
-              <dd className="text-right text-body-sm font-bold text-secondary">
+            <div className="flex items-baseline justify-between gap-4 px-5 py-3 bg-surface-container-low">
+              <dt className="text-body-sm text-on-surface-variant">Balance due at check-in</dt>
+              <dd className="text-right text-body-sm font-medium text-secondary tabular-nums">
                 {reservation.balance}
               </dd>
             </div>
@@ -144,15 +144,15 @@ function Confirmation({
       <div className="flex flex-col gap-3 sm:flex-row pt-2">
         <Link
           href={`/stays/${stay.slug}?checkIn=${booking.checkIn}&checkOut=${booking.checkOut}&guests=${booking.guests}`}
-          className="flex-1 rounded-xl border border-outline-variant/60 py-3 text-center text-xs sm:text-title-md font-semibold text-primary transition-colors hover:bg-surface-container tap-spring"
+          className="flex-1 rounded-xl border border-outline-variant/60 py-3 text-center text-label-md font-medium text-primary transition-colors hover:bg-surface-container active:opacity-90"
         >
           Return to {stay.name}
         </Link>
         <Link
           href={`/?checkIn=${booking.checkIn}&checkOut=${booking.checkOut}&guests=${booking.guests}#accommodations`}
-          className="flex-1 rounded-xl bg-primary py-3 text-center text-xs sm:text-title-md font-semibold text-on-primary transition-colors hover:bg-primary-container tap-spring"
+          className="flex-1 rounded-xl bg-primary py-3 text-center text-label-md font-medium text-on-primary transition-colors hover:bg-primary-container active:opacity-90"
         >
-          Explore More Stays
+          Explore more stays
         </Link>
       </div>
     </div>
@@ -279,7 +279,7 @@ export function CheckoutForm({ stay, booking }: { stay: Stay; booking: Booking }
             <button
               type="button"
               onClick={() => setShowSpecialRequest(true)}
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline tap-spring"
+              className="inline-flex items-center gap-1.5 text-label-sm font-medium text-primary hover:underline transition-colors"
             >
               <Icon name="add_circle" className="text-sm" />
               <span>Add arrival time window or special requests (optional)</span>
@@ -288,7 +288,7 @@ export function CheckoutForm({ stay, booking }: { stay: Stay; booking: Booking }
             <div className="space-y-3 animate-in fade-in duration-200">
               <div>
                 <label className={label} htmlFor="arrivalWindow">
-                  Estimated Arrival Window
+                  Estimated arrival window
                 </label>
                 <select id="arrivalWindow" name="arrivalWindow" className={field}>
                   {arrivalWindows.map((w) => (
@@ -301,7 +301,7 @@ export function CheckoutForm({ stay, booking }: { stay: Stay; booking: Booking }
 
               <div>
                 <label className={label} htmlFor="notes">
-                  Special Requests / Dietary Notes
+                  Special requests and dietary notes
                 </label>
                 <input
                   id="notes"
@@ -321,22 +321,22 @@ export function CheckoutForm({ stay, booking }: { stay: Stay; booking: Booking }
           <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-bold text-on-primary">
             2
           </span>
-          <h2 className="font-display text-title-lg font-semibold text-primary">Payment Schedule</h2>
+          <h2 className="font-display text-title-lg font-medium text-primary">Payment schedule</h2>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
           {[
             {
               value: "deposit" as const,
-              badge: "Most Flexible",
-              title: `50% Advance Deposit`,
+              badge: "Most flexible",
+              title: `50% advance deposit`,
               amount: formatMoney(quote.deposit),
               note: `Pay ${formatMoney(quote.deposit)} now. Balance ${formatMoney(quote.total - quote.deposit)} payable at check-in.`,
             },
             {
               value: "card_full" as const,
-              badge: "One-Time",
-              title: `Pay in Full`,
+              badge: "One-time",
+              title: `Pay in full`,
               amount: formatMoney(quote.total),
               note: `Settle 100% now (${formatMoney(quote.total)}). Zero pending dues upon arrival.`,
             },
@@ -345,7 +345,7 @@ export function CheckoutForm({ stay, booking }: { stay: Stay; booking: Booking }
             return (
               <label
                 key={option.value}
-                className={`relative flex cursor-pointer flex-col justify-between rounded-xl border p-4 transition-all tap-spring ${
+                className={`relative flex cursor-pointer flex-col justify-between rounded-xl border p-4 transition-colors ${
                   isSelected
                     ? "border-primary bg-primary/5 ring-1 ring-primary shadow-xs"
                     : "border-outline-variant/50 bg-surface-container-lowest hover:border-outline-variant"
@@ -353,7 +353,7 @@ export function CheckoutForm({ stay, booking }: { stay: Stay; booking: Booking }
               >
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <span className="rounded-full bg-primary-fixed/40 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
+                    <span className="rounded-md bg-surface-container px-2 py-0.5 text-label-sm font-medium text-primary">
                       {option.badge}
                     </span>
                     <input

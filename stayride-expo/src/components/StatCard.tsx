@@ -19,7 +19,7 @@ export const StatCard: React.FC<StatCardProps> = ({ icon, value, label, onPress 
       disabled={!onPress}
     >
       <View style={styles.iconCircle}>
-        <Ionicons name={icon} size={20} color={Colors.brandPrimary} />
+        <Ionicons name={icon} size={18} color={Colors.brandPrimary} />
       </View>
       <Text style={styles.value} numberOfLines={1}>
         {value}
@@ -36,16 +36,16 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.bgCard,
     borderRadius: Radii.card,
-    padding: 13,
+    padding: 14,
     margin: 4,
     borderWidth: 1,
     borderColor: Colors.divider,
     ...Shadows.card,
   },
   iconCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: Colors.brandPrimaryLight,
     justifyContent: 'center',
     alignItems: 'center',
@@ -53,13 +53,13 @@ const styles = StyleSheet.create({
   },
   value: {
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: Colors.textPrimary,
   },
   label: {
-    fontSize: 11,
+    fontSize: 12,
     color: Colors.textSecondary,
     marginTop: 2,
-    lineHeight: 14,
+    lineHeight: 15,
   },
 });

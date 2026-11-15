@@ -80,8 +80,9 @@ export const Pill: React.FC<PillProps> = ({ label, value, color, bgColor, border
     case 'FINDING DRIVER':
     case 'QUOTE_RECEIVED':
     case 'REPEAT':
-      textColor = Colors.statusPurple;
-      bg = Colors.statusPurpleBg;
+      textColor = Colors.brandPrimary;
+      bg = Colors.brandPrimaryLight;
+      border = '#D4E5DB';
       break;
 
     case 'CHECKED_OUT':
@@ -106,13 +107,13 @@ export const Pill: React.FC<PillProps> = ({ label, value, color, bgColor, border
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: 9,
+    paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: Radii.pill,
+    borderRadius: 6,
     alignSelf: 'flex-start',
   },
   text: {
-    fontSize: 10,
-    fontWeight: 'bold',
+    fontSize: 11,
+    fontWeight: '600',
   },
 });

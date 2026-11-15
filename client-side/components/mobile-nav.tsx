@@ -98,20 +98,12 @@ export function MobileNav({
             ))}
           </nav>
 
-          <div className="mt-5 grid grid-cols-2 gap-2.5">
+          <div className="mt-5">
             <Link
               href={checkDatesHref}
-              className="flex min-h-12 w-full items-center justify-center gap-1.5 rounded-xl bg-primary-container px-3 text-label-md text-on-primary shadow-sm"
+              className="flex min-h-11 w-full items-center justify-center rounded-lg bg-primary px-4 text-label-md font-medium text-on-primary transition-colors hover:bg-primary-container"
             >
-              <Icon name="calendar_month" className="text-[18px]" />
-              Check Dates
-            </Link>
-            <Link
-              href="/join-driver"
-              className="flex min-h-12 w-full items-center justify-center gap-1.5 rounded-xl border border-amber-600/30 bg-amber-50 px-3 text-label-md font-semibold text-amber-900 shadow-sm"
-            >
-              <Icon name="local_taxi" className="text-[18px] text-amber-700" />
-              Cab Join
+              Check availability
             </Link>
           </div>
         </div>

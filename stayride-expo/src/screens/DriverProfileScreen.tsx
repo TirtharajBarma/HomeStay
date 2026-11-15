@@ -18,6 +18,7 @@ import { Colors, Shadows } from '../theme/colors';
 import { useStayRide } from '../data/store';
 import { reportOutcome } from '../utils/report';
 import { api } from '../data/api';
+import { UserSession } from '../types';
 
 export const DriverProfileScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -136,9 +137,12 @@ export const DriverProfileScreen: React.FC = () => {
         {/* Availability Toggle */}
         <View style={styles.statusToggleCard}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.toggleTitle}>
-              {isOnline ? '🟢 Available for Nearby Rides' : '🔴 Currently Offline'}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+              <View style={[styles.statusDot, { backgroundColor: isOnline ? '#16A34A' : '#78716C' }]} />
+              <Text style={styles.toggleTitle}>
+                {isOnline ? 'Available for Nearby Rides' : 'Currently Offline'}
+              </Text>
+            </View>
             <Text style={styles.toggleSub}>
               {isOnline
                 ? 'Visible to mountain homestays looking for cabs'
@@ -383,6 +387,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2E8F0',
     ...Shadows.sm,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   toggleTitle: {
     fontSize: 14,

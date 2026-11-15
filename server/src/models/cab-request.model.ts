@@ -125,6 +125,8 @@ export interface ICabRequest extends Document {
   driverSettlementStatus: "NONE" | "PENDING" | "SETTLED";
   driverSettlementRef?: string;
   driverSettledAt?: Date | null;
+  hostSettlementStatus?: "NONE" | "PENDING" | "SETTLED";
+  hostSettledAt?: Date | null;
   startedAt?: Date | null;
   completedAt?: Date | null;
   cancelledBy?: string;
@@ -356,6 +358,8 @@ const CabRequestSchema = new Schema<ICabRequest>(
     driverSettlementStatus: { type: String, enum: ["NONE", "PENDING", "SETTLED"], default: "NONE" },
     driverSettlementRef: { type: String, default: "" },
     driverSettledAt: { type: Date, default: null },
+    hostSettlementStatus: { type: String, enum: ["NONE", "PENDING", "SETTLED"], default: "NONE" },
+    hostSettledAt: { type: Date, default: null },
     startedAt: { type: Date, default: null },
     completedAt: { type: Date, default: null },
     pickupOtp: { type: String, default: null },
@@ -393,6 +397,7 @@ CabRequestSchema.index({ assignedDriverUserId: 1, status: 1 }, { name: "driver_s
 CabRequestSchema.index({ status: 1, createdAt: -1 }, { name: "status_created_at" });
 CabRequestSchema.index({ createdAt: -1 }, { name: "created_at_desc" });
 CabRequestSchema.index({ driverSettlementStatus: 1, createdAt: -1 }, { name: "driver_settlement_status" });
+CabRequestSchema.index({ hostSettlementStatus: 1, createdAt: -1 }, { name: "host_settlement_status" });
 CabRequestSchema.index({ refundStatus: 1, createdAt: -1 }, { name: "refund_status" });
 CabRequestSchema.index({ needsReassignment: 1 }, { name: "needs_reassignment", partialFilterExpression: { needsReassignment: true } });
 CabRequestSchema.index({ dispatched: 1, nearbyNotifyAt: 1 }, { name: "dispatched_nearby_notify" });

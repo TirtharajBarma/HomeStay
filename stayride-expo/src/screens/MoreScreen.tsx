@@ -140,7 +140,7 @@ export const MoreScreen: React.FC = () => {
   const handleServerConfig = () => {
     Alert.alert(
       'Backend Server Configuration',
-      `Status: ${backendLive ? '🟢 Connected' : '🔴 Unreachable / Offline'}\n\nCurrent Endpoint:\n${api.getBaseUrl()}\n\n• Vercel Cloud: Live internet server for field testing.\n• Local Wi-Fi: Developer PC LAN (from .env).`,
+      `Status: ${backendLive ? 'Online / Connected' : 'Offline / Unreachable'}\n\nCurrent Endpoint:\n${api.getBaseUrl()}\n\n• Vercel Cloud: Live internet server for field testing.\n• Local Wi-Fi: Developer PC LAN (from .env).`,
       [
         { text: 'Close', style: 'cancel' },
         {
@@ -371,7 +371,7 @@ export const MoreScreen: React.FC = () => {
               {renderRow(
                 'server-outline',
                 'Backend server',
-                `${backendLive === null ? 'Checking...' : backendLive ? '🟢 Online' : '🔴 Offline'} · ${api.getBaseUrl()}`,
+                `${backendLive === null ? 'Checking...' : backendLive ? 'Online' : 'Offline'} · ${api.getBaseUrl()}`,
                 handleServerConfig
               )}
             </View>
@@ -502,7 +502,7 @@ const styles = StyleSheet.create({
   },
   profileLink: {
     fontSize: 12,
-    color: '#EDE9FE',
+    color: '#D4E3D9',
     marginTop: 4,
   },
   openProfileBtn: {
@@ -706,7 +706,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   otaHashBadge: {
-    backgroundColor: '#EDE9FE',
+    backgroundColor: Colors.brandPrimaryLight,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,

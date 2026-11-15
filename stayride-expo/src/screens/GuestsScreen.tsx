@@ -122,7 +122,9 @@ export const GuestsScreen: React.FC = () => {
         {linksLocked && guests.some(isCheckedIn) && <FeatureLocked feature="guestCabLinks" title="Ask-for-Cab guest links" />}
         {filteredGuests.length === 0 ? (
           <View style={{ alignItems: 'center', paddingVertical: 48, gap: 12 }}>
-            <Text style={{ fontSize: 40 }}>👤</Text>
+            <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: Colors.brandPrimaryLight, alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="people-outline" size={28} color={Colors.brandPrimary} />
+            </View>
             <Text style={{ fontSize: 15, fontWeight: '700', color: Colors.textPrimary }}>No guests yet</Text>
             <Text style={{ fontSize: 13, color: Colors.textSecondary, textAlign: 'center', paddingHorizontal: 32, lineHeight: 18 }}>
               {query ? `No guests match "${query}"` : 'Add your first guest to start tracking visits and sending cab links.'}

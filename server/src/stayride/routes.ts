@@ -27,6 +27,7 @@ import { Driver } from '../models/driver.model.js';
 import { Booking } from '../models/booking.model.js';
 import { tenantDbModel } from '../utils/tenant-model.js';
 import { requireRecaptcha } from '../middlewares/recaptcha.js';
+import { NotificationService } from '../services/notification.service.js';
 
 export function getUserModel(isDemo: boolean = false): mongoose.Model<any> {
   return tenantDbModel(isDemo, 'User', User.schema);
@@ -1042,6 +1043,27 @@ export async function createPlatformTrip(
     },
   });
   if (doc.dispatched !== false) await notifyNewRequest(isDemo, doc);
+  const schedDate = doc.date
+    ? (Number.isFinite(Number(doc.date)) && Number(doc.date) > 1000000000
+        ? new Date(Number(doc.date)).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })
+        : String(doc.date))
+    : '—';
+  const schedStr = doc.time ? `${schedDate} at ${doc.time}` : schedDate;
+  NotificationService.sendAdminAlert('cabRequestCreated', `New Cab Request: #${doc.reference} (${doc.guestName})`, {
+    badge: 'CAB REQUEST',
+    reference: doc.reference,
+    summary: `New transit request dispatched from ${doc.pickupLocation?.address || 'Pickup'} to ${(doc.destinations || []).map((d: any) => d.address).join(' → ') || 'Destination'}.`,
+    items: [
+      { label: 'Trip Reference', value: `#${doc.reference}` },
+      { label: 'Passenger', value: `${doc.guestName} (${doc.passengers || 1} pax)` },
+      { label: 'Phone', value: doc.guestPhone },
+      { label: 'Pickup Location', value: doc.pickupLocation?.address || '—' },
+      { label: 'Destination', value: (doc.destinations || []).map((d: any) => d.address).join(' → ') || '—' },
+      { label: 'Schedule', value: schedStr },
+      { label: 'Vehicle Class', value: doc.vehicleType || 'Any' },
+      { label: 'Dispatch Source', value: source },
+    ],
+  }, isDemo).catch((e: any) => logger.warn(`[Admin Alert] Cab request alert error: ${e?.message}`));
   return { trip, doc };
 }
 
@@ -1851,8 +1873,16 @@ stayrideV1Router.post('/auth/clerk-webhook', async (req: Request, res: Response)
     } else if (type === 'user.deleted') {
       const clerkId = data.id;
       if (clerkId) {
-        // Keep the account record (money history); just block sign-in.
-        await UserModel.updateOne({ clerkId }, { $set: { accountStatus: 'BLOCKED', statusReason: 'Deleted in Clerk' } });
+        // Mark blocked, stamp deletion date, unset clerkId and revoke sessions so the phone/email is freed up
+        await UserModel.updateOne(
+          { clerkId },
+          {
+            $set: { accountStatus: 'BLOCKED', statusReason: 'Deleted in Clerk', deletedAt: new Date() },
+            $unset: { clerkId: '' },
+            $inc: { tokenVersion: 1 },
+          }
+        );
+        console.log(`🔒 [Clerk Webhook] User ${clerkId} blocked and unlinked from Clerk`);
       }
     }
 
@@ -2411,6 +2441,24 @@ stayrideV1Router.post('/bookings', async (req: Request, res: Response) => {
   // Not for a back-dated stay that is already over (autoAskCab).
   const askCab = await autoAskCab(tenantKey, isDemo, (await loadReqStore(req)).homestay.name, created);
   if (askCab) created.askCab = askCab;
+
+  const homestayName = (await loadReqStore(req)).homestay.name || tenantKey;
+  NotificationService.sendAdminAlert('bookingCreated', `New Homestay Booking: #${created.id} (${created.guestName})`, {
+    badge: 'ROOM BOOKING',
+    reference: String(created.id),
+    summary: `New room reservation recorded by homestay host (${homestayName}).`,
+    items: [
+      { label: 'Booking ID', value: `#${created.id}` },
+      { label: 'Homestay Host', value: `${homestayName} (${tenantKey})` },
+      { label: 'Guest Name', value: created.guestName },
+      { label: 'Phone', value: created.phone || '—' },
+      { label: 'Room', value: `Room ${created.roomNumber}` },
+      { label: 'Stay Dates', value: `${new Date(created.checkIn).toLocaleDateString('en-IN')} to ${new Date(created.checkOut).toLocaleDateString('en-IN')}` },
+      { label: 'Total Booking Amount', value: `₹${Number(created.amount || 0).toLocaleString('en-IN')}` },
+      { label: 'Advance Paid', value: `₹${Number((created as any).advance || req.body?.advance || 0).toLocaleString('en-IN')}` },
+    ],
+  }, isDemo).catch((e: any) => logger.warn(`[Admin Alert] Booking alert error: ${e?.message}`));
+
   res.status(201).json(created);
 });
 

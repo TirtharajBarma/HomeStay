@@ -24,9 +24,9 @@ export function Stars({ rating, count, className, size = "sm" }: StarsProps) {
           />
         ))}
       </span>
-      <span className="text-title-md font-semibold text-primary">{rating.toFixed(2)}</span>
+      <span className="text-title-md font-medium text-primary tabular-nums">{rating.toFixed(2)}</span>
       {count !== undefined ? (
-        <span className="text-body-sm text-on-surface-variant">({count})</span>
+        <span className="text-body-sm text-on-surface-variant tabular-nums">({count})</span>
       ) : null}
     </span>
   );

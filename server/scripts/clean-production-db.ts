@@ -56,6 +56,13 @@ async function cleanProduction() {
   });
   console.log(`- users: deleted ${userDeleteResult.deletedCount} non-${TARGET_EMAIL} users`);
 
+  // Ensure TARGET_EMAIL is role: admin and ACTIVE
+  await db.collection("users").updateOne(
+    { email: TARGET_EMAIL },
+    { $set: { role: "admin", accountStatus: "ACTIVE" } }
+  );
+  console.log(`- users: ensured ${TARGET_EMAIL} has role: admin and accountStatus: ACTIVE`);
+
   // 2. Properties: keep only TARGET_EMAIL's property
   const propertyDeleteResult = await db.collection("properties").deleteMany({
     email: { $ne: TARGET_EMAIL }

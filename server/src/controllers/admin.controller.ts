@@ -161,6 +161,10 @@ export class AdminController {
     }
   }
 
+  /**
+   * @deprecated Legacy single-trip payout settlement on CabTrip.
+   * Production StayRide settlements are handled via `stayride-admin.routes.ts` calling `platform.settlePayout`.
+   */
   static async settlePayout(req: Request, res: Response) {
     try {
       const id = String(req.params.id || req.body.tripId || "");

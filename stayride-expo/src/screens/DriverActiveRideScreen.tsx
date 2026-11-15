@@ -60,13 +60,34 @@ export const DriverActiveRideScreen: React.FC = () => {
   const handleOpenGoogleMaps = () => {
     if (!activeRide) return;
     const isStarted = activeRide.status === 'TRIP_STARTED';
-    const destination = isStarted
-      ? encodeURIComponent(activeRide.destination || activeRide.pickup)
-      : typeof activeRide.pickupLat === 'number' && typeof activeRide.pickupLng === 'number'
-        ? `${activeRide.pickupLat},${activeRide.pickupLng}`
-        : encodeURIComponent(activeRide.pickup);
+    let destTarget = isStarted ? (activeRide.destination || activeRide.pickup) : activeRide.pickup;
+    let waypointsParam = '';
+
+    if (destTarget && (destTarget.includes('➔') || destTarget.includes('->'))) {
+      const stops = destTarget.split(/[➔\->]+/).map((s: string) => s.trim()).filter(Boolean);
+      if (stops.length > 1) {
+        destTarget = stops[stops.length - 1];
+        const intermediate = stops.slice(0, stops.length - 1);
+        waypointsParam = `&waypoints=${encodeURIComponent(intermediate.join('|'))}`;
+      } else if (stops.length === 1) {
+        destTarget = stops[0];
+      }
+    }
+
+    const hasValidCoords =
+      typeof activeRide.pickupLat === 'number' &&
+      typeof activeRide.pickupLng === 'number' &&
+      Number.isFinite(activeRide.pickupLat) &&
+      Number.isFinite(activeRide.pickupLng) &&
+      activeRide.pickupLat !== 0 &&
+      activeRide.pickupLng !== 0;
+
+    const destination = !isStarted && hasValidCoords
+      ? `${activeRide.pickupLat},${activeRide.pickupLng}`
+      : encodeURIComponent(destTarget || 'Pickup');
+
     // Omitting origin directs Google Maps to navigate from the driver's current device GPS location
-    const url = `https://www.google.com/maps/dir/?api=1&destination=${destination}&travelmode=driving`;
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${destination}${waypointsParam}&travelmode=driving`;
     Linking.openURL(url).catch(() => {
       Alert.alert('Map Error', 'Could not open Google Maps navigation.');
     });
@@ -118,7 +139,7 @@ export const DriverActiveRideScreen: React.FC = () => {
       [
         activeRide?.phone
           ? {
-              text: '📞 Call Passenger',
+              text: 'Call Passenger',
               onPress: () => {
                 Linking.openURL(`tel:${activeRide.phone}`);
               },
@@ -152,7 +173,7 @@ export const DriverActiveRideScreen: React.FC = () => {
             {/* Fix 8: Cash Hero Card — prominent at very top */}
             {typeof activeRide.remainingCashAmount === 'number' && activeRide.remainingCashAmount > 0 && (
               <View style={styles.cashHeroCard}>
-                <Text style={styles.cashHeroLabel}>💵  COLLECT FROM PASSENGER</Text>
+                <Text style={styles.cashHeroLabel}>Collect from Passenger</Text>
                 <Text style={styles.cashHeroAmount}>{cashDue}</Text>
                 <Text style={styles.cashHeroSub}>Pay at drop-off in cash or personal UPI</Text>
               </View>
@@ -219,7 +240,7 @@ export const DriverActiveRideScreen: React.FC = () => {
             <TouchableOpacity style={styles.mapBtn} onPress={handleOpenGoogleMaps}>
               <Ionicons name="navigate" size={18} color="#FFFFFF" />
               <Text style={styles.mapBtnText}>
-                {activeRide.status === 'TRIP_STARTED' ? '🗺️  Navigate to Drop Destination' : '🗺️  Navigate to Pickup'}
+                {activeRide.status === 'TRIP_STARTED' ? 'Navigate to Drop Destination' : 'Navigate to Pickup'}
               </Text>
             </TouchableOpacity>
             {/* Fix 8: GPS warning if no pin set */}
@@ -339,7 +360,7 @@ export const DriverActiveRideScreen: React.FC = () => {
             {activeRide.status === 'TRIP_STARTED' && (
               <TouchableOpacity style={styles.completeBtn} onPress={handleFinishTrip} disabled={completing}>
                 <Ionicons name="checkmark-done-circle" size={22} color="#FFFFFF" />
-                <Text style={styles.completeBtnText}>{completing ? 'Completing…' : '✓  Complete Ride & Collect Cash'}</Text>
+                <Text style={styles.completeBtnText}>{completing ? 'Completing…' : 'Complete Ride & Collect Cash'}</Text>
               </TouchableOpacity>
             )}
           </View>

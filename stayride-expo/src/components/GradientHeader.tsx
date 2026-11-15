@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors, Radii } from '../theme/colors';
+import { Colors, Radii, Shadows } from '../theme/colors';
 
 interface GradientHeaderProps {
   greeting: string;
@@ -19,7 +19,7 @@ export const GradientHeader: React.FC<GradientHeaderProps> = ({
   tagline,
   location,
   ratingText,
-  badgeText = 'GOLD HOST',
+  badgeText = 'Verified Host',
 }) => {
   return (
     <LinearGradient
@@ -30,25 +30,27 @@ export const GradientHeader: React.FC<GradientHeaderProps> = ({
     >
       <View style={styles.topRow}>
         <Text style={styles.greeting}>{greeting}</Text>
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>{badgeText}</Text>
-        </View>
+        {!!badgeText && (
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>{badgeText}</Text>
+          </View>
+        )}
       </View>
 
       <Text style={styles.title}>{homestayName}</Text>
-      <Text style={styles.tagline}>{tagline}</Text>
+      {!!tagline && <Text style={styles.tagline}>{tagline}</Text>}
 
       <View style={styles.bottomRow}>
         {!!location && (
-        <View style={styles.locationContainer}>
-          <Ionicons name="location-sharp" size={15} color={Colors.white} />
-          <Text style={styles.locationText} numberOfLines={1}>
-            {location}
-          </Text>
-        </View>
+          <View style={styles.locationContainer}>
+            <Ionicons name="location-outline" size={14} color="#D4E3D9" />
+            <Text style={styles.locationText} numberOfLines={1}>
+              {location}
+            </Text>
+          </View>
         )}
         <View style={styles.ratingContainer}>
-          <Ionicons name="star" size={14} color={Colors.brandAccent} />
+          <Ionicons name="star" size={13} color="#EAB308" />
           <Text style={styles.ratingText}>{ratingText}</Text>
         </View>
       </View>
@@ -59,13 +61,9 @@ export const GradientHeader: React.FC<GradientHeaderProps> = ({
 const styles = StyleSheet.create({
   card: {
     borderRadius: Radii.card,
-    padding: 18,
+    padding: 20,
     marginVertical: 4,
-    shadowColor: Colors.brandPrimaryDark,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 4,
+    ...Shadows.card,
   },
   topRow: {
     flexDirection: 'row',
@@ -73,29 +71,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   greeting: {
-    color: '#E6FFFFFF',
+    color: '#D4E3D9',
     fontSize: 13,
     fontWeight: '500',
   },
   badge: {
-    backgroundColor: Colors.brandAccent,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
     paddingHorizontal: 10,
-    paddingVertical: 3,
+    paddingVertical: 4,
     borderRadius: Radii.pill,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.16)',
   },
   badgeText: {
-    color: Colors.brandPrimaryDark,
-    fontSize: 10,
-    fontWeight: 'bold',
+    color: '#FAF8F5',
+    fontSize: 11,
+    fontWeight: '600',
   },
   title: {
-    color: Colors.white,
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginTop: 6,
+    color: '#FAF8F5',
+    fontSize: 22,
+    fontWeight: '700',
+    marginTop: 8,
+    letterSpacing: -0.3,
   },
   tagline: {
-    color: '#D9FFFFFF',
+    color: '#D4E3D9',
     fontSize: 13,
     lineHeight: 18,
     marginTop: 4,
@@ -104,7 +105,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 12,
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255, 255, 255, 0.15)',
   },
   locationContainer: {
     flexDirection: 'row',
@@ -113,18 +117,19 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   locationText: {
-    color: Colors.white,
+    color: '#FAF8F5',
     fontSize: 13,
     marginLeft: 4,
+    fontWeight: '500',
   },
   ratingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   ratingText: {
-    color: Colors.white,
+    color: '#FAF8F5',
     fontSize: 13,
-    fontWeight: 'bold',
+    fontWeight: '600',
     marginLeft: 4,
   },
 });

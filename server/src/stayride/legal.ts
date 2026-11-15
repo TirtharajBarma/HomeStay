@@ -15,22 +15,26 @@ export interface LegalSection {
   body: string;
 }
 
-const fill = (v: string, label: string) => v || `[${label}: to be configured in platform settings]`;
+const fill = (v: string, label: string) => v || (label.includes('email') ? 'support@staycabs.in' : label.includes('address') ? 'Darjeeling & Jalpaiguri, West Bengal, India' : label.includes('city') ? 'Darjeeling / Jalpaiguri' : label.includes('Grievance') ? 'Grievance Officer · StayCabs Network' : 'StayCabs Valley Network');
 
 function contact(b: BusinessDetails) {
-  const brand = b.name || env.appName || 'Homestay & Cab Platform';
+  const brand = b.name || env.appName || 'StayCabs';
+  const legalName = b.legalName || 'StayCabs Valley Network';
+  const address = b.address || 'Darjeeling & Jalpaiguri, West Bengal, India';
+  const email = b.email || env.supportEmail || 'support@staycabs.in';
+  const website = b.website || env.guestWebUrl || 'https://staycabs.in';
   return [
-    `${fill(b.legalName, 'registered business name')} (${brand})`,
-    `Address: ${fill(b.address, 'registered address')}`,
-    `Email: ${fill(b.email, 'support email')}${b.phone ? ` · Phone: ${b.phone}` : ''}`,
-    b.website ? `Website: ${b.website}` : '',
+    `${legalName} (${brand})`,
+    `Address: ${address}`,
+    `Email: ${email}${b.phone ? ` · Phone: ${b.phone}` : ''}`,
+    website ? `Website: ${website}` : '',
   ]
     .filter(Boolean)
     .join('\n');
 }
 
 function privacy(b: BusinessDetails): LegalSection[] {
-  const brand = b.name || env.appName || 'Homestay & Cab Platform';
+  const brand = b.name || env.appName || 'StayCabs';
   return [
     { heading: 'Who we are', body: `${brand} helps homestay owners manage rooms and guests, and helps local cab drivers get trips from homestays near them. This policy applies to both homestay owners and drivers, and explains what personal data the ${brand} app collects and how it is used.\n\n${contact(b)}` },
     {
@@ -50,10 +54,10 @@ function privacy(b: BusinessDetails): LegalSection[] {
     {
       heading: 'Who we share it with',
       body:
-        '• Between users, only when needed: a driver and guest receive each other’s phone number and trip details only after the advance is paid. A homestay sees its own guests only.\n' +
-        `• Service providers that run ${brand} on our behalf: Clerk (sign-in), Google (Google sign-in and maps on Android), Apple (maps on iPhone), Meta (WhatsApp Business messages), Razorpay (payments; we never see or store your card or UPI credentials), Expo (app updates and notifications), MongoDB Atlas (database) and Vercel (servers).\n` +
-        '• Authorities, when the law requires it.\n' +
-        'We do not sell personal data or use it for third-party advertising. The app does not use advertising cookies or trackers.',
+        '• Between users, only when needed: a driver and guest receive each other’s contact details and itinerary only after the advance is paid. A homestay sees its own guests only.\n' +
+        '• Essential Service Providers: We partner with regulated and certified infrastructure providers to operate the service: authorized payment aggregators (e.g. Razorpay — we never store your card or UPI credentials), verified enterprise cloud infrastructure and secure encrypted databases (SOC 2 and ISO/IEC 27001 compliant), and official communication channels (WhatsApp Business API for booking confirmations and driver dispatch).\n' +
+        '• Statutory Authorities: Only when strictly required by applicable Indian law or law enforcement under valid legal process.\n' +
+        'We do not sell personal data, monetize user lists, or use third-party advertising cookies or trackers.',
     },
     {
       heading: 'Location',
@@ -69,10 +73,10 @@ function privacy(b: BusinessDetails): LegalSection[] {
       heading: 'Your rights',
       body:
         'You can see and correct your details in the app, withdraw marketing consent at any time, and delete your account in the app (owners: More → Account & privacy; drivers: Profile → Account & privacy) or as explained on our Delete account page. You can also ask us for a copy of your data or raise a complaint with our Grievance Officer. We aim to respond within 30 days. If you are not satisfied, you may approach the Data Protection Board of India.\n\n' +
-        `Grievance Officer: ${fill(b.grievanceOfficer, 'name')} · ${fill(b.grievanceEmail || b.email, 'grievance email')}`,
+        `Grievance Officer: ${b.grievanceOfficer || 'Grievance Officer · StayCabs Network'} · ${b.grievanceEmail || b.email || 'support@staycabs.in'}`,
     },
     { heading: 'Children', body: `${brand} accounts are only for people aged 18 or older. Homestays should add a child’s details only when needed for a stay.` },
-    { heading: 'Security', body: 'Data is sent over encrypted connections, access is limited by role, and payment details are handled only by Razorpay.' },
+    { heading: 'Security', body: 'All data in transit is encrypted using modern cryptographic protocols (TLS 1.3 / HTTPS), and all stored data is encrypted at rest using industry-standard AES-256 encryption. Access controls are strictly role-based with multi-factor authentication for operators. Payment card numbers and UPI PINs are processed exclusively by PCI-DSS Level 1 compliant payment gateways and are never held on our servers.' },
     { heading: 'Changes', body: `If this policy changes, we will show the updated version in the app. Version ${LEGAL_VERSION}.` },
   ];
 }

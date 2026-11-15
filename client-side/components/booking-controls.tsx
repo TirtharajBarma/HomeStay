@@ -13,13 +13,14 @@ import {
   type Booking,
 } from "@/lib/booking";
 
+import { DateInput } from "./date-input";
 import { Icon } from "./icon";
 
 const block =
   "rounded-xl border border-outline-variant/60 bg-surface-container-low p-3 transition-colors hover:border-primary/50";
 
 const inputClass =
-  "min-h-11 w-full rounded-lg border border-outline-variant/50 bg-surface-container-lowest px-2.5 py-2 text-body-sm text-on-surface focus:border-primary focus:outline-none md:min-h-9 md:py-1.5 md:text-body-sm";
+  "min-h-11 w-full rounded-lg border border-outline-variant/50 bg-surface-container-lowest focus-within:border-primary transition-colors md:min-h-9";
 
 /**
  * Dates and party size live in the URL, so editing them here re-runs the
@@ -70,11 +71,11 @@ export function BookingControls({
     <div className="mb-6 space-y-3">
       <div className={block}>
         <div className="mb-1 flex items-center justify-between gap-2">
-          <span className="text-label-sm uppercase tracking-wider text-on-surface-variant">
-            Stay Dates
+          <span className="text-label-sm font-medium text-on-surface-variant">
+            Stay dates
           </span>
           <span className="text-label-sm font-medium text-primary">
-            {formatNights(draft.nights)} Selected
+            {formatNights(draft.nights)} selected
           </span>
         </div>
         <div className="mb-2 flex items-center gap-2 text-on-surface">
@@ -84,25 +85,25 @@ export function BookingControls({
           </span>
         </div>
         <div className="grid grid-cols-2 gap-2">
-          <label className="block">
-            <span className="sr-only">Check-in</span>
-            <input
-              type="date"
+          <div>
+            <DateInput
+              ariaLabel="Check-in date (DD/MM/YYYY)"
+              placeholder="Check-in"
               value={checkIn}
-              onChange={(event) => commit({ checkIn: event.target.value, checkOut, guests })}
+              onChange={(newIn) => commit({ checkIn: newIn, checkOut, guests })}
               className={inputClass}
             />
-          </label>
-          <label className="block">
-            <span className="sr-only">Check-out</span>
-            <input
-              type="date"
-              value={checkOut}
+          </div>
+          <div>
+            <DateInput
+              ariaLabel="Check-out date (DD/MM/YYYY)"
+              placeholder="Check-out"
               min={checkIn}
-              onChange={(event) => commit({ checkIn, checkOut: event.target.value, guests })}
+              value={checkOut}
+              onChange={(newOut) => commit({ checkIn, checkOut: newOut, guests })}
               className={inputClass}
             />
-          </label>
+          </div>
         </div>
         <p aria-live="polite" className="mt-1.5 text-label-sm text-outline">
           {notice ? (
@@ -120,10 +121,10 @@ export function BookingControls({
 
       <div className={block}>
         <div className="mb-1 flex items-center justify-between gap-2">
-          <span className="text-label-sm uppercase tracking-wider text-on-surface-variant">
+          <span className="text-label-sm font-medium text-on-surface-variant">
             Guests
           </span>
-          <span className="text-label-sm text-on-surface-variant">Max {maxGuests} Adults</span>
+          <span className="text-label-sm text-on-surface-variant">Max {maxGuests} adults</span>
         </div>
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 flex-1 items-center gap-2 text-on-surface">

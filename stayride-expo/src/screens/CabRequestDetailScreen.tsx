@@ -523,7 +523,7 @@ export const CabRequestDetailScreen: React.FC = () => {
                 : status === 'QUOTE_RECEIVED'
                 ? 'Quotes received from mountain drivers. Choose a driver below.'
                 : status === 'AWAITING_ADVANCE' && trip.paymentClaimPending
-                ? `Guest says paid, ${process.env.EXPO_PUBLIC_APP_NAME || 'StayCabs'} is confirming.`
+                ? `Guest says paid, ${process.env.EXPO_PUBLIC_APP_NAME || 'StayRide'} is confirming.`
                 : status === 'AWAITING_ADVANCE'
                 ? `${trip.ownerDriver ? `Your driver ${trip.driverName || ''} · w` : 'W'}aiting for the guest's ${formatINR(trip.advanceAmount || 0)} advance deposit${
                     trip.advanceDueAt

@@ -24,7 +24,7 @@ import { getLiveStay } from "@/lib/stays";
 import { waNumber } from "@/lib/whatsapp";
 
 export const metadata: Metadata = {
-  title: "Secure Reservation | StayCabs",
+  title: `Secure Reservation | ${siteConfig.appName}`,
   description: "Complete your verified homestay reservation with free cancellation.",
 };
 
@@ -47,7 +47,7 @@ export default async function CheckoutPage({
     rawPhone ||
     siteConfig.supportPhone?.trim() ||
     process.env.NEXT_PUBLIC_SUPPORT_PHONE?.trim() ||
-    "919239842574";
+    "+91 9239842574";
   const cleanPhone = waNumber(effectivePhone);
 
   return (
@@ -71,22 +71,22 @@ export default async function CheckoutPage({
           {stay.name}
         </Link>
         <span className="text-outline-variant">/</span>
-        <span aria-current="page" className="font-semibold text-primary">
-          Confirm &amp; Pay
+        <span aria-current="page" className="font-medium text-primary">
+          Confirm &amp; pay
         </span>
       </nav>
 
       {/* Page Title */}
       <div className="mb-6 max-w-2xl">
-        <span className="text-label-xs font-bold uppercase tracking-widest text-secondary">
-          Final Step
+        <span className="text-label-sm font-medium text-outline">
+          Final step
         </span>
-        <h1 className="mt-1 font-display text-2xl sm:text-headline-lg font-semibold text-primary tracking-tight">
-          Complete Your Reservation
+        <h1 className="mt-1 font-display text-2xl sm:text-headline-lg font-medium text-primary tracking-tight">
+          Complete your reservation
         </h1>
-        <p className="mt-1 text-xs sm:text-body-md text-on-surface-variant">
-          Instant booking voucher • Free cancellation until{" "}
-          <strong>{cancellationDeadline(booking.checkIn)}</strong>.
+        <p className="mt-1 text-body-sm text-on-surface-variant">
+          Instant booking voucher · Free cancellation until{" "}
+          <strong className="font-medium text-on-surface">{cancellationDeadline(booking.checkIn)}</strong>
         </p>
       </div>
 
@@ -101,11 +101,11 @@ export default async function CheckoutPage({
 
         {/* DESKTOP SIDEBAR TRIP SUMMARY */}
         <aside
-          className="hidden lg:block w-full scroll-mt-28 lg:col-span-5 lg:sticky lg:top-24"
+          className="hidden lg:block w-full scroll-mt-28 lg:col-span-5 lg:sticky lg:top-20"
           id="stay-summary"
         >
-          <div className="sticky-card-elevation space-y-5 rounded-2xl border border-outline-variant/50 bg-surface-container-lowest p-6">
-            <figure className="relative h-44 overflow-hidden rounded-xl">
+          <div className="space-y-5 rounded-xl border border-outline-variant/60 bg-surface-container-lowest p-6 shadow-ambient">
+            <figure className="relative h-44 overflow-hidden rounded-lg">
               <Image
                 src={stay.image}
                 alt={stay.imageAlt}
@@ -116,10 +116,10 @@ export default async function CheckoutPage({
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/20 to-transparent" />
               <figcaption className="absolute bottom-3 left-3 right-3 text-white">
-                <span className="block text-[11px] font-semibold uppercase tracking-wider text-white/90">
+                <span className="block text-label-sm text-white/80">
                   {stay.wing}
                 </span>
-                <span className="font-display text-headline-sm font-semibold truncate block">
+                <span className="font-display text-headline-sm font-medium truncate block">
                   {stay.name}
                 </span>
               </figcaption>
@@ -129,9 +129,9 @@ export default async function CheckoutPage({
               <Stars rating={stay.rating} count={stay.reviewCount} />
               <Link
                 href={stayHref(stay.slug, booking)}
-                className="inline-flex items-center text-xs font-semibold text-primary hover:underline"
+                className="inline-flex items-center text-label-sm font-medium text-primary hover:underline"
               >
-                View stay details →
+                View room details
               </Link>
             </div>
 
@@ -139,9 +139,9 @@ export default async function CheckoutPage({
             <div className="space-y-3 text-body-sm">
               <div className="flex items-center justify-between pb-2 border-b border-outline-variant/20">
                 <div>
-                  <span className="block text-xs text-on-surface-variant">Dates</span>
-                  <span className="font-semibold text-on-surface">{formatDateRange(booking)}</span>
-                  <span className="text-outline text-xs ml-1">({formatNights(booking.nights)})</span>
+                  <span className="block text-label-sm text-outline">Dates</span>
+                  <span className="font-medium text-on-surface tabular-nums">{formatDateRange(booking)}</span>
+                  <span className="text-outline text-label-sm ml-1 tabular-nums">({formatNights(booking.nights)})</span>
                 </div>
                 <CheckoutDates
                   slug={stay.slug}
@@ -154,8 +154,8 @@ export default async function CheckoutPage({
 
               <div className="flex items-center justify-between pb-2 border-b border-outline-variant/20">
                 <div>
-                  <span className="block text-xs text-on-surface-variant">Guests</span>
-                  <span className="font-semibold text-on-surface">
+                  <span className="block text-label-sm text-outline">Guests</span>
+                  <span className="font-medium text-on-surface">
                     {booking.guests} Adult{booking.guests === 1 ? "" : "s"}
                   </span>
                 </div>
@@ -169,63 +169,60 @@ export default async function CheckoutPage({
               </div>
 
               <div className="flex items-center justify-between">
-                <span className="text-xs text-on-surface-variant">Check-in</span>
-                <span className="font-medium text-xs text-on-surface">3:00 PM – 8:00 PM</span>
+                <span className="text-label-sm text-outline">Check-in</span>
+                <span className="font-medium text-label-sm text-on-surface">3:00 PM – 8:00 PM</span>
               </div>
             </div>
 
             {/* Price Details Breakdown */}
-            <div className="space-y-2.5 border-y border-outline-variant/30 py-4 text-xs text-on-surface-variant">
+            <div className="space-y-2.5 border-y border-outline-variant/30 py-4 text-body-sm text-on-surface-variant">
               <div className="flex justify-between">
                 <span>
                   {formatMoney(stay.price)} × {formatNights(quote.nights).toLowerCase()}
                 </span>
-                <span className="font-medium text-on-surface">{formatMoney(quote.roomTotal)}</span>
+                <span className="font-medium text-on-surface tabular-nums">{formatMoney(quote.roomTotal)}</span>
               </div>
               <div className="flex justify-between">
-                <span>Hill Breakfast &amp; Firewood</span>
-                <span className="font-medium text-emerald-700">Included Free</span>
+                <span>Hill breakfast</span>
+                <span className="font-medium text-primary">Included</span>
               </div>
               <div className="flex justify-between">
-                <span>Estate Cleaning &amp; Linens</span>
-                <span className="font-medium text-on-surface">{formatMoney(quote.cleaning)}</span>
+                <span>Estate cleaning &amp; linens</span>
+                <span className="font-medium text-on-surface tabular-nums">{formatMoney(quote.cleaning)}</span>
               </div>
               <div className="flex justify-between">
                 <span>{TAX_LABEL}</span>
-                <span className="font-medium text-on-surface">{formatMoney(quote.tax)}</span>
+                <span className="font-medium text-on-surface tabular-nums">{formatMoney(quote.tax)}</span>
               </div>
               <div className="flex items-baseline justify-between border-t border-outline-variant/40 pt-3">
-                <span className="text-title-md font-bold text-primary">Total Booking Amount</span>
-                <span className="font-display text-headline-sm font-bold text-primary">
+                <span className="text-body-md font-medium text-primary">Total</span>
+                <span className="font-display text-headline-sm font-medium text-primary tabular-nums">
                   {formatMoney(quote.total)}
                 </span>
               </div>
             </div>
 
             {/* Trust Badges */}
-            <div className="rounded-xl bg-primary/5 border border-primary/20 p-3 text-xs space-y-1">
-              <div className="flex items-center gap-1.5 font-semibold text-primary">
-                <Icon name="verified_user" className="text-sm text-emerald-600" />
-                <span>Direct Homestay Rate</span>
+            <div className="rounded-lg bg-surface-container-low border border-outline-variant/50 p-3 text-body-sm space-y-1">
+              <div className="flex items-center gap-1.5 font-medium text-primary text-label-sm">
+                <Icon name="verified_user" className="text-sm text-outline" />
+                <span>Direct homestay rate</span>
               </div>
-              <p className="text-on-surface-variant leading-relaxed">
-                Zero booking fees or OTA commission markups. Official voucher dispatched immediately upon confirmation.
+              <p className="text-on-surface-variant text-label-sm leading-relaxed">
+                Zero booking fees or middleman commissions. Official reservation voucher generated immediately upon confirmation.
               </p>
             </div>
 
             {/* Host Assistance */}
-            <div className="flex items-center justify-between pt-2 text-xs text-outline border-t border-outline-variant/20">
-              <span className="flex items-center gap-1">
-                <Icon name="phone" className="text-xs text-primary" />
-                <span>Host Helpdesk:</span>
-              </span>
+            <div className="flex items-center justify-between pt-2 text-label-sm text-outline border-t border-outline-variant/20">
+              <span>Host helpdesk:</span>
               <a
                 href={`https://wa.me/${cleanPhone}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="font-medium text-primary hover:underline"
               >
-                Chat on WhatsApp
+                WhatsApp desk
               </a>
             </div>
           </div>

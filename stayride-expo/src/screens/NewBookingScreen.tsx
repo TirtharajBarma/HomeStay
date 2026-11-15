@@ -61,9 +61,15 @@ export const NewBookingScreen: React.FC = () => {
   const [source, setSource] = useState('Airbnb');
   const [guestsCount, setGuestsCount] = useState('1');
 
-  // Dates: default checkIn = today midnight, checkOut = in 2 days
-  const now = new Date();
-  const todayMs = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  // Dates: default checkIn = today midnight (IST Asia/Kolkata), checkOut = in 2 days
+  const istTodayStr = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+  const [iY, iM, iD] = istTodayStr.split('-').map(Number);
+  const todayMs = new Date(iY, iM - 1, iD).getTime();
   const dayMs = 86400000;
   const [checkIn, setCheckIn] = useState<number>(presetCheckIn ?? todayMs);
   const [checkOut, setCheckOut] = useState<number>((presetCheckIn ?? todayMs) + (presetCheckIn ? 1 : 2) * dayMs);
@@ -181,6 +187,16 @@ export const NewBookingScreen: React.FC = () => {
     }
 
     const parsedCount = Math.max(1, parseInt(guestsCount, 10) || 1);
+    if (pickedRoom.roomType === 'DORM' && parsedCount !== 1) {
+      Alert.alert('Single Bed Allocation', 'A dorm bed accommodates exactly 1 guest per bed. Please set guests count to 1.');
+      return;
+    }
+    const maxPrivateCapacity = Math.max(2, (pickedRoom.bedCount || 1) * 2);
+    if (pickedRoom.roomType !== 'DORM' && parsedCount > maxPrivateCapacity) {
+      Alert.alert('Capacity Exceeded', `Room ${pickedRoom.number} accommodates at most ${maxPrivateCapacity} guests.`);
+      return;
+    }
+
     const receivedNum = received ? parseInt(received, 10) : 0;
     if (receivedNum > parsedAmount) {
       Alert.alert('Check amount', 'The amount received cannot be more than the booking total.');
@@ -210,7 +226,7 @@ export const NewBookingScreen: React.FC = () => {
       });
 
       Alert.alert(
-        '🎉 Booking Created!',
+        'Booking Confirmed',
         `Booking confirmed for ${trimmedName} · Room ${pickedRoom.number}${chosenBed ? ` (${chosenBed})` : ''} (${nights} night${nights > 1 ? 's' : ''}).\n\nBooking confirmation & cab link are automatically dispatched to the guest via official WhatsApp.`,
         [
           {

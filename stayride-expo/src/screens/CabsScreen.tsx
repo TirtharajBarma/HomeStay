@@ -294,9 +294,13 @@ export const CabsScreen: React.FC = () => {
       <ScrollView contentContainerStyle={styles.listContent}>
         {currentList.length === 0 ? (
           <View style={styles.emptyBox}>
-            <Text style={{ fontSize: 44, marginBottom: 8 }}>
-              {activeTab === 'guest_requests' ? '📲' : '🚗'}
-            </Text>
+            <View style={styles.emptyIconCircle}>
+              <Ionicons
+                name={activeTab === 'guest_requests' ? 'chatbubble-ellipses-outline' : 'car-outline'}
+                size={28}
+                color={Colors.brandPrimary}
+              />
+            </View>
             <Text style={styles.emptyTitle}>
               {activeTab === 'requested'
                 ? 'No pending cab requests'
@@ -324,7 +328,7 @@ export const CabsScreen: React.FC = () => {
                 style={styles.emptyActionBtn}
                 onPress={() => setAskCabModalVisible(true)}
               >
-                <Text style={styles.emptyActionBtnText}>📲 Send Guest Cab Link</Text>
+                <Text style={styles.emptyActionBtnText}>Send Guest Cab Link</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -410,7 +414,7 @@ export const CabsScreen: React.FC = () => {
           <View style={styles.modalCard}>
             <View style={styles.modalHeaderRow}>
               <View>
-                <Text style={styles.modalTitle}>Ask Guest for Cab 💬</Text>
+                <Text style={styles.modalTitle}>Ask Guest for Cab</Text>
                 <Text style={styles.modalSub}>Send direct booking link via WhatsApp</Text>
               </View>
               <TouchableOpacity onPress={() => setAskCabModalVisible(false)}>
@@ -675,8 +679,17 @@ const styles = StyleSheet.create({
   emptyBox: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 60,
+    paddingVertical: 48,
     paddingHorizontal: 20,
+  },
+  emptyIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: Colors.brandPrimaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
   },
   emptyTitle: {
     fontSize: 16,
