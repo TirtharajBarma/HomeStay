@@ -82,7 +82,7 @@ function privacy(b: BusinessDetails): LegalSection[] {
 }
 
 function terms(b: BusinessDetails): LegalSection[] {
-  const brand = b.name || env.appName || 'Homestay & Cab Platform';
+  const brand = b.name || env.appName || 'StayCabs';
   return [
     { heading: 'About these terms', body: `These terms apply when you use the ${brand} app as a homestay owner or a driver.\n\n${contact(b)}` },
     { heading: 'Who can use the app', body: 'You must be 18 or older and give true details. You are responsible for activity on your account and for keeping your sign-in secure.' },
