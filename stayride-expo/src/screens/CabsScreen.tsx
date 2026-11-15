@@ -514,11 +514,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     marginHorizontal: 12,
     marginTop: 10,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#EDE9FE',
     borderRadius: 12,
     padding: 3,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: '#DDD6FE',
   },
   toggleBtn: {
     flex: 1,
@@ -527,16 +527,17 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   toggleBtnActive: {
-    backgroundColor: '#2563EB',
+    backgroundColor: Colors.brandPrimary,
+    ...Shadows.sm,
   },
   toggleBtnText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#64748B',
+    color: '#5A556B',
   },
   toggleBtnTextActive: {
     color: '#FFFFFF',
-    fontWeight: '700',
+    fontWeight: '800',
   },
   subHeaderRow: {
     flexDirection: 'row',

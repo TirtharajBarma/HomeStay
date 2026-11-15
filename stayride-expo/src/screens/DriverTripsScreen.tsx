@@ -707,23 +707,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 5,
     borderRadius: 16,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: '#EDE9FE',
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
   },
   filterChipActive: {
-    backgroundColor: '#2563EB',
+    backgroundColor: Colors.brandPrimary,
+    borderColor: Colors.brandPrimary,
   },
   filterChipText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#64748B',
+    color: '#5A556B',
   },
   filterChipTextActive: {
     color: '#FFFFFF',
-    fontWeight: '700',
+    fontWeight: '800',
   },
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: Colors.bgPage,
   },
   header: {
     flexDirection: 'row',
@@ -770,11 +773,13 @@ const styles = StyleSheet.create({
   },
   tabRow: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
+    backgroundColor: '#EDE9FE',
+    marginHorizontal: 12,
+    marginTop: 8,
+    borderRadius: 12,
+    padding: 3,
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
   },
   tabBtn: {
     flex: 1,
@@ -783,16 +788,17 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   tabBtnActive: {
-    backgroundColor: '#EFF6FF',
+    backgroundColor: Colors.brandPrimary,
+    ...Shadows.sm,
   },
   tabText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#64748B',
+    color: '#5A556B',
   },
   tabTextActive: {
-    color: '#2563EB',
-    fontWeight: '700',
+    color: '#FFFFFF',
+    fontWeight: '800',
   },
   listContainer: {
     padding: 16,
