@@ -230,6 +230,12 @@ export const MoreScreen: React.FC = () => {
         <Text style={styles.groupHeader}>Business</Text>
         <View style={styles.cardGroup}>
           {renderRow(
+            'sparkles',
+            'Promote with Influencers',
+            'Collaborate with top travel creators in Darjeeling & Sikkim',
+            () => navigation.navigate('Promote')
+          )}
+          {renderRow(
             'bar-chart',
             'Analytics',
             'Property, guest and cab performance',

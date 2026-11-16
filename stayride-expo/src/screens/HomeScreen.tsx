@@ -230,12 +230,33 @@ export const HomeScreen: React.FC = () => {
             />
             {/* Navigates directly to FindDriver flow */}
             <QuickActionCard
-              icon="car"
-              label="Ask for Cab"
-              onPress={() => navigation.navigate('FindDriver')}
+              icon="sparkles"
+              label="Promote"
+              onPress={() => navigation.navigate('Promote')}
             />
           </View>
         </View>
+
+        {/* Promote Feature Highlight Card */}
+        <TouchableOpacity
+          style={styles.promoteFeatureCard}
+          onPress={() => navigation.navigate('Promote')}
+          activeOpacity={0.85}
+        >
+          <View style={styles.promoteCardContent}>
+            <View style={styles.promoteBadge}>
+              <Ionicons name="sparkles" size={11} color="#F59E0B" />
+              <Text style={styles.promoteBadgeText}>NEW FEATURE • PROMOTE</Text>
+            </View>
+            <Text style={styles.promoteCardTitle}>Partner with Mountain Influencers</Text>
+            <Text style={styles.promoteCardSubtitle}>
+              Invite top creators in Darjeeling, Gangtok, Sikkim & Kalimpong to shoot reels & promote {homestay.name || 'your homestay'}.
+            </Text>
+          </View>
+          <View style={styles.promoteCardArrow}>
+            <Ionicons name="arrow-forward" size={16} color="#FFFFFF" />
+          </View>
+        </TouchableOpacity>
 
         {/* More actions — less prominent */}
         <TouchableOpacity
@@ -244,7 +265,7 @@ export const HomeScreen: React.FC = () => {
           activeOpacity={0.7}
         >
           <Ionicons name="megaphone-outline" size={14} color={Colors.textSecondary} style={{ marginRight: 6 }} />
-          <Text style={styles.moreActionsText}>Promote with Campaign</Text>
+          <Text style={styles.moreActionsText}>Promote with WhatsApp Campaign</Text>
         </TouchableOpacity>
 
         {/* Performance Chart Card */}
@@ -521,5 +542,55 @@ const styles = StyleSheet.create({
   },
   chipTextActive: {
     color: Colors.white,
+  },
+  promoteFeatureCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#1E1B4B',
+    borderRadius: Radii.card,
+    padding: 16,
+    marginVertical: 12,
+    ...Shadows.card,
+  },
+  promoteCardContent: {
+    flex: 1,
+    paddingRight: 10,
+  },
+  promoteBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    marginBottom: 6,
+    gap: 4,
+  },
+  promoteBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#F59E0B',
+    letterSpacing: 0.5,
+  },
+  promoteCardTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  promoteCardSubtitle: {
+    fontSize: 11,
+    color: '#CBD5E1',
+    lineHeight: 16,
+  },
+  promoteCardArrow: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: Colors.brandPrimary,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

@@ -14,3 +14,5 @@ export * from "./whatsapp-contact.model.js";
 export * from "./whatsapp-conversation.model.js";
 export * from "./whatsapp-message.model.js";
 export * from "./homestay-lead.model.js";
+export * from "./influencer.model.js";
+export * from "./collaboration-request.model.js";

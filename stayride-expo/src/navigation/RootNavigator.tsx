@@ -32,6 +32,9 @@ import { UpdatesScreen } from '../screens/UpdatesScreen';
 import { HowItWorksScreen } from '../screens/HowItWorksScreen';
 import { LegalScreen } from '../screens/LegalScreen';
 import { AccountScreen } from '../screens/AccountScreen';
+import { PromoteScreen } from '../screens/PromoteScreen';
+import { InfluencerDetailScreen } from '../screens/InfluencerDetailScreen';
+import { CollaborateRequestScreen } from '../screens/CollaborateRequestScreen';
 
 // Driver Screens
 import { DriverTripsScreen } from '../screens/DriverTripsScreen';
@@ -61,6 +64,15 @@ export type RootStackParamList = {
   HowItWorks: undefined;
   Legal: { doc: 'privacy' | 'terms' | 'refunds' };
   Account: undefined;
+  Promote: undefined;
+  InfluencerDetail: { influencerId: string };
+  CollaborateRequest: {
+    influencerId: string;
+    influencerName?: string;
+    influencerHandle?: string;
+    selectedPackage?: any;
+    packages?: any[];
+  };
 };
 
 export type MainTabParamList = {
@@ -297,6 +309,9 @@ export const RootNavigator: React.FC = () => {
       <Stack.Screen name="HowItWorks" component={HowItWorksScreen} />
       <Stack.Screen name="Legal" component={LegalScreen} />
       <Stack.Screen name="Account" component={AccountScreen} />
+      <Stack.Screen name="Promote" component={PromoteScreen} />
+      <Stack.Screen name="InfluencerDetail" component={InfluencerDetailScreen} />
+      <Stack.Screen name="CollaborateRequest" component={CollaborateRequestScreen} />
     </Stack.Navigator>
   );
 };

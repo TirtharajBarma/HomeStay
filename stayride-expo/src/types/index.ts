@@ -286,3 +286,73 @@ export interface UserSession {
     link: string;
   };
 }
+
+// Promote / Influencer Marketing Types
+export interface InfluencerPackage {
+  _id?: string;
+  name: string;
+  price: number;
+  deliverables: string;
+  turnaroundDays?: number;
+}
+
+export interface Influencer {
+  _id: string;
+  name: string;
+  tagline: string;
+  bio: string;
+  profilePhoto: string;
+  instagramHandle: string;
+  instagramUrl: string;
+  followersCount: number;
+  averageViews: number;
+  destinations: string[];
+  categories: string[];
+  startingPrice: number;
+  packages: InfluencerPackage[];
+  sampleReels: Array<{ title: string; url: string }>;
+  isVerified: boolean;
+  isFeatured: boolean;
+  isActive: boolean;
+}
+
+export type CollaborationStatus =
+  | 'PENDING'
+  | 'CONTACTED'
+  | 'IN_NEGOTIATION'
+  | 'CONFIRMED'
+  | 'COMPLETED'
+  | 'CANCELLED';
+
+export interface CollaborationRequest {
+  _id: string;
+  influencerId: any;
+  influencerName: string;
+  influencerHandle: string;
+  influencerPhoto?: string;
+  homestayName: string;
+  homestayLocation?: string;
+  ownerName: string;
+  ownerPhone: string;
+  ownerEmail?: string;
+  selectedPackage?: {
+    name: string;
+    price: number;
+    deliverables?: string;
+  };
+  customRequirements?: string;
+  proposedDates?: string;
+  status: CollaborationStatus;
+  negotiatedPrice?: number;
+  confirmedShootingDate?: string;
+  deliveredPostUrl?: string;
+  adminNotes?: string;
+  statusHistory?: Array<{
+    status: CollaborationStatus;
+    updatedAt: string;
+    note?: string;
+    updatedBy?: string;
+  }>;
+  createdAt: string;
+  updatedAt: string;
+}

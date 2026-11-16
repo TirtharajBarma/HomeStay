@@ -7,14 +7,18 @@ import {
   AppealsTab, AuditTab, inr, CabRequestsTab, DashboardTab, DriversTab, GuestsTab, HomestaysTab, LeadsTab, NotificationBell, PayoutsTab, SettingsTab, UsersTab,
 } from "@/components/stayride-admin";
 import { WhatsAppInbox } from "@/components/whatsapp-inbox";
+import { InfluencerManagement } from "@/components/influencer-management";
+import { CollaborationRequests } from "@/components/collaboration-requests";
 
 // The old Hill Hospitality portal: its data is not used by the StayRide app, so its "Suspend" and
 // "Settle UPI" do nothing there. Hidden unless NEXT_PUBLIC_SHOW_LEGACY_PORTAL=true.
 const SHOW_LEGACY = process.env.NEXT_PUBLIC_SHOW_LEGACY_PORTAL === "true";
-type Tab = "dashboard" | "whatsapp" | "users" | "homestays" | "guests" | "drivers" | "cab-requests" | "payouts" | "settings" | "appeals" | "audit" | "leads" | "legacy";
+type Tab = "dashboard" | "whatsapp" | "influencers" | "collaborations" | "users" | "homestays" | "guests" | "drivers" | "cab-requests" | "payouts" | "settings" | "appeals" | "audit" | "leads" | "legacy";
 const TABS: Array<[Tab, string, string]> = [
   ["dashboard", "monitoring", "Overview"],
   ["whatsapp", "chat", "WhatsApp Inbox"],
+  ["influencers", "stars", "Influencers"],
+  ["collaborations", "handshake", "Collaborations"],
   ["users", "group", "Users"],
   ["homestays", "villa", "Homestays"],
   ["guests", "hotel", "Guests staying"],
@@ -84,6 +88,8 @@ export default function AdminDashboardPage() {
   const [guestTenant, setGuestTenant] = useState("");
   // WhatsApp Inbox stats badge
   const [whatsappStats, setWhatsappStats] = useState<{ total: number; unread: number }>({ total: 0, unread: 0 });
+  // Collaboration Requests badge
+  const [collabStats, setCollabStats] = useState<{ total: number; pending: number }>({ total: 0, pending: 0 });
 
   useEffect(() => {
     async function loadWhatsappCounts() {
@@ -101,8 +107,29 @@ export default function AdminDashboardPage() {
         }
       } catch {}
     }
+
+    async function loadCollabCounts() {
+      if (!token) return;
+      try {
+        const res = await apiFetch(API_ENDPOINTS.collaborationRequestAdminStats());
+        if (res.ok) {
+          const json = await res.json();
+          if (json?.data) {
+            setCollabStats({
+              total: json.data.total ?? 0,
+              pending: json.data.pending ?? 0,
+            });
+          }
+        }
+      } catch {}
+    }
+
     loadWhatsappCounts();
-    const interval = setInterval(loadWhatsappCounts, 20000);
+    loadCollabCounts();
+    const interval = setInterval(() => {
+      loadWhatsappCounts();
+      loadCollabCounts();
+    }, 20000);
     return () => clearInterval(interval);
   }, [token, demo]);
 
@@ -325,6 +352,19 @@ export default function AdminDashboardPage() {
                   ) : null}
                 </span>
               )}
+              {key === "collaborations" && (
+                <span className="flex items-center gap-1 ml-0.5">
+                  {collabStats.pending > 0 ? (
+                    <span className="bg-amber-500 text-black font-bold text-[9px] px-1.5 py-0.2 rounded-full animate-pulse">
+                      {collabStats.pending}
+                    </span>
+                  ) : collabStats.total > 0 ? (
+                    <span className="bg-slate-800 text-slate-400 text-[9px] font-mono px-1.5 py-0.2 rounded-full border border-slate-700">
+                      {collabStats.total}
+                    </span>
+                  ) : null}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -346,6 +386,12 @@ export default function AdminDashboardPage() {
               }}
             />
           )}
+        </div>
+        <div className={activeTab === "influencers" ? "block" : "hidden"}>
+          {visitedTabs.has("influencers") && <InfluencerManagement demo={demo} />}
+        </div>
+        <div className={activeTab === "collaborations" ? "block" : "hidden"}>
+          {visitedTabs.has("collaborations") && <CollaborationRequests demo={demo} />}
         </div>
         <div className={activeTab === "users" ? "block" : "hidden"}>
           {visitedTabs.has("users") && <UsersTab demo={demo} />}

@@ -33,6 +33,10 @@ export const Colors = {
 };
 
 export const Radii = {
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 20,
   button: 12,
   card: 16,
   dialog: 20,

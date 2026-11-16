@@ -53,6 +53,16 @@ export const API_ENDPOINTS = {
   homestayLeadsExport: () => `${API_BASE_URL}/admin/homestay-leads/export`,
   homestayLeadDelete: (id: string) => `${API_BASE_URL}/admin/homestay-leads/${id}`,
   resetPinLock: (id: string) => `${API_BASE_URL}/admin/cab-requests/${id}/reset-pin`,
+  influencersAdmin: (query?: string) => `${API_BASE_URL}/admin/influencers${query ? `?${query}` : ""}`,
+  influencerAdmin: (id: string) => `${API_BASE_URL}/admin/influencers/${id}`,
+  influencerCreate: () => `${API_BASE_URL}/admin/influencers`,
+  influencerUpdate: (id: string) => `${API_BASE_URL}/admin/influencers/${id}`,
+  influencerDelete: (id: string) => `${API_BASE_URL}/admin/influencers/${id}`,
+  influencerToggleStatus: (id: string) => `${API_BASE_URL}/admin/influencers/${id}/toggle-status`,
+  collaborationRequestsAdmin: (query?: string) => `${API_BASE_URL}/admin/collaboration-requests${query ? `?${query}` : ""}`,
+  collaborationRequestAdminStats: () => `${API_BASE_URL}/admin/collaboration-requests/stats`,
+  collaborationRequestAdmin: (id: string) => `${API_BASE_URL}/admin/collaboration-requests/${id}`,
+  collaborationRequestUpdateStatus: (id: string) => `${API_BASE_URL}/admin/collaboration-requests/${id}/status`,
 };
 
 export const SOCKET_SERVER_URL = API_BASE_URL.replace(/\/api\/v1\/?$/, "");

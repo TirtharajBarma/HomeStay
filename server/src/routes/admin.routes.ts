@@ -4,6 +4,7 @@ import { verifyToken, requireRole, requireLiveAdmin } from "../middlewares/auth.
 import { Property } from "../models/property.model.js";
 import stayrideAdmin from "./stayride-admin.routes.js";
 import whatsappAdmin from "./whatsapp-admin.routes.js";
+import influencerAdmin from "./influencer-admin.routes.js";
 
 const router = Router();
 
@@ -27,5 +28,8 @@ router.use(stayrideAdmin);
 
 // WhatsApp Inbox administration
 router.use("/whatsapp", whatsappAdmin);
+
+// Influencer & Collaboration administration
+router.use(influencerAdmin);
 
 export default router;

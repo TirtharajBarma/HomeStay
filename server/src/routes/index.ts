@@ -9,6 +9,8 @@ import authRoutes from "./auth.routes.js";
 import adminRoutes from "./admin.routes.js";
 import uploadRoutes from "./upload.routes.js";
 import telemetryRoutes from "./telemetry.routes.js";
+import influencerRoutes from "./influencer.routes.js";
+import collaborationRoutes from "./collaboration.routes.js";
 import { IcalController } from "../controllers/ical.controller.js";
 import { verifyToken, requireRole } from "../middlewares/auth.js";
 import { Newsletter } from "../models/newsletter.model.js";
@@ -44,6 +46,8 @@ apiRouter.use("/guests", guestRoutes);
 apiRouter.use("/drivers", driverRoutes);
 apiRouter.use("/cabs", driverRoutes); // Alias for client-side
 apiRouter.use("/analytics", analyticsRoutes);
+apiRouter.use("/influencers", influencerRoutes);
+apiRouter.use("/collaboration-requests", collaborationRoutes);
 apiRouter.get("/ical/export/:codeOrSlug", IcalController.exportIcal);
 
 // Inbound sync mutates bookings and makes the server fetch an attacker-supplied URL, so it must be

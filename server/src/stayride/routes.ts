@@ -51,6 +51,8 @@ import { verifyWebhook } from '@clerk/express/webhooks';
 import { config } from '../config/env.js';
 import uploadRoutes from '../routes/upload.routes.js';
 import telemetryRoutes from '../routes/telemetry.routes.js';
+import influencerRoutes from '../routes/influencer.routes.js';
+import collaborationRoutes from '../routes/collaboration.routes.js';
 import { logger } from '../utils/logger.js';
 
 interface StayRideAuthPayload {
@@ -2909,5 +2911,9 @@ stayrideV1Router.post('/dev/seed', demoOnly, async (_req: Request, res: Response
   await tenantManager.resetDemoStore();
   res.json({ success: true, message: 'Demo data reset' });
 });
+
+// Promote: Influencers & Collaboration Requests for Homestay Owners
+stayrideV1Router.use('/influencers', influencerRoutes);
+stayrideV1Router.use('/collaboration-requests', collaborationRoutes);
 
 export default stayrideV1Router;
