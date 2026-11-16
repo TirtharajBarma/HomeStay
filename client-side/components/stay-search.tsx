@@ -53,7 +53,7 @@ export function StaySearch({ booking, filters, maxGuests }: StaySearchProps) {
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     router.push(
-      `${homeHref({ ...draft, guests }, { kind, petFriendly: filters.petFriendly })}#accommodations`,
+      homeHref({ ...draft, guests }, { kind, petFriendly: filters.petFriendly }),
     );
   }
 

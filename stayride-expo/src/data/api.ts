@@ -1,8 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { UserSession } from '../types';
 
-// Release builds default to EXPO_PUBLIC_API_URL or the Vercel production server.
-export const VERCEL_CLOUD_URL = 'https://home-stay-ten.vercel.app/v1';
+// Release builds default to EXPO_PUBLIC_API_URL or the production StayCabs API server.
+export const VERCEL_CLOUD_URL = 'https://api.staycabs.in/v1';
 export const DEFAULT_BASE_URL =
   process.env.EXPO_PUBLIC_API_URL || VERCEL_CLOUD_URL;
 

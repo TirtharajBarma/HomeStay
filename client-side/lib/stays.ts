@@ -156,8 +156,8 @@ function propertyToStay(p: Raw): Stay {
     blurb: str(p.bio) || `Welcome to ${name}. Peaceful mountain stay in ${str(p.town) || "Darjeeling"}.`,
     amenities: ["Verified Local Host", "Mountain Transfers", "Door-to-door Cab", "Home Cooked Meals"],
     highlight: { icon: "verified", label: "Verified Estate" },
-    rating: 4.9,
-    reviewCount: 14,
+    rating: num(p.reviewCount) > 0 && num(p.rating) > 0 ? num(p.rating) : null,
+    reviewCount: num(p.reviewCount),
     eyebrow: `${str(p.town) || "Darjeeling"} Hills`,
     intro: str(p.bio) || `Welcome to ${name}. View accommodation details, contact your host directly, or book your door-to-door hill cab transfer.`,
     image: defaultImage,
@@ -179,6 +179,7 @@ function propertyToStay(p: Raw): Stay {
 
 /** Filter out test/audit properties and demo seed entities */
 function isTestEntity(e: Raw): boolean {
+  if (e.isTest === true || e.isDemo === true || e.status === "suspended") return true;
   const em = str(e.email).toLowerCase();
   const slug = str(e.slug || e.code).toLowerCase();
   const name = str(e.name || e.title).toLowerCase();

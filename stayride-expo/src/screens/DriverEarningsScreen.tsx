@@ -113,8 +113,8 @@ export const DriverEarningsScreen: React.FC = () => {
   const completedTrips = driverTrips.filter((t) => t.assignedToMe && t.status === 'COMPLETED');
   const sumNet = (list: typeof completedTrips) =>
     list.reduce((sum, t) => sum + (typeof t.driverNetPayout === 'number' ? t.driverNetPayout : 0), 0);
-  const settledTotal = sumNet(completedTrips.filter((t) => t.driverSettlementStatus === 'SETTLED'));
-  const pendingTotal = sumNet(completedTrips.filter((t) => t.driverSettlementStatus !== 'SETTLED'));
+  const settledTotal = sumNet(completedTrips.filter((t) => t.driverSettlementStatus === 'SETTLED' || t.driverSettlementStatus === 'NONE'));
+  const pendingTotal = sumNet(completedTrips.filter((t) => t.driverSettlementStatus === 'PENDING'));
   const money = (v?: number | null) => (typeof v === 'number' ? formatINR(v) : '—');
 
   const availableBalance = wallet?.available ?? 0;

@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, Modal, Alert } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -51,6 +51,7 @@ const Section: React.FC<{ icon: IconName; title: string; right?: React.ReactNode
 
 export const FindDriverScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
+  const route = useRoute<any>();
   const insets = useSafeAreaInsets();
   const { homestay, drivers, guests, bookings, trips, bookDriver, createTrip, features, config } = useStayRide();
   // Pickup times, booking window, presets and vehicle classes are the admin's settings (from the server)
@@ -102,9 +103,11 @@ export const FindDriverScreen: React.FC = () => {
   }));
 
   // Passenger selection
-  // Default passenger: a currently checked-in guest, otherwise nobody
+  // Default passenger: passed via route params, or a currently checked-in guest, otherwise nobody
+  const initialGuestId = route.params?.guestId;
+  const initialGuest = initialGuestId ? guests.find((g) => g.id === initialGuestId) : null;
   const checkedIn = (g: Guest) => bookings.some((b) => b.status === 'CHECKED_IN' && (b.guestId === g.id || b.phone === g.phone));
-  const [selectedGuest, setSelectedGuest] = useState<Guest | null>(() => guests.find(checkedIn) || null);
+  const [selectedGuest, setSelectedGuest] = useState<Guest | null>(() => initialGuest || guests.find(checkedIn) || null);
   const [customGuestName, setCustomGuestName] = useState('');
   const [customGuestPhone, setCustomGuestPhone] = useState('');
   const [isCustomPassenger, setIsCustomPassenger] = useState(() => guests.length === 0);
@@ -254,23 +257,20 @@ export const FindDriverScreen: React.FC = () => {
     const passenger = getPassengerInfo();
     setIsSearching(true);
     try {
-      const [trip] = await Promise.all([
-        createTrip({
-          guestName: passenger.name,
-          phone: passenger.phone,
-          pickup,
-          ...pinFields,
-          destination: cleanDestinationSummary(),
-          destinations: formattedDestinations(),
-          date: pickupDate,
-          time: selectedTime,
-          passengers,
-          vehicleType,
-          source: 'NEARBY_BROADCAST',
-          dispatchMode: 'PLATFORM',
-        }),
-        new Promise((resolve) => setTimeout(resolve, 3500)), // 3.5s buffer with radar scanning animation
-      ]);
+      const trip = await createTrip({
+        guestName: passenger.name,
+        phone: passenger.phone,
+        pickup,
+        ...pinFields,
+        destination: cleanDestinationSummary(),
+        destinations: formattedDestinations(),
+        date: pickupDate,
+        time: selectedTime,
+        passengers,
+        vehicleType,
+        source: 'NEARBY_BROADCAST',
+        dispatchMode: 'PLATFORM',
+      });
       setLastCreatedTrip(trip);
       setIsSearching(false);
       setBroadcastSuccessModalVisible(true);

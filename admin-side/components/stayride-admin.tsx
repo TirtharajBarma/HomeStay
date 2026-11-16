@@ -3,7 +3,7 @@
 // StayRide platform admin desks. Every value shown comes from the server; missing money is "—",
 // never a made-up default. Every server error is surfaced (adminApi throws its message).
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { adminApi } from "@/lib/api-config";
+import { adminApi, API_ENDPOINTS, apiFetch } from "@/lib/api-config";
 
 type Any = Record<string, any>;
 type TabProps = { demo: boolean };
@@ -1606,6 +1606,7 @@ function AddDriverModal({ demo, initialDriver, onClose, onAdded }: { demo: boole
       await adminApi("/stayride/drivers", {
         method: "POST",
         body: {
+          driverId: initialDriver?.id || initialDriver?._id || undefined,
           name: name.trim(),
           phone: cleanPhone,
           email: email.trim() || undefined,
@@ -2661,12 +2662,22 @@ function AdminBookCabModal({
 export function CabRequestsTab({ demo, initialTenantKey, initialFilter }: TabProps & { initialTenantKey?: string; initialFilter?: string }) {
   const [viewMode, setViewMode] = useState<"board" | "split">("board");
   const [mobileSplitView, setMobileSplitView] = useState<"queue" | "details">("queue");
-  const [stageFilter, setStageFilter] = useState<string>("all");
+  const [stageFilter, setStageFilter] = useState<string>(initialFilter || "all");
   const [tenantKey, setTenantKey] = useState(initialTenantKey || "");
   const [tenantQuery, setTenantQuery] = useState(initialTenantKey || "");
   const [createOpen, setCreateOpen] = useState(false);
   const [page, setPage] = useState(0);
   const [selectedId, setSelectedId] = useState<string>("");
+
+  useEffect(() => {
+    if (initialFilter) setStageFilter(initialFilter);
+  }, [initialFilter]);
+  useEffect(() => {
+    if (initialTenantKey) {
+      setTenantKey(initialTenantKey);
+      setTenantQuery(initialTenantKey);
+    }
+  }, [initialTenantKey]);
 
   const { data: summaryData, reload: reloadSummary } = useLoad(
     () => adminApi("/stayride/summary", { demo }).then((r) => r.data as Any),
@@ -3405,6 +3416,21 @@ function CabRequestCard({ c, demo, onChanged }: { c: Any; demo: boolean; onChang
           {c.advanceDueAt && !c.advancePaid && (
             <div className="p-2.5 rounded-xl bg-amber-950/30 border border-amber-800/40 text-amber-300 text-xs">
               Advance due by {dt(c.advanceDueAt)}
+            </div>
+          )}
+          {typeof c.pickupOtpAttempts === "number" && c.pickupOtpAttempts > 0 && (
+            <div className={`p-2.5 rounded-xl border text-xs flex items-center justify-between gap-2.5 ${c.pickupOtpAttempts >= 5 ? "bg-rose-950/40 border-rose-800/60 text-rose-300" : "bg-amber-950/30 border-amber-800/40 text-amber-300"}`}>
+              <div>
+                <span className="font-semibold">{c.pickupOtpAttempts >= 5 ? "⚠️ Boarding PIN Locked (5/5 failed attempts)" : `Boarding PIN attempts: ${c.pickupOtpAttempts}/5`}</span>
+                <p className="text-[11px] text-slate-300 mt-0.5">Passenger Boarding PIN: <strong className="font-mono text-white tracking-widest">{c.pickupOtp || "—"}</strong></p>
+              </div>
+              <button
+                type="button"
+                onClick={() => post("reset-pin")}
+                className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-medium text-xs transition cursor-pointer shrink-0 border border-slate-700"
+              >
+                Reset PIN Lock
+              </button>
             </div>
           )}
           {claim && (
@@ -5609,6 +5635,404 @@ function GuestRow({ g, demo, onChanged }: { g: Any; demo: boolean; onChanged: ()
         </div>
       </td>
     </tr>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 12. Leads & Marketing (Inbound Homestay Registrations & Newsletter Subscribers)
+// ---------------------------------------------------------------------------
+export function LeadsTab({ demo }: TabProps) {
+  const [activeSubTab, setActiveSubTab] = useState<"leads" | "newsletter">("leads");
+  const [leads, setLeads] = useState<Any[]>([]);
+  const [leadsTotal, setLeadsTotal] = useState(0);
+  const [leadsStatus, setLeadsStatus] = useState<string>("all");
+  const [leadsSearch, setLeadsSearch] = useState<string>("");
+  const [leadsLoading, setLeadsLoading] = useState(true);
+  const [leadsError, setLeadsError] = useState("");
+
+  const [subs, setSubs] = useState<Any[]>([]);
+  const [subsTotal, setSubsTotal] = useState(0);
+  const [subsSearch, setSubsSearch] = useState<string>("");
+  const [subsLoading, setSubsLoading] = useState(false);
+  const [subsError, setSubsError] = useState("");
+
+  const [busyId, setBusyId] = useState<string>("");
+
+  const fetchLeads = useCallback(async () => {
+    try {
+      setLeadsLoading(true);
+      setLeadsError("");
+      const params = new URLSearchParams();
+      if (leadsStatus !== "all") params.set("status", leadsStatus);
+      if (leadsSearch.trim()) params.set("q", leadsSearch.trim());
+      const res = await adminApi(`/homestay-leads?${params.toString()}`, { demo });
+      if (res?.data) {
+        setLeads(res.data.items || []);
+        setLeadsTotal(res.data.total || 0);
+      }
+    } catch (e: any) {
+      setLeadsError(e?.message || "Failed to load homestay leads.");
+    } finally {
+      setLeadsLoading(false);
+    }
+  }, [demo, leadsStatus, leadsSearch]);
+
+  const fetchSubs = useCallback(async () => {
+    try {
+      setSubsLoading(true);
+      setSubsError("");
+      const params = new URLSearchParams();
+      if (subsSearch.trim()) params.set("q", subsSearch.trim());
+      const res = await adminApi(`/newsletter?${params.toString()}`, { demo });
+      if (res?.data) {
+        setSubs(res.data.items || []);
+        setSubsTotal(res.data.total || 0);
+      }
+    } catch (e: any) {
+      setSubsError(e?.message || "Failed to load newsletter subscribers.");
+    } finally {
+      setSubsLoading(false);
+    }
+  }, [demo, subsSearch]);
+
+  useEffect(() => {
+    if (activeSubTab === "leads") fetchLeads();
+    else fetchSubs();
+  }, [activeSubTab, fetchLeads, fetchSubs]);
+
+  async function updateLeadStatus(id: string, newStatus: string) {
+    setBusyId(id);
+    try {
+      await adminApi(`/homestay-leads/${id}`, {
+        method: "PATCH",
+        body: { status: newStatus },
+        demo,
+      });
+      fetchLeads();
+    } catch (e: any) {
+      alert(e?.message || "Could not update lead status.");
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  async function updateLeadNotes(id: string, currentNotes: string) {
+    const notes = window.prompt("Operator follow-up notes for this homestay lead:", currentNotes || "");
+    if (notes === null) return;
+    setBusyId(id);
+    try {
+      await adminApi(`/homestay-leads/${id}`, {
+        method: "PATCH",
+        body: { notes: notes.trim() },
+        demo,
+      });
+      fetchLeads();
+    } catch (e: any) {
+      alert(e?.message || "Could not update notes.");
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  async function deleteLead(id: string, name: string) {
+    if (!window.confirm(`Delete lead "${name}"? This cannot be undone.`)) return;
+    setBusyId(id);
+    try {
+      await adminApi(`/homestay-leads/${id}`, { method: "DELETE", demo });
+      fetchLeads();
+    } catch (e: any) {
+      alert(e?.message || "Could not delete lead.");
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  async function deleteSub(id: string, email: string) {
+    if (!window.confirm(`Unsubscribe and remove "${email}"?`)) return;
+    setBusyId(id);
+    try {
+      await adminApi(`/newsletter/${id}`, { method: "DELETE", demo });
+      fetchSubs();
+    } catch (e: any) {
+      alert(e?.message || "Could not remove subscriber.");
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  async function exportCsv(type: "leads" | "newsletter") {
+    try {
+      const endpoint = type === "leads" ? API_ENDPOINTS.homestayLeadsExport() : API_ENDPOINTS.newsletterExport();
+      const res = await apiFetch(endpoint);
+      if (!res.ok) throw new Error("Export failed");
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = type === "leads" ? "homestay_leads.csv" : "newsletter_subscribers.csv";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (e: any) {
+      alert(e?.message || "Could not export CSV.");
+    }
+  }
+
+  return (
+    <div className="space-y-5">
+      {/* Sub-navigation bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-[#121820] p-3 rounded-2xl border border-slate-800">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveSubTab("leads")}
+            className={`px-4 py-2 rounded-xl text-xs font-semibold transition cursor-pointer flex items-center gap-2 ${
+              activeSubTab === "leads"
+                ? "bg-[#1E7E4B] text-white shadow-md"
+                : "text-slate-400 hover:text-white hover:bg-slate-800"
+            }`}
+          >
+            <span className="material-symbols-outlined text-base">villa</span>
+            <span>Homestay Partner Leads</span>
+            <span className="px-1.5 py-0.5 rounded-full bg-black/30 text-[10px] font-mono">{leadsTotal}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveSubTab("newsletter")}
+            className={`px-4 py-2 rounded-xl text-xs font-semibold transition cursor-pointer flex items-center gap-2 ${
+              activeSubTab === "newsletter"
+                ? "bg-[#1E7E4B] text-white shadow-md"
+                : "text-slate-400 hover:text-white hover:bg-slate-800"
+            }`}
+          >
+            <span className="material-symbols-outlined text-base">mail</span>
+            <span>Newsletter Subscribers</span>
+            <span className="px-1.5 py-0.5 rounded-full bg-black/30 text-[10px] font-mono">{subsTotal}</span>
+          </button>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => exportCsv(activeSubTab)}
+          className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium transition cursor-pointer flex items-center gap-1.5 border border-slate-700"
+        >
+          <span className="material-symbols-outlined text-base">download</span>
+          <span>Export {activeSubTab === "leads" ? "Leads" : "Subscribers"} CSV</span>
+        </button>
+      </div>
+
+      {/* Sub-tab 1: Homestay Partner Leads */}
+      {activeSubTab === "leads" && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+              {["all", "NEW", "CONTACTED", "ONBOARDED", "REJECTED"].map((st) => (
+                <button
+                  key={st}
+                  type="button"
+                  onClick={() => setLeadsStatus(st)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition capitalize cursor-pointer ${
+                    leadsStatus === st
+                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-semibold"
+                      : "bg-[#121820] text-slate-400 hover:text-white border border-slate-800"
+                  }`}
+                >
+                  {st === "all" ? "All Leads" : st.toLowerCase()}
+                </button>
+              ))}
+            </div>
+
+            <div className="relative w-full sm:w-64">
+              <input
+                type="text"
+                placeholder="Search by name, phone, town..."
+                value={leadsSearch}
+                onChange={(e) => setLeadsSearch(e.target.value)}
+                className="w-full rounded-xl bg-[#121820] border border-slate-800 px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+          </div>
+
+          {leadsError && (
+            <div className="p-3 rounded-xl bg-red-950/40 border border-red-800 text-red-300 text-xs">
+              {leadsError}
+            </div>
+          )}
+
+          {leadsLoading ? (
+            <div className="p-12 text-center text-slate-500 text-xs font-mono">Loading homestay registrations...</div>
+          ) : leads.length === 0 ? (
+            <div className="p-12 text-center bg-[#121820] rounded-2xl border border-slate-800 text-slate-400 text-xs space-y-1">
+              <p className="font-semibold text-white">No homestay leads found</p>
+              <p className="text-slate-500">Inbound registrations from the landing page quick signup form will appear here.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-[#121820]">
+              <table className="w-full text-left text-xs text-slate-300">
+                <thead className="bg-[#0D1117] text-slate-400 border-b border-slate-800 text-[11px] font-medium uppercase tracking-wider">
+                  <tr>
+                    <th className="py-3 px-4">Homestay / Host</th>
+                    <th className="py-3 px-4">Phone / WhatsApp</th>
+                    <th className="py-3 px-4">Location</th>
+                    <th className="py-3 px-4">Rooms</th>
+                    <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-4">Notes</th>
+                    <th className="py-3 px-4">Registered</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60 font-sans">
+                  {leads.map((l: Any) => {
+                    const waText = encodeURIComponent(`Namaste ${l.name}! This is the StayCabs operations desk regarding your homestay registration.`);
+                    return (
+                      <tr key={l.id} className="hover:bg-slate-800/30 transition">
+                        <td className="py-3 px-4">
+                          <span className="font-semibold text-white block">{l.name}</span>
+                          <span className="text-[10px] text-slate-500 font-mono">ID: {l.id.slice(-6)}</span>
+                        </td>
+                        <td className="py-3 px-4 font-mono">
+                          <a
+                            href={`https://wa.me/91${l.phone}?text=${waText}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-emerald-400 hover:text-emerald-300 font-semibold"
+                            title="Chat on WhatsApp"
+                          >
+                            <span>+91 {l.phone}</span>
+                            <span className="material-symbols-outlined text-sm">chat</span>
+                          </a>
+                        </td>
+                        <td className="py-3 px-4">{l.location}</td>
+                        <td className="py-3 px-4 font-mono">{l.rooms} rooms</td>
+                        <td className="py-3 px-4">
+                          <select
+                            value={l.status || "NEW"}
+                            disabled={busyId === l.id}
+                            onChange={(e) => updateLeadStatus(l.id, e.target.value)}
+                            className={`rounded-lg px-2 py-1 text-[11px] font-semibold border transition cursor-pointer ${
+                              l.status === "ONBOARDED"
+                                ? "bg-emerald-950/60 text-emerald-300 border-emerald-800"
+                                : l.status === "CONTACTED"
+                                ? "bg-amber-950/60 text-amber-300 border-amber-800"
+                                : l.status === "REJECTED"
+                                ? "bg-slate-900 text-slate-400 border-slate-800"
+                                : "bg-blue-950/60 text-blue-300 border-blue-800"
+                            }`}
+                          >
+                            <option value="NEW">NEW</option>
+                            <option value="CONTACTED">CONTACTED</option>
+                            <option value="ONBOARDED">ONBOARDED</option>
+                            <option value="REJECTED">REJECTED</option>
+                          </select>
+                        </td>
+                        <td className="py-3 px-4 max-w-xs truncate" title={l.notes}>
+                          <button
+                            type="button"
+                            onClick={() => updateLeadNotes(l.id, l.notes)}
+                            className="text-slate-400 hover:text-slate-200 text-left underline decoration-slate-700 underline-offset-2"
+                          >
+                            {l.notes ? l.notes : "+ Add note"}
+                          </button>
+                        </td>
+                        <td className="py-3 px-4 text-slate-400 font-mono text-[11px]">
+                          {l.createdAt ? new Date(l.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : "—"}
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => deleteLead(l.id, l.name)}
+                            disabled={busyId === l.id}
+                            className="text-slate-500 hover:text-rose-400 p-1 transition cursor-pointer"
+                            title="Delete Lead"
+                          >
+                            <span className="material-symbols-outlined text-base">delete</span>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Sub-tab 2: Newsletter Subscribers */}
+      {activeSubTab === "newsletter" && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span className="text-xs text-slate-400">
+              Total active newsletter email subscribers: <strong className="font-mono text-white">{subsTotal}</strong>
+            </span>
+
+            <div className="relative w-full sm:w-64">
+              <input
+                type="text"
+                placeholder="Search email address..."
+                value={subsSearch}
+                onChange={(e) => setSubsSearch(e.target.value)}
+                className="w-full rounded-xl bg-[#121820] border border-slate-800 px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+          </div>
+
+          {subsError && (
+            <div className="p-3 rounded-xl bg-red-950/40 border border-red-800 text-red-300 text-xs">
+              {subsError}
+            </div>
+          )}
+
+          {subsLoading ? (
+            <div className="p-12 text-center text-slate-500 text-xs font-mono">Loading subscribers...</div>
+          ) : subs.length === 0 ? (
+            <div className="p-12 text-center bg-[#121820] rounded-2xl border border-slate-800 text-slate-400 text-xs space-y-1">
+              <p className="font-semibold text-white">No subscribers found</p>
+              <p className="text-slate-500">Subscribers who sign up via footer or stay pages will appear here.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-[#121820]">
+              <table className="w-full text-left text-xs text-slate-300">
+                <thead className="bg-[#0D1117] text-slate-400 border-b border-slate-800 text-[11px] font-medium uppercase tracking-wider">
+                  <tr>
+                    <th className="py-3 px-4">Subscriber Email</th>
+                    <th className="py-3 px-4">Source</th>
+                    <th className="py-3 px-4">Subscribed At</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60 font-sans">
+                  {subs.map((s: Any) => (
+                    <tr key={s.id} className="hover:bg-slate-800/30 transition">
+                      <td className="py-3 px-4 font-mono font-medium text-white">{s.email}</td>
+                      <td className="py-3 px-4">
+                        <span className="px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 text-[10px] font-mono">
+                          {s.source || "website"}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-slate-400 font-mono text-[11px]">
+                        {s.createdAt ? new Date(s.createdAt).toLocaleString("en-IN") : "—"}
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <button
+                          type="button"
+                          onClick={() => deleteSub(s.id, s.email)}
+                          disabled={busyId === s.id}
+                          className="text-slate-500 hover:text-rose-400 p-1 transition cursor-pointer"
+                          title="Remove subscriber"
+                        >
+                          <span className="material-symbols-outlined text-base">delete</span>
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

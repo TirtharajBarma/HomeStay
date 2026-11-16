@@ -149,7 +149,7 @@ function Confirmation({
           Return to {stay.name}
         </Link>
         <Link
-          href={`/?checkIn=${booking.checkIn}&checkOut=${booking.checkOut}&guests=${booking.guests}#accommodations`}
+          href={`/?checkIn=${booking.checkIn}&checkOut=${booking.checkOut}&guests=${booking.guests}`}
           className="flex-1 rounded-xl bg-primary py-3 text-center text-label-md font-medium text-on-primary transition-colors hover:bg-primary-container active:opacity-90"
         >
           Explore more stays

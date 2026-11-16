@@ -1908,7 +1908,8 @@ export async function autoSelectLowestQuotes(isDemo: boolean, extra: Record<stri
 
     let winningQuote: any = null;
 
-    const fareOf = (q: any) => (q.counterFare && q.counterFare > 0 ? Math.min(q.quotedFare, q.counterFare) : q.quotedFare);
+    // Fare is always the driver's own quoted fare. Host counter-offers are not binding unless the driver explicitly accepted them.
+    const fareOf = (q: any) => Number(q.quotedFare) || 0;
 
     if (availableOwnQuotes.length > 0) {
       // Priority Tier: Own homestay drivers win automatically. If tied, higher rating wins, then earliest quote.
@@ -1955,8 +1956,7 @@ export async function autoSelectLowestQuotes(isDemo: boolean, extra: Record<stri
         isDemo,
         doc.reference,
         String(winningQuote.driverId),
-        isOwn(winningQuote) ? 'system:priority-own-driver' : 'system:lowest-pool-bid',
-        winningQuote.counterFare ?? undefined
+        isOwn(winningQuote) ? 'system:priority-own-driver' : 'system:lowest-pool-bid'
       );
       await Cab.updateOne({ _id: doc._id }, { $set: { autoAccepted: true } });
       autoSelectedCount++;
@@ -2689,6 +2689,23 @@ export async function adminReviewNoPin(isDemo: boolean, id: string, decision: un
   const s = doc.financialSnapshot || {};
   await audit(actor, 'cab.no_show', 'CabRequest', id, { ref: doc.reference, reason: why, refundDue: paidMoney ? doc.advanceAmount : 0, heldCommission: s.homestayCommissionAmount || 0, heldDriverShare: s.driverShareOfAdvance || 0 }, isDemo, scope(updated));
   await pushOwner(isDemo, String(doc.propertyId), { title: 'Trip marked no-show', body: `Trip ${doc.reference} was marked a no-show. The guest's advance is refunded and no commission is paid for it.`, data: tripData(doc, 'TRIP_NO_SHOW') }).catch(() => {});
+  return updated;
+}
+
+/**
+ * Admin unlocks a ride locked out due to exceeding maximum PIN attempts (5 wrong guesses).
+ * Resets pickupOtpAttempts to 0 so the driver can verify the passenger's PIN and start the trip.
+ */
+export async function adminResetPinLock(isDemo: boolean, id: string, actor: string) {
+  const Model = cabModel(isDemo);
+  const doc: any = await Model.findById(id).lean();
+  if (!doc) throw httpError(404, 'Trip not found');
+  const updated = await Model.findByIdAndUpdate(
+    id,
+    { $set: { pickupOtpAttempts: 0 } },
+    { new: true }
+  );
+  await audit(actor, 'cab.pin_reset', 'CabRequest', id, { ref: doc.reference, previousAttempts: doc.pickupOtpAttempts || 0 }, isDemo, scope(doc));
   return updated;
 }
 

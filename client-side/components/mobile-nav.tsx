@@ -17,7 +17,7 @@ export type NavLink = {
 
 export function MobileNav({
   links,
-  checkDatesHref = "/#search-bar",
+  checkDatesHref = "/#launchpad",
 }: {
   links: NavLink[];
   checkDatesHref?: string;
@@ -98,12 +98,20 @@ export function MobileNav({
             ))}
           </nav>
 
-          <div className="mt-5">
+          <div className="mt-5 space-y-2">
             <Link
-              href={checkDatesHref}
-              className="flex min-h-11 w-full items-center justify-center rounded-lg bg-primary px-4 text-label-md font-medium text-on-primary transition-colors hover:bg-primary-container"
+              href="/cab-request"
+              className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-primary/25 bg-primary-fixed/80 px-4 text-label-md font-semibold text-primary transition-colors hover:bg-primary-fixed"
             >
-              Check availability
+              <Icon name="local_taxi" className="text-base" />
+              <span>Book a Mountain Cab</span>
+            </Link>
+            <Link
+              href="/#register"
+              className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-label-md font-semibold text-on-primary shadow-xs transition-colors hover:bg-primary-container"
+            >
+              <Icon name="cottage" className="text-base" />
+              <span>Register Your Homestay (Free)</span>
             </Link>
           </div>
         </div>

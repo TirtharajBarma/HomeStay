@@ -30,6 +30,8 @@ export interface IProperty extends Document {
   currency: string;
   propertyType?: "homestay" | "hostel" | "hotel" | "resort";
   status: "active" | "pending" | "paused" | "suspended";
+  isTest?: boolean;
+  isDemo?: boolean;
   commissionRate: number;
   platformFeePercent?: number | null;
   homestayCommissionPercent?: number | null;
@@ -97,6 +99,8 @@ const PropertySchema = new Schema<IProperty>(
       default: "active",
       index: true,
     },
+    isTest: { type: Boolean, default: false, index: true },
+    isDemo: { type: Boolean, default: false, index: true },
     commissionRate: { type: Number, default: 0.18 },
     platformFeePercent: { type: Number, default: null },
     homestayCommissionPercent: { type: Number, default: null },

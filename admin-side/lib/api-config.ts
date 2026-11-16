@@ -45,6 +45,14 @@ export const API_ENDPOINTS = {
   whatsappTemplates: () => `${API_BASE_URL}/admin/whatsapp/templates`,
   whatsappCustomerInfo: (phone: string, demo?: boolean) => `${API_BASE_URL}/admin/whatsapp/customer-info?phone=${encodeURIComponent(phone)}${demo ? "&demo=true" : ""}`,
   whatsappStream: (demo?: boolean) => `${API_BASE_URL}/admin/whatsapp/stream${demo ? "?demo=true" : ""}`,
+  newsletter: (query?: string) => `${API_BASE_URL}/admin/newsletter${query ? `?${query}` : ""}`,
+  newsletterExport: () => `${API_BASE_URL}/admin/newsletter/export`,
+  newsletterDelete: (id: string) => `${API_BASE_URL}/admin/newsletter/${id}`,
+  homestayLeads: (query?: string) => `${API_BASE_URL}/admin/homestay-leads${query ? `?${query}` : ""}`,
+  homestayLeadUpdate: (id: string) => `${API_BASE_URL}/admin/homestay-leads/${id}`,
+  homestayLeadsExport: () => `${API_BASE_URL}/admin/homestay-leads/export`,
+  homestayLeadDelete: (id: string) => `${API_BASE_URL}/admin/homestay-leads/${id}`,
+  resetPinLock: (id: string) => `${API_BASE_URL}/admin/cab-requests/${id}/reset-pin`,
 };
 
 export const SOCKET_SERVER_URL = API_BASE_URL.replace(/\/api\/v1\/?$/, "");

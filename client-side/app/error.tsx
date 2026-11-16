@@ -43,7 +43,7 @@ export default function Error({
             Something interrupted this trail
           </h2>
           <p className="mt-2 text-body-sm text-on-surface-variant leading-relaxed">
-            {error?.message || "An unexpected issue occurred while loading this page. Please try again or return to accommodations."}
+            {error?.message || "An unexpected issue occurred while loading this page. Please try again or return to the homepage."}
           </p>
         </div>
         <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
@@ -58,7 +58,7 @@ export default function Error({
             href="/"
             className="w-full sm:flex-1 rounded-lg border border-outline-variant/60 bg-surface-container-low py-2.5 px-4 text-label-md font-medium text-on-surface hover:border-primary/40 transition-colors"
           >
-            Accommodations
+            Return home
           </Link>
         </div>
       </div>

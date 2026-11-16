@@ -45,8 +45,8 @@ export function NewsletterForm() {
       <p className="flex items-center gap-2 rounded-xl border border-primary/30 bg-primary-fixed/30 px-4 py-3 text-body-sm text-on-primary-fixed">
         <Icon name="check_circle" className="text-lg text-primary" />
         <span>
-          Noted — we will write to <span className="font-semibold">{email.trim()}</span> when the
-          autumn dates open.
+          Thank you! We will send hill transit updates and platform news to{" "}
+          <span className="font-semibold">{email.trim()}</span>.
         </span>
       </p>
     );
@@ -58,7 +58,7 @@ export function NewsletterForm() {
         htmlFor="newsletter-email"
         className="mb-1.5 block text-label-md text-on-surface-variant"
       >
-        Seasonal openings &amp; valley letters
+        Hill transit updates &amp; platform news
       </label>
       <div className="flex gap-2">
         <input

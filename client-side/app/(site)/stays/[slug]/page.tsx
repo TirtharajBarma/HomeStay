@@ -51,7 +51,7 @@ export default async function StayPage({ params, searchParams }: PageProps<"/sta
             href={homeHref(booking)}
             className="-mx-1 inline-flex min-h-11 items-center rounded px-1 hover:text-primary"
           >
-            Accommodations
+            Home
           </Link>
           <span className="text-outline-variant">/</span>
           <span className="text-outline-variant">{stay.kindLabel}</span>

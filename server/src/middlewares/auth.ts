@@ -25,14 +25,15 @@ declare global {
 
 export function verifyToken(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+  const queryToken = typeof req.query?.token === "string" ? req.query.token : undefined;
+  const token = (authHeader && authHeader.startsWith("Bearer ")) ? authHeader.split(" ")[1] : queryToken;
+
+  if (!token) {
     return res.status(401).json({
       success: false,
       error: "Authentication token missing or invalid format. Please use 'Bearer <token>'.",
     });
   }
-
-  const token = authHeader.split(" ")[1];
   try {
     const decoded = jwt.verify(token, config.jwtSecret) as AuthUserPayload & { aud?: string };
     // StayRide mobile tokens share the secret but are not valid for this API.

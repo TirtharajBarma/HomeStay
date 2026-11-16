@@ -14,14 +14,14 @@ export default function NotFound() {
           This path ends in the mountain mist.
         </h1>
         <p className="mt-3 text-body-md text-on-surface-variant leading-relaxed">
-          The page you were looking for is not on this trail. The accommodations catalogue is a short walk back.
+          The page you were looking for is not on this trail. Return to the homepage to explore our homestay platform and mountain routes.
         </p>
         <Link
-          href="/#accommodations"
+          href="/"
           className="mt-8 inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-label-md font-medium text-on-primary transition-colors hover:bg-primary-container"
         >
           <Icon name="arrow_back" className="text-[16px]" />
-          <span>Back to accommodations</span>
+          <span>Back to homepage</span>
         </Link>
       </div>
     </main>

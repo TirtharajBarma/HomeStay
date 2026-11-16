@@ -15,21 +15,21 @@ const navLinks = [
     active: true,
   },
   {
-    href: "/#features",
+    href: "/#story",
     label: "Features",
     hint: "Rooms, guests & cabs in one place",
     icon: "dashboard_customize",
     active: false,
   },
   {
-    href: "/#how-it-works",
-    label: "How It Works",
-    hint: "3 simple steps to get started",
-    icon: "alt_route",
+    href: "/cab-request",
+    label: "Guest Cabs",
+    hint: "Airport transfers & hill sightseeing",
+    icon: "local_taxi",
     active: false,
   },
   {
-    href: "/#hills",
+    href: "/#transit",
     label: "Built for Hills",
     hint: "Darjeeling, Kalimpong & Sikkim",
     icon: "landscape",
@@ -43,7 +43,7 @@ const navLinks = [
     active: false,
   },
   {
-    href: "/#pricing",
+    href: "/#launchpad",
     label: "Pricing",
     hint: "Completely free for homestay owners",
     icon: "currency_rupee",
@@ -96,7 +96,7 @@ export function SiteHeader() {
             Guest Cabs
           </Link>
           <a
-            href="#register"
+            href="/#register"
             className="inline-flex h-9 items-center rounded-lg bg-primary px-3.5 text-label-md font-semibold text-on-primary shadow-sm shadow-primary/25 transition-all hover:bg-primary-container active:scale-95"
           >
             Get Started Free
@@ -160,7 +160,7 @@ export function CheckoutHeader() {
 }
 
 const progressSteps = [
-  { label: "Accommodations", short: "Stay", href: "/#accommodations" },
+  { label: "Accommodations", short: "Stay", href: "/" },
   { label: "Dates & details", short: "Details", href: "#stay-summary" },
 ];
 

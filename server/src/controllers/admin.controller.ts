@@ -49,7 +49,7 @@ export class AdminController {
         Promise.all([
           Property.countDocuments(),
           Room.countDocuments(),
-          Driver.countDocuments(),
+          Promise.all([Driver.countDocuments(), User.countDocuments({ role: "driver" })]).then(([d, u]) => Math.max(d, u)),
           Booking.countDocuments({ status: { $ne: "cancelled" } }),
           CabTrip.countDocuments(),
           User.countDocuments(),

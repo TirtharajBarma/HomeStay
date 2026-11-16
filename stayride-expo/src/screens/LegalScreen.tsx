@@ -90,7 +90,6 @@ export const LegalScreen: React.FC<{ doc?: LegalDoc; onClose?: () => void }> = (
   useEffect(() => {
     let cancelled = false;
     const initialFallback = getFallbackLegalDoc(activeDoc);
-    setPage(initialFallback);
     setError('');
 
     api
@@ -158,7 +157,10 @@ export const LegalScreen: React.FC<{ doc?: LegalDoc; onClose?: () => void }> = (
             <TouchableOpacity
               key={tab}
               style={[styles.segmentBtn, active && styles.segmentBtnActive]}
-              onPress={() => setActiveDoc(tab)}
+              onPress={() => {
+                setActiveDoc(tab);
+                setPage(getFallbackLegalDoc(tab));
+              }}
               accessibilityRole="tab"
               accessibilityState={{ selected: active }}
             >

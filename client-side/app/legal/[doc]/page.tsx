@@ -52,7 +52,7 @@ export default function LegalDocPage() {
       {/* Breadcrumb Navigation */}
       <nav aria-label="Breadcrumb" className="mb-6 flex flex-wrap items-center gap-1.5 text-label-sm text-outline">
         <Link href="/" className="hover:text-primary transition-colors">
-          Accommodations
+          Home
         </Link>
         <span>/</span>
         <span>Legal</span>

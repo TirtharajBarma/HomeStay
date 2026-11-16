@@ -4,14 +4,14 @@ import { useEffect, useState } from "react";
 import { useAdminAuth } from "@/components/auth-context";
 import { API_ENDPOINTS, apiFetch, readApiError } from "@/lib/api-config";
 import {
-  AppealsTab, AuditTab, inr, CabRequestsTab, DashboardTab, DriversTab, GuestsTab, HomestaysTab, NotificationBell, PayoutsTab, SettingsTab, UsersTab,
+  AppealsTab, AuditTab, inr, CabRequestsTab, DashboardTab, DriversTab, GuestsTab, HomestaysTab, LeadsTab, NotificationBell, PayoutsTab, SettingsTab, UsersTab,
 } from "@/components/stayride-admin";
 import { WhatsAppInbox } from "@/components/whatsapp-inbox";
 
 // The old Hill Hospitality portal: its data is not used by the StayRide app, so its "Suspend" and
 // "Settle UPI" do nothing there. Hidden unless NEXT_PUBLIC_SHOW_LEGACY_PORTAL=true.
 const SHOW_LEGACY = process.env.NEXT_PUBLIC_SHOW_LEGACY_PORTAL === "true";
-type Tab = "dashboard" | "whatsapp" | "users" | "homestays" | "guests" | "drivers" | "cab-requests" | "payouts" | "settings" | "appeals" | "audit" | "legacy";
+type Tab = "dashboard" | "whatsapp" | "users" | "homestays" | "guests" | "drivers" | "cab-requests" | "payouts" | "settings" | "appeals" | "audit" | "leads" | "legacy";
 const TABS: Array<[Tab, string, string]> = [
   ["dashboard", "monitoring", "Overview"],
   ["whatsapp", "chat", "WhatsApp Inbox"],
@@ -21,6 +21,7 @@ const TABS: Array<[Tab, string, string]> = [
   ["drivers", "badge", "Drivers"],
   ["cab-requests", "local_taxi", "Cab requests"],
   ["payouts", "account_balance_wallet", "Payouts"],
+  ["leads", "contact_mail", "Leads & Marketing"],
   ["settings", "tune", "Platform settings"],
   ["appeals", "verified_user", "Appeals"],
   ["audit", "history", "Audit log"],
@@ -385,6 +386,9 @@ export default function AdminDashboardPage() {
         </div>
         <div className={activeTab === "payouts" ? "block" : "hidden"}>
           {visitedTabs.has("payouts") && <PayoutsTab demo={demo} />}
+        </div>
+        <div className={activeTab === "leads" ? "block" : "hidden"}>
+          {visitedTabs.has("leads") && <LeadsTab demo={demo} />}
         </div>
         <div className={activeTab === "settings" ? "block" : "hidden"}>
           {visitedTabs.has("settings") && <SettingsTab demo={demo} />}

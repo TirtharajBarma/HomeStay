@@ -105,7 +105,6 @@ export const DriverProfileScreen: React.FC = () => {
         style: 'destructive',
         onPress: async () => {
           await logout();
-          navigation.replace('Login');
         },
       },
     ]);

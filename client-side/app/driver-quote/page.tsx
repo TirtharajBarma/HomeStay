@@ -5,6 +5,7 @@
 // the trip; guest contact details are never shown before the advance is paid.
 // Also includes the driver's Sovereign Wallet & Instant UPI Payout console.
 import React, { useEffect, useState, useCallback, Suspense } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Icon } from "@/components/icon";
 import { API_ENDPOINTS, apiFetch } from "@/lib/api-config";
@@ -387,12 +388,27 @@ function DriverQuoteContent() {
   if (error || !view) {
     return (
       <div className="min-h-screen bg-surface flex items-center justify-center p-6 font-body">
-        <div className="mx-auto max-w-md w-full rounded-2xl border border-outline-variant bg-white p-8 sm:p-10 text-center space-y-4 shadow-ambient">
+        <div className="mx-auto max-w-md w-full rounded-2xl border border-outline-variant bg-white p-8 sm:p-10 text-center space-y-5 shadow-ambient">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-red-50 text-red-600 border border-red-100">
             <Icon name="error_outline" className="text-2xl" />
           </div>
           <h1 className="font-display text-xl font-bold text-on-surface">Trip link not available</h1>
           <p className="text-xs text-outline leading-relaxed">{error || "This trip request has expired or was already assigned."}</p>
+          <div className="pt-2 flex flex-col gap-2">
+            <Link
+              href="/join-driver"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-primary-container transition-all"
+            >
+              <Icon name="directions_car" className="text-sm" />
+              <span>Join as Driver Partner</span>
+            </Link>
+            <Link
+              href="/"
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-outline-variant bg-white px-5 py-2 text-xs font-semibold text-on-surface hover:bg-surface-container-low transition-colors"
+            >
+              Return to Home
+            </Link>
+          </div>
         </div>
       </div>
     );

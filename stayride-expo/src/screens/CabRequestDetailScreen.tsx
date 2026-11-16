@@ -873,12 +873,13 @@ export const CabRequestDetailScreen: React.FC = () => {
 
         {!trip.platform && status === 'CONFIRMED' && (
           <>
-            <TouchableOpacity style={styles.solidBtn} onPress={handleStartTrip}>
+            <TouchableOpacity style={[styles.solidBtn, busy && { opacity: 0.6 }]} onPress={handleStartTrip} disabled={busy}>
               <Text style={styles.solidBtnText}>Start trip</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.outlineBtn, { borderColor: Colors.statusRed }]}
+              style={[styles.outlineBtn, { borderColor: Colors.statusRed }, busy && { opacity: 0.6 }]}
               onPress={handleConfirmCancel}
+              disabled={busy}
             >
               <Text style={[styles.outlineBtnText, { color: Colors.statusRed }]}>
                 Cancel trip

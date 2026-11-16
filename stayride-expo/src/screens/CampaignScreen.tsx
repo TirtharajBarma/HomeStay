@@ -8,6 +8,7 @@ import {
   Modal,
   TextInput,
   Alert,
+  Linking,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -73,12 +74,21 @@ export const CampaignScreen: React.FC = () => {
   const handleCampaignPress = (c: Campaign) => {
     if (c.status === 'CREATED') {
       Alert.alert(
-        'Send campaign?',
-        `Mark “${c.title}” as sent? Automatic WhatsApp delivery is not connected yet, so no messages will go out.`,
+        c.title,
+        `Choose an action for “${c.title}” (${c.recipients} recipients):`,
         [
-          { text: 'Not now', style: 'cancel' },
+          { text: 'Cancel', style: 'cancel' },
           {
-            text: 'Mark as sent',
+            text: 'Share on WhatsApp',
+            onPress: () => {
+              const text = encodeURIComponent(`*${c.title}*\n\n${c.message}\n\n— Sent from ${homestay.name || 'Homestay'}`);
+              Linking.openURL(`whatsapp://send?text=${text}`).catch(() => {
+                Linking.openURL(`https://wa.me/?text=${text}`);
+              });
+            },
+          },
+          {
+            text: 'Mark as Sent',
             onPress: () =>
               guarded(async () => {
                 const outcome = await sendCampaign(c.id);
@@ -86,7 +96,7 @@ export const CampaignScreen: React.FC = () => {
                   Alert.alert('Not saved', outcome.error || 'Please try again.');
                   return;
                 }
-                Alert.alert('Campaign Updated', 'Campaign marked as sent. Automatic WhatsApp delivery is not connected yet.');
+                Alert.alert('Campaign Updated', 'Campaign marked as completed.');
               }),
           },
         ]

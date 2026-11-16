@@ -11,12 +11,14 @@ import { getStayRideTenantModel, tenantManager, normKey, isDemoKey, clean, FIELD
 import {
   OPEN_STATUSES, cabModel, payoutModel, userModel, parseFare, cancelRequest, startTrip, completeTrip,
   adminAssignDriver, adminRecordPayment, adminRejectPaymentClaim, adminVoidPayment, adminMarkRefunded, adminSettleDriver, adminReviewNoPin,
-  settlePayout, rejectPayout, expireStaleRequests, overlayTrips, onDriverStatusChange, releaseDriverTrips, adminRefundUnmatched, maskPhone,
+  adminResetPinLock, settlePayout, rejectPayout, expireStaleRequests, overlayTrips, onDriverStatusChange, releaseDriverTrips, adminRefundUnmatched, maskPhone,
   sendAskCab, autoAskCab, askCabConfirmText, askCabLine, stayOrder, last10, dispatchFields, notifyNewRequest, istDateTime,
 } from "../stayride/platform.js";
 import { logger } from "../utils/logger.js";
 import { getGuestLinkModel } from "../models/guest-link.model.js";
 import { Property } from "../models/property.model.js";
+import { Newsletter } from "../models/newsletter.model.js";
+import { HomestayLead } from "../models/homestay-lead.model.js";
 import { toWhatsAppNumber } from "../services/whatsapp.service.js";
 import { httpError } from "../middlewares/error-handler.js";
 import { config } from "../config/env.js";
@@ -638,10 +640,26 @@ router.post("/stayride/drivers", async (req, res) => {
   const unionName = String(req.body?.unionName || "").trim();
 
   const User = userModel(demo);
-  let existing = await User.findOne({ $or: [{ phone: cleanPhone }, { email: cleanEmail }] });
+  const driverId = String(req.body?.driverId || "").trim();
+  const rawDigits = cleanPhone.replace(/[^0-9]/g, "").slice(-10);
+
+  let existing = driverId && mongoose.Types.ObjectId.isValid(driverId) ? await User.findById(driverId) : null;
+  if (!existing) {
+    existing = await User.findOne({
+      $or: [
+        { phone: cleanPhone },
+        { phone: rawDigits },
+        { phone: `+91${rawDigits}` },
+        { email: cleanEmail },
+      ],
+    });
+  }
+
   if (existing) {
     if (existing.role !== "driver") throw httpError(409, "A user with this phone or email already exists with another role.");
     existing.name = name;
+    existing.phone = cleanPhone;
+    existing.email = cleanEmail;
     existing.accountStatus = "ACTIVE";
     existing.vehicle = { type: vehicleType, model, plate, seats, area };
     existing.driverCategory = driverCategory;
@@ -733,6 +751,7 @@ router.post("/cab-requests/:id/complete", cabAction((d, id, req) => completeTrip
 router.post("/cab-requests/:id/unmatched-refunded", cabAction((d, id, req) => adminRefundUnmatched(d, id, req.body.paymentId, req.body.reference, actor(req)), "Unmatched payment marked refunded."));
 router.post("/cab-requests/:id/no-pin-review", cabAction((d, id, req) => adminReviewNoPin(d, id, req.body.decision, req.body.reason, actor(req)), "Review recorded."));
 router.post("/cab-requests/:id/driver-settled", cabAction((d, id, req) => adminSettleDriver(d, id, req.body.reference, actor(req)), "Driver settlement recorded."));
+router.post("/cab-requests/:id/reset-pin", cabAction((d, id, req) => adminResetPinLock(d, id, actor(req)), "Boarding PIN lockout reset. Driver can re-enter passenger PIN."));
 
 router.post("/cab-requests/create", async (req: Request, res: Response) => {
   const demo = isDemo(req);
@@ -1375,6 +1394,130 @@ router.get("/stayride/notifications", async (req, res) => {
     .sort((a, b) => b.at - a.at)
     .slice(0, 20);
   ok(res, { unread: auditCount + cabCount, items });
+});
+
+// ---------------------------------------------------------------------------
+// 15. Newsletter Subscribers (Operations Desk & Export)
+// ---------------------------------------------------------------------------
+router.get("/newsletter", async (req: Request, res: Response) => {
+  const q = search(req);
+  const filter: any = {};
+  if (q) filter.email = new RegExp(escapeRegex(q), "i");
+  const { page, limit, skip } = paging(req);
+  const [items, total] = await Promise.all([
+    Newsletter.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+    Newsletter.countDocuments(filter),
+  ]);
+  res.json({
+    success: true,
+    data: {
+      items: items.map((sub: any) => ({
+        id: String(sub._id),
+        email: sub.email,
+        source: sub.source || "website",
+        createdAt: sub.createdAt,
+      })),
+      total,
+      page,
+      limit,
+    },
+  });
+});
+
+router.get("/newsletter/export", async (req: Request, res: Response) => {
+  const items = await Newsletter.find().sort({ createdAt: -1 }).lean();
+  let csv = "Email,Source,SubscribedAt\n";
+  for (const item of items) {
+    csv += `"${(item.email || "").replace(/"/g, '""')}","${(item.source || "website").replace(/"/g, '""')}","${item.createdAt ? new Date(item.createdAt).toISOString() : ""}"\n`;
+  }
+  res.setHeader("Content-Type", "text/csv");
+  res.setHeader("Content-Disposition", "attachment; filename=newsletter_subscribers.csv");
+  res.send(csv);
+});
+
+router.delete("/newsletter/:id", async (req: Request, res: Response) => {
+  const { id } = req.params;
+  if (!mongoose.Types.ObjectId.isValid(String(id))) throw httpError(400, "Invalid ID");
+  await Newsletter.findByIdAndDelete(id);
+  await audit(actor(req), "newsletter.delete", "Newsletter", String(id), {}, isDemo(req));
+  ok(res, null, "Subscriber removed.");
+});
+
+// ---------------------------------------------------------------------------
+// 16. Inbound Homestay Leads (Marketing Landing Page Quick Register)
+// ---------------------------------------------------------------------------
+router.get("/homestay-leads", async (req: Request, res: Response) => {
+  const q = search(req);
+  const status = String(req.query.status || "").trim();
+  const filter: any = {};
+  if (status && ["NEW", "CONTACTED", "ONBOARDED", "REJECTED"].includes(status)) {
+    filter.status = status;
+  }
+  if (q) {
+    const rx = new RegExp(escapeRegex(q), "i");
+    filter.$or = [{ name: rx }, { phone: rx }, { location: rx }];
+  }
+  const { page, limit, skip } = paging(req);
+  const [items, total] = await Promise.all([
+    HomestayLead.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+    HomestayLead.countDocuments(filter),
+  ]);
+  res.json({
+    success: true,
+    data: {
+      items: items.map((l: any) => ({
+        id: String(l._id),
+        name: l.name,
+        phone: l.phone,
+        location: l.location,
+        rooms: l.rooms,
+        status: l.status || "NEW",
+        notes: l.notes || "",
+        source: l.source || "landing_page_quick_register",
+        createdAt: l.createdAt,
+        updatedAt: l.updatedAt,
+      })),
+      total,
+      page,
+      limit,
+    },
+  });
+});
+
+router.patch("/homestay-leads/:id", async (req: Request, res: Response) => {
+  const { id } = req.params;
+  if (!mongoose.Types.ObjectId.isValid(String(id))) throw httpError(400, "Invalid ID");
+  const { status, notes, name, location, rooms } = req.body || {};
+  const update: any = {};
+  if (status && ["NEW", "CONTACTED", "ONBOARDED", "REJECTED"].includes(status)) update.status = status;
+  if (notes !== undefined) update.notes = String(notes).trim().slice(0, 1000);
+  if (name) update.name = String(name).trim();
+  if (location) update.location = String(location).trim();
+  if (rooms) update.rooms = Math.max(1, Number(rooms) || 1);
+
+  const updated = await HomestayLead.findByIdAndUpdate(id, { $set: update }, { new: true });
+  if (!updated) throw httpError(404, "Lead not found");
+  await audit(actor(req), "homestay_lead.update", "HomestayLead", String(id), update, isDemo(req));
+  ok(res, updated, "Lead updated.");
+});
+
+router.get("/homestay-leads/export", async (req: Request, res: Response) => {
+  const items = await HomestayLead.find().sort({ createdAt: -1 }).lean();
+  let csv = "Name,Phone,Location,Rooms,Status,Notes,CreatedAt\n";
+  for (const item of items) {
+    csv += `"${(item.name || "").replace(/"/g, '""')}","${(item.phone || "").replace(/"/g, '""')}","${(item.location || "").replace(/"/g, '""')}",${item.rooms || 1},"${item.status || "NEW"}","${(item.notes || "").replace(/"/g, '""')}","${item.createdAt ? new Date(item.createdAt).toISOString() : ""}"\n`;
+  }
+  res.setHeader("Content-Type", "text/csv");
+  res.setHeader("Content-Disposition", "attachment; filename=homestay_leads.csv");
+  res.send(csv);
+});
+
+router.delete("/homestay-leads/:id", async (req: Request, res: Response) => {
+  const { id } = req.params;
+  if (!mongoose.Types.ObjectId.isValid(String(id))) throw httpError(400, "Invalid ID");
+  await HomestayLead.findByIdAndDelete(id);
+  await audit(actor(req), "homestay_lead.delete", "HomestayLead", String(id), {}, isDemo(req));
+  ok(res, null, "Lead deleted.");
 });
 
 export default router;

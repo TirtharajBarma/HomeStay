@@ -12,7 +12,9 @@ export default function AdminError({
   useEffect(() => {
     console.error("Admin Tower Error:", error);
     try {
-      fetch("/api/v1/telemetry/report", {
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5050/api/v1";
+      const targetUrl = `${baseUrl.replace(/\/api\/v1\/?$/, "")}/api/v1/telemetry/report`;
+      fetch(targetUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

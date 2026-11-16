@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Playfair_Display, Plus_Jakarta_Sans } from "next/font/google";
 import { siteConfig } from "@/lib/site-config";
+import { SmoothScrollProvider } from "@/components/smooth-scroll-provider";
 
 import "./globals.css";
 
@@ -54,7 +55,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         suppressHydrationWarning
         className="flex min-h-full flex-col bg-surface font-body text-body-md text-on-surface selection:bg-primary-fixed selection:text-primary"
       >
-        {children}
+        <SmoothScrollProvider>
+          {children}
+        </SmoothScrollProvider>
       </body>
     </html>
   );

@@ -957,42 +957,51 @@ function CabRequestFormContent() {
 
             <div className="space-y-2">
               <span className="inline-block rounded-full bg-primary/10 px-3 py-0.5 text-label-sm font-medium text-primary">
-                Exclusive guest concierge
+                Verified Hill Transit Concierge
               </span>
               <h1 className="font-display text-2xl sm:text-3xl font-medium text-primary">
-                {siteConfig.appName} hill cabs
+                {siteConfig.appName} mountain transfers
               </h1>
               <p className="text-xs sm:text-sm text-on-surface-variant leading-relaxed">
-                Hill Cabs are arranged exclusively for guests of our partner homestays. Check your WhatsApp for your private booking link, or ask your host to send you a booking invite.
+                StayCabs mountain cabs are arranged in direct coordination with our verified partner homestays. This ensures experienced local drivers, high ground clearance vehicles, and safe mountain ascent.
               </p>
             </div>
 
             <div className="rounded-2xl border border-outline-variant bg-surface p-4 text-left text-xs space-y-2.5 text-on-surface">
               <div className="flex items-center gap-2.5">
                 <Icon name="verified" className="text-primary text-sm shrink-0" />
-                <span>Door-to-door mountain airport & station transfers</span>
+                <span>Door-to-door Bagdogra, NJP & mountain transfers</span>
               </div>
               <div className="flex items-center gap-2.5">
                 <Icon name="payments" className="text-primary text-sm shrink-0" />
-                <span>100% direct cash fare to mountain drivers</span>
+                <span>Direct driver payouts & transparent mountain fares</span>
               </div>
               <div className="flex items-center gap-2.5">
                 <Icon name="chat" className="text-primary text-sm shrink-0" />
-                <span>Direct WhatsApp coordination & live PIN verification</span>
+                <span>Direct WhatsApp coordination & live 4-digit PIN verification</span>
               </div>
             </div>
 
             <div className="flex flex-col gap-2.5 pt-2">
-              <Link
-                href="/#accommodations"
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-5 py-3.5 text-xs font-bold text-white shadow-sm hover:bg-primary-container transition-all"
+              <a
+                href={`https://wa.me/${activeSupportPhone || "919832012345"}?text=${encodeURIComponent("Hi StayCabs, I am traveling to the hills and would like help arranging a verified cab transfer.")}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3.5 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 transition-all"
               >
-                <Icon name="cottage" className="text-sm" />
-                <span>View Partner Homestays</span>
+                <Icon name="chat" className="text-sm" />
+                <span>Message Hill Transit Desk (WhatsApp)</span>
+              </a>
+              <Link
+                href="/#transit"
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-5 py-3 text-xs font-bold text-white shadow-sm hover:bg-primary-container transition-all"
+              >
+                <Icon name="landscape" className="text-sm" />
+                <span>Explore Hill Routes & Transit</span>
               </Link>
               <Link
                 href="/"
-                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-outline-variant bg-white px-5 py-3 text-xs font-semibold text-on-surface hover:bg-surface-container-low transition-colors"
+                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-outline-variant bg-white px-5 py-2.5 text-xs font-semibold text-on-surface hover:bg-surface-container-low transition-colors"
               >
                 Return to Home
               </Link>

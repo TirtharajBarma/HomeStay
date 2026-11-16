@@ -323,7 +323,7 @@ export const HomeScreen: React.FC = () => {
         {/* Recent Bookings */}
         <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionTitle}>Recent bookings</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Rooms' as any)}>
+          <TouchableOpacity onPress={() => navigation.navigate('Rooms' as any, { initialTab: 'bookings' })}>
             <Text style={styles.seeAllText}>See all</Text>
           </TouchableOpacity>
         </View>
@@ -338,7 +338,7 @@ export const HomeScreen: React.FC = () => {
         {/* Upcoming Check-ins */}
         <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionTitle}>Upcoming check-ins</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Rooms' as any)}>
+          <TouchableOpacity onPress={() => navigation.navigate('Rooms' as any, { initialTab: 'bookings' })}>
             <Text style={styles.seeAllText}>Manage</Text>
           </TouchableOpacity>
         </View>

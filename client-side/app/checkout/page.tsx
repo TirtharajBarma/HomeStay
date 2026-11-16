@@ -34,8 +34,8 @@ export default async function CheckoutPage({
   const query = await searchParams;
   const stay = await getLiveStay(typeof query.stay === "string" ? query.stay : "");
 
-  // A checkout without a stay sends the guest back to the catalogue
-  if (!stay) redirect("/#accommodations");
+  // A checkout without a stay sends the guest back to the homepage
+  if (!stay) redirect("/");
   // No nightly price ("Price on request"): nothing to charge, back to stay page
   if (!(stay.price > 0)) redirect(`/stays/${stay.slug}`);
 
@@ -61,7 +61,7 @@ export default async function CheckoutPage({
           href={homeHref(booking)}
           className="inline-flex min-h-8 items-center rounded hover:text-primary"
         >
-          Accommodations
+          Home
         </Link>
         <span className="text-outline-variant">/</span>
         <Link

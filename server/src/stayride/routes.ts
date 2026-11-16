@@ -2367,7 +2367,12 @@ stayrideV1Router.delete('/rooms/:id', async (req: Request, res: Response) => {
 
 // Calendar sync with Airbnb / Booking.com for one room
 const icalView = (req: Request, feed: any) => {
-  const base = (process.env.PUBLIC_API_URL || `${req.get('x-forwarded-proto') || req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
+  const host = req.get('host') || '';
+  const detectedBase = `${req.get('x-forwarded-proto') || req.protocol}://${host}`;
+  const base = (
+    process.env.PUBLIC_API_URL ||
+    (host.includes('vercel.app') || host.includes('home-stay-ten') ? 'https://api.staycabs.in' : detectedBase)
+  ).replace(/\/+$/, '');
   const prefix = req.baseUrl || '/v1';
   return {
     exportUrl: `${base}${prefix}/public/ical/${feed.exportToken}.ics`,

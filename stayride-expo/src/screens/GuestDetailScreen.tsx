@@ -61,11 +61,11 @@ export const GuestDetailScreen: React.FC = () => {
         `${guest.name} already has a pending or active cab request today. Do you want to create another one?`,
         [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Continue', onPress: () => navigation.navigate('FindDriver') },
+          { text: 'Continue', onPress: () => navigation.navigate('FindDriver', { guestId: guest.id }) },
         ]
       );
     } else {
-      navigation.navigate('FindDriver');
+      navigation.navigate('FindDriver', { guestId: guest.id });
     }
   };
 

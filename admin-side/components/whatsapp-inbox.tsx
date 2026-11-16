@@ -293,142 +293,185 @@ export function WhatsAppInbox({
     loadTemplates();
   }, []);
 
-  // 5. Real-time Live Synchronisation: Socket.IO + SSE Fallback
+  // 5. Real-time Live Synchronisation: Smart Polling (Vercel-native) + Local Socket.IO Fallback
   useEffect(() => {
-    let sse: EventSource | null = null;
+    let isMounted = true;
+    const isLocalhost =
+      typeof window !== "undefined" &&
+      (/localhost|127\.0\.0\.1/.test(window.location.hostname) ||
+        /localhost|127\.0\.0\.1/.test(SOCKET_SERVER_URL));
 
-    try {
-      const socket = socketIO(SOCKET_SERVER_URL, {
-        transports: ["websocket", "polling"],
-        reconnectionAttempts: 10,
-        reconnectionDelay: 2000,
-      });
-
-      socketRef.current = socket;
-
-      socket.on("connect", () => {
-        setSocketConnected(true);
-        if (activeConversationId) {
-          socket.emit("join_conversation", activeConversationId);
-        }
-      });
-
-      socket.on("disconnect", () => {
-        setSocketConnected(false);
-      });
-
-      // Inbound or outbound message event
-      socket.on("whatsapp:message", (data: { conversation: ConversationItem; message: ChatMessage }) => {
-        if (!data?.message) return;
-
-        // Update messages if this belongs to active conversation
-        if (data.message.conversationId === activeConversationId || data.conversation?._id === activeConversationId) {
-          setMessages((prev) => {
-            if (prev.some((m) => m._id === data.message._id || (m.whatsappMessageId && m.whatsappMessageId === data.message.whatsappMessageId))) {
-              return prev.map((m) =>
-                m._id === data.message._id || m.whatsappMessageId === data.message.whatsappMessageId ? data.message : m
-              );
-            }
-            return [...prev, data.message];
-          });
-
-          // Refresh window info if inbound message
-          if (data.message.direction === "INBOUND") {
-            setChatWindowInfo({
-              isOpen: true,
-              lastInboundAt: data.message.sentAt,
-              expiresAt: new Date(new Date(data.message.sentAt).getTime() + 24 * 3600 * 1000).toISOString(),
-              remainingSeconds: 24 * 3600,
-            });
-          }
-        }
-
-        // Update conversation list preview
-        setConversations((prev) => {
-          const index = prev.findIndex((c) => c._id === data.conversation?._id || c._id === data.message.conversationId);
-          if (index !== -1) {
-            const updated = [...prev];
-            const item = { ...updated[index] };
-            item.lastMessage = data.message.messageContent;
-            item.lastMessageAt = data.message.sentAt || new Date().toISOString();
-            item.lastMessageDirection = data.message.direction;
-            item.lastMessageStatus = data.message.deliveryStatus;
-            if (data.message.direction === "INBOUND" && data.conversation?._id !== activeConversationId) {
-              item.unreadCount = (item.unreadCount || 0) + 1;
-            }
-            // Move to top
-            updated.splice(index, 1);
-            return [item, ...updated];
-          } else if (data.conversation) {
-            return [data.conversation, ...prev];
-          }
-          return prev;
+    // Only attempt Socket.IO on local Node development server (where server.ts runs persistently)
+    if (isLocalhost) {
+      try {
+        const socket = socketIO(SOCKET_SERVER_URL, {
+          transports: ["websocket", "polling"],
+          reconnectionAttempts: 3,
+          reconnectionDelay: 5000,
+          timeout: 5000,
         });
-      });
 
-      // Conversation update event
-      socket.on("whatsapp:conversation", (updatedConv: ConversationItem) => {
-        if (!updatedConv?._id) return;
-        setConversations((prev) => {
-          const exists = prev.some((c) => c._id === updatedConv._id);
-          if (exists) {
-            return prev.map((c) => (c._id === updatedConv._id ? { ...c, ...updatedConv } : c));
+        socketRef.current = socket;
+
+        socket.on("connect", () => {
+          if (!isMounted) return;
+          setSocketConnected(true);
+          if (activeConversationId) {
+            socket.emit("join_conversation", activeConversationId);
           }
-          return [updatedConv, ...prev];
         });
-        if (activeConversationId === updatedConv._id) {
-          setActiveConversation((prev) => (prev ? { ...prev, ...updatedConv } : updatedConv));
-        }
-      });
 
-      // Delivery status update event
-      socket.on("whatsapp:status", (statusData: { messageId: string; status: DeliveryStatus; timestamp: string }) => {
-        if (!statusData?.messageId) return;
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.whatsappMessageId === statusData.messageId || m._id === statusData.messageId
-              ? { ...m, deliveryStatus: statusData.status }
-              : m
-          )
-        );
-      });
-    } catch (e) {
-      console.warn("Socket.IO initialization fallback to SSE:", e);
-    }
+        socket.on("disconnect", () => {
+          if (!isMounted) return;
+          setSocketConnected(false);
+        });
 
-    // SSE Stream Fallback
-    try {
-      sse = new EventSource(API_ENDPOINTS.whatsappStream(demo));
-      sse.addEventListener("whatsapp:message", (e: MessageEvent) => {
-        try {
-          const data = JSON.parse(e.data);
-          if (data?.message && data.message.conversationId === activeConversationId) {
+        socket.on("connect_error", () => {
+          // Gracefully fallback to polling without console noise
+          socket.disconnect();
+        });
+
+        // Inbound or outbound message event
+        socket.on("whatsapp:message", (data: { conversation: ConversationItem; message: ChatMessage }) => {
+          if (!data?.message || !isMounted) return;
+
+          // Update messages if this belongs to active conversation
+          if (data.message.conversationId === activeConversationId || data.conversation?._id === activeConversationId) {
             setMessages((prev) => {
-              if (prev.some((m) => m._id === data.message._id)) return prev;
+              if (prev.some((m) => m._id === data.message._id || (m.whatsappMessageId && m.whatsappMessageId === data.message.whatsappMessageId))) {
+                return prev.map((m) =>
+                  m._id === data.message._id || m.whatsappMessageId === data.message.whatsappMessageId ? data.message : m
+                );
+              }
               return [...prev, data.message];
             });
+
+            // Refresh window info if inbound message
+            if (data.message.direction === "INBOUND") {
+              setChatWindowInfo({
+                isOpen: true,
+                lastInboundAt: data.message.sentAt,
+                expiresAt: new Date(new Date(data.message.sentAt).getTime() + 24 * 3600 * 1000).toISOString(),
+                remainingSeconds: 24 * 3600,
+              });
+            }
           }
-        } catch {}
-      });
-      sse.addEventListener("whatsapp:status", (e: MessageEvent) => {
-        try {
-          const statusData = JSON.parse(e.data);
-          if (statusData?.messageId) {
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.whatsappMessageId === statusData.messageId || m._id === statusData.messageId
-                  ? { ...m, deliveryStatus: statusData.status }
-                  : m
-              )
-            );
+
+          // Update conversation list preview
+          setConversations((prev) => {
+            const index = prev.findIndex((c) => c._id === data.conversation?._id || c._id === data.message.conversationId);
+            if (index !== -1) {
+              const updated = [...prev];
+              const item = { ...updated[index] };
+              item.lastMessage = data.message.messageContent;
+              item.lastMessageAt = data.message.sentAt || new Date().toISOString();
+              item.lastMessageDirection = data.message.direction;
+              item.lastMessageStatus = data.message.deliveryStatus;
+              if (data.message.direction === "INBOUND" && data.conversation?._id !== activeConversationId) {
+                item.unreadCount = (item.unreadCount || 0) + 1;
+              }
+              // Move to top
+              updated.splice(index, 1);
+              return [item, ...updated];
+            } else if (data.conversation) {
+              return [data.conversation, ...prev];
+            }
+            return prev;
+          });
+        });
+
+        // Conversation update event
+        socket.on("whatsapp:conversation", (updatedConv: ConversationItem) => {
+          if (!updatedConv?._id || !isMounted) return;
+          setConversations((prev) => {
+            const exists = prev.some((c) => c._id === updatedConv._id);
+            if (exists) {
+              return prev.map((c) => (c._id === updatedConv._id ? { ...c, ...updatedConv } : c));
+            }
+            return [updatedConv, ...prev];
+          });
+          if (activeConversationId === updatedConv._id) {
+            setActiveConversation((prev) => (prev ? { ...prev, ...updatedConv } : updatedConv));
           }
-        } catch {}
-      });
-    } catch {}
+        });
+
+        // Delivery status update event
+        socket.on("whatsapp:status", (statusData: { messageId: string; status: DeliveryStatus; timestamp: string }) => {
+          if (!statusData?.messageId || !isMounted) return;
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.whatsappMessageId === statusData.messageId || m._id === statusData.messageId
+                ? { ...m, deliveryStatus: statusData.status }
+                : m
+            )
+          );
+        });
+      } catch {
+        // Fallback to polling
+      }
+    }
+
+    // On Vercel / Cloud production, enable live sync status via smart polling
+    if (!isLocalhost) {
+      setSocketConnected(true);
+    }
+
+    // --- Smart Polling Worker for Active Chat & Inbox (Production Vercel-Ready) ---
+    async function pollActiveMessages() {
+      if (!activeConversationId || !isMounted) return;
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+
+      try {
+        const res = await apiFetch(API_ENDPOINTS.whatsappMessages(activeConversationId, demo ? "demo=true" : ""));
+        if (res.ok && isMounted) {
+          const json = await res.json();
+          if (json.success && Array.isArray(json.data)) {
+            setMessages((prev) => {
+              if (json.data.length !== prev.length) return json.data;
+              const hasDiff = json.data.some((m: ChatMessage, idx: number) => {
+                const existing = prev[idx];
+                return !existing || existing._id !== m._id || existing.deliveryStatus !== m.deliveryStatus;
+              });
+              return hasDiff ? json.data : prev;
+            });
+          }
+        }
+      } catch {
+        // Quiet network catch
+      }
+    }
+
+    async function pollConversationsList() {
+      if (!isMounted) return;
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      try {
+        await fetchConversations(false);
+      } catch {}
+    }
+
+    // Active conversation polls every 3.5 seconds
+    const messageInterval = setInterval(pollActiveMessages, 3500);
+    // Overall conversation list summary polls every 12 seconds
+    const convInterval = setInterval(pollConversationsList, 12000);
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        pollActiveMessages();
+        pollConversationsList();
+      }
+    };
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", onVisibilityChange);
+    }
 
     return () => {
+      isMounted = false;
+      clearInterval(messageInterval);
+      clearInterval(convInterval);
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVisibilityChange);
+      }
       socketRef.current?.disconnect();
-      sse?.close();
     };
   }, [activeConversationId, demo]);
 

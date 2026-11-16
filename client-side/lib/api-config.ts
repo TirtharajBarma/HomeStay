@@ -87,6 +87,7 @@ export const API_ENDPOINTS = {
     requestPayout: () => `${API_BASE_URL}/stayride/public/driver-quote/payouts/request`,
   },
   legal: (doc: string) => `${API_BASE_URL}/stayride/public/legal/${encodeURIComponent(doc)}`,
+  homestayLead: () => `${API_BASE_URL}/homestay-leads`,
   newsletter: {
     subscribe: () => `${API_BASE_URL}/newsletter/subscribe`,
   },

@@ -55,6 +55,8 @@ export class PropertyService {
   static async getAllProperties(): Promise<any[]> {
     const properties: any[] = await Property.find({
       status: { $ne: "suspended" as any },
+      isTest: { $ne: true },
+      isDemo: { $ne: true },
       email: { $nin: DEMO_EMAILS, $not: /@stayride\.test$/i },
       slug: { $nin: DEMO_SLUGS },
     }).sort({ createdAt: -1 }).lean();
