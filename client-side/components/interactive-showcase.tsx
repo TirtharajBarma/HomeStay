@@ -196,6 +196,7 @@ const ELEVATION_STOPS: ElevationStop[] = [
 export function HimalayanElevationSimulator() {
   const [selectedIndex, setSelectedIndex] = useState<number>(3); // Default to Darjeeling (2,042m)
   const current = ELEVATION_STOPS[selectedIndex];
+  const supportNum = waNumber(siteConfig.supportPhone);
 
   return (
     <div className="rounded-3xl border border-primary/20 bg-surface-container-lowest p-5 sm:p-7 shadow-xl shadow-primary/10 space-y-6">
@@ -396,15 +397,17 @@ export function HimalayanElevationSimulator() {
             <span>Book Ride to {current.name.split(" ")[0]}</span>
             <ArrowRight className="h-3.5 w-3.5" />
           </Link>
-          <a
-            href={`https://wa.me/${waNumber}?text=Hi%20StayCabs,%20I%20need%20a%20verified%20hill%20cab%20for%20${encodeURIComponent(current.name)}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="liquid-btn inline-flex h-9.5 items-center justify-center gap-1.5 rounded-xl border border-outline-variant bg-surface-container-lowest px-3.5 text-xs font-semibold text-on-surface hover:border-primary/40"
-          >
-            <Phone className="h-3.5 w-3.5 text-emerald-600" />
-            <span>WhatsApp Query</span>
-          </a>
+          {supportNum ? (
+            <a
+              href={`https://wa.me/${supportNum}?text=Hi%20StayCabs,%20I%20need%20a%20verified%20hill%20cab%20for%20${encodeURIComponent(current.name)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="liquid-btn inline-flex h-9.5 items-center justify-center gap-1.5 rounded-xl border border-outline-variant bg-surface-container-lowest px-3.5 text-xs font-semibold text-on-surface hover:border-primary/40"
+            >
+              <Phone className="h-3.5 w-3.5 text-emerald-600" />
+              <span>WhatsApp Query</span>
+            </a>
+          ) : null}
         </div>
       </div>
     </div>
@@ -533,12 +536,15 @@ export function QuickActionLauncher() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
+  const supportNum = waNumber(siteConfig.supportPhone);
   const QUICK_LINKS = [
-    { title: "Register Homestay (Free)", category: "Homestay Hosts", href: "/#register", icon: Bed },
-    { title: "Guest Cab Concierge", category: "Transit", href: "/cab-request", icon: Car },
-    { title: "Join Driver Partner Network", category: "Drivers", href: "/join-driver", icon: ShieldCheck },
-    { title: "Himalayan Elevation & Route Simulator", category: "Transit", href: "/#transit", icon: MountainSnow },
-    { title: "Official WhatsApp Host Desk", category: "Support", href: `https://wa.me/${waNumber}`, icon: Phone, external: true },
+    { title: "Register Homestay (Free)", category: "Homestay Hosts", href: "/#register", icon: Bed, external: false },
+    { title: "Guest Cab Concierge", category: "Transit", href: "/cab-request", icon: Car, external: false },
+    { title: "Join Driver Partner Network", category: "Drivers", href: "/join-driver", icon: ShieldCheck, external: false },
+    { title: "Himalayan Elevation & Route Simulator", category: "Transit", href: "/#transit", icon: MountainSnow, external: false },
+    ...(supportNum
+      ? [{ title: "Official WhatsApp Host Desk", category: "Support", href: `https://wa.me/${supportNum}`, icon: Phone, external: true }]
+      : []),
   ];
 
   const filtered = QUICK_LINKS.filter(
@@ -720,6 +726,7 @@ export function FloatingChapterNavigator() {
 // ===========================================================================
 export function HimalayanOSStoryStage() {
   const [activeChapter, setActiveChapter] = useState<"rooms" | "guests" | "cabs">("rooms");
+  const supportNum = waNumber(siteConfig.supportPhone);
 
   return (
     <div className="space-y-6 sm:space-y-10">
@@ -1102,15 +1109,22 @@ export function HimalayanOSStoryStage() {
 
                   <div className="flex items-center justify-between pt-1 border-t border-outline-variant/40 text-[11px]">
                     <span className="text-outline">WhatsApp Direct Contact:</span>
-                    <a
-                      href={`https://wa.me/${waNumber}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-bold text-primary flex items-center gap-1 hover:underline"
-                    >
-                      <Phone className="h-3 w-3 text-emerald-600" />
-                      <span>+91 98310 •••••</span>
-                    </a>
+                    {supportNum ? (
+                      <a
+                        href={`https://wa.me/${supportNum}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-bold text-primary flex items-center gap-1 hover:underline"
+                      >
+                        <Phone className="h-3 w-3 text-emerald-600" />
+                        <span>{siteConfig.supportPhone}</span>
+                      </a>
+                    ) : (
+                      <span className="font-bold text-primary flex items-center gap-1">
+                        <Phone className="h-3 w-3 text-emerald-600" />
+                        <span>Direct chat in app</span>
+                      </span>
+                    )}
                   </div>
                 </div>
 

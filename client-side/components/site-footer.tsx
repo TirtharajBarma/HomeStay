@@ -9,7 +9,7 @@ import { NewsletterForm } from "./newsletter-form";
 const linkClass =
   "inline-flex py-1 text-xs sm:text-body-sm text-on-surface-variant transition-colors duration-150 hover:text-primary active:opacity-75";
 
-const supportPhone = siteConfig.supportPhone || process.env.NEXT_PUBLIC_SUPPORT_PHONE?.trim() || "+91 98320 12345";
+const supportPhone = siteConfig.supportPhone || process.env.NEXT_PUBLIC_SUPPORT_PHONE?.trim() || "";
 const cleanPhone = waNumber(supportPhone);
 const supportEmail = siteConfig.supportEmail || "support@staycabs.in";
 

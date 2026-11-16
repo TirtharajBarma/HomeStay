@@ -1,5 +1,4 @@
 import jwt from "jsonwebtoken";
-import crypto from "crypto";
 import { User, type IUser } from "../models/user.model.js";
 import { Property } from "../models/property.model.js";
 import { Driver } from "../models/driver.model.js";
@@ -301,21 +300,19 @@ export class AuthService {
   static async sendOtp(phone: string) {
     const cleanPhone = phone.replace(/[^0-9+]/g, "");
     const isDev = devConveniences;
-    // The universal "123456" code is a development convenience only. In production a random
-    // code is generated and the value is never logged or echoed back in the response.
-    const otp = isDev ? "123456" : String(crypto.randomInt(100000, 1000000));
+    // This server has no SMS provider. Claiming "OTP sent" in production would strand the user with
+    // no code, so the legacy route fails honestly instead of pretending to deliver one.
+    if (!isDev) throw Object.assign(new Error("SMS sign-in is not available on this deployment. Please use email sign-in."), { status: 503 });
+    // The universal "123456" code is a development convenience only, never available in production.
+    const otp = "123456";
     const expires = Date.now() + 5 * 60 * 1000; // 5 minutes
 
     otpStore.set(cleanPhone, { otp, expires, attempts: 0 });
-    if (isDev) {
-      console.log(`\n📲 [OTP DISPATCH] -> Phone: ${cleanPhone} | Verification Code: ${otp}\n`);
-    } else {
-      console.log('📲 [OTP DISPATCH] sent (phone and code withheld in production)');
-    }
+    console.log(`\n📲 [OTP DISPATCH] -> Phone: ${cleanPhone} | Verification Code: ${otp}\n`);
 
     return {
       success: true,
-      message: isDev ? "OTP sent successfully (Demo OTP: 123456)" : "OTP sent successfully.",
+      message: "OTP sent successfully (Demo OTP: 123456)",
       phone: cleanPhone,
     };
   }

@@ -88,7 +88,7 @@ export class AuthController {
         data: result,
       });
     } catch (err: any) {
-      res.status(400).json({
+      res.status(err?.status === 503 ? 503 : 400).json({
         success: false,
         error: err.message || "Failed to dispatch OTP.",
       });

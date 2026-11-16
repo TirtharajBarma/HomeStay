@@ -92,6 +92,7 @@ export const FindDriverScreen: React.FC = () => {
   const [passengers, setPassengers] = useState(2);
   const [fleetDriverId, setFleetDriverId] = useState<Driver['id'] | null>(null);
   const fleetDriver = drivers.find((d) => d.id === fleetDriverId) || null;
+  const activeDrivers = drivers.filter((d) => d.active);
 
   // Seats of the requested vehicle class
   const seatsFor = (type?: string | null) => vehicleOptions().find((v) => v.value === type)?.seats || 4;
@@ -557,6 +558,49 @@ export const FindDriverScreen: React.FC = () => {
             }}
           />
           <Text style={styles.hint}>Both your in-house fleet and verified regional mountain drivers with matching seats receive this request.</Text>
+
+          {activeDrivers.length > 0 ? (
+            <View style={styles.ownDriverBox}>
+              <Text style={styles.ownDriverTitle}>Or assign your own driver</Text>
+              <Text style={styles.ownDriverSub}>Skip the auction: pick one of your drivers and the fare you agreed with them.</Text>
+              <PlatformSelect
+                label="Your driver"
+                value={fleetDriver ? String(fleetDriver.id) : ''}
+                options={activeDrivers.map((d) => ({
+                  label: d.name,
+                  value: String(d.id),
+                  subLabel: [d.vehicle, d.plate].filter(Boolean).join(' · '),
+                  icon: 'person-outline' as const,
+                }))}
+                onSelect={(v) => setFleetDriverId(Number(v))}
+                placeholder="Choose one of your drivers"
+              />
+              <View style={styles.fareInput}>
+                <Text style={styles.rupee}>₹</Text>
+                <TextInput
+                  style={styles.fareText}
+                  placeholder="Fare agreed with your driver"
+                  value={ownFare}
+                  onChangeText={setOwnFare}
+                  keyboardType="number-pad"
+                  placeholderTextColor={Colors.textTertiary}
+                />
+              </View>
+              {fareNum > 0 ? (
+                <Text style={styles.hint}>Guest pays {inr(ownFee)} online as the StayRide fee; your driver collects the rest.</Text>
+              ) : null}
+              <TouchableOpacity
+                style={[styles.ownDriverBtn, (submitting || !fleetDriver || !(fareNum > 0)) && { opacity: 0.55 }]}
+                onPress={() => handleDirectAssignMyDriver(fleetDriver)}
+                disabled={submitting || !fleetDriver || !(fareNum > 0)}
+                accessibilityRole="button"
+                accessibilityLabel="Assign my own driver"
+              >
+                <Ionicons name="person-add" size={16} color={Colors.brandPrimaryDark} />
+                <Text style={styles.ownDriverBtnText}>{submitting ? 'Assigning…' : 'Assign my driver'}</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
         </Section>
       </FormScroll>
 
@@ -818,6 +862,11 @@ const styles = StyleSheet.create({
   footer: { paddingHorizontal: 16, paddingTop: 10, backgroundColor: Colors.bgCard, borderTopWidth: 1, borderTopColor: Colors.divider },
   cta: { flexDirection: 'row', gap: 8, backgroundColor: Colors.brandPrimary, paddingVertical: 15, borderRadius: Radii.button, alignItems: 'center', justifyContent: 'center' },
   ctaText: { color: Colors.white, fontWeight: '800', fontSize: 15 },
+  ownDriverBox: { marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderTopColor: Colors.divider },
+  ownDriverTitle: { fontSize: 14, fontWeight: '800', color: Colors.textPrimary },
+  ownDriverSub: { fontSize: 12, color: Colors.textSecondary, lineHeight: 17, marginTop: 3, marginBottom: 10 },
+  ownDriverBtn: { flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center', marginTop: 12, paddingVertical: 12, borderRadius: Radii.button, borderWidth: 1, borderColor: Colors.brandPrimary, backgroundColor: Colors.brandPrimaryLight },
+  ownDriverBtnText: { color: Colors.brandPrimaryDark, fontWeight: '800', fontSize: 14 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
   modalCard: { backgroundColor: Colors.bgCard, borderRadius: Radii.dialog, padding: 20, alignItems: 'center' },
   successIcon: { width: 60, height: 60, borderRadius: 30, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },

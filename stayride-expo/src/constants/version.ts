@@ -2,8 +2,8 @@
  * Application Version and Release Configuration
  * Auto-synced with EAS Updates & Local Builds
  */
-export const CURRENT_RELEASE_VERSION = "v1.0.6";
-export const RELEASE_DESCRIPTION = "Royal Mountain Violet theme, high-contrast segmented tabs, Apple-grade legal policy center";
+export const CURRENT_RELEASE_VERSION = "v1.0.7";
+export const RELEASE_DESCRIPTION = "Instant cab broadcast, guest auto-fill, WhatsApp sharing, driver earnings fix";
 export const APP_BINARY_VERSION = "v1.0.0 (Build 1)";
 export const ADMIN_NAME = process.env.EXPO_PUBLIC_APP_NAME ? `${process.env.EXPO_PUBLIC_APP_NAME} Admin` : "Platform Admin";
 export const AUTHOR_CREDIT = "Built with ❤️ for Mountain Hospitality";
@@ -18,6 +18,16 @@ export interface ReleaseHistoryItem {
 }
 
 export const INITIAL_RELEASE_HISTORY: ReleaseHistoryItem[] = [
+  {
+    version: "v1.0.7",
+    date: "Nov 16, 2026",
+    title: "Instant cab broadcast, guest auto-fill, WhatsApp sharing, driver earnings fix",
+    notes: [
+          "Instant cab broadcast, guest auto-fill, WhatsApp sharing, driver earnings fix"
+    ],
+    type: "ota",
+    isNativeBuild: false,
+  },
   {
     version: "v1.0.6",
     date: "Nov 16, 2026",

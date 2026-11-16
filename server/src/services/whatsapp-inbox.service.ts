@@ -4,6 +4,7 @@ import { getWhatsappConversationModel, IWhatsappConversation, WhatsappConversati
 import { getWhatsappMessageModel, IWhatsappMessage, WhatsappDeliveryStatus, WhatsappDirection, WhatsappMessageType, WhatsappSenderType } from "../models/whatsapp-message.model.js";
 import { Guest } from "../models/guest.model.js";
 import { Booking } from "../models/booking.model.js";
+import { Driver } from "../models/driver.model.js";
 import { getCabRequestModel } from "../models/cab-request.model.js";
 import { getStayRideTenantModel } from "../stayride/store.js";
 import { toWhatsAppNumber, sendWhatsApp, WhatsAppMessage, WhatsAppEvent } from "./whatsapp.service.js";
@@ -258,6 +259,86 @@ export const APPROVED_TEMPLATES: TemplateDefinition[] = [
     ],
     formatText: (p) => `StayCabs Payout: ₹${p[0] || "[Amount]"} has been sent to your UPI account (Bank UTR: ${p[1] || "[UTR]"}).`,
   },
+  {
+    id: "quote_accepted_driver",
+    name: "quote_accepted_driver",
+    event: "QUOTE_ACCEPTED_DRIVER",
+    title: "Driver Quote Accepted (Payment Hold)",
+    category: "UTILITY",
+    language: "en",
+    description: "Notify driver that their quote was accepted and customer advance payment is pending.",
+    variables: [
+      { index: 1, name: "Driver Name", description: "Driver name", placeholder: "e.g. Tenzing", sample: "Tenzing" },
+      { index: 2, name: "Trip Reference", description: "Trip booking reference", placeholder: "e.g. REQ-9F2A61", sample: "REQ-9F2A61" },
+    ],
+    formatText: (p) =>
+      `Hello ${p[0] || "[Driver]"},\nYour quotation for trip ${p[1] || "[Ref]"} has been accepted by the guest.\nWe are waiting for the online advance payment hold to confirm your ride.\nStay prepared.`,
+  },
+  {
+    id: "advance_expired_guest",
+    name: "advance_expired_guest",
+    event: "ADVANCE_EXPIRED_GUEST",
+    title: "Payment Window Expired (Guest Alert)",
+    category: "UTILITY",
+    language: "en",
+    description: "Inform guest that the 30-minute advance hold expired and invite them to re-request.",
+    variables: [
+      { index: 1, name: "Guest Name", description: "Guest name", placeholder: "e.g. Rahul", sample: "Rahul" },
+      { index: 2, name: "Trip Reference", description: "Booking reference", placeholder: "e.g. REQ-9F2A61", sample: "REQ-9F2A61" },
+    ],
+    formatText: (p) =>
+      `Namaste ${p[0] || "[Guest]"}.\nThe advance booking hold for cab request ${p[1] || "[Ref]"} has expired.\nYou can submit a fresh request at https://staycabs.in/cab-request whenever you are ready.`,
+  },
+  {
+    id: "vehicle_updated_guest",
+    name: "vehicle_updated_guest",
+    event: "VEHICLE_UPDATED_GUEST",
+    title: "Vehicle / Driver Updated (Guest)",
+    category: "UTILITY",
+    language: "en",
+    description: "Notify guest of an updated vehicle plate or replacement driver.",
+    variables: [
+      { index: 1, name: "Guest Name", description: "Guest name", placeholder: "e.g. Rahul", sample: "Rahul" },
+      { index: 2, name: "Trip Reference", description: "Booking reference", placeholder: "e.g. REQ-9F2A61", sample: "REQ-9F2A61" },
+      { index: 3, name: "New Plate Number", description: "Updated vehicle plate", placeholder: "e.g. WB-74-A-9999", sample: "WB-74-A-9999" },
+      { index: 4, name: "Driver Name", description: "Driver name", placeholder: "e.g. Passang", sample: "Passang" },
+      { index: 5, name: "Boarding PIN", description: "Security PIN", placeholder: "e.g. 4821", sample: "4821" },
+    ],
+    formatText: (p) =>
+      `Namaste ${p[0] || "[Guest]"},\nYour assigned cab for trip ${p[1] || "[Ref]"} has been updated.\nDriver: ${p[3] || "Verified Driver"}\nVehicle Plate: ${p[2] || "[Plate]"}\nBoarding PIN: ${p[4] || "----"}\nPlease verify this registration at pickup.`,
+  },
+  {
+    id: "driver_payout_rejected",
+    name: "driver_payout_rejected",
+    event: "PAYOUT_REJECTED_DRIVER",
+    title: "Driver Payout Rejected",
+    category: "UTILITY",
+    language: "en",
+    description: "Notify driver that withdrawal request was rejected and specify reason.",
+    variables: [
+      { index: 1, name: "Payout Amount", description: "Rejected amount in ₹", placeholder: "e.g. 3,000", sample: "3,000" },
+      { index: 2, name: "Rejection Reason", description: "Specific reason for rejection", placeholder: "e.g. Incorrect UPI ID", sample: "Invalid UPI handle" },
+    ],
+    formatText: (p) =>
+      `StayCabs Payout: Your payout request of ₹${p[0] || "[Amount]"} could not be settled.\nReason: ${p[1] || "[Reason]"}.\nPlease update your bank/UPI details in the StayRide Driver App.`,
+  },
+  {
+    id: "bidding_timeout_owner",
+    name: "bidding_timeout_owner",
+    event: "BIDDING_TIMEOUT_OWNER",
+    title: "Driver Bidding Timeout (Owner Alert)",
+    category: "UTILITY",
+    language: "en",
+    description: "Alert homestay host that no hill driver quoted for guest trip.",
+    variables: [
+      { index: 1, name: "Homestay Name", description: "Property name", placeholder: "e.g. Pine Ridge", sample: "Pine Ridge" },
+      { index: 2, name: "Guest Name", description: "Guest name", placeholder: "e.g. Rahul", sample: "Rahul" },
+      { index: 3, name: "Pickup Point", description: "Pickup location address", placeholder: "e.g. Bagdogra Airport", sample: "Bagdogra Airport" },
+      { index: 4, name: "Homestay Portal URL", description: "Host action link", placeholder: "e.g. https://staycabs.in/owner", sample: "https://staycabs.in/owner" },
+    ],
+    formatText: (p) =>
+      `Alert for ${p[0] || "[Homestay]"}:\nNo hill driver has quoted for guest ${p[1] || "[Guest]"}'s trip from ${p[2] || "[Pickup]"} yet.\nPlease review the request or assign an in-house fleet vehicle:\n${p[3] || "[Link]"}`,
+  },
 ];
 
 export class WhatsappInboxService {
@@ -444,21 +525,25 @@ export class WhatsappInboxService {
     const result: {
       contact: any;
       guest: any;
+      driver: any;
       bookings: any[];
       latestBooking: any;
       cabBookings: any[];
       latestTrip: any;
       homestay: any;
       isExistingGuest: boolean;
+      isDriver: boolean;
     } = {
       contact: null,
       guest: null,
+      driver: null,
       bookings: [],
       latestBooking: null,
       cabBookings: [],
       latestTrip: null,
       homestay: null,
       isExistingGuest: false,
+      isDriver: false,
     };
 
     const ContactModel = getWhatsappContactModel(isDemo);
@@ -537,6 +622,36 @@ export class WhatsappInboxService {
             propertyId: cabRequests[0].propertyId,
           };
         }
+      }
+
+      // 5. Driver Lookup (Hill Drivers)
+      try {
+        const driverDoc = await Driver.findOne({ phone: phoneRegex }).sort({ createdAt: -1 });
+        if (driverDoc) {
+          result.driver = driverDoc;
+          result.isDriver = true;
+          if (result.contact && (!result.contact.customerName || /^\+?\d+$/.test(result.contact.customerName))) {
+            result.contact.customerName = driverDoc.name;
+            await result.contact.save();
+          }
+        } else {
+          const assignedTrip = await CabModel.findOne({ assignedDriverPhone: phoneRegex }).sort({ createdAt: -1 });
+          if (assignedTrip) {
+            result.isDriver = true;
+            result.driver = {
+              name: assignedTrip.assignedDriverName || "Verified Driver",
+              phone: assignedTrip.assignedDriverPhone,
+              vehicle: assignedTrip.vehicleType || "Cab",
+              plate: assignedTrip.vehicleDetails?.plate || "",
+            };
+            if (result.contact && (!result.contact.customerName || /^\+?\d+$/.test(result.contact.customerName))) {
+              result.contact.customerName = assignedTrip.assignedDriverName;
+              await result.contact.save();
+            }
+          }
+        }
+      } catch (err: any) {
+        logger.warn("[WhatsApp Context] Error looking up driver", { error: err?.message });
       }
     } catch (err: any) {
       logger.warn("[WhatsApp Context] Error assembling customer context", { error: err?.message });

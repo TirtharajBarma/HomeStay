@@ -5763,7 +5763,8 @@ export function LeadsTab({ demo }: TabProps) {
   async function exportCsv(type: "leads" | "newsletter") {
     try {
       const endpoint = type === "leads" ? API_ENDPOINTS.homestayLeadsExport() : API_ENDPOINTS.newsletterExport();
-      const res = await apiFetch(endpoint);
+      // Demo mode exports demo records only, matching the list the admin is looking at.
+      const res = await apiFetch(demo ? `${endpoint}?demo=true` : endpoint);
       if (!res.ok) throw new Error("Export failed");
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);

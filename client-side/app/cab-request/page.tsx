@@ -983,15 +983,17 @@ function CabRequestFormContent() {
             </div>
 
             <div className="flex flex-col gap-2.5 pt-2">
-              <a
-                href={`https://wa.me/${activeSupportPhone || "919832012345"}?text=${encodeURIComponent("Hi StayCabs, I am traveling to the hills and would like help arranging a verified cab transfer.")}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3.5 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 transition-all"
-              >
-                <Icon name="chat" className="text-sm" />
-                <span>Message Hill Transit Desk (WhatsApp)</span>
-              </a>
+              {activeSupportPhone ? (
+                <a
+                  href={`https://wa.me/${activeSupportPhone}?text=${encodeURIComponent("Hi StayCabs, I am traveling to the hills and would like help arranging a verified cab transfer.")}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3.5 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 transition-all"
+                >
+                  <Icon name="chat" className="text-sm" />
+                  <span>Message Hill Transit Desk (WhatsApp)</span>
+                </a>
+              ) : null}
               <Link
                 href="/#transit"
                 className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-5 py-3 text-xs font-bold text-white shadow-sm hover:bg-primary-container transition-all"

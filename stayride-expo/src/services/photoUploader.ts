@@ -3,12 +3,27 @@
  * straight from the phone to Cloudinary, never through our API. Only the returned https URL is saved
  * on the homestay (updateHomestay → PUT /homestay → MongoDB), which every device then syncs.
  */
+import { File } from 'expo-file-system';
+
 import { api } from '../data/api';
 
 type PickedPhoto = { uri: string; mimeType?: string | null; fileName?: string | null };
 
+// Cloudinary's per-request upload API has no size parameter, so the cap is enforced before the file
+// leaves the device. The account's own upload limit remains the backstop for modified clients.
+export const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
+
 /** Upload one picked photo and return its permanent https URL. Throws with a readable message. */
 export async function uploadPhoto(photo: PickedPhoto): Promise<string> {
+  let size = 0;
+  try {
+    size = new File(photo.uri).size;
+  } catch {
+    // Unreadable size: let Cloudinary's account limit decide.
+  }
+  if (size > MAX_PHOTO_BYTES) {
+    throw new Error(`This photo is ${(size / (1024 * 1024)).toFixed(1)} MB. Please choose one under 5 MB.`);
+  }
   const sig = await api.get('/upload/signature');
   const form = new FormData();
   // React Native's FormData takes a { uri, type, name } object for a local file

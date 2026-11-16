@@ -47,7 +47,7 @@ export default async function CheckoutPage({
     rawPhone ||
     siteConfig.supportPhone?.trim() ||
     process.env.NEXT_PUBLIC_SUPPORT_PHONE?.trim() ||
-    "+91 9239842574";
+    "";
   const cleanPhone = waNumber(effectivePhone);
 
   return (
@@ -214,17 +214,19 @@ export default async function CheckoutPage({
             </div>
 
             {/* Host Assistance */}
-            <div className="flex items-center justify-between pt-2 text-label-sm text-outline border-t border-outline-variant/20">
-              <span>Host helpdesk:</span>
-              <a
-                href={`https://wa.me/${cleanPhone}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-medium text-primary hover:underline"
-              >
-                WhatsApp desk
-              </a>
-            </div>
+            {cleanPhone ? (
+              <div className="flex items-center justify-between pt-2 text-label-sm text-outline border-t border-outline-variant/20">
+                <span>Host helpdesk:</span>
+                <a
+                  href={`https://wa.me/${cleanPhone}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-primary hover:underline"
+                >
+                  WhatsApp desk
+                </a>
+              </div>
+            ) : null}
           </div>
         </aside>
       </div>

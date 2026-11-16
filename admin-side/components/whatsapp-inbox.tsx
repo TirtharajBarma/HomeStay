@@ -1,12 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { io as socketIO, Socket } from "socket.io-client";
 import { API_ENDPOINTS, apiFetch, readApiError, SOCKET_SERVER_URL } from "@/lib/api-config";
 
 // --- Types ---
 export type ConversationFilter = "all" | "unread" | "open" | "closed";
-
 export type DeliveryStatus = "SENDING" | "SENT" | "DELIVERED" | "READ" | "FAILED";
 export type MessageDirection = "INBOUND" | "OUTBOUND";
 export type SenderType = "CUSTOMER" | "ADMIN" | "SYSTEM";
@@ -91,7 +90,7 @@ export interface CustomerContext {
   isExistingGuest: boolean;
 }
 
-// Format date helper
+// Helpers
 function formatTime(isoString?: string | number): string {
   if (!isoString) return "";
   const d = new Date(isoString);
@@ -108,10 +107,15 @@ function formatDate(isoString?: string | number): string {
   const yesterday = new Date();
   yesterday.setDate(today.getDate() - 1);
   if (d.toDateString() === yesterday.toDateString()) return "Yesterday";
-  return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: d.getFullYear() !== today.getFullYear() ? "numeric" : undefined });
+  return d.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: d.getFullYear() !== today.getFullYear() ? "numeric" : undefined,
+  });
 }
 
-function formatPhoneDisplay(raw: string): string {
+function formatPhoneDisplay(raw?: string): string {
+  if (!raw) return "";
   const digits = raw.replace(/\D/g, "");
   if (digits.length === 12 && digits.startsWith("91")) {
     return `+91 ${digits.slice(2, 7)} ${digits.slice(7)}`;
@@ -121,6 +125,62 @@ function formatPhoneDisplay(raw: string): string {
   }
   return `+${digits}`;
 }
+
+// Extract any valid URL from message text
+function extractFirstUrl(text: string): string | null {
+  const match = text.match(/https?:\/\/[^\s]+/i);
+  return match ? match[0] : null;
+}
+
+// Quick canned responses for instant dispatcher replies
+const CANNED_RESPONSES = [
+  { label: "Driver 5m away", text: "Namaste! Your assigned driver is approximately 5 minutes away from your pickup point." },
+  { label: "Share location", text: "Please share your current live GPS WhatsApp location so our driver can reach your exact spot." },
+  { label: "Homestay Welcome", text: "Welcome to your homestay! If you need local sightseeing, Tiger Hill sunrise, or an airport drop, let us know." },
+  { label: "Booking Confirmed", text: "Your cab booking is confirmed. Verified driver details and vehicle registration have been assigned." },
+  { label: "Cash on Drop", text: "The remaining trip balance is to be paid directly in cash to the driver at your drop-off destination." },
+  { label: "24/7 Desk", text: "Our StayCabs operations desk is available 24/7. Feel free to call us at any time during your trip." },
+];
+
+// Dynamic template text formatters that use active customer values
+const TEMPLATE_FORMATTERS: Record<string, (p: Record<number, string>) => string> = {
+  ask_cab: (p) =>
+    `Namaste ${p[1] || "Guest"}.\nIf you need an airport transfer, sightseeing, or a local hill cab during your stay at ${p[2] || "StayCabs Homestay"}, please share your itinerary and we will arrange a verified driver for you:\n${p[3] || "https://staycabs.in/cab-request"}`,
+  new_trip_request: (p) =>
+    `New trip request from ${p[1] || "StayCabs Partner"}.\nRoute: ${p[2] || "Route"}\nPickup: ${p[3] || "Pickup"}\nVehicle: ${p[4] || "Cab"}\n\nSubmit your total trip fare quotation here: ${p[5] || ""}`,
+  quote_accepted_guest: (p) =>
+    `Namaste ${p[1] || "Guest"},\nA verified driver is reserved for your trip.\nDriver: ${p[2] || "Driver"}\nVehicle: ${p[3] || "Vehicle"}\nTotal fare: ${p[4] || "₹0"}\n\nPlease pay the advance booking fee of ${p[5] || "₹0"} here: ${p[6] || ""}\nPlease pay ${p[7] || "soon"} to confirm your cab. The rest is paid in cash to your driver at drop-off.`,
+  advance_paid_guest: (p) =>
+    `Namaste ${p[1] || "Guest"},\nYour cab booking is confirmed.\nDriver: ${p[2] || "Driver"}, phone ${p[3] || "Phone"}\nVehicle: ${p[4] || "Vehicle"}\nRoute: ${p[5] || "Route"}\nPickup: ${p[6] || "Pickup"}\n\nThe remaining fare of ${p[7] || "Cash"} is paid in cash to your driver at drop-off.\nTrack your cab and view your trip pass here: ${p[8] || ""}\nHave a safe journey.`,
+  boarding_pin_guest: (p) =>
+    `${p[1] || "XXXX"} is your boarding PIN. Share it with your driver at pickup.`,
+  advance_paid_driver: (p) =>
+    `Hello ${p[1] || "Driver"},\nThe online booking fee is received and trip ${p[2] || "Ref"} is confirmed.\nPassenger: ${p[3] || "Passenger"}, phone ${p[4] || "Phone"}\nRoute: ${p[5] || "Route"}\nPickup: ${p[6] || "Pickup"}\n\nCollect your cash fare of ${p[7] || "Cash"} directly from the passenger at drop-off.\nOpen trip details here: ${p[8] || ""}\nThank you.`,
+  trip_assigned_driver: (p) =>
+    `Hi ${p[1] || "Driver"},\n${p[2] || "Homestay"} has assigned you a trip.\nGuest: ${p[3] || "Guest"} (${p[4] || "Phone"})\nRoute: ${p[5] || "Route"}\nWhen: ${p[6] || "When"}`,
+  quote_counter: (p) =>
+    `Hello ${p[1] || "Driver"},\nThe homestay has made a counter-offer of ${p[3] || "Counter Fare"} for trip ${p[2] || "Ref"}.\nYou can accept this offer or keep your original fare here:\n${p[4] || ""}`,
+  trip_cancelled_guest: (p) =>
+    `Hello ${p[1] || "Guest"},\nYour cab request ${p[2] || "Ref"} for ${p[3] || "When"} has been cancelled. ${p[4] || ""}`,
+  refund_guest: (p) =>
+    `Hi ${p[1] || "Guest"},\nStayCabs has refunded your advance of ${p[2] || "Amount"} for trip ${p[3] || "Ref"} (reference ${p[4] || "UTR"}). Your bank may take a few days to show it.`,
+  completion_reminder_driver: (p) =>
+    `Hello ${p[1] || "Driver"},\nHave you completed the trip for ${p[2] || "Guest"} (${p[4] || "Ref"})?\nPlease confirm cash collection of ${p[3] || "Cash"} and tap to complete the ride:\n${p[5] || ""}`,
+  driver_welcome: (p) =>
+    `Namaste ${p[1] || "Driver"}!\nYour driver registration (${p[2] || "Plate"}) has been submitted to StayCabs.\nOur operations team will review your vehicle details shortly. Once approved, you will receive trip booking alerts directly on this WhatsApp number.\nHappy driving with StayCabs!`,
+  driver_payout_settled: (p) =>
+    `StayCabs Payout: ₹${p[1] || "Amount"} has been sent to your UPI account (Bank UTR: ${p[2] || "UTR"}).`,
+  quote_accepted_driver: (p) =>
+    `Hello ${p[1] || "Driver"},\nYour quotation for trip ${p[2] || "Ref"} has been accepted by the guest.\nWe are waiting for the online advance payment hold to confirm your ride.\nStay prepared.`,
+  advance_expired_guest: (p) =>
+    `Namaste ${p[1] || "Guest"}.\nThe advance booking hold for cab request ${p[2] || "Ref"} has expired.\nYou can submit a fresh request at https://staycabs.in/cab-request whenever you are ready.`,
+  vehicle_updated_guest: (p) =>
+    `Namaste ${p[1] || "Guest"},\nYour assigned cab for trip ${p[2] || "Ref"} has been updated.\nDriver: ${p[4] || "Verified Driver"}\nVehicle Plate: ${p[3] || "Plate"}\nBoarding PIN: ${p[5] || "----"}\nPlease verify this registration at pickup.`,
+  driver_payout_rejected: (p) =>
+    `StayCabs Payout: Your payout request of ₹${p[1] || "Amount"} could not be settled.\nReason: ${p[2] || "Reason"}.\nPlease update your bank/UPI details in the StayRide Driver App.`,
+  bidding_timeout_owner: (p) =>
+    `Alert for ${p[1] || "Homestay"}:\nNo hill driver has quoted for guest ${p[2] || "Guest"}'s trip from ${p[3] || "Pickup"} yet.\nPlease review the request or assign an in-house fleet vehicle:\n${p[4] || "https://staycabs.in/owner"}`,
+};
 
 export function WhatsAppInbox({
   demo,
@@ -154,21 +214,32 @@ export function WhatsAppInbox({
   const [sendingMessage, setSendingMessage] = useState(false);
   const [attachmentUrl, setAttachmentUrl] = useState("");
   const [showAttachInput, setShowAttachInput] = useState(false);
+  const [showCannedReplies, setShowCannedReplies] = useState(false);
 
   // State: Templates Modal
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [templates, setTemplates] = useState<TemplateItem[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateItem | null>(null);
   const [templateValues, setTemplateValues] = useState<Record<number, string>>({});
+  const [templateCategoryTab, setTemplateCategoryTab] = useState<"recommended" | "guest" | "ride" | "driver" | "all">("recommended");
   const [sendingTemplate, setSendingTemplate] = useState(false);
 
-  // State: Layout / Right Panel
+  // State: UI Utilities
   const [showRightSidebar, setShowRightSidebar] = useState(true);
   const [mobileViewChat, setMobileViewChat] = useState(false);
   const [socketConnected, setSocketConnected] = useState(false);
+  const [pollingConnected, setPollingConnected] = useState(false);
+  const [copiedPhone, setCopiedPhone] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const socketRef = useRef<Socket | null>(null);
+
+  // Toast feedback helper
+  function triggerToast(msg: string) {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3000);
+  }
 
   // 1. Fetch Conversations List
   async function fetchConversations(refresh = false) {
@@ -189,14 +260,16 @@ export function WhatsAppInbox({
           setTotalCount(json.data.stats?.totalConversations ?? json.data.pagination?.total ?? 0);
           setUnreadTotal(json.data.stats?.unreadConversations ?? 0);
 
-          // If no conversation is active and we have items, select the first on desktop
           if (!activeConversationId && json.data.conversations?.length > 0 && typeof window !== "undefined" && window.innerWidth >= 1024) {
             selectConversation(json.data.conversations[0]);
           }
         }
+        return true;
       }
+      return false;
     } catch (err: any) {
       console.warn("Error fetching WhatsApp conversations:", err);
+      return false;
     } finally {
       setLoadingConversations(false);
     }
@@ -223,7 +296,6 @@ export function WhatsAppInbox({
     setLoadingContext(true);
 
     try {
-      // Load details & 24h window
       const detailRes = await apiFetch(API_ENDPOINTS.whatsappConversation(conv._id, demo));
       if (detailRes.ok) {
         const detailJson = await detailRes.json();
@@ -234,7 +306,6 @@ export function WhatsAppInbox({
         }
       }
 
-      // Load messages
       const msgRes = await apiFetch(API_ENDPOINTS.whatsappMessages(conv._id, demo ? "demo=true" : ""));
       if (msgRes.ok) {
         const msgJson = await msgRes.json();
@@ -243,7 +314,6 @@ export function WhatsAppInbox({
         }
       }
 
-      // Mark conversation as read if unreadCount > 0
       if (conv.unreadCount > 0) {
         apiFetch(API_ENDPOINTS.whatsappMarkRead(conv._id), {
           method: "POST",
@@ -257,7 +327,6 @@ export function WhatsAppInbox({
         });
       }
 
-      // Join socket room
       if (socketRef.current) {
         socketRef.current.emit("join_conversation", conv._id);
       }
@@ -269,7 +338,7 @@ export function WhatsAppInbox({
     }
   }
 
-  // 3. Scroll to bottom of chat
+  // 3. Scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loadingMessages]);
@@ -293,7 +362,7 @@ export function WhatsAppInbox({
     loadTemplates();
   }, []);
 
-  // 5. Real-time Live Synchronisation: Smart Polling (Vercel-native) + Local Socket.IO Fallback
+  // 5. Real-time Live Synchronisation: Smart Polling + Socket.IO Fallback
   useEffect(() => {
     let isMounted = true;
     const isLocalhost =
@@ -301,7 +370,6 @@ export function WhatsAppInbox({
       (/localhost|127\.0\.0\.1/.test(window.location.hostname) ||
         /localhost|127\.0\.0\.1/.test(SOCKET_SERVER_URL));
 
-    // Only attempt Socket.IO on local Node development server (where server.ts runs persistently)
     if (isLocalhost) {
       try {
         const socket = socketIO(SOCKET_SERVER_URL, {
@@ -326,16 +394,9 @@ export function WhatsAppInbox({
           setSocketConnected(false);
         });
 
-        socket.on("connect_error", () => {
-          // Gracefully fallback to polling without console noise
-          socket.disconnect();
-        });
-
-        // Inbound or outbound message event
         socket.on("whatsapp:message", (data: { conversation: ConversationItem; message: ChatMessage }) => {
           if (!data?.message || !isMounted) return;
 
-          // Update messages if this belongs to active conversation
           if (data.message.conversationId === activeConversationId || data.conversation?._id === activeConversationId) {
             setMessages((prev) => {
               if (prev.some((m) => m._id === data.message._id || (m.whatsappMessageId && m.whatsappMessageId === data.message.whatsappMessageId))) {
@@ -346,7 +407,6 @@ export function WhatsAppInbox({
               return [...prev, data.message];
             });
 
-            // Refresh window info if inbound message
             if (data.message.direction === "INBOUND") {
               setChatWindowInfo({
                 isOpen: true,
@@ -357,7 +417,6 @@ export function WhatsAppInbox({
             }
           }
 
-          // Update conversation list preview
           setConversations((prev) => {
             const index = prev.findIndex((c) => c._id === data.conversation?._id || c._id === data.message.conversationId);
             if (index !== -1) {
@@ -370,7 +429,6 @@ export function WhatsAppInbox({
               if (data.message.direction === "INBOUND" && data.conversation?._id !== activeConversationId) {
                 item.unreadCount = (item.unreadCount || 0) + 1;
               }
-              // Move to top
               updated.splice(index, 1);
               return [item, ...updated];
             } else if (data.conversation) {
@@ -380,7 +438,6 @@ export function WhatsAppInbox({
           });
         });
 
-        // Conversation update event
         socket.on("whatsapp:conversation", (updatedConv: ConversationItem) => {
           if (!updatedConv?._id || !isMounted) return;
           setConversations((prev) => {
@@ -395,7 +452,6 @@ export function WhatsAppInbox({
           }
         });
 
-        // Delivery status update event
         socket.on("whatsapp:status", (statusData: { messageId: string; status: DeliveryStatus; timestamp: string }) => {
           if (!statusData?.messageId || !isMounted) return;
           setMessages((prev) =>
@@ -411,33 +467,32 @@ export function WhatsAppInbox({
       }
     }
 
-    // On Vercel / Cloud production, enable live sync status via smart polling
-    if (!isLocalhost) {
-      setSocketConnected(true);
-    }
-
-    // --- Smart Polling Worker for Active Chat & Inbox (Production Vercel-Ready) ---
+    // Polling worker for Vercel/production
     async function pollActiveMessages() {
       if (!activeConversationId || !isMounted) return;
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
 
       try {
         const res = await apiFetch(API_ENDPOINTS.whatsappMessages(activeConversationId, demo ? "demo=true" : ""));
-        if (res.ok && isMounted) {
-          const json = await res.json();
-          if (json.success && Array.isArray(json.data)) {
-            setMessages((prev) => {
-              if (json.data.length !== prev.length) return json.data;
-              const hasDiff = json.data.some((m: ChatMessage, idx: number) => {
-                const existing = prev[idx];
-                return !existing || existing._id !== m._id || existing.deliveryStatus !== m.deliveryStatus;
-              });
-              return hasDiff ? json.data : prev;
+        if (!isMounted) return;
+        if (!res.ok) {
+          setPollingConnected(false);
+          return;
+        }
+        const json = await res.json();
+        if (json.success && Array.isArray(json.data)) {
+          setPollingConnected(true);
+          setMessages((prev) => {
+            if (json.data.length !== prev.length) return json.data;
+            const hasDiff = json.data.some((m: ChatMessage, idx: number) => {
+              const existing = prev[idx];
+              return !existing || existing._id !== m._id || existing.deliveryStatus !== m.deliveryStatus;
             });
-          }
+            return hasDiff ? json.data : prev;
+          });
         }
       } catch {
-        // Quiet network catch
+        if (isMounted) setPollingConnected(false);
       }
     }
 
@@ -445,13 +500,14 @@ export function WhatsAppInbox({
       if (!isMounted) return;
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       try {
-        await fetchConversations(false);
-      } catch {}
+        const ok = await fetchConversations(false);
+        if (isMounted) setPollingConnected(ok);
+      } catch {
+        if (isMounted) setPollingConnected(false);
+      }
     }
 
-    // Active conversation polls every 3.5 seconds
     const messageInterval = setInterval(pollActiveMessages, 3500);
-    // Overall conversation list summary polls every 12 seconds
     const convInterval = setInterval(pollConversationsList, 12000);
 
     const onVisibilityChange = () => {
@@ -476,11 +532,10 @@ export function WhatsAppInbox({
   }, [activeConversationId, demo]);
 
   // 6. Send Manual Text Message
-  async function handleSendManualMessage(e?: React.FormEvent) {
-    if (e) e.preventDefault();
-    if (!activeConversationId || (!messageText.trim() && !attachmentUrl.trim()) || sendingMessage) return;
+  async function handleSendManualMessage(customText?: string) {
+    const textToSend = (customText !== undefined ? customText : messageText).trim();
+    if (!activeConversationId || (!textToSend && !attachmentUrl.trim()) || sendingMessage) return;
 
-    const outgoingContent = messageText.trim();
     const media = attachmentUrl.trim() || undefined;
 
     setSendingMessage(true);
@@ -489,7 +544,7 @@ export function WhatsAppInbox({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          text: outgoingContent,
+          text: textToSend,
           mediaUrl: media,
           mediaType: media ? "IMAGE" : "TEXT",
           demo,
@@ -503,19 +558,19 @@ export function WhatsAppInbox({
           setMessageText("");
           setAttachmentUrl("");
           setShowAttachInput(false);
+          setShowCannedReplies(false);
         }
       } else {
         const errMsg = await readApiError(res, "Failed to send message.");
-        alert(errMsg);
+        triggerToast(errMsg);
       }
     } catch (err: any) {
-      alert(err.message || "Failed to send message.");
+      triggerToast(err.message || "Failed to send message.");
     } finally {
       setSendingMessage(false);
     }
   }
 
-  // Enter to send, Shift+Enter for new line
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -523,46 +578,185 @@ export function WhatsAppInbox({
     }
   }
 
-  // 7. Open Template Selector
+  // 7. Auto-populate Template Variables for THIS SPECIFIC CUSTOMER
+  function getAutoPopulatedVariables(tpl: TemplateItem): Record<number, string> {
+    const values: Record<number, string> = {};
+
+    const isPhone = (s?: string) => !s || /^\+?\d+$/.test(s.trim());
+
+    // Clean resolution for Guest Name (never use a phone number as a person's name)
+    const rawGuest =
+      customerContext?.guest?.name ||
+      customerContext?.latestBooking?.guestName ||
+      (!isPhone(activeConversation?.customerName) ? activeConversation?.customerName : "");
+    const guestName = rawGuest && rawGuest.trim() ? rawGuest.trim() : "Guest";
+
+    // Clean resolution for Driver Name (never use a phone number as driver name)
+    const rawDriver =
+      (customerContext as any)?.driver?.name ||
+      customerContext?.latestTrip?.assignedDriverName ||
+      (!isPhone(activeConversation?.customerName) ? activeConversation?.customerName : "");
+    const driverName = rawDriver && rawDriver.trim() ? rawDriver.trim() : "Driver Partner";
+
+    const homestayName =
+      customerContext?.homestay?.name ||
+      customerContext?.latestBooking?.homestayName ||
+      "StayCabs Homestay";
+
+    const customerPhone = activeConversation?.phoneNumber ? formatPhoneDisplay(activeConversation.phoneNumber) : "+91 98320 12345";
+    const tripRef = customerContext?.latestTrip?.reference || customerContext?.latestBooking?.reference || `REQ-${(activeConversation?._id || "9F2A61").slice(-6).toUpperCase()}`;
+
+    const pickupAddr = customerContext?.latestTrip?.pickupLocation?.address || "Bagdogra Airport";
+    const dropAddr = (customerContext?.latestTrip?.destinations || [])[0]?.address || (homestayName ? `${homestayName}` : "Darjeeling Mall Road");
+    const route = `${pickupAddr} → ${dropAddr}`;
+
+    const tripWhen = customerContext?.latestTrip?.date
+      ? `${formatDate(customerContext.latestTrip.date)}${customerContext.latestTrip.time ? ` at ${customerContext.latestTrip.time}` : ""}`
+      : "Tomorrow at 09:30 AM";
+
+    const vehicleType = customerContext?.latestTrip?.vehicleType || "SUV";
+    const driverPhone = customerContext?.latestTrip?.assignedDriverPhone || "+91 98320 44556";
+    const totalFare = customerContext?.latestTrip?.agreedFare ? `₹${Number(customerContext.latestTrip.agreedFare).toLocaleString("en-IN")}` : "₹2,800";
+    const advanceAmount = customerContext?.latestTrip?.advanceAmount ? `₹${Number(customerContext.latestTrip.advanceAmount).toLocaleString("en-IN")}` : "₹700";
+    const remainingCash = customerContext?.latestTrip?.remainingCashAmount ? `₹${Number(customerContext.latestTrip.remainingCashAmount).toLocaleString("en-IN")}` : "₹2,100";
+    const pin = String(customerContext?.latestTrip?.pickupOtp || "4821");
+
+    tpl.variables.forEach((v) => {
+      if (tpl.id === "ask_cab") {
+        if (v.index === 1) values[1] = guestName;
+        if (v.index === 2) values[2] = homestayName;
+        if (v.index === 3) values[3] = `https://staycabs.in/cab-request?ref=${tripRef}&phone=${activeConversation?.phoneNumber || ""}`;
+      } else if (tpl.id === "new_trip_request") {
+        if (v.index === 1) values[1] = homestayName;
+        if (v.index === 2) values[2] = route;
+        if (v.index === 3) values[3] = tripWhen;
+        if (v.index === 4) values[4] = vehicleType;
+        if (v.index === 5) values[5] = `https://staycabs.in/driver-quote?t=${tripRef}`;
+      } else if (tpl.id === "quote_accepted_guest") {
+        if (v.index === 1) values[1] = guestName;
+        if (v.index === 2) values[2] = driverName;
+        if (v.index === 3) values[3] = vehicleType;
+        if (v.index === 4) values[4] = totalFare;
+        if (v.index === 5) values[5] = advanceAmount;
+        if (v.index === 6) values[6] = `https://staycabs.in/pay/${tripRef}`;
+        if (v.index === 7) values[7] = "within 30 minutes";
+      } else if (tpl.id === "advance_paid_guest") {
+        if (v.index === 1) values[1] = guestName;
+        if (v.index === 2) values[2] = driverName;
+        if (v.index === 3) values[3] = driverPhone;
+        if (v.index === 4) values[4] = `${vehicleType} (${customerContext?.latestTrip?.vehicleDetails?.plate || "Verified Cab"})`;
+        if (v.index === 5) values[5] = route;
+        if (v.index === 6) values[6] = tripWhen;
+        if (v.index === 7) values[7] = remainingCash;
+        if (v.index === 8) values[8] = `https://staycabs.in/cab-request?ref=${tripRef}`;
+      } else if (tpl.id === "boarding_pin_guest") {
+        if (v.index === 1) values[1] = pin;
+      } else if (tpl.id === "advance_paid_driver") {
+        if (v.index === 1) values[1] = driverName;
+        if (v.index === 2) values[2] = tripRef;
+        if (v.index === 3) values[3] = guestName;
+        if (v.index === 4) values[4] = customerPhone;
+        if (v.index === 5) values[5] = route;
+        if (v.index === 6) values[6] = tripWhen;
+        if (v.index === 7) values[7] = remainingCash;
+        if (v.index === 8) values[8] = `https://staycabs.in/driver-quote?t=${tripRef}`;
+      } else if (tpl.id === "trip_assigned_driver") {
+        if (v.index === 1) values[1] = driverName;
+        if (v.index === 2) values[2] = homestayName;
+        if (v.index === 3) values[3] = guestName;
+        if (v.index === 4) values[4] = customerPhone;
+        if (v.index === 5) values[5] = route;
+        if (v.index === 6) values[6] = tripWhen;
+      } else if (tpl.id === "quote_counter") {
+        if (v.index === 1) values[1] = driverName;
+        if (v.index === 2) values[2] = tripRef;
+        if (v.index === 3) values[3] = totalFare;
+        if (v.index === 4) values[4] = `https://staycabs.in/quote/${tripRef}`;
+      } else if (tpl.id === "trip_cancelled_guest") {
+        if (v.index === 1) values[1] = guestName;
+        if (v.index === 2) values[2] = tripRef;
+        if (v.index === 3) values[3] = tripWhen;
+        if (v.index === 4) values[4] = "Due to mountain route advisory. Any advance paid will be automatically refunded.";
+      } else if (tpl.id === "refund_guest") {
+        if (v.index === 1) values[1] = guestName;
+        if (v.index === 2) values[2] = advanceAmount;
+        if (v.index === 3) values[3] = tripRef;
+        if (v.index === 4) values[4] = `RFND-${Date.now().toString().slice(-6)}`;
+      } else if (tpl.id === "completion_reminder_driver") {
+        if (v.index === 1) values[1] = driverName;
+        if (v.index === 2) values[2] = guestName;
+        if (v.index === 3) values[3] = remainingCash;
+        if (v.index === 4) values[4] = tripRef;
+        if (v.index === 5) values[5] = `https://staycabs.in/trip/complete?ref=${tripRef}`;
+      } else if (tpl.id === "driver_welcome") {
+        if (v.index === 1) values[1] = activeConversation?.customerName || "Driver Partner";
+        if (v.index === 2) values[2] = customerContext?.latestTrip?.vehicleDetails?.plate || "SK-01-A-4567";
+      } else if (tpl.id === "driver_payout_settled") {
+        if (v.index === 1) values[1] = "₹4,500";
+        if (v.index === 2) values[2] = `UPI-${Math.floor(100000000000 + Math.random() * 900000000000)}`;
+      } else if (tpl.id === "quote_accepted_driver") {
+        if (v.index === 1) values[1] = driverName;
+        if (v.index === 2) values[2] = tripRef;
+      } else if (tpl.id === "advance_expired_guest") {
+        if (v.index === 1) values[1] = guestName;
+        if (v.index === 2) values[2] = tripRef;
+      } else if (tpl.id === "vehicle_updated_guest") {
+        if (v.index === 1) values[1] = guestName;
+        if (v.index === 2) values[2] = tripRef;
+        if (v.index === 3) values[3] = customerContext?.latestTrip?.vehicleDetails?.plate || "WB-74-A-9999";
+        if (v.index === 4) values[4] = driverName;
+        if (v.index === 5) values[5] = pin;
+      } else if (tpl.id === "driver_payout_rejected") {
+        if (v.index === 1) values[1] = "₹3,000";
+        if (v.index === 2) values[2] = "Incorrect UPI virtual payment address";
+      } else if (tpl.id === "bidding_timeout_owner") {
+        if (v.index === 1) values[1] = homestayName;
+        if (v.index === 2) values[2] = guestName;
+        if (v.index === 3) values[3] = pickupAddr;
+        if (v.index === 4) values[4] = `https://staycabs.in/owner?t=${tripRef}`;
+      } else {
+        values[v.index] = v.sample || "";
+      }
+    });
+
+    return values;
+  }
+
   function handleOpenTemplates() {
-    // Auto-populate variables from active customer context
     if (templates.length > 0) {
-      selectTemplateForComposer(templates[0]);
+      // Intelligently detect if this contact is a Driver or Guest
+      const isDriverContact =
+        Boolean((customerContext as any)?.driver) ||
+        Boolean((customerContext as any)?.isDriver) ||
+        messages.some(
+          (m) =>
+            m.templateName === "new_trip_request" ||
+            m.templateName === "advance_paid_driver" ||
+            m.messageContent.includes("Submit your total trip fare quotation")
+        );
+
+      if (isDriverContact) {
+        setTemplateCategoryTab("driver");
+        const defaultDriverTpl =
+          templates.find((t) => t.id === "new_trip_request" || t.id === "advance_paid_driver") ||
+          templates[0];
+        selectTemplateForComposer(defaultDriverTpl);
+      } else {
+        const hasCabs = (customerContext?.cabBookings?.length || 0) > 0;
+        setTemplateCategoryTab(hasCabs ? "ride" : "guest");
+        const defaultGuestTpl =
+          templates.find((t) => (hasCabs ? t.id === "advance_paid_guest" : t.id === "ask_cab")) ||
+          templates[0];
+        selectTemplateForComposer(defaultGuestTpl);
+      }
     }
     setShowTemplateModal(true);
   }
 
   function selectTemplateForComposer(tpl: TemplateItem) {
     setSelectedTemplate(tpl);
-    const initial: Record<number, string> = {};
-
-    tpl.variables.forEach((v) => {
-      // Smart variable auto-population based on template index & customer info
-      if (tpl.id === "ask_cab") {
-        if (v.index === 1) initial[1] = customerContext?.guest?.name || customerContext?.latestBooking?.guestName || activeConversation?.customerName || "";
-        if (v.index === 2) initial[2] = customerContext?.homestay?.name || "StayCabs Homestay";
-        if (v.index === 3) initial[3] = "https://staycabs.in/cab-request";
-      } else if (tpl.id === "new_trip_request") {
-        if (v.index === 1) initial[1] = customerContext?.homestay?.name || "StayCabs Partner";
-        if (v.index === 2) initial[2] = customerContext?.latestTrip?.pickupLocation?.address ? `${customerContext.latestTrip.pickupLocation.address} → Drop` : "Bagdogra Airport → Darjeeling Mall Road";
-        if (v.index === 3) initial[3] = customerContext?.latestTrip?.time ? `${customerContext.latestTrip.time}` : "Tomorrow at 10:00 AM";
-        if (v.index === 4) initial[4] = customerContext?.latestTrip?.vehicleType || "SUV";
-        if (v.index === 5) initial[5] = "https://staycabs.in/driver-quote";
-      } else if (tpl.id === "quote_accepted_guest" || tpl.id === "advance_paid_guest") {
-        if (v.index === 1) initial[1] = customerContext?.guest?.name || activeConversation?.customerName || "";
-        if (v.index === 2) initial[2] = customerContext?.latestTrip?.assignedDriverName || "Tenzing Sherpa";
-        if (v.index === 3) initial[3] = customerContext?.latestTrip?.assignedDriverPhone || "+91 98320 12345";
-        if (v.index === 4) initial[4] = "Mahindra Scorpio";
-        if (v.index === 5) initial[5] = "Local Hill Excursion";
-        if (v.index === 6) initial[6] = "Tomorrow 09:00 AM";
-        if (v.index === 7) initial[7] = "₹2,500";
-        if (v.index === 8) initial[8] = "https://staycabs.in/cab-request";
-      } else {
-        initial[v.index] = v.sample || "";
-      }
-    });
-
-    setTemplateValues(initial);
+    const populated = getAutoPopulatedVariables(tpl);
+    setTemplateValues(populated);
   }
 
   // 8. Send Selected Template
@@ -589,19 +783,20 @@ export function WhatsAppInbox({
         if (json.success && json.data) {
           setMessages((prev) => [...prev, json.data]);
           setShowTemplateModal(false);
+          triggerToast(`Template "${selectedTemplate.title}" sent successfully!`);
         }
       } else {
         const errMsg = await readApiError(res, "Failed to send template message.");
-        alert(errMsg);
+        triggerToast(errMsg);
       }
     } catch (err: any) {
-      alert(err.message || "Failed to send template message.");
+      triggerToast(err.message || "Failed to send template message.");
     } finally {
       setSendingTemplate(false);
     }
   }
 
-  // 9. Toggle Conversation Status (Open / Closed)
+  // 9. Toggle Conversation Status
   async function handleToggleStatus() {
     if (!activeConversation) return;
     const nextStatus = activeConversation.status === "OPEN" ? "CLOSED" : "OPEN";
@@ -616,56 +811,128 @@ export function WhatsAppInbox({
         setConversations((prev) =>
           prev.map((c) => (c._id === activeConversation._id ? { ...c, status: nextStatus } : c))
         );
+        triggerToast(`Conversation marked as ${nextStatus}`);
       }
-    } catch (err: any) {
-      alert("Failed to update conversation status.");
+    } catch {
+      triggerToast("Failed to update status");
     }
   }
 
-  // Render preview of template
+  // Copy phone helper
+  function handleCopyPhone(phone: string) {
+    navigator.clipboard.writeText(phone);
+    setCopiedPhone(true);
+    triggerToast(`Phone ${phone} copied to clipboard`);
+    setTimeout(() => setCopiedPhone(false), 2000);
+  }
+
+  // Render preview of template body with active customer values
   function renderTemplatePreview(): string {
     if (!selectedTemplate) return "";
+    const formatter = TEMPLATE_FORMATTERS[selectedTemplate.id];
+    if (formatter) {
+      return formatter(templateValues);
+    }
+    // Fallback: replace any variable placeholders or samples
     let text = selectedTemplate.samplePreview;
     selectedTemplate.variables.forEach((v) => {
-      const val = templateValues[v.index] || `{{${v.index}}}`;
-      text = text.replace(new RegExp(`\\{\\{${v.index}\\}\\}`, "g"), val);
+      const val = templateValues[v.index];
+      if (val && v.sample) {
+        text = text.replace(v.sample, val);
+      }
     });
     return text;
   }
 
+  // Categorized templates for the modal
+  const filteredTemplates = useMemo(() => {
+    if (templateCategoryTab === "all") return templates;
+    if (templateCategoryTab === "recommended") {
+      const hasCabs = (customerContext?.cabBookings?.length || 0) > 0;
+      return templates.filter((t) =>
+        hasCabs
+          ? ["quote_accepted_guest", "advance_paid_guest", "boarding_pin_guest", "trip_cancelled_guest"].includes(t.id)
+          : ["ask_cab", "new_trip_request", "quote_accepted_guest"].includes(t.id)
+      );
+    }
+    if (templateCategoryTab === "guest") {
+      return templates.filter((t) => ["ask_cab", "quote_accepted_guest", "advance_paid_guest", "boarding_pin_guest", "trip_cancelled_guest", "refund_guest", "advance_expired_guest", "vehicle_updated_guest"].includes(t.id));
+    }
+    if (templateCategoryTab === "ride") {
+      return templates.filter((t) => ["new_trip_request", "quote_accepted_guest", "advance_paid_guest", "quote_counter", "completion_reminder_driver", "quote_accepted_driver", "vehicle_updated_guest"].includes(t.id));
+    }
+    if (templateCategoryTab === "driver") {
+      return templates.filter((t) => ["new_trip_request", "advance_paid_driver", "trip_assigned_driver", "completion_reminder_driver", "driver_welcome", "driver_payout_settled", "driver_payout_rejected", "quote_accepted_driver", "bidding_timeout_owner"].includes(t.id));
+    }
+    return templates;
+  }, [templates, templateCategoryTab, customerContext]);
+
+  const syncConnected = socketConnected || pollingConnected;
+
+  // Render message text with auto-link clickable anchors
+  function renderClickableText(content: string) {
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const parts = content.split(urlRegex);
+
+    return parts.map((part, i) => {
+      if (part.match(urlRegex)) {
+        return (
+          <a
+            key={i}
+            href={part}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-emerald-400 hover:text-emerald-300 underline underline-offset-2 break-all"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {part}
+          </a>
+        );
+      }
+      return <span key={i}>{part}</span>;
+    });
+  }
+
   return (
-    <div className="flex flex-col h-[calc(100vh-130px)] min-h-[580px] bg-[#0B0F14] text-[#E6EDF3] rounded-xl border border-slate-800 shadow-2xl overflow-hidden font-sans">
-      {/* 1. TOP STATUS BAR */}
-      <div className="flex items-center justify-between border-b border-slate-800/80 bg-[#121820] px-4 py-2.5 text-xs">
-        <div className="flex items-center gap-2">
+    <div className="flex flex-col h-[calc(100vh-130px)] min-h-[580px] bg-[#0B1015] text-[#E9EDEF] rounded-xl border border-slate-800 shadow-2xl overflow-hidden font-sans">
+      {/* 1. TOP HEADER / STATUS BAR */}
+      <div className="flex items-center justify-between border-b border-slate-800/80 bg-[#111B21] px-4 py-2.5 text-xs select-none">
+        <div className="flex items-center gap-2.5">
           <span className="flex h-2.5 w-2.5 relative">
             <span
               className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
-                socketConnected ? "bg-emerald-400" : "bg-amber-400"
+                syncConnected ? "bg-emerald-400" : "bg-amber-400"
               }`}
             />
             <span
               className={`relative inline-flex rounded-full h-2.5 w-2.5 ${
-                socketConnected ? "bg-emerald-500" : "bg-amber-500"
+                syncConnected ? "bg-emerald-500" : "bg-amber-500"
               }`}
             />
           </span>
           <span className="font-medium text-slate-300">
-            {socketConnected ? "Cloud API Live Sync" : "Connecting..."}
+            {socketConnected ? "Cloud API Live Sync" : pollingConnected ? "Cloud API Polling Sync" : "Connecting..."}
           </span>
-          <span className="text-slate-500">•</span>
-          <span className="text-slate-400 font-mono">
+          <span className="text-slate-600">•</span>
+          <span className="text-slate-400 font-mono text-[11px]">
             {totalCount} Total Conversations ({unreadTotal} Unread)
           </span>
         </div>
 
         <div className="flex items-center gap-3">
+          {toastMessage && (
+            <div className="text-[11px] text-emerald-300 bg-emerald-950/80 border border-emerald-500/40 px-2.5 py-0.5 rounded-md animate-fade-in">
+              {toastMessage}
+            </div>
+          )}
           <button
             onClick={() => fetchConversations(true)}
-            className="flex items-center gap-1 text-slate-400 hover:text-white transition cursor-pointer"
-            title="Refresh conversations"
+            className="flex items-center gap-1.5 text-slate-400 hover:text-white transition cursor-pointer text-xs font-medium px-2 py-1 rounded hover:bg-slate-800/60"
+            title="Refresh conversations list"
           >
-            <span className="material-symbols-outlined text-sm">refresh</span>
+            <span className={`material-symbols-outlined text-sm ${loadingConversations ? "animate-spin text-emerald-400" : ""}`}>
+              refresh
+            </span>
             <span>Sync</span>
           </button>
         </div>
@@ -677,14 +944,14 @@ export function WhatsAppInbox({
         {/* PANE A: LEFT SIDEBAR - CONVERSATION LIST                                  */}
         {/* ========================================================================= */}
         <div
-          className={`w-full md:w-80 lg:w-96 flex flex-col border-r border-slate-800/80 bg-[#0E131A] shrink-0 transition-all ${
+          className={`w-full md:w-80 lg:w-96 flex flex-col border-r border-slate-800/80 bg-[#111B21] shrink-0 transition-all ${
             mobileViewChat ? "hidden md:flex" : "flex"
           }`}
         >
           {/* Search Bar */}
-          <div className="p-3 border-b border-slate-800/80 bg-[#121820]/60 space-y-2.5">
+          <div className="p-3 border-b border-slate-800/80 bg-[#111B21] space-y-2.5">
             <div className="relative">
-              <span className="material-symbols-outlined absolute left-2.5 top-2.5 text-slate-400 text-sm">
+              <span className="material-symbols-outlined absolute left-2.5 top-2 text-slate-500 text-sm">
                 search
               </span>
               <input
@@ -692,7 +959,7 @@ export function WhatsAppInbox({
                 placeholder="Search name, phone, message..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-slate-700/80 bg-[#161F2C] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 transition"
+                className="w-full pl-8 pr-7 py-1.5 rounded-lg border border-slate-800 bg-[#202C33] text-xs text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500/60 transition"
               />
               {search && (
                 <button
@@ -712,13 +979,13 @@ export function WhatsAppInbox({
                   onClick={() => setFilter(f)}
                   className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition cursor-pointer capitalize flex items-center gap-1 shrink-0 ${
                     filter === f
-                      ? "bg-purple-600 text-white shadow-xs"
-                      : "bg-slate-800/60 text-slate-400 hover:text-white hover:bg-slate-800"
+                      ? "bg-emerald-600 text-white shadow-xs"
+                      : "bg-[#202C33] text-slate-300 hover:text-white hover:bg-slate-700/60"
                   }`}
                 >
                   <span>{f}</span>
                   {f === "unread" && unreadTotal > 0 && (
-                    <span className="bg-emerald-500 text-white text-[9px] px-1.5 py-0.2 rounded-full font-bold">
+                    <span className="bg-emerald-400 text-black text-[9px] px-1.5 py-0.2 rounded-full font-bold">
                       {unreadTotal}
                     </span>
                   )}
@@ -731,7 +998,7 @@ export function WhatsAppInbox({
           <div className="flex-1 overflow-y-auto divide-y divide-slate-800/40">
             {loadingConversations && conversations.length === 0 ? (
               <div className="p-8 text-center text-slate-500 text-xs">
-                <span className="material-symbols-outlined text-2xl animate-spin mb-2 text-purple-400 block">
+                <span className="material-symbols-outlined text-2xl animate-spin mb-2 text-emerald-400 block">
                   progress_activity
                 </span>
                 Loading conversations...
@@ -743,7 +1010,7 @@ export function WhatsAppInbox({
                 </span>
                 <p className="font-medium text-slate-400">No conversations found</p>
                 <p className="text-[11px]">
-                  When customers message our WhatsApp Cloud API number, chats will appear here instantly.
+                  When guests or drivers message your WhatsApp Cloud API number, chats will appear here instantly.
                 </p>
               </div>
             ) : (
@@ -755,23 +1022,28 @@ export function WhatsAppInbox({
                   <div
                     key={conv._id}
                     onClick={() => selectConversation(conv)}
-                    className={`flex items-start gap-3 p-3 transition cursor-pointer select-none border-l-4 ${
+                    className={`flex items-start gap-3 p-3 transition cursor-pointer select-none border-l-3 ${
                       isSelected
-                        ? "bg-[#182230] border-purple-500"
+                        ? "bg-[#202C33] border-emerald-500"
                         : conv.unreadCount > 0
-                        ? "bg-[#151D28] border-emerald-500 hover:bg-[#182230]"
-                        : "border-transparent hover:bg-slate-800/40"
+                        ? "bg-[#182229] border-emerald-400 hover:bg-[#202C33]/60"
+                        : "border-transparent hover:bg-[#202C33]/40"
                     }`}
                   >
                     {/* Avatar */}
                     <div className="relative shrink-0">
-                      <div className="h-10 w-10 rounded-full bg-gradient-to-br from-purple-700 to-indigo-800 flex items-center justify-center text-white font-semibold text-xs uppercase shadow-sm">
+                      <div className="h-10 w-10 rounded-full bg-slate-700/80 border border-slate-600/40 flex items-center justify-center text-slate-200 font-semibold text-xs uppercase shadow-sm">
                         {conv.customerName ? conv.customerName.slice(0, 2) : "WA"}
                       </div>
-                      {conv.status === "CLOSED" && (
+                      {conv.status === "CLOSED" ? (
                         <span
-                          className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-slate-600 border-2 border-[#0E131A]"
+                          className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-slate-600 border-2 border-[#111B21]"
                           title="Closed conversation"
+                        />
+                      ) : (
+                        <span
+                          className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-500 border-2 border-[#111B21]"
+                          title="Open conversation"
                         />
                       )}
                     </div>
@@ -816,7 +1088,7 @@ export function WhatsAppInbox({
                         </p>
 
                         {conv.unreadCount > 0 && (
-                          <span className="shrink-0 bg-emerald-500 text-white font-bold text-[10px] h-4 min-w-[16px] px-1 rounded-full flex items-center justify-center">
+                          <span className="shrink-0 bg-emerald-500 text-black font-bold text-[10px] h-4 min-w-[16px] px-1 rounded-full flex items-center justify-center">
                             {conv.unreadCount}
                           </span>
                         )}
@@ -833,15 +1105,15 @@ export function WhatsAppInbox({
         {/* PANE B: MIDDLE SECTION - CHAT WINDOW                                      */}
         {/* ========================================================================= */}
         <div
-          className={`flex-1 flex flex-col bg-[#0B0F14] min-w-0 relative ${
+          className={`flex-1 flex flex-col bg-[#0B1015] min-w-0 relative ${
             !mobileViewChat ? "hidden md:flex" : "flex"
           }`}
         >
           {activeConversation ? (
             <>
               {/* Chat Header */}
-              <div className="p-3 border-b border-slate-800 bg-[#121820] flex items-center justify-between gap-2 shrink-0">
-                <div className="flex items-center gap-2.5 min-w-0">
+              <div className="px-4 py-3 border-b border-slate-800 bg-[#111B21] flex items-center justify-between gap-2 shrink-0">
+                <div className="flex items-center gap-3 min-w-0">
                   {/* Mobile Back Button */}
                   <button
                     onClick={() => setMobileViewChat(false)}
@@ -850,7 +1122,7 @@ export function WhatsAppInbox({
                     <span className="material-symbols-outlined text-lg">arrow_back</span>
                   </button>
 
-                  <div className="h-9 w-9 rounded-full bg-gradient-to-br from-purple-700 to-indigo-800 flex items-center justify-center text-white font-semibold text-xs uppercase shrink-0">
+                  <div className="h-9 w-9 rounded-full bg-slate-700/80 border border-slate-600/50 flex items-center justify-center text-slate-200 font-semibold text-xs uppercase shrink-0">
                     {activeConversation.customerName ? activeConversation.customerName.slice(0, 2) : "WA"}
                   </div>
 
@@ -863,7 +1135,7 @@ export function WhatsAppInbox({
                         onClick={handleToggleStatus}
                         className={`text-[9px] font-bold px-1.5 py-0.5 rounded cursor-pointer transition ${
                           activeConversation.status === "OPEN"
-                            ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20"
+                            ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25"
                             : "bg-slate-700 text-slate-300 hover:bg-slate-600"
                         }`}
                         title="Click to toggle status"
@@ -874,13 +1146,14 @@ export function WhatsAppInbox({
 
                     <p className="text-[11px] text-slate-400 truncate flex items-center gap-2">
                       <span>{formatPhoneDisplay(activeConversation.phoneNumber)}</span>
+                      <span className="text-slate-600">•</span>
                       {chatWindowInfo?.isOpen ? (
-                        <span className="text-emerald-400 flex items-center gap-0.5 text-[10px]">
+                        <span className="text-emerald-400 flex items-center gap-1 text-[10px]">
                           <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
                           24h Window Active ({Math.floor((chatWindowInfo.remainingSeconds || 0) / 3600)}h left)
                         </span>
                       ) : (
-                        <span className="text-amber-400 flex items-center gap-0.5 text-[10px]">
+                        <span className="text-amber-400 flex items-center gap-1 text-[10px]">
                           <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
                           Window Closed (Templates Only)
                         </span>
@@ -889,12 +1162,12 @@ export function WhatsAppInbox({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1.5 shrink-0">
+                <div className="flex items-center gap-2 shrink-0">
                   <button
-                    onClick={() => setShowTemplateModal(true)}
-                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-purple-500/30 bg-purple-500/10 text-purple-300 text-xs font-medium hover:bg-purple-500/20 transition cursor-pointer"
+                    onClick={handleOpenTemplates}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-500/30 bg-emerald-950/40 text-emerald-300 text-xs font-medium hover:bg-emerald-900/40 transition cursor-pointer"
                   >
-                    <span className="material-symbols-outlined text-sm">auto_awesome</span>
+                    <span className="material-symbols-outlined text-sm">bookmark</span>
                     <span className="hidden sm:inline">Templates</span>
                   </button>
 
@@ -902,8 +1175,8 @@ export function WhatsAppInbox({
                     onClick={() => setShowRightSidebar(!showRightSidebar)}
                     className={`p-1.5 rounded-lg border text-xs transition cursor-pointer ${
                       showRightSidebar
-                        ? "border-purple-500/40 bg-purple-500/10 text-purple-300"
-                        : "border-slate-700 bg-slate-800 text-slate-400 hover:text-white"
+                        ? "border-emerald-500/40 bg-emerald-950/40 text-emerald-300"
+                        : "border-slate-800 bg-[#202C33] text-slate-400 hover:text-white"
                     }`}
                     title="Toggle customer details sidebar"
                   >
@@ -913,29 +1186,22 @@ export function WhatsAppInbox({
               </div>
 
               {/* Chat Messages Area */}
-              <div
-                className="flex-1 overflow-y-auto p-4 space-y-3"
-                style={{
-                  backgroundImage: "radial-gradient(#1f2937 1px, transparent 1px)",
-                  backgroundSize: "24px 24px",
-                  backgroundColor: "#0A0E13",
-                }}
-              >
+              <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#0B1015]">
                 {loadingMessages ? (
                   <div className="flex items-center justify-center h-full text-slate-500 text-xs">
-                    <span className="material-symbols-outlined text-2xl animate-spin mr-2 text-purple-400">
+                    <span className="material-symbols-outlined text-2xl animate-spin mr-2 text-emerald-400">
                       progress_activity
                     </span>
                     Loading conversation history...
                   </div>
                 ) : messages.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full text-slate-500 text-xs space-y-2 max-w-sm mx-auto text-center">
-                    <div className="h-12 w-12 rounded-full bg-slate-800/80 flex items-center justify-center text-slate-400">
-                      <span className="material-symbols-outlined text-2xl">chat</span>
+                    <div className="h-12 w-12 rounded-full bg-[#182229] border border-slate-700/60 flex items-center justify-center text-slate-400">
+                      <span className="material-symbols-outlined text-2xl text-emerald-400">chat</span>
                     </div>
                     <p className="font-medium text-slate-300">No messages in this chat yet</p>
-                    <p className="text-[11px] text-slate-500">
-                      Use the composer below or select an approved template to start communicating with this customer.
+                    <p className="text-[11px] text-slate-400">
+                      Use the message composer below or dispatch a pre-approved template for this recipient.
                     </p>
                   </div>
                 ) : (
@@ -943,12 +1209,13 @@ export function WhatsAppInbox({
                     const isOutbound = msg.direction === "OUTBOUND";
                     const showDateSeparator =
                       idx === 0 || formatDate(msg.sentAt) !== formatDate(messages[idx - 1].sentAt);
+                    const linkInText = extractFirstUrl(msg.messageContent);
 
                     return (
                       <div key={msg._id || idx} className="space-y-3">
                         {showDateSeparator && (
                           <div className="flex justify-center my-3">
-                            <span className="bg-[#161F2C] border border-slate-800 text-slate-400 text-[10px] font-medium px-2.5 py-1 rounded-full shadow-xs">
+                            <span className="bg-[#182229] border border-slate-800 text-slate-400 text-[10px] font-medium px-3 py-1 rounded-full shadow-xs">
                               {formatDate(msg.sentAt)}
                             </span>
                           </div>
@@ -956,35 +1223,28 @@ export function WhatsAppInbox({
 
                         <div className={`flex ${isOutbound ? "justify-end" : "justify-start"}`}>
                           <div
-                            className={`max-w-[85%] sm:max-w-[75%] rounded-2xl p-3 shadow-md text-xs relative group ${
+                            className={`max-w-[85%] sm:max-w-[70%] rounded-2xl p-3 shadow-md text-xs relative group ${
                               isOutbound
-                                ? "bg-[#1E293B] border border-purple-900/30 text-slate-100 rounded-br-xs"
-                                : "bg-[#161F2C] border border-slate-700/60 text-slate-200 rounded-bl-xs"
+                                ? "bg-[#005C4B] text-white rounded-br-xs border border-emerald-600/30"
+                                : "bg-[#202C33] text-slate-100 rounded-bl-xs border border-slate-700/60"
                             }`}
                           >
-                            {/* Message Type Label Badge */}
-                            <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
-                              {msg.messageType === "TEMPLATE" ? (
-                                <span className="bg-purple-500/20 border border-purple-500/30 text-purple-300 text-[9px] font-semibold px-1.5 py-0.2 rounded flex items-center gap-1">
-                                  <span className="material-symbols-outlined text-[10px]">auto_awesome</span>
-                                  API Template {msg.templateName ? `: ${msg.templateName}` : ""}
+                            {/* Template or Automated Badge */}
+                            {msg.messageType === "TEMPLATE" ? (
+                              <div className="mb-1.5 flex items-center gap-1.5">
+                                <span className="bg-black/25 text-emerald-200 text-[10px] font-medium px-2 py-0.5 rounded flex items-center gap-1">
+                                  <span className="material-symbols-outlined text-[11px]">bookmark</span>
+                                  Template: {msg.templateName || "Approved Utility"}
                                 </span>
-                              ) : msg.senderType === "SYSTEM" ? (
-                                <span className="bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 text-[9px] font-semibold px-1.5 py-0.2 rounded flex items-center gap-1">
+                              </div>
+                            ) : msg.senderType === "SYSTEM" ? (
+                              <div className="mb-1.5 flex items-center gap-1.5">
+                                <span className="bg-black/20 text-slate-300 text-[9px] font-medium px-1.5 py-0.2 rounded flex items-center gap-1">
                                   <span className="material-symbols-outlined text-[10px]">smart_toy</span>
-                                  Automated Message
+                                  System Alert
                                 </span>
-                              ) : msg.senderType === "ADMIN" ? (
-                                <span className="bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-[9px] font-semibold px-1.5 py-0.2 rounded flex items-center gap-1">
-                                  <span className="material-symbols-outlined text-[10px]">support_agent</span>
-                                  Manual Reply
-                                </span>
-                              ) : (
-                                <span className="bg-slate-700/60 text-slate-300 text-[9px] font-medium px-1.5 py-0.2 rounded">
-                                  Customer Message
-                                </span>
-                              )}
-                            </div>
+                              </div>
+                            ) : null}
 
                             {/* Image Attachment */}
                             {msg.mediaUrl && msg.messageType === "IMAGE" && (
@@ -1006,51 +1266,63 @@ export function WhatsAppInbox({
                                 href={msg.mediaUrl}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="flex items-center gap-2 p-2 rounded-lg bg-slate-900/60 border border-slate-700 mb-2 hover:bg-slate-900 transition text-purple-300 text-[11px]"
+                                className="flex items-center gap-2 p-2 rounded-lg bg-black/30 border border-slate-700/50 mb-2 hover:bg-black/50 transition text-emerald-300 text-[11px]"
                               >
                                 <span className="material-symbols-outlined text-lg">description</span>
                                 <span className="truncate">View attached document</span>
                               </a>
                             )}
 
-                            {/* Rendered Message Content */}
-                            <p className="whitespace-pre-wrap leading-relaxed select-text font-normal text-slate-100 text-[12px]">
-                              {msg.messageContent}
+                            {/* Rendered Message Content with Clickable URLs */}
+                            <p className="whitespace-pre-wrap leading-relaxed select-text font-normal text-[12.5px]">
+                              {renderClickableText(msg.messageContent)}
                             </p>
 
-                            {/* Template Parameters Metadata Details */}
-                            {msg.templateParameters && Array.isArray(msg.templateParameters) && msg.templateParameters.length > 0 && (
-                              <details className="mt-1.5 text-[10px] text-slate-400 border-t border-slate-700/40 pt-1">
-                                <summary className="cursor-pointer hover:text-slate-300 select-none">
-                                  Template variables ({msg.templateParameters.length})
-                                </summary>
-                                <ul className="mt-1 space-y-0.5 font-mono text-[9px] text-slate-400 bg-black/30 p-1.5 rounded">
-                                  {msg.templateParameters.map((p, pIdx) => (
-                                    <li key={pIdx}>
-                                      <span className="text-purple-400">{`{{${pIdx + 1}}}`}:</span> {String(p)}
-                                    </li>
-                                  ))}
-                                </ul>
-                              </details>
+                            {/* Interactive Link Card Button (WhatsApp Style CTA) */}
+                            {linkInText && (
+                              <a
+                                href={linkInText}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className={`mt-2.5 flex items-center justify-between gap-2 px-3 py-2 rounded-lg transition text-xs font-medium border ${
+                                  isOutbound
+                                    ? "bg-black/20 hover:bg-black/30 border-white/20 text-white"
+                                    : "bg-slate-900/60 hover:bg-slate-900 border-slate-700 text-emerald-400"
+                                }`}
+                              >
+                                <span className="flex items-center gap-1.5 truncate">
+                                  <span className="material-symbols-outlined text-sm">open_in_new</span>
+                                  <span className="truncate">
+                                    {linkInText.includes("cab-request")
+                                      ? "Request Cab Online"
+                                      : linkInText.includes("pay")
+                                      ? "Pay Booking Advance"
+                                      : linkInText.includes("driver-quote")
+                                      ? "Submit Driver Quote"
+                                      : "Open Link"}
+                                  </span>
+                                </span>
+                                <span className="material-symbols-outlined text-xs">arrow_forward</span>
+                              </a>
                             )}
 
-                            {/* Message Footer: Timestamp and Status Indicators */}
-                            <div className="flex items-center justify-end gap-1.5 mt-1.5 text-[10px] text-slate-400 select-none">
+                            {/* Footer: Timestamp and Delivery Status */}
+                            <div className="flex items-center justify-end gap-1 mt-1 text-[10px] text-slate-300/80 select-none">
                               <span>{formatTime(msg.sentAt)}</span>
                               {isOutbound && (
                                 <span
                                   className={`material-symbols-outlined text-[13px] ${
                                     msg.deliveryStatus === "READ"
-                                      ? "text-sky-400"
+                                      ? "text-sky-300"
                                       : msg.deliveryStatus === "DELIVERED"
                                       ? "text-slate-300"
                                       : msg.deliveryStatus === "FAILED"
                                       ? "text-rose-400"
-                                      : "text-slate-400"
+                                      : "text-slate-300"
                                   }`}
                                   title={
                                     msg.deliveryStatus === "FAILED"
-                                      ? `Delivery Failed: ${msg.errorDetails || "Network / Meta error"}`
+                                      ? `Delivery Failed: ${msg.errorDetails || "Meta error"}`
                                       : `Status: ${msg.deliveryStatus}`
                                   }
                                 >
@@ -1077,9 +1349,9 @@ export function WhatsAppInbox({
 
               {/* 24-Hour Policy Warning Banner */}
               {chatWindowInfo && !chatWindowInfo.isOpen && (
-                <div className="bg-amber-500/10 border-t border-amber-500/30 px-3 py-2 flex items-center justify-between text-xs text-amber-300 shrink-0">
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <span className="material-symbols-outlined text-sm text-amber-400 shrink-0">
+                <div className="bg-amber-500/10 border-t border-amber-500/30 px-4 py-2.5 flex items-center justify-between text-xs text-amber-300 shrink-0">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="material-symbols-outlined text-base text-amber-400 shrink-0">
                       lock_clock
                     </span>
                     <span className="truncate text-[11px]">
@@ -1088,15 +1360,44 @@ export function WhatsAppInbox({
                   </div>
                   <button
                     onClick={handleOpenTemplates}
-                    className="px-2.5 py-1 rounded bg-amber-500 text-black font-semibold text-[11px] shrink-0 hover:bg-amber-400 transition cursor-pointer"
+                    className="px-3 py-1 rounded bg-amber-400 text-black font-semibold text-[11px] shrink-0 hover:bg-amber-300 transition cursor-pointer"
                   >
                     Send Template
                   </button>
                 </div>
               )}
 
+              {/* Quick Canned Responses Strip */}
+              {showCannedReplies && (
+                <div className="border-t border-slate-800 bg-[#141E26] px-3 py-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0">
+                  <span className="text-[10px] text-slate-400 uppercase font-bold shrink-0 tracking-wider">
+                    Quick:
+                  </span>
+                  {CANNED_RESPONSES.map((chip, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => {
+                        setMessageText(chip.text);
+                        setShowCannedReplies(false);
+                      }}
+                      className="px-2.5 py-1 rounded-full bg-[#202C33] hover:bg-emerald-950 hover:border-emerald-500/40 border border-slate-700/60 text-[11px] text-slate-200 hover:text-emerald-300 transition shrink-0 cursor-pointer"
+                    >
+                      {chip.label}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setShowCannedReplies(false)}
+                    className="text-slate-400 hover:text-white ml-auto p-1"
+                  >
+                    <span className="material-symbols-outlined text-sm">close</span>
+                  </button>
+                </div>
+              )}
+
               {/* Message Composer */}
-              <div className="p-3 border-t border-slate-800 bg-[#121820] shrink-0">
+              <div className="p-3 border-t border-slate-800 bg-[#111B21] shrink-0">
                 {showAttachInput && (
                   <div className="mb-2 flex items-center gap-2">
                     <input
@@ -1104,7 +1405,7 @@ export function WhatsAppInbox({
                       placeholder="Paste image / document URL (https://...)"
                       value={attachmentUrl}
                       onChange={(e) => setAttachmentUrl(e.target.value)}
-                      className="flex-1 px-3 py-1.5 rounded-lg border border-slate-700 bg-[#161F2C] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+                      className="flex-1 px-3 py-1.5 rounded-lg border border-slate-700 bg-[#202C33] text-xs text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500"
                     />
                     <button
                       onClick={() => {
@@ -1119,40 +1420,58 @@ export function WhatsAppInbox({
                 )}
 
                 <div className="flex items-end gap-2">
+                  {/* Attach Button */}
                   <button
                     type="button"
                     onClick={() => setShowAttachInput(!showAttachInput)}
-                    className="p-2 rounded-lg border border-slate-700 bg-slate-800/80 text-slate-400 hover:text-white transition cursor-pointer"
+                    className="p-2 rounded-lg border border-slate-700/70 bg-[#202C33] text-slate-300 hover:text-white transition cursor-pointer"
                     title="Attach image or file link"
                   >
                     <span className="material-symbols-outlined text-base">attach_file</span>
                   </button>
 
+                  {/* Templates Quick Button */}
                   <button
                     type="button"
                     onClick={handleOpenTemplates}
-                    className="p-2 rounded-lg border border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 transition cursor-pointer"
+                    className="p-2 rounded-lg border border-emerald-500/30 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/40 transition cursor-pointer"
                     title="Select and send approved WhatsApp template"
                   >
-                    <span className="material-symbols-outlined text-base">auto_awesome</span>
+                    <span className="material-symbols-outlined text-base">bookmark</span>
                   </button>
 
+                  {/* Canned Responses Toggle */}
+                  <button
+                    type="button"
+                    onClick={() => setShowCannedReplies(!showCannedReplies)}
+                    className={`p-2 rounded-lg border transition cursor-pointer ${
+                      showCannedReplies
+                        ? "border-emerald-500 bg-emerald-600 text-white"
+                        : "border-slate-700/70 bg-[#202C33] text-slate-300 hover:text-white"
+                    }`}
+                    title="Quick dispatch canned replies"
+                  >
+                    <span className="material-symbols-outlined text-base">bolt</span>
+                  </button>
+
+                  {/* Clean Non-breaking Textarea */}
                   <div className="flex-1 relative">
                     <textarea
                       rows={1}
                       disabled={chatWindowInfo ? !chatWindowInfo.isOpen : false}
                       placeholder={
                         chatWindowInfo && !chatWindowInfo.isOpen
-                          ? "24-hr window expired. Use 'Templates' to send message..."
-                          : "Type a WhatsApp message... (Enter to send, Shift+Enter for newline)"
+                          ? "24-hr window closed · Send template to re-engage..."
+                          : "Type a message..."
                       }
                       value={messageText}
                       onChange={(e) => setMessageText(e.target.value)}
                       onKeyDown={handleKeyDown}
-                      className="w-full px-3 py-2 rounded-lg border border-slate-700/80 bg-[#161F2C] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 resize-none max-h-32 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="w-full px-3 py-2 rounded-lg border border-slate-700/80 bg-[#202C33] text-xs text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500 resize-none max-h-32 disabled:opacity-50 disabled:cursor-not-allowed leading-relaxed"
                     />
                   </div>
 
+                  {/* Send Button */}
                   <button
                     type="button"
                     onClick={() => handleSendManualMessage()}
@@ -1161,8 +1480,8 @@ export function WhatsAppInbox({
                       (!messageText.trim() && !attachmentUrl.trim()) ||
                       sendingMessage
                     }
-                    className="p-2.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium text-xs transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-md flex items-center justify-center shrink-0"
-                    title="Send message"
+                    className="p-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-md flex items-center justify-center shrink-0"
+                    title="Send message (Enter)"
                   >
                     {sendingMessage ? (
                       <span className="material-symbols-outlined text-base animate-spin">
@@ -1173,26 +1492,34 @@ export function WhatsAppInbox({
                     )}
                   </button>
                 </div>
+
+                {/* Subtext Keyboard Hint (Never breaks inside placeholder!) */}
+                <div className="mt-1 flex items-center justify-between text-[10px] text-slate-500 px-1">
+                  <span>↵ to send · Shift+↵ for new line</span>
+                  {activeConversation?.phoneNumber && (
+                    <span>Recipient: {formatPhoneDisplay(activeConversation.phoneNumber)}</span>
+                  )}
+                </div>
               </div>
             </>
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-slate-500 text-xs space-y-3 p-8 text-center">
-              <div className="h-16 w-16 rounded-full bg-purple-900/20 border border-purple-500/20 flex items-center justify-center text-purple-400">
+              <div className="h-16 w-16 rounded-full bg-[#182229] border border-slate-700/60 flex items-center justify-center text-emerald-400">
                 <span className="material-symbols-outlined text-3xl">chat</span>
               </div>
-              <h3 className="text-base font-semibold text-white">StayCabs WhatsApp Inbox</h3>
+              <h3 className="text-base font-semibold text-white">StayCabs WhatsApp Desk</h3>
               <p className="max-w-md text-slate-400 leading-relaxed text-[11px]">
-                Select a conversation from the sidebar to view complete chat history, automated Cloud API messages, and reply to customers directly.
+                Select a conversation from the sidebar to view chat history, customer homestay context, and reply directly.
               </p>
             </div>
           )}
         </div>
 
         {/* ========================================================================= */}
-        {/* PANE C: RIGHT SIDEBAR - CUSTOMER INFORMATION                              */}
+        {/* PANE C: RIGHT SIDEBAR - CUSTOMER INFORMATION & ACTIONS                    */}
         {/* ========================================================================= */}
         {activeConversation && showRightSidebar && (
-          <div className="w-80 border-l border-slate-800 bg-[#0E131A] overflow-y-auto shrink-0 p-4 space-y-4 hidden lg:block">
+          <div className="w-80 border-l border-slate-800/80 bg-[#111B21] overflow-y-auto shrink-0 p-4 space-y-4 hidden lg:block">
             {/* Header */}
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <h3 className="text-xs font-semibold text-white uppercase tracking-wider">
@@ -1208,36 +1535,71 @@ export function WhatsAppInbox({
 
             {/* Profile Card */}
             <div className="text-center py-2 space-y-2">
-              <div className="h-16 w-16 rounded-full bg-gradient-to-br from-purple-700 to-indigo-800 flex items-center justify-center text-white font-bold text-lg mx-auto shadow-md">
+              <div className="h-16 w-16 rounded-full bg-slate-700/80 border-2 border-emerald-500/40 flex items-center justify-center text-white font-bold text-lg mx-auto shadow-md">
                 {activeConversation.customerName ? activeConversation.customerName.slice(0, 2) : "WA"}
               </div>
               <div>
                 <h4 className="text-sm font-semibold text-white">
                   {activeConversation.customerName || formatPhoneDisplay(activeConversation.phoneNumber)}
                 </h4>
-                <p className="text-xs text-purple-400 font-mono">
+                <p className="text-xs text-emerald-400 font-mono">
                   {formatPhoneDisplay(activeConversation.phoneNumber)}
                 </p>
               </div>
 
-              {customerContext?.isExistingGuest ? (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              {(customerContext as any)?.isDriver || messages.some((m) => m.templateName === "new_trip_request" || m.messageContent.includes("Submit your total trip fare")) ? (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  <span className="material-symbols-outlined text-xs">local_taxi</span>
+                  StayRide Driver Partner
+                </span>
+              ) : customerContext?.isExistingGuest ? (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-sky-500/10 text-sky-400 border border-sky-500/20">
                   <span className="material-symbols-outlined text-xs">verified</span>
                   StayCabs Guest
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-800 text-slate-400 border border-slate-700">
-                  New WhatsApp Customer
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-[#202C33] text-slate-300 border border-slate-700">
+                  WhatsApp Contact
                 </span>
               )}
             </div>
 
+            {/* Quick Actions (Create Cab Request & Copy Phone) */}
+            <div className="space-y-2">
+              {onNavigateToCabRequests && (
+                <button
+                  onClick={() => {
+                    onNavigateToCabRequests(customerContext?.latestTrip?.propertyId || customerContext?.homestay?.tenantKey);
+                    triggerToast("Opening Cab Requests Desk...");
+                  }}
+                  className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium transition cursor-pointer shadow-sm"
+                >
+                  <span className="material-symbols-outlined text-sm">local_taxi</span>
+                  <span>+ Book Cab for this Guest</span>
+                </button>
+              )}
+
+              <button
+                onClick={() => handleCopyPhone(activeConversation.phoneNumber)}
+                className={`w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg border text-xs transition cursor-pointer ${
+                  copiedPhone
+                    ? "border-emerald-500 bg-emerald-950/60 text-emerald-300"
+                    : "border-slate-700 bg-[#202C33] text-slate-300 hover:bg-slate-700"
+                }`}
+              >
+                <span className="material-symbols-outlined text-sm">
+                  {copiedPhone ? "check" : "content_copy"}
+                </span>
+                <span>{copiedPhone ? "Copied to clipboard!" : "Copy Phone Number"}</span>
+              </button>
+            </div>
+
             {/* Guest Record Section */}
             {customerContext?.guest && (
-              <div className="rounded-xl border border-slate-800 bg-[#121820] p-3 space-y-2">
+              <div className="rounded-xl border border-slate-800 bg-[#182229] p-3 space-y-2">
                 <div className="flex items-center justify-between text-xs font-semibold text-white">
                   <span className="flex items-center gap-1.5">
-                    <span className="material-symbols-outlined text-purple-400 text-sm">badge</span>
+                    <span className="material-symbols-outlined text-emerald-400 text-sm">badge</span>
                     Guest Profile
                   </span>
                   {customerContext.guest.vip && (
@@ -1248,20 +1610,16 @@ export function WhatsAppInbox({
                 </div>
                 <div className="text-[11px] space-y-1 text-slate-300">
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Name:</span>
+                    <span className="text-slate-400">Name:</span>
                     <span className="font-medium text-white">{customerContext.guest.name}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Email:</span>
+                    <span className="text-slate-400">Email:</span>
                     <span className="truncate max-w-[150px]">{customerContext.guest.email || "—"}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Total Stays:</span>
+                    <span className="text-slate-400">Total Stays:</span>
                     <span className="font-semibold text-white">{customerContext.guest.stays || 1}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Status:</span>
-                    <span className="text-emerald-400">{customerContext.guest.status || "Upcoming"}</span>
                   </div>
                 </div>
               </div>
@@ -1269,54 +1627,50 @@ export function WhatsAppInbox({
 
             {/* Homestay & Booking Details */}
             {customerContext?.latestBooking && (
-              <div className="rounded-xl border border-slate-800 bg-[#121820] p-3 space-y-2">
+              <div className="rounded-xl border border-slate-800 bg-[#182229] p-3 space-y-2">
                 <div className="flex items-center justify-between text-xs font-semibold text-white">
                   <span className="flex items-center gap-1.5">
-                    <span className="material-symbols-outlined text-purple-400 text-sm">villa</span>
+                    <span className="material-symbols-outlined text-emerald-400 text-sm">villa</span>
                     Homestay Booking
                   </span>
-                  <span className="text-[10px] font-mono text-purple-300">
+                  <span className="text-[10px] font-mono text-emerald-300">
                     {customerContext.latestBooking.reference}
                   </span>
                 </div>
                 <div className="text-[11px] space-y-1 text-slate-300">
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Homestay:</span>
+                    <span className="text-slate-400">Homestay:</span>
                     <span className="font-medium text-white truncate max-w-[140px]">
                       {customerContext.latestBooking.homestayName || customerContext.homestay?.name || "StayCabs Estate"}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Room:</span>
+                    <span className="text-slate-400">Room:</span>
                     <span className="truncate max-w-[140px]">{customerContext.latestBooking.roomName || "—"}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Check-In:</span>
+                    <span className="text-slate-400">Check-In:</span>
                     <span className="font-mono">{formatDate(customerContext.latestBooking.checkIn)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Check-Out:</span>
+                    <span className="text-slate-400">Check-Out:</span>
                     <span className="font-mono">{formatDate(customerContext.latestBooking.checkOut)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Status:</span>
-                    <span className="capitalize text-emerald-400">{customerContext.latestBooking.status}</span>
                   </div>
                 </div>
               </div>
             )}
 
             {/* Associated Cab Bookings */}
-            <div className="rounded-xl border border-slate-800 bg-[#121820] p-3 space-y-2.5">
+            <div className="rounded-xl border border-slate-800 bg-[#182229] p-3 space-y-2.5">
               <div className="flex items-center justify-between text-xs font-semibold text-white">
                 <span className="flex items-center gap-1.5">
-                  <span className="material-symbols-outlined text-purple-400 text-sm">local_taxi</span>
+                  <span className="material-symbols-outlined text-emerald-400 text-sm">local_taxi</span>
                   Cab Bookings ({customerContext?.cabBookings?.length || 0})
                 </span>
                 {customerContext?.latestTrip?.propertyId && onNavigateToCabRequests && (
                   <button
                     onClick={() => onNavigateToCabRequests(String(customerContext.latestTrip.propertyId))}
-                    className="text-[10px] text-purple-400 hover:underline"
+                    className="text-[10px] text-emerald-400 hover:underline"
                   >
                     View Desk
                   </button>
@@ -1328,18 +1682,18 @@ export function WhatsAppInbox({
                   {customerContext.cabBookings.slice(0, 3).map((trip) => (
                     <div
                       key={trip._id || trip.reference}
-                      className="p-2 rounded-lg bg-black/30 border border-slate-800 text-[11px] space-y-1"
+                      className="p-2.5 rounded-lg bg-[#111B21] border border-slate-800 text-[11px] space-y-1"
                     >
                       <div className="flex items-center justify-between">
-                        <span className="font-mono font-semibold text-purple-300">{trip.reference}</span>
-                        <span className="text-[9px] px-1.5 py-0.2 rounded font-bold bg-slate-800 text-slate-300">
+                        <span className="font-mono font-semibold text-emerald-300">{trip.reference}</span>
+                        <span className="text-[9px] px-1.5 py-0.2 rounded font-bold bg-[#202C33] text-slate-300">
                           {trip.status}
                         </span>
                       </div>
                       <p className="text-slate-400 truncate">
                         {trip.pickupLocation?.address} → {(trip.destinations || [])[0]?.address || "Local"}
                       </p>
-                      <div className="flex items-center justify-between text-[10px] text-slate-500">
+                      <div className="flex items-center justify-between text-[10px] text-slate-400">
                         <span>{trip.date ? formatDate(trip.date) : "—"}</span>
                         <span className="text-emerald-400 font-mono font-semibold">
                           ₹{trip.agreedFare ? Number(trip.agreedFare).toLocaleString("en-IN") : "—"}
@@ -1349,125 +1703,202 @@ export function WhatsAppInbox({
                   ))}
                 </div>
               ) : (
-                <p className="text-[11px] text-slate-500 italic">No cab requests found for this customer.</p>
+                <p className="text-[11px] text-slate-400 italic">No cab requests found for this customer.</p>
               )}
             </div>
 
-            {/* Quick Actions */}
-            <div className="pt-2 border-t border-slate-800 space-y-2">
+            {/* Extra Desk Shortcut */}
+            {onNavigateToGuests && customerContext?.guest?.name && (
               <button
-                onClick={() => {
-                  navigator.clipboard.writeText(activeConversation.phoneNumber);
-                  alert(`Copied ${activeConversation.phoneNumber} to clipboard!`);
-                }}
-                className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-slate-700 text-xs text-slate-300 hover:bg-slate-800 transition cursor-pointer"
+                onClick={() => onNavigateToGuests(customerContext.guest.name)}
+                className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-slate-700 bg-[#202C33] text-xs text-slate-300 hover:text-white transition cursor-pointer"
               >
-                <span className="material-symbols-outlined text-sm">content_copy</span>
-                Copy Phone Number
+                <span className="material-symbols-outlined text-sm">open_in_new</span>
+                <span>Open in Guests Desk</span>
               </button>
-
-              {onNavigateToGuests && customerContext?.guest?.name && (
-                <button
-                  onClick={() => onNavigateToGuests(customerContext.guest.name)}
-                  className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-purple-500/30 bg-purple-500/10 text-xs text-purple-300 hover:bg-purple-500/20 transition cursor-pointer"
-                >
-                  <span className="material-symbols-outlined text-sm">open_in_new</span>
-                  Open in Guests Desk
-                </button>
-              )}
-            </div>
+            )}
           </div>
         )}
       </div>
 
       {/* ========================================================================= */}
-      {/* 3. MODAL: WHATSAPP TEMPLATE SELECTOR & DISPATCH                           */}
+      {/* 3. MODAL: WHATSAPP TEMPLATE SELECTOR & PHONE PREVIEW (SCOPED TO CUSTOMER) */}
       {/* ========================================================================= */}
       {showTemplateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4">
-          <div className="w-full max-w-2xl bg-[#121820] border border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+          <div className="w-full max-w-4xl bg-[#111B21] border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
             {/* Modal Header */}
-            <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
+            <div className="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between bg-[#111B21]">
               <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-purple-400">auto_awesome</span>
-                <h3 className="text-sm font-semibold text-white">Select WhatsApp Template</h3>
+                <span className="material-symbols-outlined text-emerald-400">bookmark</span>
+                <div>
+                  <h3 className="text-sm font-semibold text-white">
+                    Send WhatsApp Template
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Auto-personalized for <strong className="text-emerald-400">{activeConversation?.customerName || formatPhoneDisplay(activeConversation?.phoneNumber)}</strong>
+                  </p>
+                </div>
               </div>
               <button
                 onClick={() => setShowTemplateModal(false)}
-                className="text-slate-400 hover:text-white"
+                className="text-slate-400 hover:text-white p-1"
               >
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
 
-            {/* Modal Body */}
-            <div className="p-5 overflow-y-auto space-y-4 flex-1">
-              {/* Template Picker */}
-              <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                  Approved Template
-                </label>
-                <select
-                  value={selectedTemplate?.id || ""}
-                  onChange={(e) => {
-                    const tpl = templates.find((t) => t.id === e.target.value);
-                    if (tpl) selectTemplateForComposer(tpl);
+            {/* Modal Category Tabs */}
+            <div className="px-5 py-2 border-b border-slate-800 bg-[#141E26] flex items-center gap-2 overflow-x-auto no-scrollbar">
+              {[
+                { id: "recommended", label: "Recommended" },
+                { id: "guest", label: "Guest Welcoming" },
+                { id: "ride", label: "Ride Confirmations" },
+                { id: "driver", label: "Driver Alerts" },
+                { id: "all", label: `All (${templates.length})` },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => {
+                    setTemplateCategoryTab(tab.id as any);
+                    const firstMatch = templates.find((t) => {
+                      if (tab.id === "all") return true;
+                      if (tab.id === "guest") return ["ask_cab", "quote_accepted_guest", "advance_paid_guest", "boarding_pin_guest"].includes(t.id);
+                      if (tab.id === "driver") return ["new_trip_request", "advance_paid_driver", "trip_assigned_driver"].includes(t.id);
+                      return true;
+                    });
+                    if (firstMatch) selectTemplateForComposer(firstMatch);
                   }}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-700 bg-[#161F2C] text-xs text-white focus:outline-none focus:border-purple-500"
+                  className={`px-3 py-1 rounded-md text-xs font-medium transition cursor-pointer shrink-0 ${
+                    templateCategoryTab === tab.id
+                      ? "bg-emerald-600 text-white font-semibold"
+                      : "bg-[#202C33] text-slate-300 hover:text-white"
+                  }`}
                 >
-                  {templates.map((tpl) => (
-                    <option key={tpl.id} value={tpl.id}>
-                      {tpl.title} ({tpl.name}) • {tpl.language.toUpperCase()}
-                    </option>
-                  ))}
-                </select>
-                {selectedTemplate && (
-                  <p className="text-[11px] text-slate-400 mt-1">{selectedTemplate.description}</p>
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Modal Body: Two-Column Editor & WhatsApp Phone Screen Preview */}
+            <div className="p-5 overflow-y-auto grid grid-cols-1 lg:grid-cols-12 gap-5 flex-1 bg-[#0B1015]">
+              {/* LEFT COLUMN: Template Selection & Variable Inputs (7 Cols) */}
+              <div className="lg:col-span-7 space-y-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                    Select Approved Template
+                  </label>
+                  <select
+                    value={selectedTemplate?.id || ""}
+                    onChange={(e) => {
+                      const tpl = templates.find((t) => t.id === e.target.value);
+                      if (tpl) selectTemplateForComposer(tpl);
+                    }}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-700 bg-[#202C33] text-xs text-white focus:outline-none focus:border-emerald-500"
+                  >
+                    {filteredTemplates.map((tpl) => (
+                      <option key={tpl.id} value={tpl.id}>
+                        {tpl.title} ({tpl.name}) • {tpl.language.toUpperCase()}
+                      </option>
+                    ))}
+                  </select>
+                  {selectedTemplate && (
+                    <p className="text-[11px] text-slate-400 mt-1">{selectedTemplate.description}</p>
+                  )}
+                </div>
+
+                {/* Auto-populated Parameters Form */}
+                {selectedTemplate && selectedTemplate.variables.length > 0 && (
+                  <div className="space-y-3 p-3.5 rounded-xl border border-slate-800 bg-[#182229]">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-semibold text-emerald-400">
+                        Template Variables ({selectedTemplate.variables.length})
+                      </h4>
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        Auto-filled from customer record
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {selectedTemplate.variables.map((v) => (
+                        <div key={v.index}>
+                          <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                            {`{{${v.index}}}`} {v.name}
+                          </label>
+                          <input
+                            type="text"
+                            placeholder={v.placeholder}
+                            value={templateValues[v.index] || ""}
+                            onChange={(e) =>
+                              setTemplateValues((prev) => ({ ...prev, [v.index]: e.target.value }))
+                            }
+                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-700 bg-[#111B21] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 font-mono"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
 
-              {/* Template Variables Inputs */}
-              {selectedTemplate && selectedTemplate.variables.length > 0 && (
-                <div className="space-y-3 p-3.5 rounded-xl border border-slate-800 bg-[#161F2C]">
-                  <h4 className="text-xs font-semibold text-purple-300">
-                    Template Variables ({selectedTemplate.variables.length})
-                  </h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {selectedTemplate.variables.map((v) => (
-                      <div key={v.index}>
-                        <label className="block text-[11px] font-medium text-slate-300 mb-1">
-                          {`{{${v.index}}}`} {v.name}
-                        </label>
-                        <input
-                          type="text"
-                          placeholder={v.placeholder}
-                          value={templateValues[v.index] || ""}
-                          onChange={(e) =>
-                            setTemplateValues((prev) => ({ ...prev, [v.index]: e.target.value }))
-                          }
-                          className="w-full px-2.5 py-1.5 rounded-lg border border-slate-700 bg-slate-900 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 font-mono"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Rendered Live Preview */}
-              <div>
+              {/* RIGHT COLUMN: Realistic WhatsApp Phone Preview (5 Cols) */}
+              <div className="lg:col-span-5 flex flex-col">
                 <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                  Rendered Preview
+                  Live WhatsApp Message Preview
                 </label>
-                <div className="p-3.5 rounded-xl border border-purple-500/30 bg-[#182230] text-slate-100 text-xs whitespace-pre-wrap font-sans leading-relaxed shadow-inner">
-                  {renderTemplatePreview()}
+
+                <div className="flex-1 rounded-2xl border border-slate-800 bg-[#0B141A] p-4 flex flex-col shadow-inner">
+                  {/* WhatsApp Header Simulation */}
+                  <div className="flex items-center gap-2 pb-3 mb-3 border-b border-slate-800/80">
+                    <div className="h-7 w-7 rounded-full bg-emerald-700 flex items-center justify-center text-white text-[11px] font-bold">
+                      SR
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs font-semibold text-white">StayRide Cabs</span>
+                        <span className="material-symbols-outlined text-emerald-400 text-xs">verified</span>
+                      </div>
+                      <span className="text-[10px] text-slate-400">Official WhatsApp Business</span>
+                    </div>
+                  </div>
+
+                  {/* WhatsApp Chat Bubble */}
+                  <div className="bg-[#005C4B] rounded-2xl rounded-tl-xs p-3.5 text-white shadow-md space-y-2">
+                    <p className="text-xs leading-relaxed whitespace-pre-wrap">
+                      {renderTemplatePreview()}
+                    </p>
+
+                    {/* WhatsApp CTA Action Button Card Simulation */}
+                    {extractFirstUrl(renderTemplatePreview()) && (
+                      <div className="mt-2 pt-2 border-t border-emerald-700/60 flex items-center justify-center gap-1.5 text-xs font-semibold text-emerald-200 bg-black/20 py-1.5 rounded">
+                        <span className="material-symbols-outlined text-sm">open_in_new</span>
+                        <span>
+                          {selectedTemplate?.id === "ask_cab"
+                            ? "Request Cab Online"
+                            : selectedTemplate?.id === "advance_paid_guest"
+                            ? "View Trip Pass"
+                            : "Open Action Link"}
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-end text-[10px] text-slate-300/80 gap-1 pt-1">
+                      <span>{new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                      <span className="material-symbols-outlined text-[13px] text-sky-300">done_all</span>
+                    </div>
+                  </div>
+
+                  <p className="mt-auto pt-3 text-[10px] text-slate-500 text-center font-mono">
+                    Will be sent to {formatPhoneDisplay(activeConversation?.phoneNumber || "")}
+                  </p>
                 </div>
               </div>
             </div>
 
             {/* Modal Footer */}
-            <div className="px-5 py-3 border-t border-slate-800 bg-[#161F2C] flex items-center justify-between">
+            <div className="px-5 py-3 border-t border-slate-800 bg-[#111B21] flex items-center justify-between">
               <span className="text-[11px] text-slate-400">
-                Recipient: <strong className="text-white">{formatPhoneDisplay(activeConversation?.phoneNumber || "")}</strong>
+                Sending as official business template via Meta Cloud API
               </span>
               <div className="flex items-center gap-2">
                 <button
@@ -1481,7 +1912,7 @@ export function WhatsAppInbox({
                   type="button"
                   onClick={handleSendTemplate}
                   disabled={sendingTemplate}
-                  className="px-4 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium text-xs transition cursor-pointer shadow-md flex items-center gap-1.5 disabled:opacity-50"
+                  className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs transition cursor-pointer shadow-md flex items-center gap-1.5 disabled:opacity-50"
                 >
                   {sendingTemplate ? (
                     <>
@@ -1493,7 +1924,7 @@ export function WhatsAppInbox({
                   ) : (
                     <>
                       <span className="material-symbols-outlined text-sm">send</span>
-                      <span>Send Template</span>
+                      <span>Send to {activeConversation?.customerName || "Customer"}</span>
                     </>
                   )}
                 </button>

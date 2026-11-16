@@ -146,25 +146,33 @@ export const DriverTripsScreen: React.FC = () => {
   const isOnline = session?.driver?.available !== false;
 
   // While online, tell StayRide where the driver is so only nearby requests reach them.
-  // Asked once, foreground only, refreshed every 10 minutes while this screen is open.
+  // Foreground updates as the OS reports movement (100 m), plus one fix immediately: no battery-draining polling.
   useEffect(() => {
     if (!isOnline || driverStatus !== 'ACTIVE') return;
     let cancelled = false;
-    const report = async () => {
+    let subscription: Location.LocationSubscription | null = null;
+    (async () => {
       try {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== 'granted' || cancelled) return;
         const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        if (!cancelled) await reportDriverLocation(pos.coords.latitude, pos.coords.longitude);
+        if (cancelled) return;
+        await reportDriverLocation(pos.coords.latitude, pos.coords.longitude);
+        if (cancelled) return;
+        subscription = await Location.watchPositionAsync(
+          { accuracy: Location.Accuracy.Balanced, distanceInterval: 100, timeInterval: 60000 },
+          (update) => {
+            reportDriverLocation(update.coords.latitude, update.coords.longitude).catch(() => {});
+          }
+        );
+        if (cancelled) subscription.remove();
       } catch {
         // no GPS fix in a valley is normal: the last known position stays on the server
       }
-    };
-    report();
-    const timer = setInterval(report, 10 * 60000);
+    })();
     return () => {
       cancelled = true;
-      clearInterval(timer);
+      subscription?.remove();
     };
   }, [isOnline, driverStatus, reportDriverLocation]);
 

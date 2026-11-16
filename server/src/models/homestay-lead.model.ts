@@ -9,6 +9,7 @@ export interface IHomestayLead extends Document {
   status: "NEW" | "CONTACTED" | "ONBOARDED" | "REJECTED";
   notes?: string;
   ip?: string;
+  demo: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -23,6 +24,8 @@ const HomestayLeadSchema = new Schema<IHomestayLead>(
     status: { type: String, enum: ["NEW", "CONTACTED", "ONBOARDED", "REJECTED"], default: "NEW" },
     notes: { type: String, default: "" },
     ip: { type: String },
+    // Landing-page leads are real people: demo-mode admins must not see them.
+    demo: { type: Boolean, default: false, index: true },
   },
   { timestamps: true }
 );

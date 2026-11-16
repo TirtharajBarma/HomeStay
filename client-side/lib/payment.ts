@@ -5,13 +5,6 @@ export type CardFields = {
   cvc: string;
 };
 
-export const TEST_CARD: CardFields = {
-  cardName: "Rowan Mercer",
-  cardNumber: "4242 4242 4242 4242",
-  expiry: "10 / 2028",
-  cvc: "123",
-};
-
 const digits = (value: string) => value.replace(/\D/g, "");
 
 export function formatCardNumber(value: string): string {

@@ -28,6 +28,9 @@ import { clerkClient } from "@clerk/express";
 const router = Router();
 
 const isDemo = (req: Request) => req.query.demo === "true" || req.body?.demo === true;
+// Newsletter subscribers and landing-page leads are real people. A demo-mode admin sees only demo
+// records (none are collected today); the live desk sees everything that is not demo.
+const demoScope = (req: Request) => (isDemo(req) ? { demo: true } : { demo: { $ne: true } });
 const actor = (req: Request) => {
   const u = (req as any).user;
   if (!u) return "Admin";
@@ -660,13 +663,13 @@ router.post("/stayride/drivers", async (req, res) => {
     existing.name = name;
     existing.phone = cleanPhone;
     existing.email = cleanEmail;
-    existing.accountStatus = "ACTIVE";
+    // Editing details must never unblock a driver: only the approve action changes accountStatus.
     existing.vehicle = { type: vehicleType, model, plate, seats, area };
     existing.driverCategory = driverCategory;
     existing.unionName = unionName;
     await existing.save();
     await audit(actor(req), "driver.update", "User", String(existing._id), { targetName: name, targetPhone: maskPhone(cleanPhone), vehicle: existing.vehicle, driverCategory, unionName }, demo, { actorRole: "ADMIN", driverId: String(existing._id) });
-    return ok(res, { id: String(existing._id), name: existing.name, phone: existing.phone, vehicle: existing.vehicle, driverCategory: existing.driverCategory, unionName: existing.unionName, accountStatus: existing.accountStatus }, "Driver updated and active.");
+    return ok(res, { id: String(existing._id), name: existing.name, phone: existing.phone, vehicle: existing.vehicle, driverCategory: existing.driverCategory, unionName: existing.unionName, accountStatus: existing.accountStatus }, existing.accountStatus === "ACTIVE" ? "Driver updated." : "Driver updated. Their account status is unchanged.");
   }
 
   const created = await User.create({
@@ -1401,7 +1404,7 @@ router.get("/stayride/notifications", async (req, res) => {
 // ---------------------------------------------------------------------------
 router.get("/newsletter", async (req: Request, res: Response) => {
   const q = search(req);
-  const filter: any = {};
+  const filter: any = { ...demoScope(req) };
   if (q) filter.email = new RegExp(escapeRegex(q), "i");
   const { page, limit, skip } = paging(req);
   const [items, total] = await Promise.all([
@@ -1425,7 +1428,7 @@ router.get("/newsletter", async (req: Request, res: Response) => {
 });
 
 router.get("/newsletter/export", async (req: Request, res: Response) => {
-  const items = await Newsletter.find().sort({ createdAt: -1 }).lean();
+  const items = await Newsletter.find(demoScope(req)).sort({ createdAt: -1 }).lean();
   let csv = "Email,Source,SubscribedAt\n";
   for (const item of items) {
     csv += `"${(item.email || "").replace(/"/g, '""')}","${(item.source || "website").replace(/"/g, '""')}","${item.createdAt ? new Date(item.createdAt).toISOString() : ""}"\n`;
@@ -1438,7 +1441,8 @@ router.get("/newsletter/export", async (req: Request, res: Response) => {
 router.delete("/newsletter/:id", async (req: Request, res: Response) => {
   const { id } = req.params;
   if (!mongoose.Types.ObjectId.isValid(String(id))) throw httpError(400, "Invalid ID");
-  await Newsletter.findByIdAndDelete(id);
+  const removed = await Newsletter.findOneAndDelete({ _id: id, ...demoScope(req) });
+  if (!removed) throw httpError(404, "Subscriber not found");
   await audit(actor(req), "newsletter.delete", "Newsletter", String(id), {}, isDemo(req));
   ok(res, null, "Subscriber removed.");
 });
@@ -1449,7 +1453,7 @@ router.delete("/newsletter/:id", async (req: Request, res: Response) => {
 router.get("/homestay-leads", async (req: Request, res: Response) => {
   const q = search(req);
   const status = String(req.query.status || "").trim();
-  const filter: any = {};
+  const filter: any = { ...demoScope(req) };
   if (status && ["NEW", "CONTACTED", "ONBOARDED", "REJECTED"].includes(status)) {
     filter.status = status;
   }
@@ -1495,14 +1499,14 @@ router.patch("/homestay-leads/:id", async (req: Request, res: Response) => {
   if (location) update.location = String(location).trim();
   if (rooms) update.rooms = Math.max(1, Number(rooms) || 1);
 
-  const updated = await HomestayLead.findByIdAndUpdate(id, { $set: update }, { new: true });
+  const updated = await HomestayLead.findOneAndUpdate({ _id: id, ...demoScope(req) }, { $set: update }, { new: true });
   if (!updated) throw httpError(404, "Lead not found");
   await audit(actor(req), "homestay_lead.update", "HomestayLead", String(id), update, isDemo(req));
   ok(res, updated, "Lead updated.");
 });
 
 router.get("/homestay-leads/export", async (req: Request, res: Response) => {
-  const items = await HomestayLead.find().sort({ createdAt: -1 }).lean();
+  const items = await HomestayLead.find(demoScope(req)).sort({ createdAt: -1 }).lean();
   let csv = "Name,Phone,Location,Rooms,Status,Notes,CreatedAt\n";
   for (const item of items) {
     csv += `"${(item.name || "").replace(/"/g, '""')}","${(item.phone || "").replace(/"/g, '""')}","${(item.location || "").replace(/"/g, '""')}",${item.rooms || 1},"${item.status || "NEW"}","${(item.notes || "").replace(/"/g, '""')}","${item.createdAt ? new Date(item.createdAt).toISOString() : ""}"\n`;
@@ -1515,7 +1519,8 @@ router.get("/homestay-leads/export", async (req: Request, res: Response) => {
 router.delete("/homestay-leads/:id", async (req: Request, res: Response) => {
   const { id } = req.params;
   if (!mongoose.Types.ObjectId.isValid(String(id))) throw httpError(400, "Invalid ID");
-  await HomestayLead.findByIdAndDelete(id);
+  const removed = await HomestayLead.findOneAndDelete({ _id: id, ...demoScope(req) });
+  if (!removed) throw httpError(404, "Lead not found");
   await audit(actor(req), "homestay_lead.delete", "HomestayLead", String(id), {}, isDemo(req));
   ok(res, null, "Lead deleted.");
 });

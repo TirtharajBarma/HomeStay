@@ -26,7 +26,7 @@ function getHostContact(stay: Stay) {
     rawPhone ||
     siteConfig.supportPhone?.trim() ||
     process.env.NEXT_PUBLIC_SUPPORT_PHONE?.trim() ||
-    "919239842574";
+    "";
 
   const cleanPhone = waNumber(effectivePhone);
   const email = stay.email?.trim() || siteConfig.supportEmail || "bookings@staycabs.in";
@@ -53,7 +53,7 @@ export function BookingCard({ stay, booking }: { stay: Stay; booking: Booking })
   const waQuestionMessage = `Hello! I have a question about staying at ${stay.name} (${booking.nights} night${booking.nights > 1 ? "s" : ""}, ${booking.checkIn} to ${booking.checkOut}, ${booking.guests} guest${booking.guests > 1 ? "s" : ""}). Could you please assist me?`;
   const waQuestionUrl = `https://wa.me/${host.cleanPhone}?text=${encodeURIComponent(waQuestionMessage)}`;
 
-  const callUrl = `tel:${host.effectivePhone.replace(/\s+/g, "")}`;
+  const callUrl = host.effectivePhone ? `tel:${host.effectivePhone.replace(/[^\d+]/g, "")}` : "";
 
   return (
     <aside className="order-last lg:order-last lg:col-span-4 lg:sticky lg:top-20 self-start">
@@ -140,22 +140,35 @@ export function BookingCard({ stay, booking }: { stay: Stay; booking: Booking })
               </div>
 
               <div className="mt-3 flex items-center gap-2">
-                <a
-                  href={waQuestionUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-md bg-surface-container hover:bg-surface-container-high text-primary py-2 px-3 text-label-sm font-medium border border-outline-variant/60 transition-colors"
-                >
-                  <Icon name="chat" className="text-[14px]" />
-                  <span>WhatsApp</span>
-                </a>
-                <a
-                  href={callUrl}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-md border border-outline-variant/60 bg-surface-container hover:bg-surface-container-high px-3 py-2 text-label-sm font-medium text-primary transition-colors"
-                >
-                  <Icon name="call" className="text-[14px]" />
-                  <span>Call</span>
-                </a>
+                {host.cleanPhone ? (
+                  <a
+                    href={waQuestionUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-md bg-surface-container hover:bg-surface-container-high text-primary py-2 px-3 text-label-sm font-medium border border-outline-variant/60 transition-colors"
+                  >
+                    <Icon name="chat" className="text-[14px]" />
+                    <span>WhatsApp</span>
+                  </a>
+                ) : null}
+                {callUrl ? (
+                  <a
+                    href={callUrl}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-md border border-outline-variant/60 bg-surface-container hover:bg-surface-container-high px-3 py-2 text-label-sm font-medium text-primary transition-colors"
+                  >
+                    <Icon name="call" className="text-[14px]" />
+                    <span>Call</span>
+                  </a>
+                ) : null}
+                {!host.cleanPhone && !callUrl ? (
+                  <a
+                    href={`mailto:${host.email}?subject=${encodeURIComponent(`Stay Inquiry: ${stay.name} (${booking.checkIn} to ${booking.checkOut})`)}`}
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-md bg-surface-container hover:bg-surface-container-high text-primary py-2 px-3 text-label-sm font-medium border border-outline-variant/60 transition-colors"
+                  >
+                    <Icon name="mail" className="text-[14px]" />
+                    <span>Email host</span>
+                  </a>
+                ) : null}
               </div>
             </div>
           </>
@@ -175,23 +188,27 @@ export function BookingCard({ stay, booking }: { stay: Stay; booking: Booking })
             </div>
 
             <div className="space-y-2">
-              <a
-                href={waInquiryUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary hover:bg-primary-container py-3 text-label-md font-medium text-on-primary transition-colors"
-              >
-                <Icon name="chat" className="text-base" />
-                <span>Inquire on WhatsApp</span>
-              </a>
+              {host.cleanPhone ? (
+                <a
+                  href={waInquiryUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary hover:bg-primary-container py-3 text-label-md font-medium text-on-primary transition-colors"
+                >
+                  <Icon name="chat" className="text-base" />
+                  <span>Inquire on WhatsApp</span>
+                </a>
+              ) : null}
 
-              <a
-                href={callUrl}
-                className="flex w-full items-center justify-center gap-2 rounded-lg border border-outline-variant/60 bg-surface-container hover:bg-surface-container-high py-2.5 text-label-md font-medium text-on-surface transition-colors"
-              >
-                <Icon name="call" className="text-base text-primary" />
-                <span>Call host directly</span>
-              </a>
+              {callUrl ? (
+                <a
+                  href={callUrl}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-outline-variant/60 bg-surface-container hover:bg-surface-container-high py-2.5 text-label-md font-medium text-on-surface transition-colors"
+                >
+                  <Icon name="call" className="text-base text-primary" />
+                  <span>Call host directly</span>
+                </a>
+              ) : null}
 
               {host.email ? (
                 <a

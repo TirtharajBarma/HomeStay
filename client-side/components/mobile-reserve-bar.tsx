@@ -45,7 +45,7 @@ export function MobileReserveBar({ stay, booking }: { stay: Stay; booking: Booki
     rawPhone ||
     siteConfig.supportPhone?.trim() ||
     process.env.NEXT_PUBLIC_SUPPORT_PHONE?.trim() ||
-    "919239842574";
+    "";
   const cleanPhone = waNumber(effectivePhone);
 
   const waInquiryMessage = `Hello! I would like to inquire about booking ${stay.name} for ${booking.nights} night${booking.nights > 1 ? "s" : ""} (${booking.checkIn} to ${booking.checkOut}) for ${booking.guests} guest${booking.guests > 1 ? "s" : ""}. Please let me know room availability and price.`;
@@ -81,7 +81,7 @@ export function MobileReserveBar({ stay, booking }: { stay: Stay; booking: Booki
             <span>Reserve</span>
             <Icon name="arrow_forward" className="text-base" />
           </Link>
-        ) : (
+        ) : cleanPhone ? (
           <a
             href={waInquiryUrl}
             target="_blank"
@@ -91,7 +91,15 @@ export function MobileReserveBar({ stay, booking }: { stay: Stay; booking: Booki
             <Icon name="chat" className="text-base" />
             <span>Ask host</span>
           </a>
-        )}
+        ) : stay.email ? (
+          <a
+            href={`mailto:${stay.email}?subject=${encodeURIComponent(`Stay Inquiry: ${stay.name}`)}`}
+            className="ml-auto flex min-h-12 shrink-0 items-center gap-1.5 rounded-xl bg-primary px-4 text-label-md font-medium text-on-primary shadow-sm active:opacity-85 transition-opacity"
+          >
+            <Icon name="mail" className="text-base" />
+            <span>Email host</span>
+          </a>
+        ) : null}
       </div>
     </div>
   );

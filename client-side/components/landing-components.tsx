@@ -846,6 +846,7 @@ export function StepProcessShowcase() {
 // ---------------------------------------------------------------------------
 export function MountainTransitShowcase() {
   const [audience, setAudience] = useState<"hosts" | "drivers">("hosts");
+  const supportNum = waNumber(siteConfig.supportPhone);
 
   return (
     <div>
@@ -917,14 +918,16 @@ export function MountainTransitShowcase() {
             >
               Join as a Driver
             </Link>
-            <a
-              href={`https://wa.me/${waNumber}?text=${encodeURIComponent("Hi StayCabs, I am a local mountain driver and want to register my vehicle.")}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="liquid-btn inline-flex h-12 items-center justify-center rounded-xl border border-white/40 bg-primary/20 px-5 text-sm font-medium text-white hover:bg-primary-container shadow-xs"
-            >
-              Driver Support Desk
-            </a>
+            {supportNum ? (
+              <a
+                href={`https://wa.me/${supportNum}?text=${encodeURIComponent("Hi StayCabs, I am a local mountain driver and want to register my vehicle.")}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="liquid-btn inline-flex h-12 items-center justify-center rounded-xl border border-white/40 bg-primary/20 px-5 text-sm font-medium text-white hover:bg-primary-container shadow-xs"
+              >
+                Driver Support Desk
+              </a>
+            ) : null}
           </div>
         </div>
       </div>
@@ -1079,14 +1082,16 @@ export function MountainTransitShowcase() {
               >
                 Join as a Driver
               </Link>
-              <a
-                href={`https://wa.me/${waNumber}?text=${encodeURIComponent("Hi StayCabs, I am a local mountain driver and want to register my vehicle.")}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="liquid-btn flex-1 inline-flex h-9.5 items-center justify-center rounded-xl border border-white/40 bg-white/15 text-xs font-medium text-white hover:bg-white/25"
-              >
-                Driver Desk
-              </a>
+              {supportNum ? (
+                <a
+                  href={`https://wa.me/${supportNum}?text=${encodeURIComponent("Hi StayCabs, I am a local mountain driver and want to register my vehicle.")}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="liquid-btn flex-1 inline-flex h-9.5 items-center justify-center rounded-xl border border-white/40 bg-white/15 text-xs font-medium text-white hover:bg-white/25"
+                >
+                  Driver Desk
+                </a>
+              ) : null}
             </div>
           </div>
         )}
@@ -1306,15 +1311,17 @@ export function QuickRegisterForm() {
             <span>Cab Booking Desk</span>
             <Icon name="arrow_forward" className="text-xs" />
           </Link>
-          <a
-            href={`https://wa.me/${waNumber(siteConfig.supportPhone || "+91 9239842574")}?text=${encodeURIComponent(`Hi StayCabs, I just registered my homestay "${name}" in ${location}.`)}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-emerald-700"
-          >
-            <Icon name="chat" className="text-xs" />
-            <span>Connect on WhatsApp</span>
-          </a>
+          {siteConfig.supportPhone ? (
+            <a
+              href={`https://wa.me/${waNumber(siteConfig.supportPhone)}?text=${encodeURIComponent(`Hi StayCabs, I just registered my homestay "${name}" in ${location}.`)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-emerald-700"
+            >
+              <Icon name="chat" className="text-xs" />
+              <span>Connect on WhatsApp</span>
+            </a>
+          ) : null}
         </div>
       </div>
     );
@@ -1431,8 +1438,10 @@ export function QuickRegisterForm() {
 // 4. Floating WhatsApp Help Desk Button (Desktop & Tablet)
 // ---------------------------------------------------------------------------
 export function FloatingWhatsApp() {
-  const phone = siteConfig.supportPhone || process.env.NEXT_PUBLIC_SUPPORT_PHONE || "+91 9239842574";
+  const phone = siteConfig.supportPhone || process.env.NEXT_PUBLIC_SUPPORT_PHONE || "";
   const num = waNumber(phone);
+  // No support number configured: do not invent one.
+  if (!num) return null;
 
   return (
     <aside

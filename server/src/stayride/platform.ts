@@ -19,6 +19,7 @@ import { sendWhatsApp, WhatsAppMessage, WhatsAppResult, WhatsAppContext, maskPho
 import * as messages from './messages.js';
 import { parseTime12 } from './time.js';
 import { getCabRequestModel } from '../models/cab-request.model.js';
+import { getDriverLockModel } from '../models/driver-lock.model.js';
 import { getPayoutRequestModel } from '../models/payout-request.model.js';
 import { User } from '../models/user.model.js';
 import { Driver } from '../models/driver.model.js';
@@ -417,8 +418,8 @@ async function inactiveDrivers(isDemo: boolean, ids: unknown[]): Promise<Set<str
 
 /**
  * True when the driver already holds another trip whose pickup is within OVERLAP_MS of this one.
- * ponytail: check-then-write, not atomic: two confirms for the same driver in the same instant can both pass and
- * double-book him (rare; the owner/admin sees both trips). A per-driver lock document would close it if it happens.
+ * The check alone is a read; callers hold `acquireDriverLock` for the driver until their write is
+ * committed, so two overlapping assignments cannot both pass.
  */
 async function driverHasOverlap(isDemo: boolean, driverId: string, doc: any): Promise<boolean> {
   const at = istDateTime(doc.date, doc.time) ?? Number(doc.date);
@@ -427,6 +428,33 @@ async function driverHasOverlap(isDemo: boolean, driverId: string, doc: any): Pr
     .select('date time')
     .lean();
   return held.some((t) => pickupsOverlap(at, istDateTime(t.date, t.time) ?? Number(t.date)));
+}
+
+const DRIVER_LOCK_MS = 30_000; // longer than any confirm write; stale locks expire on their own
+
+/**
+ * Cross-instance mutex for one driver's assignment slot. Returns the release function; a live lock is
+ * reported as a 409 so the caller retries instead of double-booking. Fleet accounts are never locked
+ * (they stand for many vehicles).
+ */
+async function acquireDriverLock(isDemo: boolean, driverId: string, tenantKey: unknown): Promise<() => Promise<void>> {
+  const Model = getDriverLockModel(isDemo);
+  const key = driverKey(driverId, tenantKey);
+  const token = crypto.randomBytes(12).toString('hex');
+  const expiresAt = new Date(Date.now() + DRIVER_LOCK_MS);
+  try {
+    await Model.findOneAndUpdate(
+      { key, expiresAt: { $lte: new Date() } },
+      { $set: { key, token, expiresAt } },
+      { upsert: true, new: true }
+    );
+  } catch (err: any) {
+    if (err?.code === 11000) throw conflict('This driver is being assigned to another trip right now. Please try again.');
+    throw err;
+  }
+  return async () => {
+    await Model.deleteOne({ key, token }).catch(() => {});
+  };
 }
 
 /**
@@ -989,7 +1017,6 @@ export async function ownerConfirmQuote(tenantKey: string, isDemo: boolean, refe
     driver = { vehicle: { plate: quote.driverVehicle || '' }, accountStatus: 'ACTIVE' };
   }
   if (!driver) throw conflict('This driver is no longer available.');
-  if (!isFleet(quote) && (await driverHasOverlap(isDemo, quoteDriverIdStr, doc))) throw conflict('This driver already has another trip within 3 hours of this pickup.');
   // Fare comes from the driver's quote (or the counter-offer he accepted), never from the client.
   const fare = counterFare ?? quote.quotedFare;
   // If own fleet has fee set to 0, advance is 0 and ride is confirmed immediately without gateway wait
@@ -997,70 +1024,78 @@ export async function ownerConfirmQuote(tenantKey: string, isDemo: boolean, refe
   const cfg = await cfgOf(isDemo);
   const noFee = priced.advanceAmount <= 0;
   const pickupOtp = doc.pickupOtp || String(crypto.randomInt(1000, 10000));
-  const updated = await Model.findOneAndUpdate(
-    {
-      _id: doc._id,
-      status: { $in: ['FINDING_DRIVER', 'QUOTE_RECEIVED', 'PENDING_REVIEW'] },
-      dispatched: { $ne: false },
-      advancePaid: { $ne: true },
-      // the fare we priced must still be the driver's current quote / counter (drivers may revise it)
-      quotes: { $elemMatch: { driverId: quote.driverId, status: 'PENDING', quotedFare: quote.quotedFare, ...(counterFare !== undefined ? { counterFare } : {}) } },
-    },
-    {
-      $set: {
-        ...priced,
-        status: noFee ? 'CONFIRMED' : 'AWAITING_ADVANCE_PAYMENT',
-        advancePaid: noFee,
-        advanceDueAt: noFee ? null : dueAt(cfg, doc),
-        pickupOtp: noFee ? pickupOtp : (doc.pickupOtp || null),
-        paymentLinkId: '',
-        paymentLinkUrl: '',
-        assignedDriverUserId: String(quote.driverId),
-        assignedDriverName: quote.driverName,
-        assignedDriverPhone: quote.driverPhone,
-        assignedDriverCategory: quote.driverCategory || 'INDIVIDUAL',
-        assignedDriverUnionName: quote.unionName || '',
-        vehicleDetails: {
-          model: quote.driverVehicleModel || (driver as any).vehicle?.model || quote.driverVehicle || '',
-          plate: quote.driverVehiclePlate || (driver as any).vehicle?.plate || '',
-        },
-        'quotes.$[q].status': 'ACCEPTED',
-        'quotes.$[q].quotedFare': fare,
-        'quotes.$[q].counterFare': null,
-        'quotes.$[o].status': 'REJECTED',
-        'quotes.$[o].outbid': true, // lost to this driver: may come back if the guest never pays
+  // The overlap check and the write must be exclusive per driver, across server instances.
+  const releaseLock = isFleet(quote) ? null : await acquireDriverLock(isDemo, quoteDriverIdStr, doc.propertyId);
+  let updated: any;
+  try {
+    if (!isFleet(quote) && (await driverHasOverlap(isDemo, quoteDriverIdStr, doc))) throw conflict('This driver already has another trip within 3 hours of this pickup.');
+    updated = await Model.findOneAndUpdate(
+      {
+        _id: doc._id,
+        status: { $in: ['FINDING_DRIVER', 'QUOTE_RECEIVED', 'PENDING_REVIEW'] },
+        dispatched: { $ne: false },
+        advancePaid: { $ne: true },
+        // the fare we priced must still be the driver's current quote / counter (drivers may revise it)
+        quotes: { $elemMatch: { driverId: quote.driverId, status: 'PENDING', quotedFare: quote.quotedFare, ...(counterFare !== undefined ? { counterFare } : {}) } },
       },
-    },
-    {
-      returnDocument: 'after',
-      arrayFilters: [{ 'q.driverId': quote.driverId }, { 'o.driverId': { $ne: quote.driverId }, 'o.status': 'PENDING' }],
-    }
-  );
-  if (!updated) throw conflict('This request already has a confirmed driver, or the quote changed. Refresh and try again.');
-
-  // Atomic Concurrency Lock Verification: Ensure another host didn't confirm this driver in the same instant
-  if (!isFleet(quote) && (await driverHasOverlap(isDemo, quoteDriverIdStr, updated))) {
-    await Model.updateOne(
-      { _id: updated._id, assignedDriverUserId: String(quote.driverId), status: updated.status },
       {
         $set: {
-          status: doc.status,
-          assignedDriverUserId: null,
-          assignedDriverName: '',
-          assignedDriverPhone: '',
-          assignedDriverCategory: 'INDIVIDUAL',
-          assignedDriverUnionName: '',
-          agreedFare: null,
-          advanceAmount: null,
-          advancePaid: false,
-          'quotes.$[q].status': 'PENDING',
-          'quotes.$[o].status': 'PENDING',
-          'quotes.$[o].outbid': false,
+          ...priced,
+          status: noFee ? 'CONFIRMED' : 'AWAITING_ADVANCE_PAYMENT',
+          advancePaid: noFee,
+          advanceDueAt: noFee ? null : dueAt(cfg, doc),
+          pickupOtp: noFee ? pickupOtp : (doc.pickupOtp || null),
+          paymentLinkId: '',
+          paymentLinkUrl: '',
+          assignedDriverUserId: String(quote.driverId),
+          assignedDriverName: quote.driverName,
+          assignedDriverPhone: quote.driverPhone,
+          assignedDriverCategory: quote.driverCategory || 'INDIVIDUAL',
+          assignedDriverUnionName: quote.unionName || '',
+          vehicleDetails: {
+            model: quote.driverVehicleModel || (driver as any).vehicle?.model || quote.driverVehicle || '',
+            plate: quote.driverVehiclePlate || (driver as any).vehicle?.plate || '',
+          },
+          'quotes.$[q].status': 'ACCEPTED',
+          'quotes.$[q].quotedFare': fare,
+          'quotes.$[q].counterFare': null,
+          'quotes.$[o].status': 'REJECTED',
+          'quotes.$[o].outbid': true, // lost to this driver: may come back if the guest never pays
         },
       },
-      { arrayFilters: [{ 'q.driverId': quote.driverId }, { 'o.driverId': { $ne: quote.driverId } }] }
+      {
+        returnDocument: 'after',
+        arrayFilters: [{ 'q.driverId': quote.driverId }, { 'o.driverId': { $ne: quote.driverId }, 'o.status': 'PENDING' }],
+      }
     );
-    throw conflict('This driver was just assigned to another overlapping trip by another host. Please choose another driver.');
+    if (!updated) throw conflict('This request already has a confirmed driver, or the quote changed. Refresh and try again.');
+
+    // Defensive re-check under the same lock: a write that slipped in before the lock was taken.
+    if (!isFleet(quote) && (await driverHasOverlap(isDemo, quoteDriverIdStr, updated))) {
+      await Model.updateOne(
+        { _id: updated._id, assignedDriverUserId: String(quote.driverId), status: updated.status },
+        {
+          $set: {
+            status: doc.status,
+            assignedDriverUserId: null,
+            assignedDriverName: '',
+            assignedDriverPhone: '',
+            assignedDriverCategory: 'INDIVIDUAL',
+            assignedDriverUnionName: '',
+            agreedFare: null,
+            advanceAmount: null,
+            advancePaid: false,
+            'quotes.$[q].status': 'PENDING',
+            'quotes.$[o].status': 'PENDING',
+            'quotes.$[o].outbid': false,
+          },
+        },
+        { arrayFilters: [{ 'q.driverId': quote.driverId }, { 'o.driverId': { $ne: quote.driverId } }] }
+      );
+      throw conflict('This driver was just assigned to another overlapping trip by another host. Please choose another driver.');
+    }
+  } finally {
+    await releaseLock?.();
   }
 
   await audit(actor, 'cab.confirm_quote', 'CabRequest', String(doc._id), { reference, driverUserId, fare: priced.agreedFare, counterAccepted: counterFare !== undefined }, isDemo, scope(doc));
@@ -1857,6 +1892,8 @@ async function selectableQuotes(isDemo: boolean, doc: any, quotes: any[]): Promi
   for (const q of quotes) {
     const id = String(q.driverId);
     if (inactive.has(id)) continue;
+    // An open counter-offer is not an agreed fare: auto-selecting this quote would bypass it.
+    if (Number(q.counterFare) > 0) continue;
     if (!isFleet(q) && (busyDriverIds.has(driverKey(id, doc.propertyId)) || (await driverHasOverlap(isDemo, id, doc)))) continue;
     out.push(q);
   }
@@ -2246,21 +2283,20 @@ export async function adminAssignDriver(isDemo: boolean, id: string, body: any, 
     : null;
   const pickedId = body.driverUserId || byPhone?._id;
   const isOwnFleetPicked = pickedId && String(pickedId).startsWith('own-');
+  let pickedDriver: any = null;
   if (pickedId && !isOwnFleetPicked) {
-    const driver: any = mongoose.Types.ObjectId.isValid(String(pickedId))
+    pickedDriver = mongoose.Types.ObjectId.isValid(String(pickedId))
       ? await userModel(isDemo).findOne({ _id: pickedId, role: 'driver', accountStatus: 'ACTIVE' }).lean()
       : null;
-    if (!driver) throw httpError(400, 'Driver not found or not approved.');
-    if (!isFleet(driver) && (await driverHasOverlap(isDemo, String(driver._id), doc))) throw conflict(`${driver.name} already has another trip within 3 hours of this pickup.`);
-    driverUserId = String(driver._id);
-    name = driver.name;
-    phone = driver.phone || '';
-    plate = plate || driver.vehicle?.plate || '';
+    if (!pickedDriver) throw httpError(400, 'Driver not found or not approved.');
+    driverUserId = String(pickedDriver._id);
+    name = pickedDriver.name;
+    phone = pickedDriver.phone || '';
+    plate = plate || pickedDriver.vehicle?.plate || '';
   } else if (isOwnFleetPicked) {
     driverUserId = String(pickedId);
     name = name || String(body.assignedDriverName || `Fleet Driver ${String(pickedId).slice(4)}`);
     phone = phone || String(body.assignedDriverPhone || '');
-    if (await driverHasOverlap(isDemo, String(pickedId), doc)) throw conflict(`${name} already has another trip within 3 hours of this pickup.`);
   }
   if (!name || !phone) throw httpError(400, 'Driver name and phone are required.');
   const driverFields = {
@@ -2270,39 +2306,48 @@ export async function adminAssignDriver(isDemo: boolean, id: string, body: any, 
     vehicleDetails: { model: String(body.vehicleModel || doc.vehicleType || '').slice(0, 60), plate },
   };
   const previous = doc.assignedDriverUserId || null;
-  let updated;
-  if (reassign) {
-    updated = await transition(
-      isDemo,
-      { _id: doc._id, needsReassignment: true, advancePaid: true, status: { $in: PAID_NOT_STARTED } },
-      { ...driverFields, needsReassignment: false },
-      'This trip no longer needs a new driver.'
-    );
-  } else {
-    const priced = await pricedUpdate(doc, fare, isDemo);
-    const { pin, entry } = keepClaim(doc);
-    updated = await transition(
-      isDemo,
-      // previous assignee pinned so "reassigned away" is recorded for the right driver
-      { _id: doc._id, status: { $in: [...OPEN_STATUSES, 'AWAITING_ADVANCE_PAYMENT'] }, advancePaid: { $ne: true }, assignedDriverUserId: previous, ...pin },
-      { ...priced, status: 'AWAITING_ADVANCE_PAYMENT', advanceDueAt: dueAt(cfg, doc), paymentLinkId: '', paymentLinkUrl: '', paymentClaim: null, ownFleet: false, ownDriverId: null, ...driverFields },
-      'Request changed meanwhile (paid, started, cancelled, or the guest sent a payment claim). Reload and try again.',
-      {
-        ...(previous && previous !== driverUserId ? { $addToSet: { previousDriverUserIds: previous } } : {}),
-        ...(entry ? { $push: { unmatchedPayments: entry } } : {}),
-      }
-    );
-    await auditClaimReleased(isDemo, updated, entry, actor, 'admin re-assigned / re-priced');
-  }
-
-  // Atomic Concurrency Lock Verification: Ensure another request did not assign this driver concurrently
   const driverCheckId = driverUserId || (typedPhone.length === 10 ? `tel-${typedPhone}` : '');
-  if (driverCheckId && (await driverHasOverlap(isDemo, driverCheckId, updated))) {
-    await Model.updateOne(
-      { _id: updated._id, status: updated.status },
-      { $set: { status: doc.status, assignedDriverUserId: previous, assignedDriverName: doc.assignedDriverName || '', assignedDriverPhone: doc.assignedDriverPhone || '' } }
-    );
-    throw conflict(`${name} was just assigned to another overlapping trip by another host or admin.`);
+  // A fleet / union account stands for many vehicles: never busy, so no overlap check or lock.
+  const fleetAccount = Boolean(pickedDriver && isFleet(pickedDriver));
+  // The overlap check and the write must be exclusive per driver, across server instances.
+  const releaseLock = driverCheckId && !fleetAccount ? await acquireDriverLock(isDemo, driverCheckId, doc.propertyId) : null;
+  let updated: any;
+  try {
+    if (driverCheckId && !fleetAccount && (await driverHasOverlap(isDemo, driverCheckId, doc))) throw conflict(`${name} already has another trip within 3 hours of this pickup.`);
+    if (reassign) {
+      updated = await transition(
+        isDemo,
+        { _id: doc._id, needsReassignment: true, advancePaid: true, status: { $in: PAID_NOT_STARTED } },
+        { ...driverFields, needsReassignment: false },
+        'This trip no longer needs a new driver.'
+      );
+    } else {
+      const priced = await pricedUpdate(doc, fare, isDemo);
+      const { pin, entry } = keepClaim(doc);
+      updated = await transition(
+        isDemo,
+        // previous assignee pinned so "reassigned away" is recorded for the right driver
+        { _id: doc._id, status: { $in: [...OPEN_STATUSES, 'AWAITING_ADVANCE_PAYMENT'] }, advancePaid: { $ne: true }, assignedDriverUserId: previous, ...pin },
+        { ...priced, status: 'AWAITING_ADVANCE_PAYMENT', advanceDueAt: dueAt(cfg, doc), paymentLinkId: '', paymentLinkUrl: '', paymentClaim: null, ownFleet: false, ownDriverId: null, ...driverFields },
+        'Request changed meanwhile (paid, started, cancelled, or the guest sent a payment claim). Reload and try again.',
+        {
+          ...(previous && previous !== driverUserId ? { $addToSet: { previousDriverUserIds: previous } } : {}),
+          ...(entry ? { $push: { unmatchedPayments: entry } } : {}),
+        }
+      );
+      await auditClaimReleased(isDemo, updated, entry, actor, 'admin re-assigned / re-priced');
+    }
+
+    // Defensive re-check under the same lock: a write that slipped in before the lock was taken.
+    if (driverCheckId && !fleetAccount && (await driverHasOverlap(isDemo, driverCheckId, updated))) {
+      await Model.updateOne(
+        { _id: updated._id, status: updated.status },
+        { $set: { status: doc.status, assignedDriverUserId: previous, assignedDriverName: doc.assignedDriverName || '', assignedDriverPhone: doc.assignedDriverPhone || '' } }
+      );
+      throw conflict(`${name} was just assigned to another overlapping trip by another host or admin.`);
+    }
+  } finally {
+    await releaseLock?.();
   }
 
   await audit(actor, reassign ? 'cab.reassign_driver' : 'cab.assign_driver', 'CabRequest', id, { fare, driverUserId, name, matchedByPhone: Boolean(byPhone) }, isDemo, scope(updated));
