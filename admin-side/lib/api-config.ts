@@ -35,7 +35,19 @@ export const API_ENDPOINTS = {
   userStatus: (id: string) => `${API_BASE_URL}/admin/stayride/users/${id}/status`,
   cabRequests: (status?: string) => `${API_BASE_URL}/admin/cab-requests${status ? `?status=${status}` : ""}`,
   settleDriverCabRequest: (id: string) => `${API_BASE_URL}/admin/cab-requests/${id}/driver-settled`,
+  whatsappConversations: (query?: string) => `${API_BASE_URL}/admin/whatsapp/conversations${query ? `?${query}` : ""}`,
+  whatsappConversation: (id: string, demo?: boolean) => `${API_BASE_URL}/admin/whatsapp/conversations/${id}${demo ? "?demo=true" : ""}`,
+  whatsappMessages: (id: string, query?: string) => `${API_BASE_URL}/admin/whatsapp/conversations/${id}/messages${query ? `?${query}` : ""}`,
+  whatsappSendMessage: (id: string) => `${API_BASE_URL}/admin/whatsapp/conversations/${id}/send-message`,
+  whatsappSendTemplate: (id: string) => `${API_BASE_URL}/admin/whatsapp/conversations/${id}/send-template`,
+  whatsappUpdateStatus: (id: string) => `${API_BASE_URL}/admin/whatsapp/conversations/${id}/status`,
+  whatsappMarkRead: (id: string) => `${API_BASE_URL}/admin/whatsapp/conversations/${id}/read`,
+  whatsappTemplates: () => `${API_BASE_URL}/admin/whatsapp/templates`,
+  whatsappCustomerInfo: (phone: string, demo?: boolean) => `${API_BASE_URL}/admin/whatsapp/customer-info?phone=${encodeURIComponent(phone)}${demo ? "&demo=true" : ""}`,
+  whatsappStream: (demo?: boolean) => `${API_BASE_URL}/admin/whatsapp/stream${demo ? "?demo=true" : ""}`,
 };
+
+export const SOCKET_SERVER_URL = API_BASE_URL.replace(/\/api\/v1\/?$/, "");
 
 export const TOKEN_STORAGE_KEY = "platform_admin_token";
 export const USER_STORAGE_KEY = "platform_admin_data";

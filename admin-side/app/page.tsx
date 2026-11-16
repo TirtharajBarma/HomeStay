@@ -6,13 +6,15 @@ import { API_ENDPOINTS, apiFetch, readApiError } from "@/lib/api-config";
 import {
   AppealsTab, AuditTab, inr, CabRequestsTab, DashboardTab, DriversTab, GuestsTab, HomestaysTab, NotificationBell, PayoutsTab, SettingsTab, UsersTab,
 } from "@/components/stayride-admin";
+import { WhatsAppInbox } from "@/components/whatsapp-inbox";
 
 // The old Hill Hospitality portal: its data is not used by the StayRide app, so its "Suspend" and
 // "Settle UPI" do nothing there. Hidden unless NEXT_PUBLIC_SHOW_LEGACY_PORTAL=true.
 const SHOW_LEGACY = process.env.NEXT_PUBLIC_SHOW_LEGACY_PORTAL === "true";
-type Tab = "dashboard" | "users" | "homestays" | "guests" | "drivers" | "cab-requests" | "payouts" | "settings" | "appeals" | "audit" | "legacy";
+type Tab = "dashboard" | "whatsapp" | "users" | "homestays" | "guests" | "drivers" | "cab-requests" | "payouts" | "settings" | "appeals" | "audit" | "legacy";
 const TABS: Array<[Tab, string, string]> = [
   ["dashboard", "monitoring", "Overview"],
+  ["whatsapp", "chat", "WhatsApp Inbox"],
   ["users", "group", "Users"],
   ["homestays", "villa", "Homestays"],
   ["guests", "hotel", "Guests staying"],
@@ -79,6 +81,30 @@ export default function AdminDashboardPage() {
   const [guestSearch, setGuestSearch] = useState("");
   // ...and the homestay, for a calendar import or a guest's WhatsApp reply
   const [guestTenant, setGuestTenant] = useState("");
+  // WhatsApp Inbox stats badge
+  const [whatsappStats, setWhatsappStats] = useState<{ total: number; unread: number }>({ total: 0, unread: 0 });
+
+  useEffect(() => {
+    async function loadWhatsappCounts() {
+      if (!token) return;
+      try {
+        const res = await apiFetch(API_ENDPOINTS.whatsappConversations("limit=1" + (demo ? "&demo=true" : "")));
+        if (res.ok) {
+          const json = await res.json();
+          if (json?.data?.stats) {
+            setWhatsappStats({
+              total: json.data.stats.totalConversations ?? 0,
+              unread: json.data.stats.unreadConversations ?? 0,
+            });
+          }
+        }
+      } catch {}
+    }
+    loadWhatsappCounts();
+    const interval = setInterval(loadWhatsappCounts, 20000);
+    return () => clearInterval(interval);
+  }, [token, demo]);
+
 
   const handleTabChange = (tab: Tab) => {
     setActiveTab(tab);
@@ -285,12 +311,40 @@ export default function AdminDashboardPage() {
             >
               <span className="material-symbols-outlined text-base">{icon}</span>
               <span>{label}</span>
+              {key === "whatsapp" && (
+                <span className="flex items-center gap-1 ml-0.5">
+                  {whatsappStats.unread > 0 ? (
+                    <span className="bg-emerald-500 text-white font-bold text-[9px] px-1.5 py-0.2 rounded-full animate-pulse">
+                      {whatsappStats.unread}
+                    </span>
+                  ) : whatsappStats.total > 0 ? (
+                    <span className="bg-slate-800 text-slate-400 text-[9px] font-mono px-1.5 py-0.2 rounded-full border border-slate-700">
+                      {whatsappStats.total}
+                    </span>
+                  ) : null}
+                </span>
+              )}
             </button>
           ))}
         </div>
 
         <div className={activeTab === "dashboard" ? "block" : "hidden"}>
           {visitedTabs.has("dashboard") && <DashboardTab demo={demo} />}
+        </div>
+        <div className={activeTab === "whatsapp" ? "block" : "hidden"}>
+          {visitedTabs.has("whatsapp") && (
+            <WhatsAppInbox
+              demo={demo}
+              onNavigateToCabRequests={(tenantKey) => {
+                handleTabChange("cab-requests");
+                if (tenantKey) setCabTenant(tenantKey);
+              }}
+              onNavigateToGuests={(guestName) => {
+                handleTabChange("guests");
+                if (guestName) setGuestSearch(guestName);
+              }}
+            />
+          )}
         </div>
         <div className={activeTab === "users" ? "block" : "hidden"}>
           {visitedTabs.has("users") && <UsersTab demo={demo} />}

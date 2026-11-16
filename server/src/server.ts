@@ -4,6 +4,7 @@ import { config } from "./config/env.js";
 import { connectDB, disconnectDB } from "./config/db.js";
 import { seedDatabase } from "./data/seeds/seed.js";
 import { CronService } from "./services/cron.service.js";
+import { initSocketService } from "./services/socket.service.js";
 async function bootstrap() {
   try {
     // 1. Connect to MongoDB Atlas (or in-memory fallback during dev)
@@ -31,7 +32,10 @@ async function bootstrap() {
       console.log(`⚡ Engine:       Node ${process.version} with tsx`);
       console.log(`======================================================\n`);
 
-      // 4. Start automated background workers
+      // 4. Attach real-time WebSocket / Socket.IO service
+      initSocketService(server);
+
+      // 5. Start automated background workers
       CronService.startIcalWorker(15);
       CronService.startCabWorker(60);
     });

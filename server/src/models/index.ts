@@ -10,3 +10,7 @@ export * from "./commission-settings.model.js";
 export * from "./cab-request.model.js";
 export * from "./feature-appeal.model.js";
 export * from "./payout-request.model.js";
+export * from "./whatsapp-contact.model.js";
+export * from "./whatsapp-conversation.model.js";
+export * from "./whatsapp-message.model.js";
+

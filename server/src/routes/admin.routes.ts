@@ -3,6 +3,7 @@ import { AdminController } from "../controllers/admin.controller.js";
 import { verifyToken, requireRole, requireLiveAdmin } from "../middlewares/auth.js";
 import { Property } from "../models/property.model.js";
 import stayrideAdmin from "./stayride-admin.routes.js";
+import whatsappAdmin from "./whatsapp-admin.routes.js";
 
 const router = Router();
 
@@ -23,5 +24,8 @@ router.patch("/properties/:id/status", AdminController.updatePropertyStatus);
 
 // StayRide platform administration (commission, features, blocking, cab queue, payments, payouts, audit)
 router.use(stayrideAdmin);
+
+// WhatsApp Inbox administration
+router.use("/whatsapp", whatsappAdmin);
 
 export default router;

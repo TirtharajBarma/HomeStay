@@ -13,6 +13,7 @@ import { logger } from '../utils/logger.js';
 import { audit } from '../models/audit-log.model.js';
 import { getGuestLinkModel } from '../models/guest-link.model.js';
 import { notify } from './push.service.js';
+import { WhatsappInboxService } from './whatsapp-inbox.service.js';
 
 const TIMEOUT_MS = 4000;
 const API_VERSION = process.env.WHATSAPP_API_VERSION || 'v26.0';
@@ -132,13 +133,20 @@ export function getWhatsAppNativeLink(phone: unknown, text: string): string {
 }
 
 // templateName: from the admin's settings; the WHATSAPP_TPL_<EVENT> env var is the older fallback
-export async function sendWhatsApp(isDemo: boolean, msg: WhatsAppMessage, language = 'en', templateName?: string): Promise<WhatsAppResult> {
+export async function sendWhatsApp(
+  isDemo: boolean,
+  msg: WhatsAppMessage,
+  language = 'en',
+  templateName?: string,
+  options?: { skipRecord?: boolean }
+): Promise<WhatsAppResult> {
   const to = toWhatsAppNumber(msg.to);
   const isMetaEnabled = enabled();
 
   const ctx = msg.context || {};
   const base = { event: msg.event, to: maskPhone(msg.to), ...ctx };
   const logMeta = { action: 'whatsapp.dispatch', tenantId: ctx.tenantId, driverId: ctx.driverId };
+  const template = templateName || process.env[`WHATSAPP_TPL_${msg.event}`];
 
   // Skips go to Axiom only, never with message contents.
   if (isDemo || !to || !isMetaEnabled) {
@@ -147,10 +155,27 @@ export async function sendWhatsApp(isDemo: boolean, msg: WhatsAppMessage, langua
       ...logMeta,
       metadata: { ...base, status: 'SKIPPED', reason, metaCloudApiEnabled: isMetaEnabled },
     });
+    // In dev / demo / unconfigured mode: record message as simulated outbound message so admins see automated messages
+    if (to && !options?.skipRecord) {
+      try {
+        await WhatsappInboxService.recordOutboundMessage({
+          to: msg.to,
+          text: msg.text,
+          senderType: 'SYSTEM',
+          messageType: template ? 'TEMPLATE' : 'TEXT',
+          templateName: template || undefined,
+          templateLanguage: language,
+          templateParameters: msg.params,
+          deliveryStatus: 'SENT',
+          isDemo,
+        });
+      } catch (e: any) {
+        logger.warn('[WhatsApp Inbox] Failed to record skipped send', { error: e?.message });
+      }
+    }
     return 'SKIPPED';
   }
 
-  const template = templateName || process.env[`WHATSAPP_TPL_${msg.event}`];
   if (!template && process.env.NODE_ENV === 'production') {
     logger.warn(`[WhatsApp Skipped] ${msg.event} (APPROVED_TEMPLATE_NOT_CONFIGURED)`, {
       ...logMeta,
@@ -186,6 +211,24 @@ export async function sendWhatsApp(isDemo: boolean, msg: WhatsAppMessage, langua
     });
     // compact Mongo record (90-day TTL); Axiom above has the full error
     await audit('system', 'whatsapp.failed', targetOf(msg.event), ctx.ref || '', { event: msg.event, to: base.to, code: detail.code ?? detail.httpStatus ?? 'NETWORK', title: detail.title || '' }, false, { tenantId: ctx.tenantId, driverId: ctx.driverId, actorRole: 'SYSTEM' });
+    if (!options?.skipRecord) {
+      try {
+        await WhatsappInboxService.recordOutboundMessage({
+          to: msg.to,
+          text: msg.text,
+          senderType: 'SYSTEM',
+          messageType: template ? 'TEMPLATE' : 'TEXT',
+          templateName: template || undefined,
+          templateLanguage: language,
+          templateParameters: msg.params,
+          deliveryStatus: 'FAILED',
+          errorDetails: detail.title || detail.message,
+          isDemo,
+        });
+      } catch (e: any) {
+        logger.warn('[WhatsApp Inbox] Failed to record failed send', { error: e?.message });
+      }
+    }
     return 'FAILED' as const;
   };
 
@@ -203,10 +246,29 @@ export async function sendWhatsApp(isDemo: boolean, msg: WhatsAppMessage, langua
       const e = json?.error || {};
       return await failed({ httpStatus: res.status, code: e.code, subcode: e.error_subcode, title: e.error_user_title || e.title || e.type, message: e.message, error_data: e.error_data, fbtraceId: e.fbtrace_id });
     }
+    const messageId = json?.messages?.[0]?.id;
     logger.info(`[WhatsApp Sent] ${msg.event}`, {
       ...logMeta,
-      metadata: { ...base, template: template || null, status: 'SENT', messageId: json?.messages?.[0]?.id, messageStatus: json?.messages?.[0]?.message_status },
+      metadata: { ...base, template: template || null, status: 'SENT', messageId, messageStatus: json?.messages?.[0]?.message_status },
     });
+    if (!options?.skipRecord) {
+      try {
+        await WhatsappInboxService.recordOutboundMessage({
+          to: msg.to,
+          text: msg.text,
+          whatsappMessageId: messageId,
+          senderType: 'SYSTEM',
+          messageType: template ? 'TEMPLATE' : 'TEXT',
+          templateName: template || undefined,
+          templateLanguage: language,
+          templateParameters: msg.params,
+          deliveryStatus: 'SENT',
+          isDemo,
+        });
+      } catch (e: any) {
+        logger.warn('[WhatsApp Inbox] Failed to record sent message', { error: e?.message });
+      }
+    }
     return 'SENT';
   } catch (err: any) {
     return await failed({ title: err?.name === 'AbortError' ? 'Timeout' : 'Network error', message: err?.message });
@@ -259,7 +321,7 @@ export async function staysOfPhone(waFrom: unknown): Promise<Array<{ tenantKey: 
  * Replies are linked to the sender's live stay (staysOfPhone) for the admin bell and an owner push; Axiom also
  * joins them through replyTo = the wamid of our message, which the send log carries as messageId.
  */
-export async function recordWhatsAppWebhook(body: any): Promise<void> {
+export async function recordWhatsAppWebhook(body: any, isDemo = false): Promise<void> {
   for (const entry of body?.entry || []) {
     for (const change of entry?.changes || []) {
       const v = change?.value || {};
@@ -278,6 +340,19 @@ export async function recordWhatsAppWebhook(body: any): Promise<void> {
             pricingCategory: st.pricing?.category, billable: st.pricing?.billable, errors: st.errors,
           },
         });
+        // Update WhatsApp Inbox message status
+        try {
+          await WhatsappInboxService.updateMessageStatus({
+            whatsappMessageId: st.id,
+            status: st.status,
+            timestamp: st.timestamp,
+            errorDetails: err?.message || err?.title || err?.error_data?.details,
+            isDemo,
+          });
+        } catch (e: any) {
+          logger.warn('[WhatsApp Inbox] Status update failed', { error: e?.message });
+        }
+
         // Ask-for-cab "Last contacted" status on its guest link: one conditional update, forward only
         if (ctx.event === 'ASK_CAB' && /^[a-f0-9]{24}$/.test(String(ctx.ref)) && askCabStatusFrom(st.status).length) {
           try {
@@ -298,6 +373,24 @@ export async function recordWhatsAppWebhook(body: any): Promise<void> {
           // whitelist, never the raw message: "contacts" / "location" messages carry other people's phones and places
           metadata: { id: m.id, type: m.type, timestamp: m.timestamp, from, replyTo: m.context?.id, text, contacts: m.contacts?.length, errors: m.errors },
         });
+
+        // Record incoming message in WhatsApp Inbox
+        const profileName = (v.contacts as any[])?.find((c: any) => c.wa_id === m.from)?.profile?.name;
+        try {
+          await WhatsappInboxService.recordInboundMessage({
+            from: m.from,
+            text: text || m.image?.caption || m.document?.caption || `[${m.type} message]`,
+            whatsappMessageId: m.id,
+            mediaType: m.type,
+            mediaId: m.image?.id || m.document?.id,
+            timestamp: m.timestamp,
+            profileName,
+            isDemo,
+          });
+        } catch (e: any) {
+          logger.warn('[WhatsApp Inbox] Inbound message record failed', { error: e?.message });
+        }
+
         // Which homestay(s) this guest is staying with, so the admin bell and the owner see the reply
         const stays = await staysOfPhone(m.from);
         const first = stays[0];

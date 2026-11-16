@@ -28,10 +28,10 @@
     "mongoose": "^9.11.1",
     "morgan": "^1.12.1",
     "nodemailer": "^10.0.16",
+    "socket.io": "^4.8.4",
     "zod": "^4.6.5"
   },
   "devDependencies": {
-    "nodemon": "^3.1.14",
     "@types/bcryptjs": "^2.4.6",
     "@types/compression": "^1.8.1",
     "@types/cors": "^2.8.19",
@@ -43,6 +43,7 @@
     "eslint": "^9.0.0",
     "eslint-config-expo": "~57.0.2",
     "mongodb-memory-server": "^11.3.0",
+    "nodemon": "^3.1.14",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3"
   }
