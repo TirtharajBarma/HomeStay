@@ -614,13 +614,13 @@ export const CabRequestDetailScreen: React.FC = () => {
                       </View>
                     ) : null}
                     <View style={styles.quoteCardBody}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.assignName}>{q.driverName}</Text>
-                        <Text style={styles.quoteVehicleText}>
+                      <View style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
+                        <Text style={styles.assignName} numberOfLines={1} ellipsizeMode="tail">{q.driverName}</Text>
+                        <Text style={styles.quoteVehicleText} numberOfLines={1} ellipsizeMode="tail">
                           🚗 {q.driverVehicle || 'Mountain Cab'}
                           {typeof q.driverRating === 'number' ? ` · ★ ${q.driverRating} (${q.driverRatingCount ?? 0})` : ''}
                         </Text>
-                        {q.notes ? <Text style={styles.quoteNotesText}>&ldquo;{q.notes}&rdquo;</Text> : null}
+                        {q.notes ? <Text style={styles.quoteNotesText} numberOfLines={2}>&ldquo;{q.notes}&rdquo;</Text> : null}
                         <Text style={styles.quoteFareHighlight}>
                           {formatINR(q.quotedFare)}
                         </Text>
@@ -643,7 +643,7 @@ export const CabRequestDetailScreen: React.FC = () => {
                         )}
                       </View>
                       <TouchableOpacity
-                        style={[styles.assignBtn, q.status !== 'PENDING' && { opacity: 0.4 }]}
+                        style={[styles.assignBtn, { flexShrink: 0, alignSelf: 'center' }, q.status !== 'PENDING' && { opacity: 0.4 }]}
                         disabled={busy || q.status !== 'PENDING'}
                         onPress={() => handleConfirmQuote(q.driverId)}
                       >

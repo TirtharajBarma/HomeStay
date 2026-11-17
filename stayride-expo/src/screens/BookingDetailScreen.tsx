@@ -294,6 +294,33 @@ export const BookingDetailScreen: React.FC = () => {
     reportOutcome(outcome, 'Room Assigned', `Room ${room.number} assigned`);
   };
 
+  const handleOpenManageOptions = () => {
+    Alert.alert(
+      'Manage Stay',
+      `Room ${booking.roomNumber} · ${booking.guestName}`,
+      [
+        ...(!booking.external
+          ? [
+              {
+                text: 'Edit Stay (Dates, Amount, Guests)',
+                onPress: openEdit,
+              },
+              {
+                text: 'Assign / Change Room',
+                onPress: () => setAssignModalVisible(true),
+              },
+            ]
+          : []),
+        {
+          text: 'Cancel Booking',
+          style: 'destructive' as const,
+          onPress: handleCancelBooking,
+        },
+        { text: 'Close', style: 'cancel' as const },
+      ]
+    );
+  };
+
   return (
     <View style={styles.container}>
       <Header title="Booking details" onBack={() => navigation.goBack()} />
@@ -404,59 +431,73 @@ export const BookingDetailScreen: React.FC = () => {
 
       {/* Action Buttons Footer */}
       <View style={[styles.footerActions, { paddingBottom: Math.max(insets.bottom, 16) + 8 }]}>
-        {(booking.status === 'CONFIRMED' || booking.status === 'CHECKED_IN') && !booking.external && (
-          <TouchableOpacity style={styles.outlineBtn} onPress={openEdit}>
-            <Text style={styles.outlineBtnText}>
-              {booking.status === 'CHECKED_IN' ? 'Extend / change check-out' : 'Edit stay (dates, amount, guests)'}
-            </Text>
-          </TouchableOpacity>
-        )}
         {booking.status === 'CONFIRMED' && (
-          <>
-            {!booking.external && (
-              <TouchableOpacity style={styles.outlineBtn} onPress={() => setAssignModalVisible(true)}>
-                <Text style={styles.outlineBtnText}>Assign / change room</Text>
-              </TouchableOpacity>
-            )}
+          <View style={styles.dualActionBar}>
+            <TouchableOpacity
+              style={styles.actionBtnSecondary}
+              onPress={handleOpenManageOptions}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="ellipsis-horizontal-circle-outline" size={17} color={Colors.textPrimary} />
+              <Text style={styles.actionBtnSecondaryText}>Manage</Text>
+            </TouchableOpacity>
 
             {canCheckInNow(booking) ? (
-              <TouchableOpacity style={styles.solidBtn} onPress={handleCheckIn}>
-                <Text style={styles.solidBtnText}>Check in guest</Text>
+              <TouchableOpacity
+                style={styles.actionBtnPrimary}
+                onPress={handleCheckIn}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="log-in-outline" size={18} color={Colors.white} />
+                <Text style={styles.actionBtnPrimaryText}>Check In</Text>
               </TouchableOpacity>
             ) : (
-              <View style={[styles.solidBtn, { opacity: 0.5 }]}>
-                <Text style={styles.solidBtnText}>
-                  Check-in opens {new Date(booking.checkIn).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+              <View style={[styles.actionBtnPrimary, { opacity: 0.55 }]}>
+                <Text style={styles.actionBtnPrimaryText} numberOfLines={1}>
+                  Check-in {new Date(booking.checkIn).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
                 </Text>
               </View>
             )}
-            <TouchableOpacity
-              style={[styles.outlineBtn, { borderColor: Colors.statusRed }]}
-              onPress={handleCancelBooking}
-            >
-              <Text style={[styles.outlineBtnText, { color: Colors.statusRed }]}>
-                Cancel booking
-              </Text>
-            </TouchableOpacity>
-          </>
+          </View>
         )}
 
         {booking.status === 'CHECKED_IN' && (
-          <>
-            <TouchableOpacity style={styles.solidBtn} onPress={handleCheckOut}>
-              <Text style={styles.solidBtnText}>Check out guest</Text>
-            </TouchableOpacity>
-            {balance > 0 && (
-              <TouchableOpacity style={styles.outlineBtn} onPress={openPayment}>
-                <Text style={styles.outlineBtnText}>Record payment (₹{balance.toLocaleString('en-IN')} due)</Text>
+          <View style={styles.dualActionBar}>
+            {balance > 0 ? (
+              <TouchableOpacity
+                style={styles.actionBtnSecondary}
+                onPress={openPayment}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="cash-outline" size={17} color={Colors.statusGreen} />
+                <Text style={styles.actionBtnSecondaryText} numberOfLines={1}>Collect ₹{balance.toLocaleString('en-IN')}</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.actionBtnSecondary}
+                onPress={openEdit}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="calendar-outline" size={17} color={Colors.textPrimary} />
+                <Text style={styles.actionBtnSecondaryText}>Extend</Text>
               </TouchableOpacity>
             )}
-          </>
+
+            <TouchableOpacity
+              style={[styles.actionBtnPrimary, { backgroundColor: '#DC2626' }]}
+              onPress={handleCheckOut}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="log-out-outline" size={18} color={Colors.white} />
+              <Text style={styles.actionBtnPrimaryText}>Check Out</Text>
+            </TouchableOpacity>
+          </View>
         )}
 
         {booking.status === 'CHECKED_OUT' && balance > 0 && (
           <TouchableOpacity style={styles.solidBtn} onPress={openPayment}>
-            <Text style={styles.solidBtnText}>Record payment (₹{balance.toLocaleString('en-IN')} due)</Text>
+            <Ionicons name="cash-outline" size={18} color={Colors.white} style={{ marginRight: 6 }} />
+            <Text style={styles.solidBtnText}>Record Payment · ₹{balance.toLocaleString('en-IN')} Due</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -758,6 +799,45 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: Colors.divider,
     paddingTop: 10,
+  },
+  dualActionBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  actionBtnSecondary: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 13,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: Colors.divider,
+    borderRadius: 12,
+  },
+  actionBtnSecondaryText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+  },
+  actionBtnPrimary: {
+    flex: 1.4,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 13,
+    backgroundColor: Colors.brandPrimary,
+    borderRadius: 12,
+  },
+  actionBtnPrimaryText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.white,
   },
   solidBtn: {
     backgroundColor: Colors.brandPrimary,

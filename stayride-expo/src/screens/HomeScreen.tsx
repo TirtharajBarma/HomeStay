@@ -46,6 +46,7 @@ export const HomeScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const {
     homestay,
+    rooms,
     todayBookings,
     currentGuestCount,
     availableRoomCount,
@@ -67,6 +68,7 @@ export const HomeScreen: React.FC = () => {
   const [metric, setMetric] = useState<'revenue' | 'bookings' | 'cabs' | 'commission'>('revenue');
   const [lastSyncedAt, setLastSyncedAt] = useState<Date>(new Date());
   const [now, setNow] = useState(() => Date.now());
+  const [pullRefreshing, setPullRefreshing] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 30000);
@@ -85,15 +87,29 @@ export const HomeScreen: React.FC = () => {
 
   const isRecentSync = now - lastSyncedAt.getTime() < 2 * 60 * 1000;
 
-  const handleSync = async () => {
-    await sync();
-    setLastSyncedAt(new Date());
+  // Manual user pull-down refresh
+  const handlePullRefresh = async () => {
+    setPullRefreshing(true);
+    try {
+      await sync();
+      setLastSyncedAt(new Date());
+    } finally {
+      setPullRefreshing(false);
+    }
   };
 
-  // Auto-refresh every 5 minutes
+  // Silent background auto-refresh (does not pull screen down)
+  const handleSilentSync = async () => {
+    try {
+      await sync();
+      setLastSyncedAt(new Date());
+    } catch {}
+  };
+
+  // Silent auto-refresh every 5 minutes
   useEffect(() => {
     const interval = setInterval(() => {
-      handleSync();
+      handleSilentSync();
     }, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
@@ -117,7 +133,14 @@ export const HomeScreen: React.FC = () => {
       </View>
       <ScrollView
         contentContainerStyle={[styles.scrollContent, { paddingTop: 12, paddingBottom: Math.max(insets.bottom, 16) + 76 }]}
-        refreshControl={<RefreshControl refreshing={syncing} onRefresh={handleSync} colors={[Colors.brandPrimary]} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={pullRefreshing}
+            onRefresh={handlePullRefresh}
+            colors={[Colors.brandPrimary]}
+            tintColor={Colors.brandPrimary}
+          />
+        }
         showsVerticalScrollIndicator={false}
       >
         <GradientHeader
@@ -125,19 +148,20 @@ export const HomeScreen: React.FC = () => {
           homestayName={homestay.name || 'My Homestay'}
           tagline="Cosy stays in the clouds. Mountain cabs, zero hassle."
           location={formatReadableArea(homestay.location)}
+          hasStar={isDemoMode}
           ratingText={
             isDemoMode
               ? `4.9 • ${totalBookings()} stays`
               : totalBookings() === 0
-              ? 'New Homestay • 0 stays'
-              : `${totalBookings()} stays`
+              ? 'New Homestay · Ready for guests'
+              : `${totalBookings()} ${totalBookings() === 1 ? 'stay' : 'stays'} recorded`
           }
           badgeText={
             isDemoMode
               ? 'Verified Host'
               : totalBookings() === 0
               ? 'New Host'
-              : 'Host'
+              : 'Verified Host'
           }
         />
 
@@ -152,51 +176,23 @@ export const HomeScreen: React.FC = () => {
               onPress={() => navigation.navigate('Rooms' as any)}
             />
             <StatCard
-              icon="people"
-              value={currentGuestCount()}
-              label="Current guests"
-              onPress={() => navigation.navigate('Guests' as any)}
+              icon="cash"
+              value={`₹${monthRevenue().toLocaleString()}`}
+              label="Stays revenue"
+              onPress={() => navigation.navigate('Analytics')}
             />
           </View>
           <View style={styles.statRow}>
             <StatCard
               icon="bed"
-              value={availableRoomCount()}
-              label="Available rooms"
+              value={`${availableRoomCount()} / ${rooms.length}`}
+              label="Rooms available"
               onPress={() => navigation.navigate('Rooms' as any)}
             />
             <StatCard
-              icon="cash"
-              value={`₹${monthRevenue().toLocaleString()}`}
-              label="Room revenue this month"
-              onPress={() => navigation.navigate('Analytics')}
-            />
-          </View>
-          <View style={styles.statRow}>
-            <StatCard
-              icon="car"
-              value={recentTrips(100).length}
-              label="Cab bookings"
-              onPress={() => navigation.navigate('Cabs' as any)}
-            />
-            <StatCard
-              icon="pie-chart"
-              value={`${occupancyPercent()}%`}
-              label="Occupancy"
-              onPress={() => navigation.navigate('Analytics')}
-            />
-          </View>
-          <View style={styles.statRow}>
-            <StatCard
               icon="trending-up"
               value={`₹${commissionEarned().toLocaleString()}`}
-              label="Cab commission earned"
-              onPress={() => navigation.navigate('Commission')}
-            />
-            <StatCard
-              icon="time"
-              value={payoutSummary ? `₹${payoutSummary.available.toLocaleString()}` : '—'}
-              label="Commission to withdraw"
+              label="Cab earnings"
               onPress={() => navigation.navigate('Commission')}
             />
           </View>
@@ -208,27 +204,19 @@ export const HomeScreen: React.FC = () => {
           <View style={styles.quickRow}>
             <QuickActionCard
               icon="add"
-              label="Add Booking"
+              label="New Booking"
               onPress={() => navigation.navigate('NewBooking')}
             />
             <QuickActionCard
-              icon="bed"
-              label="Manage Rooms"
-              onPress={() => navigation.navigate('Rooms' as any)}
-            />
-            <QuickActionCard
-              icon="search"
-              label="Find Driver"
+              icon="car"
+              label="Book Cab"
               onPress={() => navigation.navigate('FindDriver')}
             />
-          </View>
-          <View style={styles.quickRow}>
             <QuickActionCard
-              icon="navigate"
-              label="Cab Requests"
-              onPress={() => navigation.navigate('Cabs' as any)}
+              icon="bed"
+              label="Rooms"
+              onPress={() => navigation.navigate('Rooms' as any)}
             />
-            {/* Navigates directly to FindDriver flow */}
             <QuickActionCard
               icon="sparkles"
               label="Promote"
@@ -246,26 +234,13 @@ export const HomeScreen: React.FC = () => {
           <View style={styles.promoteCardContent}>
             <View style={styles.promoteBadge}>
               <Ionicons name="sparkles" size={11} color="#F59E0B" />
-              <Text style={styles.promoteBadgeText}>NEW FEATURE • PROMOTE</Text>
+              <Text style={styles.promoteBadgeText}>CREATOR COLLABORATIONS</Text>
             </View>
-            <Text style={styles.promoteCardTitle}>Partner with Mountain Influencers</Text>
-            <Text style={styles.promoteCardSubtitle}>
-              Invite top creators in Darjeeling, Gangtok, Sikkim & Kalimpong to shoot reels & promote {homestay.name || 'your homestay'}.
-            </Text>
+            <Text style={styles.promoteCardTitle}>Partner with Mountain Influencers in Sikkim & Darjeeling</Text>
           </View>
           <View style={styles.promoteCardArrow}>
             <Ionicons name="arrow-forward" size={16} color="#FFFFFF" />
           </View>
-        </TouchableOpacity>
-
-        {/* More actions — less prominent */}
-        <TouchableOpacity
-          style={styles.moreActionsRow}
-          onPress={() => navigation.navigate('Campaign')}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="megaphone-outline" size={14} color={Colors.textSecondary} style={{ marginRight: 6 }} />
-          <Text style={styles.moreActionsText}>Promote with WhatsApp Campaign</Text>
         </TouchableOpacity>
 
         {/* Performance Chart Card */}
@@ -349,21 +324,6 @@ export const HomeScreen: React.FC = () => {
           </TouchableOpacity>
         </View>
         {recentBookings(4).map((b) => (
-          <BookingItem
-            key={b.id}
-            booking={b}
-            onPress={() => navigation.navigate('BookingDetail', { bookingId: b.id })}
-          />
-        ))}
-
-        {/* Upcoming Check-ins */}
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>Upcoming check-ins</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Rooms' as any, { initialTab: 'bookings' })}>
-            <Text style={styles.seeAllText}>Manage</Text>
-          </TouchableOpacity>
-        </View>
-        {upcomingCheckIns(3).map((b) => (
           <BookingItem
             key={b.id}
             booking={b}

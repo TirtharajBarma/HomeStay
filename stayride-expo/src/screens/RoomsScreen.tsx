@@ -24,13 +24,23 @@ import { PlatformSelect } from '../components/PlatformSelect';
 import { Header } from '../components/Header';
 import { Booking, Room, RoomStatus } from '../types';
 
-const FLOOR_OPTIONS = [
+const FLOOR_DEFAULTS = [
   { label: 'Ground Floor', value: 'Ground Floor', icon: 'layers-outline' as const },
   { label: '1st Floor', value: '1st Floor', icon: 'layers-outline' as const },
   { label: '2nd Floor', value: '2nd Floor', icon: 'layers-outline' as const },
   { label: '3rd Floor', value: '3rd Floor', icon: 'layers-outline' as const },
   { label: 'Attic / Rooftop', value: 'Attic', icon: 'arrow-up-outline' as const },
   { label: 'Cottage Wing', value: 'Cottage Wing', icon: 'leaf-outline' as const },
+];
+
+const ROOM_CATEGORY_OPTIONS = [
+  { label: 'Standard Room', value: 'Standard Room', icon: 'bed-outline' as const },
+  { label: 'Deluxe Room', value: 'Deluxe Room', icon: 'star-outline' as const },
+  { label: 'Valley View Suite', value: 'Valley View Suite', icon: 'image-outline' as const },
+  { label: 'Family Suite', value: 'Family Suite', icon: 'people-outline' as const },
+  { label: 'Attic Cottage Room', value: 'Attic Cottage Room', icon: 'home-outline' as const },
+  { label: 'Budget Twin Room', value: 'Budget Twin Room', icon: 'bed-outline' as const },
+  { label: '➕ Custom Category...', value: 'CUSTOM', icon: 'create-outline' as const },
 ];
 
 // Occupied / Reserved come from bookings automatically; the owner only blocks a room for maintenance
@@ -60,30 +70,81 @@ export const RoomsScreen: React.FC = () => {
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
   const [editNumber, setEditNumber] = useState('');
   const [editFloor, setEditFloor] = useState('1st Floor');
+  const [customFloor, setCustomFloor] = useState('');
+  const [isCustomFloor, setIsCustomFloor] = useState(false);
+  const [editCategory, setEditCategory] = useState('Standard Room');
+  const [customCategory, setCustomCategory] = useState('');
+  const [isCustomCategory, setIsCustomCategory] = useState(false);
   const [editPrice, setEditPrice] = useState('1800');
   const [editStatus, setEditStatus] = useState<RoomStatus>('AVAILABLE');
   const [editRoomType, setEditRoomType] = useState<'PRIVATE' | 'DORM'>('PRIVATE');
   const [editBedCount, setEditBedCount] = useState('4');
+  const [editBedLabels, setEditBedLabels] = useState('');
   const [editNote, setEditNote] = useState('');
+
+  // Collect all unique custom floors already present in the homestay's rooms
+  const existingFloors = Array.from(new Set(rooms.map((r) => r.floor).filter(Boolean)));
+  const dynamicFloorOptions = [
+    ...FLOOR_DEFAULTS,
+    ...existingFloors
+      .filter((f) => !FLOOR_DEFAULTS.some((d) => d.value === f))
+      .map((f) => ({ label: f, value: f, icon: 'layers-outline' as const })),
+    { label: '➕ Other / Custom Floor / Wing...', value: 'CUSTOM', icon: 'create-outline' as const },
+  ];
 
   const openRoomModal = (room?: Room) => {
     if (room) {
       setSelectedRoom(room);
       setEditNumber(room.number);
-      setEditFloor(room.floor);
+
+      const isKnownFloor = FLOOR_DEFAULTS.some((f) => f.value === room.floor) || existingFloors.includes(room.floor);
+      if (isKnownFloor) {
+        setEditFloor(room.floor);
+        setCustomFloor('');
+        setIsCustomFloor(false);
+      } else {
+        setEditFloor('CUSTOM');
+        setCustomFloor(room.floor);
+        setIsCustomFloor(true);
+      }
+
+      if (room.type) {
+        const isKnownCategory = ROOM_CATEGORY_OPTIONS.some((c) => c.value === room.type);
+        if (isKnownCategory) {
+          setEditCategory(room.type);
+          setCustomCategory('');
+          setIsCustomCategory(false);
+        } else {
+          setEditCategory('CUSTOM');
+          setCustomCategory(room.type);
+          setIsCustomCategory(true);
+        }
+      } else {
+        setEditCategory('Standard Room');
+        setCustomCategory('');
+        setIsCustomCategory(false);
+      }
+
       setEditPrice(String(room.price));
       setEditStatus(room.status === 'MAINTENANCE' ? 'MAINTENANCE' : 'AVAILABLE');
       setEditRoomType(room.roomType || 'PRIVATE');
       setEditBedCount(room.bedCount ? String(room.bedCount) : '4');
+      setEditBedLabels(room.beds ? room.beds.join(', ') : '');
       setEditNote(room.note || '');
     } else {
       setSelectedRoom(null);
       setEditNumber('');
       setEditFloor('1st Floor');
+      setCustomFloor('');
+      setIsCustomFloor(false);
+      setEditCategory('Standard Room');
+      setCustomCategory('');
+      setIsCustomCategory(false);
       setEditPrice('1800');
       setEditStatus('AVAILABLE');
       setEditRoomType('PRIVATE');
       setEditBedCount('4');
+      setEditBedLabels('');
       setEditNote('');
     }
     setModalVisible(true);
@@ -99,33 +160,34 @@ export const RoomsScreen: React.FC = () => {
       Alert.alert('Validation Error', 'Enter the room price per night in whole rupees.');
       return;
     }
+    const finalFloor = isCustomFloor ? (customFloor.trim() || 'Ground Floor') : editFloor;
+    const finalType = isCustomCategory ? (customCategory.trim() || 'Standard Room') : editCategory;
     const bedCountNum = editRoomType === 'DORM' ? Math.max(1, parseInt(editBedCount.trim() || '4', 10)) : undefined;
+    const bedsArray = editRoomType === 'DORM' && editBedLabels.trim()
+      ? editBedLabels.split(',').map((s) => s.trim()).filter(Boolean)
+      : undefined;
+
+    const payload = {
+      number: editNumber.trim(),
+      floor: finalFloor,
+      type: finalType,
+      price: priceNum,
+      status: editStatus,
+      roomType: editRoomType,
+      bedCount: bedCountNum,
+      beds: bedsArray,
+      note: editNote.trim(),
+    };
 
     if (selectedRoom) {
-      const outcome = await updateRoom(selectedRoom.id, {
-        number: editNumber.trim(),
-        floor: editFloor.trim(),
-        price: priceNum,
-        status: editStatus,
-        roomType: editRoomType,
-        bedCount: bedCountNum,
-        note: editNote.trim(),
-      });
+      const outcome = await updateRoom(selectedRoom.id, payload);
       if (!outcome.ok) {
         Alert.alert("Couldn't save", outcome.error || 'Please try again.');
         return;
       }
     } else {
       try {
-        await createRoom({
-          number: editNumber.trim(),
-          floor: editFloor.trim(),
-          price: priceNum,
-          status: editStatus,
-          roomType: editRoomType,
-          bedCount: bedCountNum,
-          note: editNote.trim(),
-        });
+        await createRoom(payload);
       } catch (e: any) {
         Alert.alert('Not saved', e?.message || 'Please try again.');
         return;
@@ -341,50 +403,137 @@ export const RoomsScreen: React.FC = () => {
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false}>
-              <Text style={styles.modalLabel}>Room / Dorm Name or Number</Text>
-              <TextInput
-                style={styles.modalInput}
-                placeholder="101 or Dorm A"
-                value={editNumber}
-                onChangeText={setEditNumber}
-              />
-
-              <PlatformSelect
-                label="Room Category"
-                value={editRoomType}
-                options={ROOM_TYPE_OPTIONS}
-                onSelect={(val) => setEditRoomType(val as 'PRIVATE' | 'DORM')}
-              />
-
-              {editRoomType === 'DORM' && (
-                <>
-                  <Text style={styles.modalLabel}>Beds in this Dorm Room</Text>
+              {/* Row 1: Room Number (50%) + Floor (50%) */}
+              <View style={styles.grid5050}>
+                <View style={styles.col50}>
+                  <Text style={styles.modalLabel}>Room No / Name *</Text>
                   <TextInput
                     style={styles.modalInput}
-                    placeholder="4"
-                    keyboardType="numeric"
-                    value={editBedCount}
-                    onChangeText={setEditBedCount}
+                    placeholder="101, Attic A"
+                    value={editNumber}
+                    onChangeText={setEditNumber}
                   />
-                </>
+                </View>
+                <View style={styles.col50}>
+                  <PlatformSelect
+                    label="Floor / Wing"
+                    value={isCustomFloor ? 'CUSTOM' : editFloor}
+                    options={dynamicFloorOptions}
+                    onSelect={(val) => {
+                      if (val === 'CUSTOM') {
+                        setIsCustomFloor(true);
+                        setEditFloor('CUSTOM');
+                      } else {
+                        setIsCustomFloor(false);
+                        setEditFloor(val);
+                      }
+                    }}
+                  />
+                </View>
+              </View>
+
+              {/* If Custom Floor */}
+              {isCustomFloor && (
+                <View style={{ marginBottom: 10 }}>
+                  <Text style={styles.modalLabel}>Custom Floor or Wing Name *</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="e.g. River Wing, Basement, Block B, Pine Villa"
+                    value={customFloor}
+                    onChangeText={setCustomFloor}
+                  />
+                </View>
               )}
 
-              <PlatformSelect
-                label="Floor"
-                value={editFloor}
-                options={FLOOR_OPTIONS}
-                onSelect={setEditFloor}
-              />
+              {/* Row 2: Price (50%) + Room Setup (50%) */}
+              <View style={styles.grid5050}>
+                <View style={styles.col50}>
+                  <Text style={styles.modalLabel}>Price / Night (₹) *</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="1800"
+                    keyboardType="numeric"
+                    value={editPrice}
+                    onChangeText={setEditPrice}
+                  />
+                </View>
+                <View style={styles.col50}>
+                  <PlatformSelect
+                    label="Room Setup"
+                    value={editRoomType}
+                    options={ROOM_TYPE_OPTIONS}
+                    onSelect={(val) => setEditRoomType(val as 'PRIVATE' | 'DORM')}
+                  />
+                </View>
+              </View>
 
-              <Text style={styles.modalLabel}>Price per Night (₹)</Text>
-              <TextInput
-                style={styles.modalInput}
-                placeholder="1800"
-                keyboardType="numeric"
-                value={editPrice}
-                onChangeText={setEditPrice}
-              />
+              {/* Row 3: Room Category (50%) + Availability (50%) */}
+              <View style={styles.grid5050}>
+                <View style={styles.col50}>
+                  <PlatformSelect
+                    label="Room Category"
+                    value={isCustomCategory ? 'CUSTOM' : editCategory}
+                    options={ROOM_CATEGORY_OPTIONS}
+                    onSelect={(val) => {
+                      if (val === 'CUSTOM') {
+                        setIsCustomCategory(true);
+                        setEditCategory('CUSTOM');
+                      } else {
+                        setIsCustomCategory(false);
+                        setEditCategory(val);
+                      }
+                    }}
+                  />
+                </View>
+                <View style={styles.col50}>
+                  <PlatformSelect
+                    label="Availability"
+                    value={editStatus}
+                    options={ROOM_STATUS_OPTIONS}
+                    onSelect={(val) => setEditStatus(val as RoomStatus)}
+                  />
+                </View>
+              </View>
 
+              {/* If Custom Category */}
+              {isCustomCategory && (
+                <View style={{ marginBottom: 10 }}>
+                  <Text style={styles.modalLabel}>Custom Category Name</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="e.g. Glamping Tent, Duplex Cottage, Treehouse"
+                    value={customCategory}
+                    onChangeText={setCustomCategory}
+                  />
+                </View>
+              )}
+
+              {/* If Dorm: Beds Count & Bed Labels */}
+              {editRoomType === 'DORM' && (
+                <View style={styles.grid5050}>
+                  <View style={styles.col50}>
+                    <Text style={styles.modalLabel}>Bed Count</Text>
+                    <TextInput
+                      style={styles.modalInput}
+                      placeholder="4"
+                      keyboardType="numeric"
+                      value={editBedCount}
+                      onChangeText={setEditBedCount}
+                    />
+                  </View>
+                  <View style={styles.col50}>
+                    <Text style={styles.modalLabel}>Custom Bed Labels (Optional)</Text>
+                    <TextInput
+                      style={styles.modalInput}
+                      placeholder="Lower 1, Upper 1..."
+                      value={editBedLabels}
+                      onChangeText={setEditBedLabels}
+                    />
+                  </View>
+                </View>
+              )}
+
+              {/* Row 3: Availability (100%) */}
               <PlatformSelect
                 label="Availability"
                 value={editStatus}
@@ -392,15 +541,16 @@ export const RoomsScreen: React.FC = () => {
                 onSelect={(val) => setEditStatus(val as RoomStatus)}
               />
               {selectedRoom && selectedRoom.status !== 'MAINTENANCE' && (
-                <Text style={styles.modalLabel}>
-                  Right now: {selectedRoom.status.toLowerCase()} (set automatically from bookings)
+                <Text style={styles.statusHelperText}>
+                  Current live status: {selectedRoom.status.toLowerCase()} (managed automatically by bookings)
                 </Text>
               )}
 
-              <Text style={styles.modalLabel}>Note</Text>
+              {/* Row 4: Room Features / Notes (100%) */}
+              <Text style={styles.modalLabel}>Features / Balcony / View (Optional)</Text>
               <TextInput
-                style={[styles.modalInput, { height: 60 }]}
-                placeholder="Valley side, 1 double bed"
+                style={[styles.modalInput, { height: 50 }]}
+                placeholder="e.g. Balcony with Kanchenjunga view, 1 King bed"
                 multiline
                 value={editNote}
                 onChangeText={setEditNote}
@@ -575,6 +725,21 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: Colors.textPrimary,
+  },
+  grid5050: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'flex-start',
+  },
+  col50: {
+    flex: 1,
+    minWidth: 0,
+  },
+  statusHelperText: {
+    fontSize: 11,
+    color: Colors.textSecondary,
+    marginTop: 4,
+    marginBottom: 8,
   },
   modalLabel: {
     fontSize: 13,

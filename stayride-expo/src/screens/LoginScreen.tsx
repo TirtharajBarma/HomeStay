@@ -34,7 +34,7 @@ import { VehicleType } from '../types';
 WebBrowser.maybeCompleteAuthSession();
 
 const APP_NAME = process.env.EXPO_PUBLIC_APP_NAME || 'StayCabs';
-const OPERATING_AREAS = ['Darjeeling', 'Kalimpong', 'Sikkim'] as const;
+const OPERATING_AREAS = ['Darjeeling', 'Kalimpong', 'Sikkim', 'Siliguri', 'Kurseong', 'Mirik', 'Dooars'] as const;
 const DEMO_HOST_EMAIL = process.env.EXPO_PUBLIC_DEMO_HOST_EMAIL || 'demo@stayride.in';
 const DEMO_DRIVER_EMAIL = process.env.EXPO_PUBLIC_DEMO_DRIVER_EMAIL || 'driver@stayride.in';
 
@@ -156,6 +156,7 @@ export const LoginScreen: React.FC = () => {
   const [vehicleNumber, setVehicleNumber] = useState('');
   const [area, setArea] = useState('');
   const [selectedAreas, setSelectedAreas] = useState<string[]>(['Darjeeling']);
+  const [customAreaText, setCustomAreaText] = useState('');
   const [consent, setConsent] = useState(false);
   const [mapVisible, setMapVisible] = useState(false);
   // Create account runs in short steps: 1 role, 2 details, 3 consent + login (the Google sheet: 1, 2)
@@ -681,7 +682,7 @@ export const LoginScreen: React.FC = () => {
               Operating Areas (Select all that apply) *
             </Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-              {OPERATING_AREAS.map((a) => {
+              {Array.from(new Set([...OPERATING_AREAS, ...selectedAreas])).map((a) => {
                 const active = selectedAreas.includes(a);
                 return (
                   <TouchableOpacity
@@ -718,6 +719,46 @@ export const LoginScreen: React.FC = () => {
                   </TouchableOpacity>
                 );
               })}
+            </View>
+
+            {/* Custom Operating Area / Town Input */}
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+              <TextInput
+                style={{
+                  flex: 1,
+                  backgroundColor: Colors.white,
+                  borderWidth: 1,
+                  borderColor: Colors.divider,
+                  borderRadius: 10,
+                  paddingHorizontal: 12,
+                  paddingVertical: 9,
+                  fontSize: 13,
+                  color: Colors.textPrimary,
+                }}
+                placeholder="➕ Other / Custom Town (e.g. Pelling, Namchi)"
+                placeholderTextColor={Colors.textTertiary}
+                value={customAreaText}
+                onChangeText={setCustomAreaText}
+              />
+              <TouchableOpacity
+                style={{
+                  backgroundColor: Colors.brandPrimary,
+                  paddingHorizontal: 14,
+                  borderRadius: 10,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+                onPress={() => {
+                  const trimmed = customAreaText.trim();
+                  if (!trimmed) return;
+                  if (!selectedAreas.includes(trimmed)) {
+                    setSelectedAreas([...selectedAreas, trimmed]);
+                  }
+                  setCustomAreaText('');
+                }}
+              >
+                <Text style={{ color: Colors.white, fontWeight: '700', fontSize: 13 }}>Add</Text>
+              </TouchableOpacity>
             </View>
           </View>
           <Text style={styles.hint}>Driver accounts are reviewed by operations before you get trip requests.</Text>

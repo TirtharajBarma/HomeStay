@@ -278,7 +278,7 @@ const B: FieldRule = { t: 'bool' };
 const E = (values: readonly string[]): FieldRule => ({ t: 'enum', values });
 const MONEY = N({ int: true, max: 10_000_000 });
 const DATE = N({ max: 8_640_000_000_000 });
-export const VEHICLE_TYPES = ['SUV', 'Sedan', '7-seater', '9-seater'] as const;
+export const VEHICLE_TYPES = ['Hatchback', 'SUV', 'Sedan', '7-seater', '9-seater'] as const;
 export const ROOM_STATUSES = ['AVAILABLE', 'OCCUPIED', 'RESERVED', 'MAINTENANCE'] as const;
 export const ROOM_TYPES = ['PRIVATE', 'DORM'] as const;
 export const PROPERTY_TYPES = ['HOMESTAY', 'HOSTEL', 'HOTEL', 'RESORT'] as const;

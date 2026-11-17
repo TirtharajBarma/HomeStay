@@ -22,7 +22,18 @@ import { reportOutcome } from '../utils/report';
 
 export const DriverTripsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
-  const { driverTrips, session, driverQuote, driverStartTrip, driverAcceptCounter, sync, syncing, pushEnabled, reportDriverLocation } = useStayRide();
+  const {
+    driverTrips,
+    session,
+    driverQuote,
+    driverStartTrip,
+    driverAcceptCounter,
+    sync,
+    syncing,
+    pushEnabled,
+    reportDriverLocation,
+    setDriverOnline,
+  } = useStayRide();
 
   const [activeTab, setActiveTab] = useState<'requests' | 'assigned' | 'completed'>('requests');
   const [quoteInputs, setQuoteInputs] = useState<Record<string, string>>({});
@@ -145,6 +156,19 @@ export const DriverTripsScreen: React.FC = () => {
   const statusReason = session?.driver?.statusReason || '';
   const isOnline = session?.driver?.available !== false;
 
+  const handleToggleOnline = async () => {
+    if (driverStatus !== 'ACTIVE') return;
+    const nextVal = !isOnline;
+    const outcome = await setDriverOnline(nextVal);
+    reportOutcome(
+      outcome,
+      nextVal ? 'You are Online' : 'You are Offline',
+      nextVal
+        ? (pushEnabled ? 'New ride requests will trigger push notifications.' : 'Keep the app open to receive new ride requests.')
+        : 'You will not receive any new ride dispatches until you go back online.'
+    );
+  };
+
   // While online, tell StayRide where the driver is so only nearby requests reach them.
   // Foreground updates as the OS reports movement (100 m), plus one fix immediately: no battery-draining polling.
   useEffect(() => {
@@ -180,53 +204,96 @@ export const DriverTripsScreen: React.FC = () => {
     <View style={styles.container}>
       {/* Top Banner */}
       <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) }]}>
-        <View>
-          <Text style={styles.headerTitle}>Driver Console</Text>
-          <Text style={styles.headerSubtitle}>{driverName} • {session?.driver?.vehicle || '—'}</Text>
-        </View>
-        <View style={[
-          styles.statusBadge,
-          driverStatus === 'BLOCKED'
-            ? { backgroundColor: '#FEE2E2' }
-            : driverStatus === 'PENDING_APPROVAL'
-            ? { backgroundColor: '#FEF3C7' }
-            : !isOnline
-            ? { backgroundColor: '#F1F5F9' }
-            : { backgroundColor: '#DCFCE7' }
-        ]}>
-          <View style={[
-            styles.statusDot,
-            driverStatus === 'BLOCKED'
-              ? { backgroundColor: '#EF4444' }
-              : driverStatus === 'PENDING_APPROVAL'
-              ? { backgroundColor: '#F59E0B' }
-              : !isOnline
-              ? { backgroundColor: '#94A3B8' }
-              : { backgroundColor: '#16A34A' }
-          ]} />
-          <Text style={[
-            styles.statusText,
-            driverStatus === 'BLOCKED'
-              ? { color: '#B91C1C' }
-              : driverStatus === 'PENDING_APPROVAL'
-              ? { color: '#B45309' }
-              : !isOnline
-              ? { color: '#64748B' }
-              : { color: '#15803D' }
-          ]}>
-            {driverStatus === 'BLOCKED' ? 'Suspended' : driverStatus === 'PENDING_APPROVAL' ? 'Under Review' : isOnline ? 'Online' : 'Offline'}
+        <View style={{ flex: 1, marginRight: 10 }}>
+          <Text style={styles.headerTitle} numberOfLines={1}>Driver Console</Text>
+          <Text style={styles.headerSubtitle} numberOfLines={1} ellipsizeMode="tail">
+            {driverName} • {session?.driver?.vehicle || '—'}
           </Text>
         </View>
+        <TouchableOpacity
+          activeOpacity={driverStatus === 'ACTIVE' ? 0.7 : 1}
+          onPress={driverStatus === 'ACTIVE' ? handleToggleOnline : undefined}
+          disabled={driverStatus !== 'ACTIVE'}
+          style={[
+            styles.statusBadge,
+            driverStatus === 'BLOCKED'
+              ? { backgroundColor: '#FEE2E2', borderColor: '#FECACA' }
+              : driverStatus === 'PENDING_APPROVAL'
+              ? { backgroundColor: '#FEF3C7', borderColor: '#FDE68A' }
+              : !isOnline
+              ? { backgroundColor: '#F1F5F9', borderColor: '#CBD5E1' }
+              : { backgroundColor: '#DCFCE7', borderColor: '#86EFAC' },
+          ]}
+        >
+          <View
+            style={[
+              styles.statusDot,
+              driverStatus === 'BLOCKED'
+                ? { backgroundColor: '#EF4444' }
+                : driverStatus === 'PENDING_APPROVAL'
+                ? { backgroundColor: '#F59E0B' }
+                : !isOnline
+                ? { backgroundColor: '#94A3B8' }
+                : { backgroundColor: '#16A34A' },
+            ]}
+          />
+          <Text
+            style={[
+              styles.statusText,
+              driverStatus === 'BLOCKED'
+                ? { color: '#B91C1C' }
+                : driverStatus === 'PENDING_APPROVAL'
+                ? { color: '#B45309' }
+                : !isOnline
+                ? { color: '#64748B' }
+                : { color: '#15803D' },
+            ]}
+          >
+            {driverStatus === 'BLOCKED'
+              ? 'Suspended'
+              : driverStatus === 'PENDING_APPROVAL'
+              ? 'Under Review'
+              : isOnline
+              ? 'Online'
+              : 'Offline'}
+          </Text>
+          {driverStatus === 'ACTIVE' && (
+            <Ionicons
+              name="swap-horizontal"
+              size={12}
+              color={isOnline ? '#15803D' : '#64748B'}
+              style={{ marginLeft: 4 }}
+            />
+          )}
+        </TouchableOpacity>
       </View>
 
       {/* Offline Status Notice Banner */}
       {driverStatus === 'ACTIVE' && !isOnline && (
-        <View style={{ backgroundColor: '#F8FAFC', borderBottomWidth: 1, borderColor: '#E2E8F0', paddingHorizontal: 16, paddingVertical: 9, flexDirection: 'row', alignItems: 'center' }}>
-          <Ionicons name="pause-circle-outline" size={16} color="#64748B" style={{ marginRight: 6 }} />
-          <Text style={{ fontSize: 12, color: '#64748B', flex: 1 }}>
-            You are currently Offline. Turn availability ON in Profile to receive new ride dispatches.
-          </Text>
-        </View>
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={handleToggleOnline}
+          style={{
+            backgroundColor: '#F8FAFC',
+            borderBottomWidth: 1,
+            borderColor: '#E2E8F0',
+            paddingHorizontal: 16,
+            paddingVertical: 10,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 10 }}>
+            <Ionicons name="pause-circle-outline" size={18} color="#64748B" style={{ marginRight: 8 }} />
+            <Text style={{ fontSize: 12, color: '#64748B', flex: 1 }} numberOfLines={1} ellipsizeMode="tail">
+              You are currently <Text style={{ fontWeight: '700', color: '#1E293B' }}>Offline</Text>. Tap to receive rides.
+            </Text>
+          </View>
+          <View style={{ backgroundColor: Colors.brandPrimary, paddingHorizontal: 12, paddingVertical: 5, borderRadius: Radii.pill, flexShrink: 0 }}>
+            <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '700' }}>Go Online</Text>
+          </View>
+        </TouchableOpacity>
       )}
 
       {/* Account Status Notice Banner */}

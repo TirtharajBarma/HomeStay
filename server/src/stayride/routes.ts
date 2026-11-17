@@ -899,7 +899,7 @@ stayrideV1Router.post('/auth/clerk-sync', async (req: Request, res: Response) =>
 // Shared helpers
 // ==========================================
 const DAY_MS = 86400000;
-export const VEHICLE_TYPES = ['SUV', 'Sedan', '7-seater', '9-seater'];
+export const VEHICLE_TYPES = ['Hatchback', 'SUV', 'Sedan', '7-seater', '9-seater'];
 
 // Pickup time helpers (istDateTime) live in platform.ts (also used for request expiry).
 export function validateSchedule(body: any, cfgOrHorizon: PlatformConfig | number = 365): string | null {

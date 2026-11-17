@@ -137,7 +137,7 @@ const MainTabs: React.FC = () => {
           } else if (route.name === 'Cabs') {
             iconName = focused ? 'car' : 'car-outline';
           } else if (route.name === 'More') {
-            iconName = focused ? 'grid' : 'grid-outline';
+            iconName = focused ? 'settings' : 'settings-outline';
           }
 
           return <Ionicons name={iconName} size={22} color={color} />;
@@ -148,7 +148,7 @@ const MainTabs: React.FC = () => {
       <Tab.Screen name="Rooms" component={RoomsScreen} />
       <Tab.Screen name="Guests" component={GuestsScreen} />
       <Tab.Screen name="Cabs" component={CabsScreen} />
-      <Tab.Screen name="More" component={MoreScreen} />
+      <Tab.Screen name="More" component={MoreScreen} options={{ tabBarLabel: 'Settings' }} />
     </Tab.Navigator>
   );
 };

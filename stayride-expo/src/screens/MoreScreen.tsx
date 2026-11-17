@@ -10,7 +10,10 @@ import {
   Modal,
   TextInput,
   ActivityIndicator,
+  Linking,
+  Share,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -48,6 +51,43 @@ export const MoreScreen: React.FC = () => {
 
   // Clerk users without a password yet (e.g. Google sign-in) set one without entering a current password
   const needsCurrentPassword = !clerkUser || clerkUser.passwordEnabled;
+
+  // Public guest booking link
+  const [copiedLink, setCopiedLink] = useState(false);
+  const rawLink = homestay.link?.trim() || '';
+  const hasLink = Boolean(rawLink);
+  const resolveFullUrl = (link: string): string => {
+    if (!link) return '';
+    if (link.startsWith('http://') || link.startsWith('https://')) return link;
+    if (link.startsWith('/')) return `https://staycabs.in${link}`;
+    return `https://${link}`;
+  };
+  const fullLink = resolveFullUrl(rawLink);
+  const cleanLink = hasLink
+    ? fullLink.replace(/^https?:\/\//, '')
+    : 'Not yet assigned (set up in Homestay Profile)';
+
+  const handleCopyLink = async () => {
+    if (!fullLink) return;
+    await Clipboard.setStringAsync(fullLink);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2000);
+  };
+
+  const handleShareWhatsApp = () => {
+    if (!fullLink) return;
+    const msg = `Hi! You can view rooms & book directly at our homestay here: ${fullLink}`;
+    Linking.openURL(`whatsapp://send?text=${encodeURIComponent(msg)}`).catch(() => {
+      Share.share({ message: msg, url: fullLink });
+    });
+  };
+
+  const handleOpenWeb = () => {
+    if (!fullLink) return;
+    Linking.openURL(fullLink).catch(() => {
+      Alert.alert('Cannot open link', fullLink);
+    });
+  };
 
   // Password management modal
   const [passwordModalVisible, setPasswordModalVisible] = useState(false);
@@ -204,7 +244,7 @@ export const MoreScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <Header title="More" />
+      <Header title="Settings" />
       <ScrollView
         contentContainerStyle={[styles.scrollContent, { paddingTop: 14 }]}
         showsVerticalScrollIndicator={false}
@@ -212,18 +252,90 @@ export const MoreScreen: React.FC = () => {
         {/* Profile Highlight Card */}
         <View style={styles.profileCard}>
           <View style={styles.profileTopRow}>
-            <Text style={styles.profileName}>{homestay.name || 'My Homestay'}</Text>
+            <View style={{ flex: 1, marginRight: 12 }}>
+              <Text style={styles.profileName}>{homestay.name || 'My Homestay'}</Text>
+              {homestay.location ? (
+                <View style={styles.profileLocationRow}>
+                  <Ionicons name="location-outline" size={13} color="#DDD6FE" />
+                  <Text style={styles.profileLocationText} numberOfLines={1}>
+                    {homestay.location}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+            <TouchableOpacity
+              style={styles.openProfileBtn}
+              onPress={() => navigation.navigate('HomestayProfile')}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Open homestay profile"
+            >
+              <Text style={styles.openProfileBtnText}>Edit Profile</Text>
+            </TouchableOpacity>
           </View>
-          <Text style={styles.profileLink}>
-            {(homestay.link || '').replace(/^https?:\/\//, '') || 'homestay-preview'}
-          </Text>
-          <TouchableOpacity
-            style={styles.openProfileBtn}
-            onPress={() => navigation.navigate('HomestayProfile')}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.openProfileBtnText}>Open homestay profile</Text>
-          </TouchableOpacity>
+
+          {/* Guest Booking Link Section */}
+          <View style={styles.publicLinkContainer}>
+            <View style={styles.publicLinkHeader}>
+              <View style={styles.publicLinkHeaderLeft}>
+                <Ionicons name="globe-outline" size={13} color="#DDD6FE" />
+                <Text style={styles.publicLinkLabel}>GUEST BOOKING LINK</Text>
+              </View>
+              {hasLink && (
+                <View style={styles.liveBadge}>
+                  <View style={styles.liveDot} />
+                  <Text style={styles.liveBadgeText}>LIVE</Text>
+                </View>
+              )}
+            </View>
+
+            {/* URL Display with Open Action */}
+            <TouchableOpacity
+              style={styles.urlBoxRow}
+              onPress={handleOpenWeb}
+              activeOpacity={hasLink ? 0.75 : 1}
+              disabled={!hasLink}
+            >
+              <Text style={styles.publicLinkUrl} numberOfLines={1}>
+                {cleanLink}
+              </Text>
+              {hasLink && (
+                <View style={styles.openExternalPill}>
+                  <Text style={styles.openExternalText}>Open</Text>
+                  <Ionicons name="open-outline" size={11} color="#FFFFFF" />
+                </View>
+              )}
+            </TouchableOpacity>
+
+            {/* 2 Clean Balanced Action Buttons: 50% / 50% */}
+            {hasLink && (
+              <View style={styles.linkActionsRow}>
+                <TouchableOpacity
+                  style={[styles.linkActionBtn, styles.linkActionCopy]}
+                  onPress={handleCopyLink}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons
+                    name={copiedLink ? 'checkmark-circle' : 'copy-outline'}
+                    size={14}
+                    color={copiedLink ? '#86EFAC' : '#FFFFFF'}
+                  />
+                  <Text style={[styles.linkActionText, copiedLink && { color: '#86EFAC' }]}>
+                    {copiedLink ? 'Copied' : 'Copy Link'}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.linkActionBtn, styles.linkActionWhatsApp]}
+                  onPress={handleShareWhatsApp}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="logo-whatsapp" size={14} color="#FFFFFF" />
+                  <Text style={styles.linkActionText}>Share WhatsApp</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
         </View>
 
         {/* Business Group */}
@@ -252,12 +364,6 @@ export const MoreScreen: React.FC = () => {
             'Cab commission',
             `₹${commissionEarned().toLocaleString()} earned • ${payoutSummary ? `₹${payoutSummary.available.toLocaleString()}` : '—'} to withdraw`,
             () => navigation.navigate('Commission')
-          )}
-          {renderRow(
-            'home',
-            'Homestay profile',
-            'Photos, amenities and location',
-            () => navigation.navigate('HomestayProfile')
           )}
         </View>
 
@@ -492,7 +598,7 @@ const styles = StyleSheet.create({
   profileCard: {
     backgroundColor: Colors.brandPrimary,
     borderRadius: Radii.card,
-    padding: 18,
+    padding: 16,
     ...Shadows.card,
   },
   profileTopRow: {
@@ -504,26 +610,133 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: Colors.white,
-    flex: 1,
   },
-  profileLink: {
-    fontSize: 12,
-    color: '#DDD6FE',
+  profileLocationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     marginTop: 4,
   },
+  profileLocationText: {
+    fontSize: 12,
+    color: '#DDD6FE',
+    flexShrink: 1,
+  },
   openProfileBtn: {
-    alignSelf: 'flex-start',
-    marginTop: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: Radii.button,
-    borderWidth: 1.5,
-    borderColor: Colors.white,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.35)',
   },
   openProfileBtnText: {
     color: Colors.white,
     fontSize: 12,
-    fontWeight: 'bold',
+    fontWeight: '700',
+  },
+  publicLinkContainer: {
+    marginTop: 14,
+    backgroundColor: 'rgba(0, 0, 0, 0.22)',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  publicLinkHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  publicLinkHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  publicLinkLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#DDD6FE',
+    letterSpacing: 0.5,
+  },
+  liveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#10B981',
+  },
+  liveBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#86EFAC',
+    letterSpacing: 0.5,
+  },
+  urlBoxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(0, 0, 0, 0.25)',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginTop: 4,
+  },
+  publicLinkUrl: {
+    fontSize: 12,
+    color: Colors.white,
+    fontWeight: '600',
+    flex: 1,
+    marginRight: 8,
+  },
+  openExternalPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  openExternalText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: Colors.white,
+  },
+  linkActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 8,
+  },
+  linkActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 9,
+    borderRadius: 8,
+  },
+  linkActionCopy: {
+    backgroundColor: 'rgba(255, 255, 255, 0.16)',
+  },
+  linkActionWhatsApp: {
+    backgroundColor: '#16A34A',
+  },
+  linkActionText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.white,
   },
   groupHeader: {
     fontSize: 13,

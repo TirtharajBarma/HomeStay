@@ -45,9 +45,10 @@ export const DEFAULT_PLATFORM_CONFIG: PlatformPublicConfig = {
     'NJP Railway Station',
   ],
   vehicles: [
-    { value: 'Sedan', label: '4 Seater (Sedan)', seats: 4, estFare: 2200 },
-    { value: 'SUV', label: '6-7 Seater (Bolero / Innova)', seats: 7, estFare: 3000 },
-    { value: '7-seater', label: '7 Seater (Ertiga / Maxi)', seats: 7, estFare: 3200 },
+    { value: 'Hatchback', label: '4 Seater Mountain Cab (Alto / WagonR)', seats: 4, estFare: 1800 },
+    { value: 'Sedan', label: '4 Seater (Dzire / Etios)', seats: 4, estFare: 2200 },
+    { value: 'SUV', label: '6-7 Seater (Bolero / Sumo / Scorpio)', seats: 7, estFare: 3000 },
+    { value: '7-seater', label: '7 Seater (Innova / Ertiga)', seats: 7, estFare: 3200 },
     { value: '9-seater', label: '9+ Seater (Traveller)', seats: 9, estFare: 4200 },
   ],
   advanceWindowMin: 0,

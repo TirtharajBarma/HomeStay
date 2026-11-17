@@ -95,85 +95,8 @@ export const PlatformSelect: React.FC<PlatformSelectProps> = ({
     </TouchableOpacity>
   );
 
-  // iOS: Apple Liquid UI (Frosted glass sheet with smooth rounded card)
-  const renderIosModal = () => (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={handleClose}
-    >
-      <TouchableWithoutFeedback onPress={handleClose}>
-        <View style={styles.iosBackdrop}>
-          <TouchableWithoutFeedback>
-            <View style={styles.iosLiquidSheet}>
-              <BlurView intensity={90} tint="light" style={styles.iosBlurContainer}>
-                {label && (
-                  <View style={styles.iosHeader}>
-                    <Text style={styles.iosHeaderTitle}>{label}</Text>
-                    <TouchableOpacity onPress={handleClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                      <Text style={styles.iosDoneText}>Done</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-                <ScrollView
-                  style={styles.iosList}
-                  showsVerticalScrollIndicator={false}
-                  bounces={false}
-                >
-                  {options.map((opt, idx) => {
-                    const isSelected = opt.value === value;
-                    const isLast = idx === options.length - 1;
-                    return (
-                      <TouchableOpacity
-                        key={opt.value}
-                        style={[styles.iosOptionRow, !isLast && styles.iosOptionBorder]}
-                        onPress={() => handleChoose(opt.value)}
-                        activeOpacity={0.6}
-                      >
-                        {opt.icon && (
-                          <View style={styles.optionIconContainer}>
-                            <Ionicons
-                              name={opt.icon}
-                              size={18}
-                              color={isSelected ? Colors.brandPrimary : Colors.textSecondary}
-                            />
-                          </View>
-                        )}
-                        <View style={styles.optionTextContainer}>
-                          <Text
-                            style={[
-                              styles.iosOptionText,
-                              isSelected && styles.iosOptionTextSelected,
-                            ]}
-                          >
-                            {opt.label}
-                          </Text>
-                          {opt.subLabel && (
-                            <Text style={styles.iosSubLabel}>{opt.subLabel}</Text>
-                          )}
-                        </View>
-                        {isSelected && (
-                          <Ionicons
-                            name="checkmark-circle"
-                            size={20}
-                            color={Colors.brandPrimary}
-                          />
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-              </BlurView>
-            </View>
-          </TouchableWithoutFeedback>
-        </View>
-      </TouchableWithoutFeedback>
-    </Modal>
-  );
-
-  // Android: Material UI 3 (Elevated Bottom Sheet with drag handle & radio buttons)
-  const renderAndroidModal = () => (
+  // iOS & Android: Authentic Native Bottom Sheet (Apple HIG & Material 3 compliant)
+  const renderNativeSheet = () => (
     <Modal
       visible={visible}
       transparent
@@ -181,63 +104,78 @@ export const PlatformSelect: React.FC<PlatformSelectProps> = ({
       onRequestClose={handleClose}
     >
       <TouchableWithoutFeedback onPress={handleClose}>
-        <View style={styles.androidBackdrop}>
+        <View style={styles.sheetBackdrop}>
           <TouchableWithoutFeedback>
-            <View style={styles.androidSheet}>
-              {/* Material 3 Drag Handle */}
-              <View style={styles.androidHandleBar}>
-                <View style={styles.androidHandle} />
+            <View style={styles.nativeSheetContainer}>
+              {/* Native Drag Indicator Pill */}
+              <View style={styles.handleBar}>
+                <View style={styles.dragHandle} />
               </View>
 
-              {label && <Text style={styles.androidHeaderTitle}>{label}</Text>}
+              {/* Sheet Header */}
+              <View style={styles.sheetHeader}>
+                <Text style={styles.sheetHeaderTitle}>{label || placeholder}</Text>
+                <TouchableOpacity
+                  onPress={handleClose}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  style={styles.doneBtn}
+                >
+                  <Text style={styles.doneText}>Done</Text>
+                </TouchableOpacity>
+              </View>
 
+              {/* Options List */}
               <ScrollView
-                style={styles.androidList}
+                style={styles.optionsList}
+                contentContainerStyle={styles.optionsListContent}
                 showsVerticalScrollIndicator={false}
+                bounces={false}
               >
-                {options.map((opt) => {
+                {options.map((opt, idx) => {
                   const isSelected = opt.value === value;
+                  const isLast = idx === options.length - 1;
                   return (
                     <TouchableOpacity
                       key={opt.value}
                       style={[
-                        styles.androidOptionRow,
-                        isSelected && styles.androidOptionRowSelected,
+                        styles.optionRow,
+                        isSelected && styles.optionRowSelected,
+                        !isLast && styles.optionRowBorder,
                       ]}
                       onPress={() => handleChoose(opt.value)}
                       activeOpacity={0.7}
                     >
                       {opt.icon && (
-                        <Ionicons
-                          name={opt.icon}
-                          size={20}
-                          color={isSelected ? Colors.brandPrimary : Colors.textSecondary}
-                          style={{ marginRight: 14 }}
-                        />
+                        <View style={[styles.optionIconBox, isSelected && styles.optionIconBoxSelected]}>
+                          <Ionicons
+                            name={opt.icon}
+                            size={18}
+                            color={isSelected ? Colors.brandPrimaryDark : Colors.textSecondary}
+                          />
+                        </View>
                       )}
-                      <View style={{ flex: 1 }}>
+                      <View style={styles.optionTextBox}>
                         <Text
                           style={[
-                            styles.androidOptionText,
-                            isSelected && styles.androidOptionTextSelected,
+                            styles.optionLabel,
+                            isSelected && styles.optionLabelSelected,
                           ]}
                         >
                           {opt.label}
                         </Text>
-                        {opt.subLabel && (
-                          <Text style={styles.androidSubLabel}>{opt.subLabel}</Text>
-                        )}
+                        {opt.subLabel ? (
+                          <Text style={styles.optionSubLabel}>{opt.subLabel}</Text>
+                        ) : null}
                       </View>
-
-                      {/* Material Radio Circle */}
-                      <View
-                        style={[
-                          styles.materialRadio,
-                          isSelected && styles.materialRadioSelected,
-                        ]}
-                      >
-                        {isSelected && <View style={styles.materialRadioInner} />}
-                      </View>
+                      {isSelected ? (
+                        <View style={styles.checkIconBox}>
+                          <Ionicons
+                            name="checkmark-circle"
+                            size={22}
+                            color={Colors.brandPrimary}
+                          />
+                        </View>
+                      ) : null}
                     </TouchableOpacity>
                   );
                 })}
@@ -253,7 +191,7 @@ export const PlatformSelect: React.FC<PlatformSelectProps> = ({
     <View style={styles.container}>
       {label && <Text style={styles.fieldLabel}>{label}</Text>}
       {renderTrigger()}
-      {Platform.OS === 'ios' ? renderIosModal() : renderAndroidModal()}
+      {renderNativeSheet()}
     </View>
   );
 };
@@ -299,157 +237,111 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
 
-  // iOS Liquid UI Styles
-  iosBackdrop: {
+  // Native Bottom Sheet Styles (Apple HIG + Material 3)
+  sheetBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.45)',
-    justifyContent: 'flex-end',
-    padding: 16,
-    paddingBottom: 32,
-  },
-  iosLiquidSheet: {
-    borderRadius: 22,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.65)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
-  },
-  iosBlurContainer: {
-    padding: 18,
-    maxHeight: 380,
-  },
-  iosHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.06)',
-    marginBottom: 4,
-  },
-  iosHeaderTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-  },
-  iosDoneText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: Colors.brandPrimary,
-  },
-  iosList: {
-    maxHeight: 300,
-  },
-  iosOptionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 13,
-    paddingHorizontal: 4,
-  },
-  iosOptionBorder: {
-    borderBottomWidth: 0.8,
-    borderBottomColor: 'rgba(0,0,0,0.05)',
-  },
-  iosOptionText: {
-    fontSize: 15,
-    color: Colors.textPrimary,
-  },
-  iosOptionTextSelected: {
-    color: Colors.brandPrimaryDark,
-    fontWeight: '700',
-  },
-  iosSubLabel: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    marginTop: 2,
-  },
-  optionIconContainer: {
-    width: 28,
-    alignItems: 'center',
-    marginRight: 10,
-  },
-  optionTextContainer: {
-    flex: 1,
-  },
-
-  // Android Material 3 Styles
-  androidBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
     justifyContent: 'flex-end',
   },
-  androidSheet: {
+  nativeSheetContainer: {
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    paddingHorizontal: 20,
-    paddingBottom: 28,
-    maxHeight: 440,
-    elevation: 16,
+    paddingTop: 8,
+    paddingBottom: Platform.OS === 'ios' ? 36 : 24,
+    maxHeight: '75%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 24,
   },
-  androidHandleBar: {
+  handleBar: {
     alignItems: 'center',
+    paddingVertical: 8,
+  },
+  dragHandle: {
+    width: 38,
+    height: 4.5,
+    borderRadius: 3,
+    backgroundColor: '#CBD5E1',
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
     paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E2E8F0',
   },
-  androidHandle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#D1D5DB',
-  },
-  androidHeaderTitle: {
-    fontSize: 18,
+  sheetHeaderTitle: {
+    fontSize: 17,
     fontWeight: '700',
-    color: '#1F2937',
-    marginBottom: 12,
+    color: '#0F172A',
+    flex: 1,
+    letterSpacing: -0.3,
   },
-  androidList: {
-    maxHeight: 340,
+  doneBtn: {
+    paddingLeft: 12,
+    paddingVertical: 4,
   },
-  androidOptionRow: {
+  doneText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.brandPrimary,
+  },
+  optionsList: {
+    maxHeight: 380,
+  },
+  optionsListContent: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  optionRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 14,
-    paddingHorizontal: 8,
-    borderRadius: 12,
-    marginBottom: 4,
+    paddingHorizontal: 12,
+    borderRadius: 14,
   },
-  androidOptionRowSelected: {
-    backgroundColor: Colors.brandPrimaryLight,
+  optionRowSelected: {
+    backgroundColor: '#F5F3FF',
   },
-  androidOptionText: {
+  optionRowBorder: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#F1F5F9',
+  },
+  optionIconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  optionIconBoxSelected: {
+    backgroundColor: '#EDE9FE',
+  },
+  optionTextBox: {
+    flex: 1,
+  },
+  optionLabel: {
     fontSize: 15,
-    color: '#1F2937',
+    fontWeight: '500',
+    color: '#1E293B',
   },
-  androidOptionTextSelected: {
+  optionLabelSelected: {
     color: Colors.brandPrimaryDark,
     fontWeight: '700',
   },
-  androidSubLabel: {
+  optionSubLabel: {
     fontSize: 12,
-    color: '#6B7280',
+    color: '#64748B',
     marginTop: 2,
   },
-  materialRadio: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: '#9CA3AF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 12,
-  },
-  materialRadioSelected: {
-    borderColor: Colors.brandPrimary,
-  },
-  materialRadioInner: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: Colors.brandPrimary,
+  checkIconBox: {
+    marginLeft: 10,
   },
 });

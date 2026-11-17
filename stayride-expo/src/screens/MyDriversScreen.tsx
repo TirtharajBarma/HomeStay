@@ -23,8 +23,8 @@ import { reportOutcome } from '../utils/report';
 import { vehicleLabel } from '../utils/vehicle';
 import { api } from '../data/api';
 
-const VEHICLE_TYPES = ['SUV', 'Sedan', '7-seater', '9-seater'];
-const ROUTE_OPTIONS = ['NJP', 'Bagdogra', 'Sightseeing', 'Local'];
+const VEHICLE_TYPES = ['Hatchback', 'SUV', 'Sedan', '7-seater', '9-seater'];
+const ROUTE_OPTIONS = ['NJP', 'Bagdogra', 'Sightseeing', 'Local', 'Gangtok', 'Kalimpong', 'Mirik', 'Pelling'];
 
 export const MyDriversScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
@@ -53,6 +53,7 @@ export const MyDriversScreen: React.FC = () => {
   const [area, setArea] = useState('');
   const [available, setAvailable] = useState(true);
   const [selectedRoutes, setSelectedRoutes] = useState<string[]>(['Local', 'NJP']);
+  const [customRouteText, setCustomRouteText] = useState('');
 
   // Closing the add/edit form ends that submission: a reopened form gets a fresh Idempotency-Key
   useEffect(() => {
@@ -318,7 +319,7 @@ export const MyDriversScreen: React.FC = () => {
 
               <Text style={styles.label}>Frequent Routes / Pickups</Text>
               <View style={styles.chipRow}>
-                {ROUTE_OPTIONS.map((r) => {
+                {Array.from(new Set([...ROUTE_OPTIONS, ...selectedRoutes])).map((r) => {
                   const active = selectedRoutes.includes(r);
                   return (
                     <TouchableOpacity
@@ -332,6 +333,36 @@ export const MyDriversScreen: React.FC = () => {
                     </TouchableOpacity>
                   );
                 })}
+              </View>
+
+              {/* Add Custom Route Input */}
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                <TextInput
+                  style={[styles.input, { flex: 1, marginBottom: 0 }]}
+                  placeholder="➕ Add custom destination / route"
+                  placeholderTextColor={Colors.textSecondary}
+                  value={customRouteText}
+                  onChangeText={setCustomRouteText}
+                />
+                <TouchableOpacity
+                  style={{
+                    backgroundColor: Colors.brandPrimary,
+                    paddingHorizontal: 14,
+                    borderRadius: 10,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                  onPress={() => {
+                    const trimmed = customRouteText.trim();
+                    if (!trimmed) return;
+                    if (!selectedRoutes.includes(trimmed)) {
+                      setSelectedRoutes([...selectedRoutes, trimmed]);
+                    }
+                    setCustomRouteText('');
+                  }}
+                >
+                  <Text style={{ color: Colors.white, fontWeight: '700', fontSize: 13 }}>Add</Text>
+                </TouchableOpacity>
               </View>
 
               <View style={styles.switchRow}>

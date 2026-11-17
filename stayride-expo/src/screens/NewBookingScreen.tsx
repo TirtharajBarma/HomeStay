@@ -23,13 +23,15 @@ import { FormScroll } from '../components/FormScroll';
 import { Guest, PaymentMethod, Room } from '../types';
 
 const SOURCE_OPTIONS = [
+  { label: 'Walk-in Direct', value: 'Walk-in', icon: 'walk-outline' as const },
+  { label: 'Phone Call / WhatsApp', value: 'Phone / WhatsApp', icon: 'call-outline' as const },
   { label: 'Airbnb', value: 'Airbnb', icon: 'home-outline' as const },
   { label: 'MakeMyTrip / Goibibo', value: 'MakeMyTrip', icon: 'airplane-outline' as const },
   { label: 'Booking.com', value: 'Booking.com', icon: 'business-outline' as const },
-  { label: 'Phone Call / WhatsApp', value: 'Phone / WhatsApp', icon: 'call-outline' as const },
-  { label: 'Walk-in Direct', value: 'Walk-in', icon: 'walk-outline' as const },
+  { label: 'Agoda', value: 'Agoda', icon: 'globe-outline' as const },
   { label: 'Homestay Website / Link', value: 'Website link', icon: 'globe-outline' as const },
   { label: 'Repeat Returning Guest', value: 'Repeat booking', icon: 'repeat-outline' as const },
+  { label: '➕ Other / Custom Source...', value: 'OTHER', icon: 'create-outline' as const },
 ];
 
 const GUEST_COUNT_OPTIONS = [
@@ -37,7 +39,10 @@ const GUEST_COUNT_OPTIONS = [
   { label: '2 Guests', value: '2', icon: 'people-outline' as const },
   { label: '3 Guests', value: '3', icon: 'people-outline' as const },
   { label: '4 Guests', value: '4', icon: 'people-outline' as const },
-  { label: '5+ Guests', value: '5', icon: 'people-outline' as const },
+  { label: '5 Guests', value: '5', icon: 'people-outline' as const },
+  { label: '6 Guests', value: '6', icon: 'people-outline' as const },
+  { label: '7-10 Guests (Group)', value: '8', icon: 'people-outline' as const },
+  { label: '➕ Custom Count...', value: 'CUSTOM', icon: 'create-outline' as const },
 ];
 
 export const NewBookingScreen: React.FC = () => {
@@ -58,8 +63,17 @@ export const NewBookingScreen: React.FC = () => {
 
   // Opened from the occupancy calendar: that room and night are preselected
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(() => initialRoom);
-  const [source, setSource] = useState('Airbnb');
-  const [guestsCount, setGuestsCount] = useState('1');
+  const [source, setSource] = useState('Walk-in');
+  const [customSource, setCustomSource] = useState('');
+  const [isCustomSource, setIsCustomSource] = useState(false);
+
+  const [guestsCount, setGuestsCount] = useState('2');
+  const [customGuests, setCustomGuests] = useState('');
+  const [isCustomGuests, setIsCustomGuests] = useState(false);
+
+  const [pickedBed, setPickedBed] = useState<string>('');
+  const [customBed, setCustomBed] = useState<string>('');
+  const [isCustomBed, setIsCustomBed] = useState(false);
 
   // Dates: default checkIn = today midnight (IST Asia/Kolkata), checkOut = in 2 days
   const istTodayStr = new Intl.DateTimeFormat('en-CA', {
@@ -76,7 +90,6 @@ export const NewBookingScreen: React.FC = () => {
 
   const nights = Math.max(1, Math.round((checkOut - checkIn) / dayMs));
   const [amount, setAmount] = useState(() => (initialRoom ? String(initialRoom.price * (presetCheckIn ? 1 : 2)) : ''));
-  const [pickedBed, setPickedBed] = useState<string>('');
   // Money received while booking: an advance, the full amount, or nothing yet
   const [received, setReceived] = useState('');
   const [receivedMethod, setReceivedMethod] = useState<PaymentMethod>('UPI');
@@ -104,6 +117,15 @@ export const NewBookingScreen: React.FC = () => {
       year: 'numeric',
       timeZone: 'Asia/Kolkata',
     });
+
+  const fmtDateParts = (ms: number) => {
+    const d = new Date(ms);
+    const day = d.toLocaleDateString('en-IN', { day: 'numeric', timeZone: 'Asia/Kolkata' });
+    const weekday = d.toLocaleDateString('en-IN', { weekday: 'short', timeZone: 'Asia/Kolkata' });
+    const month = d.toLocaleDateString('en-IN', { month: 'short', timeZone: 'Asia/Kolkata' });
+    const year = d.toLocaleDateString('en-IN', { year: 'numeric', timeZone: 'Asia/Kolkata' });
+    return { day, weekday, month, year, formatted: `${weekday}, ${day} ${month}` };
+  };
 
   const handleSelectGuest = (g: Guest) => {
     setSelectedGuest(g);
@@ -141,7 +163,9 @@ export const NewBookingScreen: React.FC = () => {
   const pickedRoom = selectedRoom && freeRooms.some((r) => r.id === selectedRoom.id) ? selectedRoom : null;
 
   const dormBeds = pickedRoom?.roomType === 'DORM'
-    ? Array.from({ length: pickedRoom.bedCount || 4 }, (_, i) => `Bed ${i + 1}`)
+    ? (pickedRoom.beds && pickedRoom.beds.length > 0
+        ? pickedRoom.beds
+        : Array.from({ length: pickedRoom.bedCount || 4 }, (_, i) => `Bed ${i + 1}`))
     : [];
   const occupiedBedsInDorm = pickedRoom?.roomType === 'DORM'
     ? new Set(
@@ -186,7 +210,10 @@ export const NewBookingScreen: React.FC = () => {
       return;
     }
 
-    const parsedCount = Math.max(1, parseInt(guestsCount, 10) || 1);
+    const parsedCount = isCustomGuests
+      ? Math.max(1, parseInt(customGuests.trim() || '1', 10))
+      : Math.max(1, parseInt(guestsCount, 10) || 1);
+
     if (pickedRoom.roomType === 'DORM' && parsedCount !== 1) {
       Alert.alert('Single Bed Allocation', 'A dorm bed accommodates exactly 1 guest per bed. Please set guests count to 1.');
       return;
@@ -204,8 +231,14 @@ export const NewBookingScreen: React.FC = () => {
     }
 
     const chosenBed = pickedRoom.roomType === 'DORM'
-      ? (pickedBed || dormBeds.find((b) => !occupiedBedsInDorm.has(b)) || 'Bed 1')
+      ? (isCustomBed
+          ? (customBed.trim() || 'Bed 1')
+          : (pickedBed || dormBeds.find((b) => !occupiedBedsInDorm.has(b)) || 'Bed 1'))
       : undefined;
+
+    const finalSource = isCustomSource
+      ? (customSource.trim() || 'Custom')
+      : (source || 'Walk-in');
 
     setSubmitting(true);
     try {
@@ -219,7 +252,7 @@ export const NewBookingScreen: React.FC = () => {
         checkOut,
         guests: parsedCount,
         amount: parsedAmount,
-        source: source || 'Walk-in',
+        source: finalSource,
         paid: false, // the server marks it paid once the money received covers the total
         advance: receivedNum,
         advanceMethod: receivedMethod,
@@ -305,38 +338,85 @@ export const NewBookingScreen: React.FC = () => {
         )}
 
         {/* Room Picker */}
-        <PlatformSelect
-          label="Room / Dorm"
-          value={pickedRoom ? String(pickedRoom.id) : ''}
-          options={freeRooms.map((r) => ({
-            label: r.roomType === 'DORM' ? `Room ${r.number} (Dorm - ${r.bedCount || 4} Beds)` : `Room ${r.number}`,
-            value: String(r.id),
-            icon: (r.roomType === 'DORM' ? 'people-outline' : 'bed-outline') as any,
-            subLabel: `₹${r.price.toLocaleString()}${r.roomType === 'DORM' ? '/bed/night' : '/night'} · ${r.floor}`,
-          }))}
-          onSelect={(roomIdStr) => {
-            const rm = freeRooms.find((r) => String(r.id) === roomIdStr);
-            if (rm) {
-              setSelectedRoom(rm);
-              setAmount(String(rm.price * nights));
-              setPickedBed('');
-            }
-          }}
-          placeholder={freeRooms.length ? `${freeRooms.length} room(s) free for these dates` : 'No room is free for these dates'}
-        />
-
-        {/* Dorm Bed Selection */}
-        {pickedRoom?.roomType === 'DORM' && (
+        {pickedRoom?.roomType === 'DORM' ? (
+          <View style={styles.grid5050}>
+            <View style={styles.col50}>
+              <PlatformSelect
+                label="Room"
+                value={pickedRoom ? String(pickedRoom.id) : ''}
+                options={freeRooms.map((r) => ({
+                  label: `Room ${r.number}`,
+                  value: String(r.id),
+                  icon: (r.roomType === 'DORM' ? 'people-outline' : 'bed-outline') as any,
+                  subLabel: `₹${r.price.toLocaleString()}${r.roomType === 'DORM' ? '/bed' : '/night'} · ${r.floor}`,
+                }))}
+                onSelect={(roomIdStr) => {
+                  const rm = freeRooms.find((r) => String(r.id) === roomIdStr);
+                  if (rm) {
+                    setSelectedRoom(rm);
+                    setAmount(String(rm.price * nights));
+                    setPickedBed('');
+                  }
+                }}
+                placeholder={freeRooms.length ? `${freeRooms.length} free` : 'No room free'}
+              />
+            </View>
+            <View style={styles.col50}>
+              <PlatformSelect
+                label="Dorm Bed"
+                value={isCustomBed ? 'CUSTOM' : (pickedBed || dormBeds.find((b) => !occupiedBedsInDorm.has(b)) || 'Bed 1')}
+                options={[
+                  ...dormBeds.map((bed) => ({
+                    label: bed + (occupiedBedsInDorm.has(bed) ? ' (Busy)' : ' (Free)'),
+                    value: bed,
+                    icon: 'bed-outline' as const,
+                  })),
+                  { label: '➕ Custom Bed Name...', value: 'CUSTOM', icon: 'create-outline' as const },
+                ]}
+                onSelect={(val) => {
+                  if (val === 'CUSTOM') {
+                    setIsCustomBed(true);
+                  } else {
+                    setIsCustomBed(false);
+                    setPickedBed(val);
+                  }
+                }}
+              />
+            </View>
+          </View>
+        ) : (
           <PlatformSelect
-            label="Select Bed in Dorm"
-            value={pickedBed || (dormBeds.find((b) => !occupiedBedsInDorm.has(b)) || 'Bed 1')}
-            options={dormBeds.map((bed) => ({
-              label: bed + (occupiedBedsInDorm.has(bed) ? ' (Occupied)' : ' (Available)'),
-              value: bed,
-              icon: 'bed-outline' as const,
+            label="Room / Dorm"
+            value={pickedRoom ? String(pickedRoom.id) : ''}
+            options={freeRooms.map((r) => ({
+              label: r.roomType === 'DORM' ? `Room ${r.number} (Dorm - ${r.bedCount || 4} Beds)` : `Room ${r.number}`,
+              value: String(r.id),
+              icon: (r.roomType === 'DORM' ? 'people-outline' : 'bed-outline') as any,
+              subLabel: `₹${r.price.toLocaleString()}${r.roomType === 'DORM' ? '/bed/night' : '/night'} · ${r.floor}`,
             }))}
-            onSelect={setPickedBed}
+            onSelect={(roomIdStr) => {
+              const rm = freeRooms.find((r) => String(r.id) === roomIdStr);
+              if (rm) {
+                setSelectedRoom(rm);
+                setAmount(String(rm.price * nights));
+                setPickedBed('');
+                setIsCustomBed(false);
+              }
+            }}
+            placeholder={freeRooms.length ? `${freeRooms.length} room(s) free for these dates` : 'No room is free for these dates'}
           />
+        )}
+        {isCustomBed && pickedRoom?.roomType === 'DORM' && (
+          <View style={{ marginTop: 10 }}>
+            <Text style={styles.label}>Custom Dorm Bed Identifier</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="e.g. Lower Bunk 1, Window Bed, Bunk 2B"
+              placeholderTextColor={Colors.textSecondary}
+              value={customBed}
+              onChangeText={setCustomBed}
+            />
+          </View>
         )}
         {busyRooms.length > 0 && (
           <Text style={styles.selectedGuestMeta}>
@@ -347,57 +427,140 @@ export const NewBookingScreen: React.FC = () => {
         {/* Dates */}
         <Text style={styles.label}>Stay Dates</Text>
         <TouchableOpacity
-          style={styles.dropdownBtn}
+          activeOpacity={0.8}
+          style={styles.stayDatesCard}
           onPress={() => setDatesPickerVisible(true)}
         >
-          <Ionicons name="calendar-outline" size={18} color={Colors.brandPrimaryDark} style={{ marginRight: 10 }} />
-          <Text style={[styles.dropdownVal, { flex: 1 }]}>
-            Check-in {fmtLong(checkIn)}
-            {'\n'}Check-out {fmtLong(checkOut)} · {nights} night(s)
-          </Text>
+          <View style={styles.dateSegment}>
+            <View style={styles.dateSegmentHeader}>
+              <Ionicons name="calendar-outline" size={13} color={Colors.brandPrimary} />
+              <Text style={styles.dateSegmentLabel}>CHECK-IN</Text>
+            </View>
+            <Text style={styles.dateSegmentMain}>{fmtDateParts(checkIn).formatted}</Text>
+            <Text style={styles.dateSegmentYear}>{fmtDateParts(checkIn).year}</Text>
+          </View>
+
+          <View style={styles.nightsBadgeContainer}>
+            <View style={styles.nightsBadge}>
+              <Ionicons name="moon" size={11} color={Colors.brandPrimaryDark} style={{ marginRight: 3 }} />
+              <Text style={styles.nightsBadgeText}>
+                {nights} {nights === 1 ? 'Night' : 'Nights'}
+              </Text>
+            </View>
+            <Ionicons name="arrow-forward" size={13} color={Colors.textSecondary} style={{ marginTop: 4 }} />
+          </View>
+
+          <View style={[styles.dateSegment, { alignItems: 'flex-end' }]}>
+            <View style={[styles.dateSegmentHeader, { alignSelf: 'flex-end' }]}>
+              <Ionicons name="calendar-outline" size={13} color={Colors.brandPrimary} />
+              <Text style={styles.dateSegmentLabel}>CHECK-OUT</Text>
+            </View>
+            <Text style={styles.dateSegmentMain}>{fmtDateParts(checkOut).formatted}</Text>
+            <Text style={styles.dateSegmentYear}>{fmtDateParts(checkOut).year}</Text>
+          </View>
         </TouchableOpacity>
 
-        {/* Number of Guests */}
-        <PlatformSelect
-          label="Number of Guests"
-          value={guestsCount}
-          options={GUEST_COUNT_OPTIONS}
-          onSelect={setGuestsCount}
-        />
+        {/* Row: Guests & Source (50/50 Grid) */}
+        <View style={styles.grid5050}>
+          <View style={styles.col50}>
+            <PlatformSelect
+              label="Guests"
+              value={isCustomGuests ? 'CUSTOM' : guestsCount}
+              options={GUEST_COUNT_OPTIONS}
+              onSelect={(val) => {
+                if (val === 'CUSTOM') {
+                  setIsCustomGuests(true);
+                  setGuestsCount('CUSTOM');
+                } else {
+                  setIsCustomGuests(false);
+                  setGuestsCount(val);
+                }
+              }}
+            />
+          </View>
+          <View style={styles.col50}>
+            <PlatformSelect
+              label="Source"
+              value={isCustomSource ? 'OTHER' : source}
+              options={SOURCE_OPTIONS}
+              onSelect={(val) => {
+                if (val === 'OTHER') {
+                  setIsCustomSource(true);
+                  setSource('OTHER');
+                } else {
+                  setIsCustomSource(false);
+                  setSource(val);
+                }
+              }}
+            />
+          </View>
+        </View>
 
-        {/* Amount */}
-        <Text style={styles.label}>Total Amount (₹)</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="0"
-          placeholderTextColor={Colors.textSecondary}
-          keyboardType="number-pad"
-          value={amount}
-          onChangeText={setAmount}
-        />
+        {/* Dynamic Inputs for Custom Guests / Custom Source */}
+        {(isCustomGuests || isCustomSource) && (
+          <View style={styles.grid5050}>
+            {isCustomGuests ? (
+              <View style={styles.col50}>
+                <Text style={styles.label}>Guests Count</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g. 8"
+                  keyboardType="numeric"
+                  value={customGuests}
+                  onChangeText={setCustomGuests}
+                />
+              </View>
+            ) : (
+              <View style={styles.col50} />
+            )}
+            {isCustomSource ? (
+              <View style={styles.col50}>
+                <Text style={styles.label}>Custom Channel</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g. Agoda, Tour Agent"
+                  value={customSource}
+                  onChangeText={setCustomSource}
+                />
+              </View>
+            ) : (
+              <View style={styles.col50} />
+            )}
+          </View>
+        )}
 
-        {/* Source */}
-        <PlatformSelect
-          label="Booking Source"
-          value={source}
-          options={SOURCE_OPTIONS}
-          onSelect={setSource}
-        />
+        {/* Row: Total Tariff & Advance Collected (50/50 Grid) */}
+        <View style={styles.grid5050}>
+          <View style={styles.col50}>
+            <Text style={styles.label}>Total Tariff (₹)</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="0"
+              placeholderTextColor={Colors.textSecondary}
+              keyboardType="number-pad"
+              value={amount}
+              onChangeText={setAmount}
+            />
+          </View>
 
-        {/* Money received now: advance or full amount */}
-        <Text style={styles.label}>Received now (₹)</Text>
-        <View style={styles.guestInputRow}>
-          <TextInput
-            style={[styles.input, { flex: 1 }]}
-            placeholder="0 = nothing yet"
-            placeholderTextColor={Colors.textSecondary}
-            keyboardType="number-pad"
-            value={received}
-            onChangeText={(t) => setReceived(t.replace(/[^0-9]/g, ''))}
-          />
-          <TouchableOpacity style={styles.pickerTriggerBtn} onPress={() => setReceived(amount)}>
-            <Text style={styles.pickerTriggerText}>Full amount</Text>
-          </TouchableOpacity>
+          <View style={styles.col50}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={styles.label}>Advance (₹)</Text>
+              {Boolean(amount) && (
+                <TouchableOpacity onPress={() => setReceived(amount)} hitSlop={6}>
+                  <Text style={styles.fullAmountLink}>Full</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+            <TextInput
+              style={styles.input}
+              placeholder="0 = unpaid"
+              placeholderTextColor={Colors.textSecondary}
+              keyboardType="number-pad"
+              value={received}
+              onChangeText={(t) => setReceived(t.replace(/[^0-9]/g, ''))}
+            />
+          </View>
         </View>
         {Number(received) > 0 && (
           <View style={styles.methodRow}>
@@ -564,6 +727,80 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.textPrimary,
     fontWeight: '600',
+  },
+  stayDatesCard: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: Colors.divider,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    shadowColor: '#000',
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
+  },
+  dateSegment: {
+    flex: 1,
+  },
+  dateSegmentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 4,
+  },
+  dateSegmentLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    color: Colors.textSecondary,
+  },
+  dateSegmentMain: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+  },
+  dateSegmentYear: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
+  nightsBadgeContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
+  nightsBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(37, 99, 235, 0.08)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  nightsBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.brandPrimaryDark,
+  },
+  grid5050: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'flex-start',
+  },
+  col50: {
+    flex: 1,
+    minWidth: 0,
+  },
+  fullAmountLink: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.brandPrimary,
+    marginBottom: 6,
   },
   dropdownBtn: {
     backgroundColor: '#FFFFFF',

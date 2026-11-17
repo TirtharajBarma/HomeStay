@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, Modal, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, Modal, Alert, ScrollView } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -93,6 +93,7 @@ export const FindDriverScreen: React.FC = () => {
   const [fleetDriverId, setFleetDriverId] = useState<Driver['id'] | null>(null);
   const fleetDriver = drivers.find((d) => d.id === fleetDriverId) || null;
   const activeDrivers = drivers.filter((d) => d.active);
+  const [dispatchMode, setDispatchMode] = useState<'broadcast' | 'own'>('broadcast');
 
   // Seats of the requested vehicle class
   const seatsFor = (type?: string | null) => vehicleOptions().find((v) => v.value === type)?.seats || 4;
@@ -333,14 +334,41 @@ export const FindDriverScreen: React.FC = () => {
     <View style={styles.container}>
       <Header title="Book a cab" onBack={() => navigation.goBack()} />
 
-      <FormScroll contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-        <View style={styles.intro}>
-          <Ionicons name="shield-checkmark" size={16} color={Colors.brandPrimaryDark} />
-          <Text style={styles.introText}>
-            Your request automatically notifies your homestay fleet first, then expands to verified nearby mountain drivers. Driver quotes appear under Cabs.
-          </Text>
-        </View>
+      {activeDrivers.length > 0 && (
+        <View style={styles.tabs}>
+          <TouchableOpacity
+            style={[styles.tab, dispatchMode === 'broadcast' && styles.tabActive]}
+            onPress={() => setDispatchMode('broadcast')}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name="paper-plane"
+              size={15}
+              color={dispatchMode === 'broadcast' ? Colors.white : Colors.brandPrimaryDark}
+            />
+            <Text style={[styles.tabText, dispatchMode === 'broadcast' && styles.tabTextActive]}>
+              Nearby Cabs
+            </Text>
+          </TouchableOpacity>
 
+          <TouchableOpacity
+            style={[styles.tab, dispatchMode === 'own' && styles.tabActive]}
+            onPress={() => setDispatchMode('own')}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name="person"
+              size={15}
+              color={dispatchMode === 'own' ? Colors.white : Colors.brandPrimaryDark}
+            />
+            <Text style={[styles.tabText, dispatchMode === 'own' && styles.tabTextActive]}>
+              My Fleet Driver
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      <FormScroll contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         {/* Route */}
         <Section
           icon="map"
@@ -375,15 +403,15 @@ export const FindDriverScreen: React.FC = () => {
                 />
               ) : (
                 <TouchableOpacity onPress={() => setPickupMapVisible(true)} accessibilityRole="button" accessibilityLabel="Change pickup on map">
-                  <Text style={styles.routeValue} numberOfLines={2}>
+                  <Text style={styles.routeValue} numberOfLines={1}>
                     {homestayPickup}
                   </Text>
-                  <Text style={styles.routeHint}>Your homestay · tap to search or pick on map</Text>
+                  <Text style={styles.routeHint}>Homestay location · tap to change</Text>
                 </TouchableOpacity>
               )}
               {pickupIsCustom ? (
                 <View style={styles.pickupActions}>
-                  <Text style={styles.routeHint}>{pickupPin ? 'Pinned on map · the driver gets directions' : 'Pin it so the driver can navigate'}</Text>
+                  <Text style={styles.routeHint}>{pickupPin ? 'Pinned on map' : 'Pin so driver navigates'}</Text>
                   <TouchableOpacity
                     onPress={() => {
                       setCustomPickup('');
@@ -412,10 +440,10 @@ export const FindDriverScreen: React.FC = () => {
                   {!last && <View style={styles.railLine} />}
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.routeLabel}>{idx === 0 ? (destinations.length > 1 ? 'First stop' : 'Drop') : last ? 'Final drop' : `Stop ${idx + 1}`}</Text>
+                  <Text style={styles.routeLabel}>{idx === 0 ? 'Drop Destination' : `Stop ${idx + 1}`}</Text>
                   <TextInput
                     style={styles.input}
-                    placeholder={idx === 0 ? 'Where to? Type or pick a place below' : 'Next place'}
+                    placeholder="Where to? (e.g. NJP Station, Bagdogra Airport)"
                     value={dest}
                     onChangeText={(text) => handleUpdateDestination(idx, text)}
                     placeholderTextColor={Colors.textTertiary}
@@ -434,9 +462,13 @@ export const FindDriverScreen: React.FC = () => {
           })}
 
           {allPresets.length > 0 ? (
-            <>
-              <Text style={styles.presetTitle}>Popular destinations & day trips</Text>
-              <View style={styles.presetWrap}>
+            <View style={styles.popularRow}>
+              <Text style={styles.presetMiniLabel}>QUICK DESTINATIONS</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.presetScroll}
+              >
                 {allPresets.map((dest) => {
                   const used = usedPresets.has(dest);
                   return (
@@ -453,35 +485,36 @@ export const FindDriverScreen: React.FC = () => {
                     </TouchableOpacity>
                   );
                 })}
-              </View>
-            </>
+              </ScrollView>
+            </View>
           ) : null}
         </Section>
 
-        {/* When */}
-        <Section icon="calendar" title="When">
-          <Text style={styles.fieldLabel}>Pickup date</Text>
-          <TouchableOpacity style={styles.selectBtn} onPress={() => setDatePickerVisible(true)} accessibilityRole="button" accessibilityLabel="Choose pickup date">
-            <Ionicons name="calendar-outline" size={18} color={Colors.brandPrimaryDark} />
-            <Text style={styles.selectText}>{fmtDay(pickupDate)}</Text>
-            <Ionicons name="chevron-down" size={16} color={Colors.textSecondary} />
-          </TouchableOpacity>
+        {/* Schedule */}
+        <Section icon="calendar" title="Schedule">
+          <View style={styles.whenRow}>
+            <TouchableOpacity
+              style={styles.whenDateBtn}
+              onPress={() => setDatePickerVisible(true)}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+            >
+              <Ionicons name="calendar-outline" size={16} color={Colors.brandPrimary} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.fieldMiniLabel}>PICKUP DATE</Text>
+                <Text style={styles.whenDateText} numberOfLines={1}>{fmtDay(pickupDate)}</Text>
+              </View>
+            </TouchableOpacity>
 
-          <Text style={[styles.fieldLabel, { marginTop: 10 }]}>Pickup time</Text>
-          <View style={styles.quickTimesRow}>
-            {['06:00 AM', '09:00 AM', '12:00 PM', '03:00 PM', '06:00 PM'].map((t) => (
-              <TouchableOpacity
-                key={t}
-                style={[styles.quickTimeChip, selectedTime === t && styles.quickTimeChipActive]}
-                onPress={() => setSelectedTime(t)}
-              >
-                <Text style={[styles.quickTimeText, selectedTime === t && styles.quickTimeTextActive]}>
-                  {t}
-                </Text>
-              </TouchableOpacity>
-            ))}
+            <View style={{ flex: 1 }}>
+              <PlatformSelect
+                label="Pickup Time"
+                value={selectedTime}
+                options={timeOptions}
+                onSelect={setSelectedTime}
+              />
+            </View>
           </View>
-          <PlatformSelect label="All pickup time slots" value={selectedTime} options={timeOptions} onSelect={setSelectedTime} />
         </Section>
 
         {/* Guest */}
@@ -521,7 +554,7 @@ export const FindDriverScreen: React.FC = () => {
             </View>
           ) : null}
 
-          {/* Fix 5: Passenger - / + Stepper */}
+          {/* Passenger - / + Stepper */}
           <View style={styles.stepperContainer}>
             <View style={{ flex: 1 }}>
               <Text style={styles.fieldLabel}>Passengers</Text>
@@ -547,67 +580,73 @@ export const FindDriverScreen: React.FC = () => {
           </View>
         </Section>
 
-        <Section icon="car" title="Vehicle">
-          <PlatformSelect
-            label="Seats needed"
-            value={vehicleType}
-            options={vehicleOptions().map((v) => ({ label: v.label, value: v.value, icon: 'car-outline' as const, subLabel: `Usually around ${inr(v.estFare)}` }))}
-            onSelect={(v) => {
-              setVehicleType(v as VehicleType);
-              setPassengers((p) => Math.min(p, seatsFor(v)));
-            }}
-          />
-          <Text style={styles.hint}>Both your in-house fleet and verified regional mountain drivers with matching seats receive this request.</Text>
-
-          {activeDrivers.length > 0 ? (
-            <View style={styles.ownDriverBox}>
-              <Text style={styles.ownDriverTitle}>Or assign your own driver</Text>
-              <Text style={styles.ownDriverSub}>Skip the auction: pick one of your drivers and the fare you agreed with them.</Text>
-              <PlatformSelect
-                label="Your driver"
-                value={fleetDriver ? String(fleetDriver.id) : ''}
-                options={activeDrivers.map((d) => ({
-                  label: d.name,
-                  value: String(d.id),
-                  subLabel: [d.vehicle, d.plate].filter(Boolean).join(' · '),
-                  icon: 'person-outline' as const,
-                }))}
-                onSelect={(v) => setFleetDriverId(Number(v))}
-                placeholder="Choose one of your drivers"
+        {/* Mode Dependent Section */}
+        {dispatchMode === 'own' ? (
+          <Section icon="car" title="Assign In-House Driver">
+            <PlatformSelect
+              label="Select Fleet Driver"
+              value={fleetDriver ? String(fleetDriver.id) : ''}
+              options={activeDrivers.map((d) => ({
+                label: d.name,
+                value: String(d.id),
+                subLabel: [d.vehicle, d.plate].filter(Boolean).join(' · '),
+                icon: 'person-outline' as const,
+              }))}
+              onSelect={(v) => setFleetDriverId(Number(v))}
+              placeholder="Choose one of your active drivers"
+            />
+            <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Agreed Fare (₹)</Text>
+            <View style={styles.fareInput}>
+              <Text style={styles.rupee}>₹</Text>
+              <TextInput
+                style={styles.fareText}
+                placeholder="e.g. 2500"
+                value={ownFare}
+                onChangeText={setOwnFare}
+                keyboardType="number-pad"
+                placeholderTextColor={Colors.textTertiary}
               />
-              <View style={styles.fareInput}>
-                <Text style={styles.rupee}>₹</Text>
-                <TextInput
-                  style={styles.fareText}
-                  placeholder="Fare agreed with your driver"
-                  value={ownFare}
-                  onChangeText={setOwnFare}
-                  keyboardType="number-pad"
-                  placeholderTextColor={Colors.textTertiary}
-                />
-              </View>
-              {fareNum > 0 ? (
-                <Text style={styles.hint}>Guest pays {inr(ownFee)} online as the StayRide fee; your driver collects the rest.</Text>
-              ) : null}
-              <TouchableOpacity
-                style={[styles.ownDriverBtn, (submitting || !fleetDriver || !(fareNum > 0)) && { opacity: 0.55 }]}
-                onPress={() => handleDirectAssignMyDriver(fleetDriver)}
-                disabled={submitting || !fleetDriver || !(fareNum > 0)}
-                accessibilityRole="button"
-                accessibilityLabel="Assign my own driver"
-              >
-                <Ionicons name="person-add" size={16} color={Colors.brandPrimaryDark} />
-                <Text style={styles.ownDriverBtnText}>{submitting ? 'Assigning…' : 'Assign my driver'}</Text>
-              </TouchableOpacity>
             </View>
-          ) : null}
-        </Section>
+            {fareNum > 0 ? (
+              <Text style={styles.hint}>Guest pays {inr(ownFee)} advance fee online; driver collects balance cash.</Text>
+            ) : null}
+          </Section>
+        ) : (
+          <Section icon="car" title="Vehicle Class">
+            <PlatformSelect
+              label="Vehicle Class"
+              value={vehicleType}
+              options={vehicleOptions().map((v) => ({
+                label: `${v.label} (${seatsFor(v.value)} seats)`,
+                value: v.value,
+                icon: 'car-outline' as const,
+                subLabel: `Est. fare around ${inr(v.estFare)}`,
+              }))}
+              onSelect={(v) => {
+                setVehicleType(v as VehicleType);
+                setPassengers((p) => Math.min(p, seatsFor(v)));
+              }}
+            />
+          </Section>
+        )}
       </FormScroll>
 
       {/* Sticky action */}
       <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
         {platformLocked ? (
           <FeatureLocked feature="platformDispatch" title="Send cab request" />
+        ) : dispatchMode === 'own' ? (
+          <TouchableOpacity
+            style={[styles.cta, (submitting || !fleetDriver || !(fareNum > 0)) && { opacity: 0.55 }]}
+            onPress={() => handleDirectAssignMyDriver(fleetDriver)}
+            disabled={submitting || !fleetDriver || !(fareNum > 0)}
+            accessibilityRole="button"
+          >
+            <Ionicons name="checkmark-circle-outline" size={18} color={Colors.white} />
+            <Text style={styles.ctaText}>
+              {submitting ? 'Assigning…' : `Confirm Driver · ${fareNum > 0 ? inr(fareNum) : 'Enter Fare'}`}
+            </Text>
+          </TouchableOpacity>
         ) : (
           <TouchableOpacity
             style={[styles.cta, (submitting || isSearching) && { opacity: 0.6 }]}
@@ -616,7 +655,7 @@ export const FindDriverScreen: React.FC = () => {
             accessibilityRole="button"
           >
             <Ionicons name="paper-plane" size={18} color={Colors.white} />
-            <Text style={styles.ctaText}>{submitting || isSearching ? 'Finding drivers…' : 'Find drivers & get quotes'}</Text>
+            <Text style={styles.ctaText}>{submitting || isSearching ? 'Finding drivers…' : 'Find Drivers & Get Quotes'}</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -762,10 +801,17 @@ const styles = StyleSheet.create({
   iconBtnSpacer: { width: 40 },
   input: { backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.divider, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 11, fontSize: 15, color: Colors.textPrimary, marginBottom: 10 },
   presetTitle: { fontSize: 12, fontWeight: '700', color: Colors.textSecondary, marginTop: 4, marginBottom: 8 },
+  popularRow: { marginTop: 10, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.divider },
+  presetMiniLabel: { fontSize: 10, fontWeight: '800', color: Colors.textSecondary, letterSpacing: 0.5, marginBottom: 6, textTransform: 'uppercase' },
+  presetScroll: { flexDirection: 'row', gap: 8, paddingVertical: 2 },
   presetWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   preset: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderColor: Colors.divider, paddingHorizontal: 11, paddingVertical: 7, borderRadius: Radii.pill, backgroundColor: Colors.white },
   presetUsed: { backgroundColor: Colors.brandPrimary, borderColor: Colors.brandPrimary },
   presetText: { fontSize: 13, color: Colors.textPrimary, fontWeight: '600' },
+  whenRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  fieldMiniLabel: { fontSize: 10, fontWeight: '800', color: Colors.textSecondary, letterSpacing: 0.5, marginBottom: 4, textTransform: 'uppercase' },
+  whenDateBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.divider, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10 },
+  whenDateText: { fontSize: 14, fontWeight: '700', color: Colors.textPrimary },
   fieldLabel: { fontSize: 13, fontWeight: '700', color: Colors.textSecondary, marginBottom: 6 },
   selectBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.divider, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 13, marginBottom: 12 },
   selectText: { flex: 1, fontSize: 15, fontWeight: '600', color: Colors.textPrimary },

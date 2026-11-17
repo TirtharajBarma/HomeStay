@@ -67,7 +67,7 @@ export interface RoomCalendar {
   results?: { source: string; ok: boolean; added?: number; updated?: number; cancelled?: number; conflicts?: number; error?: string }[];
 }
 
-export type VehicleType = 'SUV' | 'Sedan' | '7-seater' | '9-seater';
+export type VehicleType = 'Hatchback' | 'SUV' | 'Sedan' | '7-seater' | '9-seater';
 
 export interface Driver {
   id: number;

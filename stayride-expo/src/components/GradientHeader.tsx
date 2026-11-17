@@ -10,6 +10,7 @@ interface GradientHeaderProps {
   tagline: string;
   location: string;
   ratingText: string;
+  hasStar?: boolean;
   badgeText?: string;
 }
 
@@ -19,6 +20,7 @@ export const GradientHeader: React.FC<GradientHeaderProps> = ({
   tagline,
   location,
   ratingText,
+  hasStar = false,
   badgeText = 'Verified Host',
 }) => {
   return (
@@ -50,7 +52,7 @@ export const GradientHeader: React.FC<GradientHeaderProps> = ({
           </View>
         )}
         <View style={styles.ratingContainer}>
-          <Ionicons name="star" size={13} color="#F59E0B" />
+          <Ionicons name={hasStar ? "star" : "calendar-outline"} size={13} color={hasStar ? "#F59E0B" : "#DDD6FE"} />
           <Text style={styles.ratingText}>{ratingText}</Text>
         </View>
       </View>

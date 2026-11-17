@@ -22,18 +22,24 @@ const AMENITIES: { label: string; icon: IconName }[] = [
   { label: '24x7 Hot Water', icon: 'water' },
   { label: 'Private Parking', icon: 'car' },
   { label: 'Home Breakfast', icon: 'cafe' },
+  { label: 'Bonfire & Barbecue', icon: 'flame' },
+  { label: 'Pet Friendly', icon: 'paw' },
+  { label: 'Kitchen / Self Cooking', icon: 'restaurant' },
+  { label: 'Room Heater', icon: 'thermometer' },
+  { label: 'Mountain View', icon: 'image' },
+  { label: 'Balcony / Terrace', icon: 'leaf' },
   { label: 'Air Conditioning', icon: 'snow' },
   { label: 'Power Backup', icon: 'flash' },
   { label: 'Luggage Storage', icon: 'briefcase' },
-  { label: 'Mountain View', icon: 'image' },
   { label: 'Laundry Service', icon: 'shirt' },
   { label: 'In-house Cabs & Mobility', icon: 'navigate' },
   { label: 'Airport Pickup', icon: 'airplane' },
-  { label: 'Restaurant', icon: 'restaurant' },
-  { label: 'Garden', icon: 'leaf' },
+  { label: 'Tea Garden Tour', icon: 'map' },
+  { label: 'EV Charging Station', icon: 'battery-charging' },
+  { label: 'Fiber Wi-Fi / Workstation', icon: 'laptop' },
   { label: 'CCTV Security', icon: 'videocam' },
   { label: 'Doctor on Call', icon: 'medkit' },
-  { label: 'Travel Desk', icon: 'map' },
+  { label: 'Travel Desk', icon: 'compass' },
 ];
 const iconFor = (amenity: string): IconName => AMENITIES.find((a) => a.label === amenity)?.icon || 'checkmark-circle';
 
@@ -70,6 +76,7 @@ export const HomestayProfileScreen: React.FC = () => {
   const [checkInTime, setCheckInTime] = useState('12:00 PM');
   const [checkOutTime, setCheckOutTime] = useState('11:00 AM');
   const [amenityDraft, setAmenityDraft] = useState<string[]>([]);
+  const [customAmenityText, setCustomAmenityText] = useState('');
 
   const PROPERTY_TYPE_OPTIONS = [
     { label: 'Homestay / Traditional Stay', value: 'HOMESTAY', icon: 'home-outline' as const },
@@ -202,8 +209,8 @@ export const HomestayProfileScreen: React.FC = () => {
         <View style={styles.factsRow}>
           {fact('business-outline', 'Category', homestay.propertyType || 'HOMESTAY')}
           {fact('bed-outline', 'Units', String(rooms.length))}
-          {fact('log-in-outline', 'Check-in', homestay.checkInTime || '—')}
-          {fact('log-out-outline', 'Check-out', homestay.checkOutTime || '—')}
+          {fact('log-in-outline', 'Check-in', homestay.checkInTime || '12:00 PM')}
+          {fact('log-out-outline', 'Check-out', homestay.checkOutTime || '11:00 AM')}
         </View>
 
         {/* Only when missing: drivers can't find an unpinned homestay */}
@@ -413,10 +420,10 @@ export const HomestayProfileScreen: React.FC = () => {
         </View>
       </Modal>
 
-      {/* Amenities: tick what you have, save once */}
+      {/* Amenities: tick what you have, plus add custom */}
       {(
         [
-          [amenitiesVisible, setAmenitiesVisible, 'Amenities', AMENITIES.map((a) => a.label), amenityDraft, setAmenityDraft, 'amenities'],
+          [amenitiesVisible, setAmenitiesVisible, 'Amenities', Array.from(new Set([...AMENITIES.map((a) => a.label), ...amenityDraft])), amenityDraft, setAmenityDraft, 'amenities'],
         ] as const
       ).map(([visible, setVisible, title, options, draft, setDraft, field]) => (
         <Modal key={field} visible={visible} transparent animationType="slide" onRequestClose={() => setVisible(false)}>
@@ -428,7 +435,48 @@ export const HomestayProfileScreen: React.FC = () => {
                   <Ionicons name="close" size={24} color={Colors.textPrimary} />
                 </TouchableOpacity>
               </View>
-              <ScrollView style={{ maxHeight: 420 }} contentContainerStyle={styles.pickGrid}>
+
+              {/* Add Custom Amenity Row */}
+              <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16, marginBottom: 10 }}>
+                <TextInput
+                  style={{
+                    flex: 1,
+                    backgroundColor: Colors.white,
+                    borderWidth: 1,
+                    borderColor: Colors.divider,
+                    borderRadius: Radii.sm,
+                    paddingHorizontal: 12,
+                    paddingVertical: 9,
+                    fontSize: 14,
+                    color: Colors.textPrimary,
+                  }}
+                  placeholder="➕ Type custom amenity (e.g. Yoga Deck)"
+                  placeholderTextColor={Colors.textSecondary}
+                  value={customAmenityText}
+                  onChangeText={setCustomAmenityText}
+                />
+                <TouchableOpacity
+                  style={{
+                    backgroundColor: Colors.brandPrimary,
+                    paddingHorizontal: 14,
+                    borderRadius: Radii.sm,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                  onPress={() => {
+                    const trimmed = customAmenityText.trim();
+                    if (!trimmed) return;
+                    if (!draft.includes(trimmed)) {
+                      setDraft([...draft, trimmed]);
+                    }
+                    setCustomAmenityText('');
+                  }}
+                >
+                  <Text style={{ color: Colors.white, fontWeight: '700', fontSize: 13 }}>Add</Text>
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={{ maxHeight: 380 }} contentContainerStyle={styles.pickGrid}>
                 {options.map((o) => {
                   const on = draft.includes(o);
                   return (
