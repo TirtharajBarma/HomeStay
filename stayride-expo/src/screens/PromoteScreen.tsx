@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Platform,
+  Alert,
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,20 +23,24 @@ import { Influencer, CollaborationRequest, CollaborationStatus } from '../types'
 const DESTINATIONS = ['All', 'Darjeeling', 'Kalimpong', 'Kurseong', 'Gangtok', 'Sikkim'];
 
 const STATUS_CONFIG: Record<
-  CollaborationStatus,
+  string,
   { label: string; color: string; bg: string; icon: keyof typeof Ionicons.glyphMap; step: number }
 > = {
+  NEW: { label: 'New Request', color: '#0284C7', bg: '#E0F2FE', icon: 'sparkles-outline', step: 1 },
   PENDING: { label: 'Under Review', color: '#D97706', bg: '#FEF3C7', icon: 'time-outline', step: 1 },
   CONTACTED: { label: 'Contacted', color: '#0284C7', bg: '#E0F2FE', icon: 'chatbubbles-outline', step: 2 },
+  'FINDING INFLUENCERS': { label: 'Finding Influencers', color: '#7C3AED', bg: '#EDE9FE', icon: 'search-outline', step: 2 },
   IN_NEGOTIATION: { label: 'In Negotiation', color: '#7C3AED', bg: '#EDE9FE', icon: 'swap-horizontal-outline', step: 3 },
+  'PROPOSAL SENT': { label: 'Proposal Sent', color: '#8B5CF6', bg: '#F3E8FF', icon: 'mail-outline', step: 3 },
   CONFIRMED: { label: 'Shoot Confirmed', color: '#16A34A', bg: '#DCFCE7', icon: 'checkmark-circle-outline', step: 4 },
   COMPLETED: { label: 'Campaign Completed', color: '#2563EB', bg: '#DBEAFE', icon: 'videocam-outline', step: 5 },
-  CANCELLED: { label: 'Declined / Cancelled', color: '#DC2626', bg: '#FEE2E2', icon: 'close-circle-outline', step: 0 },
+  REJECTED: { label: 'Declined', color: '#DC2626', bg: '#FEE2E2', icon: 'close-circle-outline', step: 0 },
+  CANCELLED: { label: 'Cancelled', color: '#DC2626', bg: '#FEE2E2', icon: 'close-circle-outline', step: 0 },
 };
 
 export const PromoteScreen: React.FC = () => {
   const navigation = useNavigation<any>();
-  const { homestay } = useStayRide();
+  const { homestay, session } = useStayRide();
 
   const [activeTab, setActiveTab] = useState<'explore' | 'collaborations'>('explore');
   const [influencers, setInfluencers] = useState<Influencer[]>([]);
@@ -43,9 +48,23 @@ export const PromoteScreen: React.FC = () => {
   const [selectedDestination, setSelectedDestination] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Section B: Quote Your Budget Form State
+  const [budget, setBudget] = useState('');
+  const [preferredDestination, setPreferredDestination] = useState(homestay?.location || '');
+  const [promotionRequirements, setPromotionRequirements] = useState('');
+  const [additionalMessage, setAdditionalMessage] = useState('');
+  const [submittingBudget, setSubmittingBudget] = useState(false);
+
   const [myRequests, setMyRequests] = useState<CollaborationRequest[]>([]);
   const [loadingRequests, setLoadingRequests] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Sync default destination from homestay if changed
+  useEffect(() => {
+    if (homestay?.location && !preferredDestination) {
+      setPreferredDestination(homestay.location);
+    }
+  }, [homestay?.location]);
 
   // Fetch influencers from backend
   const fetchInfluencers = async () => {
@@ -101,11 +120,64 @@ export const PromoteScreen: React.FC = () => {
     setRefreshing(false);
   };
 
+  // Submit Section B: Quote Your Budget request
+  const handleSubmitBudgetRequest = async () => {
+    const rawBudget = budget.replace(/\D/g, '');
+    const numBudget = Number(rawBudget);
+
+    if (!rawBudget || isNaN(numBudget) || numBudget <= 0) {
+      Alert.alert('Validation Error', 'Please enter a valid promotion budget in INR greater than zero.');
+      return;
+    }
+
+    try {
+      setSubmittingBudget(true);
+
+      const payload = {
+        requestType: 'BUDGET_BASED_PROMOTION',
+        budget: numBudget,
+        preferredDestination: preferredDestination.trim() || homestay?.location || '',
+        promotionRequirements: promotionRequirements.trim(),
+        additionalMessage: additionalMessage.trim(),
+        homestayName: homestay?.name || 'My Homestay',
+        homestayLocation: homestay?.location || '',
+        ownerName: homestay?.ownerName || session?.owner?.name || 'Homestay Owner',
+        ownerPhone: homestay?.phone || session?.owner?.phone || '',
+        ownerEmail: homestay?.email || session?.owner?.email || '',
+      };
+
+      await api.post('/collaboration-requests', payload);
+
+      Alert.alert(
+        'Request Submitted! 🎉',
+        'Your promotion request has been submitted! Our StayCabs team will find suitable influencers within your budget and contact you.',
+        [
+          {
+            text: 'Track Request',
+            onPress: () => {
+              setActiveTab('collaborations');
+              fetchMyRequests();
+            },
+          },
+        ]
+      );
+
+      setBudget('');
+      setPromotionRequirements('');
+      setAdditionalMessage('');
+      fetchMyRequests();
+    } catch (err: any) {
+      Alert.alert('Submission Error', err?.message || 'Could not submit your promotion request. Please try again.');
+    } finally {
+      setSubmittingBudget(false);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <Header title="Promote Homestay" />
 
-      {/* Main Mode Toggle: Explore vs My Collaborations */}
+      {/* Main Mode Toggle: Explore vs My Requests */}
       <View style={styles.tabBar}>
         <TouchableOpacity
           style={[styles.tabButton, activeTab === 'explore' && styles.tabButtonActive]}
@@ -118,7 +190,7 @@ export const PromoteScreen: React.FC = () => {
             color={activeTab === 'explore' ? Colors.brandPrimary : Colors.textSecondary}
           />
           <Text style={[styles.tabText, activeTab === 'explore' && styles.tabTextActive]}>
-            Explore Creators
+            Explore & Quote
           </Text>
         </TouchableOpacity>
 
@@ -160,9 +232,108 @@ export const PromoteScreen: React.FC = () => {
               </Text>
             </View>
 
+            {/* ========================================================================= */}
+            {/* SECTION B: Request Influencer Recommendations (Quote Your Budget) */}
+            {/* ========================================================================= */}
+            <View style={styles.budgetCard}>
+              <View style={styles.budgetHeader}>
+                <View style={styles.budgetIconCircle}>
+                  <Ionicons name="megaphone" size={20} color="#7C3AED" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.budgetTitle}>Quote Your Budget</Text>
+                  <Text style={styles.budgetSubtitle}>
+                    Have a budget in mind? Tell us how much you want to spend on promotion, and our StayCabs team will find suitable influencers for your homestay.
+                  </Text>
+                </View>
+              </View>
+
+              {/* Field 1: Promotion Budget (Required) */}
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>
+                  Promotion Budget (₹) <Text style={{ color: '#EF4444' }}>*</Text>
+                </Text>
+                <View style={styles.budgetInputWrap}>
+                  <Text style={styles.currencyPrefix}>₹</Text>
+                  <TextInput
+                    style={styles.budgetInput}
+                    placeholder="e.g. 8000"
+                    placeholderTextColor={Colors.textSecondary}
+                    keyboardType="numeric"
+                    value={budget}
+                    onChangeText={setBudget}
+                  />
+                </View>
+              </View>
+
+              {/* Field 2: Preferred Destination (Optional) */}
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Preferred Destination (Optional)</Text>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="e.g. Darjeeling, Kalimpong, Gangtok"
+                  placeholderTextColor={Colors.textSecondary}
+                  value={preferredDestination}
+                  onChangeText={setPreferredDestination}
+                />
+              </View>
+
+              {/* Field 3: Promotion Requirements (Optional) */}
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Promotion Requirements (Optional)</Text>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="e.g. Instagram Reel, Stories, Travel Vlog, Drone b-roll"
+                  placeholderTextColor={Colors.textSecondary}
+                  value={promotionRequirements}
+                  onChangeText={setPromotionRequirements}
+                />
+              </View>
+
+              {/* Field 4: Additional Message (Optional) */}
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Additional Message (Optional)</Text>
+                <TextInput
+                  style={[styles.textInput, styles.textArea]}
+                  placeholder="Describe your homestay's unique highlights, views, rooms, or any specific creator profile you prefer..."
+                  placeholderTextColor={Colors.textSecondary}
+                  multiline
+                  numberOfLines={3}
+                  value={additionalMessage}
+                  onChangeText={setAdditionalMessage}
+                />
+              </View>
+
+              {/* Submit Button */}
+              <TouchableOpacity
+                style={[styles.budgetSubmitBtn, submittingBudget && { opacity: 0.65 }]}
+                onPress={handleSubmitBudgetRequest}
+                disabled={submittingBudget}
+                activeOpacity={0.8}
+              >
+                {submittingBudget ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 8 }} />
+                ) : (
+                  <Ionicons name="paper-plane" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                )}
+                <Text style={styles.budgetSubmitBtnText}>Submit Request</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* ========================================================================= */}
+            {/* SECTION A: Discover Influencers */}
+            {/* ========================================================================= */}
+            <View style={styles.sectionHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.sectionTitle}>Discover Mountain Creators</Text>
+                <Text style={styles.sectionSubtitle}>
+                  Browse certified creators added by StayCabs admin
+                </Text>
+              </View>
+            </View>
+
             {/* Destination Filters */}
             <View style={styles.filterSection}>
-              <Text style={styles.filterLabel}>Discover by Region:</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterList}>
                 {DESTINATIONS.map((dest) => {
                   const isSelected = selectedDestination === dest;
@@ -338,14 +509,13 @@ export const PromoteScreen: React.FC = () => {
           </>
         ) : (
           /* ========================================================================= */
-          /* TAB 2: MY COLLABORATIONS & STATUS TRACKING                                */
+          /* MY REQUESTS TRACKING TAB */
           /* ========================================================================= */
           <>
-            <View style={styles.myCollabHeader}>
-              <Text style={styles.sectionHeaderTitle}>Collaboration History</Text>
-              <Text style={styles.sectionHeaderDesc}>
-                Track real-time status of creator invites, shoot schedules, and published posts for{' '}
-                {homestay?.name || 'your homestay'}.
+            <View style={styles.myRequestsHeader}>
+              <Text style={styles.myRequestsTitle}>Your Promotion Requests</Text>
+              <Text style={styles.myRequestsDesc}>
+                Track live review, influencer matching, and shooting schedules coordinated by the StayCabs team.
               </Text>
             </View>
 
@@ -357,30 +527,58 @@ export const PromoteScreen: React.FC = () => {
             ) : myRequests.length === 0 ? (
               <View style={styles.emptyBox}>
                 <Ionicons name="chatbubble-ellipses-outline" size={48} color={Colors.divider} />
-                <Text style={styles.emptyTitle}>No collaboration invites yet</Text>
+                <Text style={styles.emptyTitle}>No promotion requests yet</Text>
                 <Text style={styles.emptyDesc}>
-                  Select a mountain creator from the Explore tab and click &quot;Invite to Collaborate&quot; to begin.
+                  Quote your budget above or invite a mountain creator from the Explore tab to begin.
                 </Text>
                 <TouchableOpacity
                   style={[styles.collabBtn, { marginTop: 14, paddingHorizontal: 20 }]}
                   onPress={() => setActiveTab('explore')}
                 >
-                  <Text style={styles.collabBtnText}>Browse Creators</Text>
+                  <Text style={styles.collabBtnText}>Start Promoting</Text>
                 </TouchableOpacity>
               </View>
             ) : (
               <View style={styles.requestsList}>
                 {myRequests.map((req) => {
                   const statusInfo = STATUS_CONFIG[req.status] || STATUS_CONFIG.PENDING;
+                  const isBudgetRequest = req.requestType === 'BUDGET_BASED_PROMOTION';
+                  const reqIdText = req.requestId || `REQ-${req._id.slice(-6).toUpperCase()}`;
 
                   return (
                     <View key={req._id} style={styles.requestCard}>
-                      {/* Top Row: Influencer Name + Status Badge */}
+                      {/* Top Row: Request ID + Category Badge + Status Badge */}
                       <View style={styles.requestTop}>
                         <View style={{ flex: 1 }}>
-                          <Text style={styles.requestInfluencerName}>{req.influencerName}</Text>
-                          <Text style={styles.requestHandle}>{req.influencerHandle}</Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            <Text style={styles.requestIdBadge}>{reqIdText}</Text>
+                            <View
+                              style={[
+                                styles.categoryTag,
+                                isBudgetRequest ? styles.categoryTagBudget : styles.categoryTagDirect,
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.categoryTagText,
+                                  isBudgetRequest ? styles.categoryTagTextBudget : styles.categoryTagTextDirect,
+                                ]}
+                              >
+                                {isBudgetRequest ? 'Budget-Based Promotion' : 'Creator Invite'}
+                              </Text>
+                            </View>
+                          </View>
+
+                          <Text style={styles.requestInfluencerName}>
+                            {isBudgetRequest
+                              ? `Budget: ₹${req.budget?.toLocaleString()}`
+                              : req.influencerName || 'Mountain Creator'}
+                          </Text>
+                          {!isBudgetRequest && req.influencerHandle && (
+                            <Text style={styles.requestHandle}>{req.influencerHandle}</Text>
+                          )}
                         </View>
+
                         <View style={[styles.statusBadge, { backgroundColor: statusInfo.bg }]}>
                           <Ionicons name={statusInfo.icon} size={12} color={statusInfo.color} style={{ marginRight: 4 }} />
                           <Text style={[styles.statusBadgeText, { color: statusInfo.color }]}>
@@ -389,31 +587,81 @@ export const PromoteScreen: React.FC = () => {
                         </View>
                       </View>
 
-                      {/* Package & Proposed Dates */}
+                      {/* Request Details Grid */}
                       <View style={styles.requestDetailsGrid}>
-                        <View style={styles.detailItem}>
-                          <Text style={styles.detailItemLabel}>Package</Text>
-                          <Text style={styles.detailItemVal}>
-                            {req.selectedPackage?.name || 'Standard Package'}
-                          </Text>
-                          <Text style={styles.detailItemPrice}>
-                            ₹{req.selectedPackage?.price?.toLocaleString() || '5,000'}
-                          </Text>
-                        </View>
-
-                        <View style={styles.detailItem}>
-                          <Text style={styles.detailItemLabel}>Preferred Schedule</Text>
-                          <Text style={styles.detailItemVal}>
-                            {req.confirmedShootingDate ? `Locked: ${req.confirmedShootingDate}` : req.proposedDates || 'Flexible'}
-                          </Text>
-                        </View>
+                        {isBudgetRequest ? (
+                          <>
+                            <View style={styles.detailItem}>
+                              <Text style={styles.detailItemLabel}>Quoted Budget</Text>
+                              <Text style={styles.detailItemPrice}>
+                                ₹{req.budget?.toLocaleString() || '0'}
+                              </Text>
+                            </View>
+                            <View style={styles.detailItem}>
+                              <Text style={styles.detailItemLabel}>Region</Text>
+                              <Text style={styles.detailItemVal}>
+                                {req.preferredDestination || 'All Hill Regions'}
+                              </Text>
+                            </View>
+                          </>
+                        ) : (
+                          <>
+                            <View style={styles.detailItem}>
+                              <Text style={styles.detailItemLabel}>Package</Text>
+                              <Text style={styles.detailItemVal}>
+                                {req.selectedPackage?.name || 'Standard Package'}
+                              </Text>
+                              <Text style={styles.detailItemPrice}>
+                                ₹{req.selectedPackage?.price?.toLocaleString() || '5,000'}
+                              </Text>
+                            </View>
+                            <View style={styles.detailItem}>
+                              <Text style={styles.detailItemLabel}>Preferred Schedule</Text>
+                              <Text style={styles.detailItemVal}>
+                                {req.confirmedShootingDate ? `Locked: ${req.confirmedShootingDate}` : req.proposedDates || 'Flexible'}
+                              </Text>
+                            </View>
+                          </>
+                        )}
                       </View>
 
+                      {/* Assigned Influencer & Agreed Price Row (if recorded by admin) */}
+                      {(req.assignedInfluencerName || req.agreedPrice) && (
+                        <View style={styles.assignedBox}>
+                          {req.assignedInfluencerName ? (
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                              <Ionicons name="person-circle-outline" size={14} color="#16A34A" />
+                              <Text style={styles.assignedText}>
+                                Assigned Creator: <Text style={{ fontWeight: '700' }}>{req.assignedInfluencerName}</Text>
+                              </Text>
+                            </View>
+                          ) : null}
+                          {req.agreedPrice ? (
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                              <Ionicons name="pricetag-outline" size={13} color="#16A34A" />
+                              <Text style={styles.assignedText}>
+                                Agreed Price: <Text style={{ fontWeight: '700' }}>₹{req.agreedPrice.toLocaleString()}</Text>
+                              </Text>
+                            </View>
+                          ) : null}
+                        </View>
+                      )}
+
+                      {/* Requirements / Notes if provided */}
+                      {(req.promotionRequirements || req.additionalMessage || req.customRequirements) && (
+                        <View style={styles.messageBox}>
+                          <Text style={styles.messageBoxLabel}>Requirements:</Text>
+                          <Text style={styles.messageBoxText}>
+                            {req.promotionRequirements || req.additionalMessage || req.customRequirements}
+                          </Text>
+                        </View>
+                      )}
+
                       {/* Progress Stepper (1 to 5) */}
-                      {req.status !== 'CANCELLED' && (
+                      {req.status !== 'CANCELLED' && req.status !== 'REJECTED' && (
                         <View style={styles.stepperContainer}>
                           <View style={styles.stepperRow}>
-                            {['Submitted', 'Contacted', 'Negotiation', 'Shoot Locked', 'Posted'].map((stepName, sIdx) => {
+                            {['Submitted', 'Contacted', 'Finding', 'Proposal', 'Completed'].map((stepName, sIdx) => {
                               const stepNum = sIdx + 1;
                               const isPassed = statusInfo.step >= stepNum;
                               const isCurrent = statusInfo.step === stepNum;
@@ -499,11 +747,7 @@ export const PromoteScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
-  },
-  scrollContent: {
-    padding: 16,
-    paddingBottom: 40,
+    backgroundColor: Colors.bgPage,
   },
   tabBar: {
     flexDirection: 'row',
@@ -511,6 +755,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.divider,
     paddingHorizontal: 16,
+    paddingTop: 4,
   },
   tabButton: {
     flex: 1,
@@ -532,9 +777,14 @@ const styles = StyleSheet.create({
   },
   tabTextActive: {
     color: Colors.brandPrimary,
+    fontWeight: '700',
+  },
+  scrollContent: {
+    padding: 16,
+    paddingBottom: 40,
   },
   heroCard: {
-    backgroundColor: '#1E1B4B',
+    backgroundColor: '#1E1435',
     borderRadius: Radii.lg,
     padding: 18,
     marginBottom: 16,
@@ -544,16 +794,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 20,
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
     paddingHorizontal: 8,
     paddingVertical: 3,
+    borderRadius: 6,
     marginBottom: 8,
     gap: 4,
   },
   heroBadgeText: {
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#F59E0B',
     letterSpacing: 0.5,
   },
@@ -561,31 +811,136 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '800',
     color: '#FFFFFF',
+    lineHeight: 24,
     marginBottom: 6,
   },
   heroDesc: {
     fontSize: 12,
-    color: '#CBD5E1',
+    color: '#DDD6FE',
     lineHeight: 18,
   },
-  filterSection: {
+  // Section B: Quote Your Budget Card
+  budgetCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: Radii.lg,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1.5,
+    borderColor: '#E9D5FF',
+    ...Shadows.sm,
+  },
+  budgetHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginBottom: 14,
+  },
+  budgetIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#EDE9FE',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  budgetTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#1E1B4B',
+  },
+  budgetSubtitle: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    lineHeight: 17,
+    marginTop: 2,
+  },
+  fieldGroup: {
     marginBottom: 12,
   },
-  filterLabel: {
-    fontSize: 11,
+  fieldLabel: {
+    fontSize: 12,
     fontWeight: '700',
-    color: Colors.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    color: Colors.textPrimary,
+    marginBottom: 5,
+  },
+  budgetInputWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: Radii.button,
+    paddingHorizontal: 12,
+  },
+  currencyPrefix: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#7C3AED',
+    marginRight: 6,
+  },
+  budgetInput: {
+    flex: 1,
+    paddingVertical: 10,
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+  },
+  textInput: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: Radii.button,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    fontSize: 13,
+    color: Colors.textPrimary,
+  },
+  textArea: {
+    height: 70,
+    textAlignVertical: 'top',
+  },
+  budgetSubmitBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#7C3AED',
+    paddingVertical: 12,
+    borderRadius: Radii.button,
+    marginTop: 4,
+    ...Shadows.sm,
+  },
+  budgetSubmitBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 14,
+  },
+  // Section A Header
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 8,
   },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: Colors.textPrimary,
+  },
+  sectionSubtitle: {
+    fontSize: 11,
+    color: Colors.textSecondary,
+    marginTop: 1,
+  },
+  filterSection: {
+    marginBottom: 10,
+  },
   filterList: {
-    paddingRight: 16,
+    paddingVertical: 4,
     gap: 8,
   },
   filterChip: {
     paddingHorizontal: 14,
-    paddingVertical: 7,
+    paddingVertical: 6,
     borderRadius: 20,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
@@ -598,7 +953,7 @@ const styles = StyleSheet.create({
   filterChipText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#475569',
+    color: Colors.textSecondary,
   },
   filterChipTextActive: {
     color: '#FFFFFF',
@@ -611,68 +966,66 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2E8F0',
     paddingHorizontal: 12,
-    paddingVertical: Platform.OS === 'ios' ? 10 : 6,
-    marginBottom: 16,
+    paddingVertical: 8,
+    marginBottom: 14,
   },
   searchInput: {
     flex: 1,
     fontSize: 13,
-    color: '#1E293B',
+    color: Colors.textPrimary,
   },
   creatorList: {
-    gap: 16,
+    gap: 12,
   },
   creatorCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: Radii.lg,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    padding: 16,
+    padding: 14,
     ...Shadows.sm,
   },
   creatorTop: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
     gap: 12,
-    marginBottom: 12,
   },
   avatarWrap: {
     position: 'relative',
   },
   avatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#EDE9FE',
+    width: 52,
+    height: 52,
+    borderRadius: 26,
   },
   avatarFallback: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: Colors.brandPrimary,
-    alignItems: 'center',
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: Colors.brandPrimaryLight,
     justifyContent: 'center',
+    alignItems: 'center',
   },
   avatarFallbackText: {
-    color: '#FFFFFF',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '800',
+    color: Colors.brandPrimaryDark,
   },
   verifiedIcon: {
     position: 'absolute',
     bottom: -2,
     right: -2,
-    backgroundColor: '#0EA5E9',
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    alignItems: 'center',
+    backgroundColor: '#0284C7',
+    borderRadius: 8,
+    width: 16,
+    height: 16,
     justifyContent: 'center',
-    borderWidth: 2,
+    alignItems: 'center',
+    borderWidth: 1.5,
     borderColor: '#FFFFFF',
   },
   creatorInfo: {
     flex: 1,
+    minWidth: 0,
   },
   nameRow: {
     flexDirection: 'row',
@@ -683,13 +1036,12 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: '#0F172A',
-    flexShrink: 1,
   },
   featuredBadge: {
     backgroundColor: '#FEF3C7',
-    borderRadius: 4,
     paddingHorizontal: 5,
     paddingVertical: 1,
+    borderRadius: 4,
   },
   featuredBadgeText: {
     fontSize: 9,
@@ -705,116 +1057,151 @@ const styles = StyleSheet.create({
   creatorTagline: {
     fontSize: 11,
     color: Colors.textSecondary,
-    lineHeight: 16,
+    lineHeight: 15,
     marginTop: 3,
   },
   statsStrip: {
     flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#F8FAFC',
     borderRadius: Radii.md,
-    borderWidth: 1,
-    borderColor: '#F1F5F9',
-    paddingVertical: 10,
+    paddingVertical: 8,
     paddingHorizontal: 12,
-    marginBottom: 12,
+    marginTop: 12,
+    justifyContent: 'space-around',
   },
   statBox: {
-    flex: 1,
     alignItems: 'center',
   },
   statBoxLabel: {
     fontSize: 10,
     color: Colors.textSecondary,
-    marginBottom: 2,
+    textTransform: 'uppercase',
   },
   statBoxValue: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '800',
     color: '#0F172A',
+    marginTop: 2,
   },
   statDivider: {
     width: 1,
+    height: 20,
     backgroundColor: '#E2E8F0',
-    marginVertical: 2,
   },
   destinationTags: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 14,
+    marginTop: 10,
   },
   destinationTagsText: {
     fontSize: 11,
-    color: '#475569',
-    fontWeight: '500',
+    color: Colors.textSecondary,
   },
   creatorActions: {
     flexDirection: 'row',
     gap: 8,
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
   },
   profileBtn: {
     flex: 1,
+    paddingVertical: 9,
+    borderRadius: Radii.button,
     borderWidth: 1,
     borderColor: '#CBD5E1',
-    borderRadius: Radii.md,
-    paddingVertical: 9,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
   },
   profileBtnText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#334155',
+    color: Colors.textPrimary,
   },
   collabBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.brandPrimary,
-    borderRadius: Radii.md,
     paddingVertical: 9,
     paddingHorizontal: 16,
+    borderRadius: Radii.button,
+    backgroundColor: Colors.brandPrimary,
   },
   collabBtnText: {
     fontSize: 12,
     fontWeight: '700',
     color: '#FFFFFF',
   },
-  myCollabHeader: {
+  // My Requests Tab
+  myRequestsHeader: {
     marginBottom: 14,
   },
-  sectionHeaderTitle: {
-    fontSize: 16,
+  myRequestsTitle: {
+    fontSize: 17,
     fontWeight: '800',
-    color: '#0F172A',
+    color: Colors.textPrimary,
   },
-  sectionHeaderDesc: {
+  myRequestsDesc: {
     fontSize: 12,
     color: Colors.textSecondary,
-    marginTop: 3,
-    lineHeight: 18,
+    marginTop: 2,
+    lineHeight: 16,
   },
   requestsList: {
-    gap: 14,
+    gap: 12,
   },
   requestCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: Radii.lg,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    padding: 16,
+    padding: 14,
     ...Shadows.sm,
   },
   requestTop: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    marginBottom: 10,
+  },
+  requestIdBadge: {
+    fontSize: 10,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    fontWeight: '700',
+    color: '#7C3AED',
+    backgroundColor: '#EDE9FE',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  categoryTag: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  categoryTagBudget: {
+    backgroundColor: '#FEF3C7',
+  },
+  categoryTagDirect: {
+    backgroundColor: '#E0E7FF',
+  },
+  categoryTagText: {
+    fontSize: 9,
+    fontWeight: '700',
+  },
+  categoryTagTextBudget: {
+    color: '#B45309',
+  },
+  categoryTagTextDirect: {
+    color: '#4338CA',
   },
   requestInfluencerName: {
     fontSize: 15,
     fontWeight: '700',
     color: '#0F172A',
+    marginTop: 4,
   },
   requestHandle: {
     fontSize: 12,
@@ -838,7 +1225,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
     borderRadius: Radii.md,
     padding: 10,
-    marginBottom: 12,
+    marginBottom: 8,
     gap: 12,
   },
   detailItem: {
@@ -856,13 +1243,43 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   detailItemPrice: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '800',
     color: Colors.brandPrimary,
-    marginTop: 1,
+    marginTop: 2,
+  },
+  assignedBox: {
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#DCFCE7',
+    borderRadius: Radii.sm,
+    padding: 8,
+    marginBottom: 8,
+    gap: 4,
+  },
+  assignedText: {
+    fontSize: 11,
+    color: '#166534',
+  },
+  messageBox: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: Radii.sm,
+    padding: 8,
+    marginBottom: 8,
+  },
+  messageBoxLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: Colors.textSecondary,
+    marginBottom: 2,
+  },
+  messageBoxText: {
+    fontSize: 11,
+    color: '#334155',
+    lineHeight: 16,
   },
   stepperContainer: {
-    marginVertical: 8,
+    marginVertical: 6,
     paddingVertical: 6,
     borderTopWidth: 1,
     borderTopColor: '#F1F5F9',
@@ -915,7 +1332,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F5F3FF',
     borderRadius: Radii.sm,
     padding: 10,
-    marginTop: 8,
+    marginTop: 6,
   },
   adminNotesText: {
     flex: 1,
@@ -929,7 +1346,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FDF2F8',
     borderRadius: Radii.sm,
     padding: 10,
-    marginTop: 8,
+    marginTop: 6,
   },
   postLinkText: {
     fontSize: 12,
@@ -939,11 +1356,11 @@ const styles = StyleSheet.create({
   requestFooter: {
     borderTopWidth: 1,
     borderTopColor: '#F1F5F9',
-    marginTop: 12,
-    paddingTop: 8,
+    marginTop: 8,
+    paddingTop: 6,
   },
   requestFooterDate: {
-    fontSize: 11,
+    fontSize: 10,
     color: Colors.textSecondary,
   },
   loadingBox: {
@@ -956,7 +1373,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   emptyBox: {
-    padding: 40,
+    padding: 36,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#FFFFFF',

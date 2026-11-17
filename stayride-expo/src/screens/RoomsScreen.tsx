@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,10 @@ import {
   TextInput,
   Platform,
   Alert,
+  Image,
+  ActivityIndicator,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,6 +26,7 @@ import { BookingItem } from '../components/BookingItem';
 import { PlatformSelect } from '../components/PlatformSelect';
 import { Header } from '../components/Header';
 import { Booking, Room, RoomStatus } from '../types';
+import { uploadPhoto, photoUrl } from '../services/photoUploader';
 
 const FLOOR_DEFAULTS = [
   { label: 'Ground Floor', value: 'Ground Floor', icon: 'layers-outline' as const },
@@ -59,9 +63,20 @@ export const RoomsScreen: React.FC = () => {
   const route = useRoute<any>();
   const { rooms, bookings, countRooms, createRoom, updateRoom, deleteRoom } = useStayRide();
 
-  const [activeTab, setActiveTab] = useState<'rooms' | 'bookings' | 'calendar'>(
-    route.params?.initialTab === 'bookings' ? 'bookings' : route.params?.initialTab === 'calendar' ? 'calendar' : 'rooms'
+  const [activeTab, setActiveTab] = useState<'calendar' | 'bookings' | 'rooms'>(
+    route.params?.initialTab === 'rooms'
+      ? 'rooms'
+      : route.params?.initialTab === 'bookings'
+      ? 'bookings'
+      : 'calendar'
   );
+
+  useEffect(() => {
+    if (route.params?.initialTab) {
+      setActiveTab(route.params.initialTab);
+    }
+  }, [route.params?.initialTab]);
+
   const [roomFilter, setRoomFilter] = useState<string>('ALL');
   const [bookingFilter, setBookingFilter] = useState<string>('ALL');
 
@@ -81,6 +96,8 @@ export const RoomsScreen: React.FC = () => {
   const [editBedCount, setEditBedCount] = useState('4');
   const [editBedLabels, setEditBedLabels] = useState('');
   const [editNote, setEditNote] = useState('');
+  const [editPhoto, setEditPhoto] = useState('');
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   // Collect all unique custom floors already present in the homestay's rooms
   const existingFloors = Array.from(new Set(rooms.map((r) => r.floor).filter(Boolean)));
@@ -131,6 +148,7 @@ export const RoomsScreen: React.FC = () => {
       setEditBedCount(room.bedCount ? String(room.bedCount) : '4');
       setEditBedLabels(room.beds ? room.beds.join(', ') : '');
       setEditNote(room.note || '');
+      setEditPhoto(room.photo || (room.photos && room.photos.length > 0 ? room.photos[0] : '') || '');
     } else {
       setSelectedRoom(null);
       setEditNumber('');
@@ -146,8 +164,36 @@ export const RoomsScreen: React.FC = () => {
       setEditBedCount('4');
       setEditBedLabels('');
       setEditNote('');
+      setEditPhoto('');
     }
     setModalVisible(true);
+  };
+
+  const pickRoomPhoto = async () => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permission needed', 'Please allow photo gallery access to pick room photos.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [16, 9],
+        quality: 0.75,
+      });
+
+      if (result.canceled || !result.assets?.length) return;
+      const asset = result.assets[0];
+
+      setUploadingPhoto(true);
+      const url = await uploadPhoto(asset);
+      setEditPhoto(url);
+    } catch (e: any) {
+      Alert.alert('Upload Failed', e?.message || 'Could not upload room photo.');
+    } finally {
+      setUploadingPhoto(false);
+    }
   };
 
   const handleSaveRoom = async () => {
@@ -177,6 +223,8 @@ export const RoomsScreen: React.FC = () => {
       bedCount: bedCountNum,
       beds: bedsArray,
       note: editNote.trim(),
+      photo: editPhoto.trim() || undefined,
+      photos: editPhoto.trim() ? [editPhoto.trim()] : [],
     };
 
     if (selectedRoom) {
@@ -253,12 +301,12 @@ export const RoomsScreen: React.FC = () => {
       {/* Top Segmented Button Toggle */}
       <View style={styles.toggleRow}>
         <TouchableOpacity
-          style={[styles.toggleBtn, activeTab === 'rooms' && styles.toggleBtnActive]}
-          onPress={() => setActiveTab('rooms')}
+          style={[styles.toggleBtn, activeTab === 'calendar' && styles.toggleBtnActive]}
+          onPress={() => setActiveTab('calendar')}
           activeOpacity={0.8}
         >
-          <Text style={[styles.toggleBtnText, activeTab === 'rooms' && styles.toggleBtnTextActive]}>
-            Rooms
+          <Text style={[styles.toggleBtnText, activeTab === 'calendar' && styles.toggleBtnTextActive]}>
+            Calendar
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -271,12 +319,12 @@ export const RoomsScreen: React.FC = () => {
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.toggleBtn, activeTab === 'calendar' && styles.toggleBtnActive]}
-          onPress={() => setActiveTab('calendar')}
+          style={[styles.toggleBtn, activeTab === 'rooms' && styles.toggleBtnActive]}
+          onPress={() => setActiveTab('rooms')}
           activeOpacity={0.8}
         >
-          <Text style={[styles.toggleBtnText, activeTab === 'calendar' && styles.toggleBtnTextActive]}>
-            Calendar
+          <Text style={[styles.toggleBtnText, activeTab === 'rooms' && styles.toggleBtnTextActive]}>
+            Rooms
           </Text>
         </TouchableOpacity>
       </View>
@@ -403,6 +451,55 @@ export const RoomsScreen: React.FC = () => {
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false}>
+              {/* Room Photo (Optional) */}
+              <View style={styles.photoUploadContainer}>
+                <Text style={styles.modalLabel}>Room Photo (Optional)</Text>
+                {uploadingPhoto ? (
+                  <View style={styles.photoLoadingBox}>
+                    <ActivityIndicator size="small" color={Colors.brandPrimary} />
+                    <Text style={styles.photoLoadingText}>Uploading photo to Cloudinary...</Text>
+                  </View>
+                ) : editPhoto ? (
+                  <View style={styles.photoPreviewCard}>
+                    <Image
+                      source={{ uri: photoUrl(editPhoto, 600) }}
+                      style={styles.photoPreviewImage}
+                      resizeMode="cover"
+                    />
+                    <View style={styles.photoActionOverlay}>
+                      <TouchableOpacity
+                        style={styles.photoActionButton}
+                        onPress={pickRoomPhoto}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons name="camera" size={14} color="#FFFFFF" />
+                        <Text style={styles.photoActionText}>Change</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.photoActionButton, styles.photoDeleteButton]}
+                        onPress={() => setEditPhoto('')}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons name="trash-outline" size={14} color="#FFFFFF" />
+                        <Text style={styles.photoActionText}>Remove</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.photoPickArea}
+                    onPress={pickRoomPhoto}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.photoPickIconCircle}>
+                      <Ionicons name="camera-outline" size={20} color={Colors.brandPrimary} />
+                    </View>
+                    <Text style={styles.photoPickTitle}>Add Room Photo</Text>
+                    <Text style={styles.photoPickSub}>JPG, PNG, WebP up to 5MB</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
               {/* Row 1: Room Number (50%) + Floor (50%) */}
               <View style={styles.grid5050}>
                 <View style={styles.col50}>
@@ -533,13 +630,6 @@ export const RoomsScreen: React.FC = () => {
                 </View>
               )}
 
-              {/* Row 3: Availability (100%) */}
-              <PlatformSelect
-                label="Availability"
-                value={editStatus}
-                options={ROOM_STATUS_OPTIONS}
-                onSelect={(val) => setEditStatus(val as RoomStatus)}
-              />
               {selectedRoom && selectedRoom.status !== 'MAINTENANCE' && (
                 <Text style={styles.statusHelperText}>
                   Current live status: {selectedRoom.status.toLowerCase()} (managed automatically by bookings)
@@ -811,5 +901,87 @@ const styles = StyleSheet.create({
   saveBtnText: {
     color: Colors.white,
     fontWeight: 'bold',
+  },
+  photoUploadContainer: {
+    marginBottom: 12,
+  },
+  photoPickArea: {
+    height: 100,
+    borderRadius: Radii.card,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: '#C084FC',
+    backgroundColor: '#FAF5FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 10,
+  },
+  photoPickIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(168, 85, 247, 0.12)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  photoPickTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.brandPrimaryDark,
+  },
+  photoPickSub: {
+    fontSize: 11,
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
+  photoLoadingBox: {
+    height: 100,
+    borderRadius: Radii.card,
+    backgroundColor: '#FAF5FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+  },
+  photoLoadingText: {
+    fontSize: 12,
+    color: Colors.brandPrimaryDark,
+    fontWeight: '600',
+  },
+  photoPreviewCard: {
+    height: 125,
+    borderRadius: Radii.card,
+    overflow: 'hidden',
+    position: 'relative',
+    borderWidth: 1,
+    borderColor: Colors.divider,
+  },
+  photoPreviewImage: {
+    width: '100%',
+    height: '100%',
+  },
+  photoActionOverlay: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
+    flexDirection: 'row',
+    gap: 8,
+  },
+  photoActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+  },
+  photoDeleteButton: {
+    backgroundColor: 'rgba(220, 38, 38, 0.85)',
+  },
+  photoActionText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '600',
   },
 });

@@ -221,6 +221,11 @@ export class InfluencerController {
   static async submitCollaborationRequest(req: Request, res: Response) {
     try {
       const {
+        requestType = "INFLUENCER_COLLABORATION",
+        budget,
+        preferredDestination,
+        promotionRequirements,
+        additionalMessage,
         influencerId,
         homestayName,
         homestayLocation,
@@ -233,15 +238,6 @@ export class InfluencerController {
         proposedDates,
         tenantKey,
       } = req.body;
-
-      if (!influencerId || !mongoose.Types.ObjectId.isValid(influencerId)) {
-        return res.status(400).json({ success: false, error: "Valid influencer ID is required" });
-      }
-
-      const influencer = await Influencer.findById(influencerId);
-      if (!influencer) {
-        return res.status(404).json({ success: false, error: "Influencer not found" });
-      }
 
       if (!homestayName || !homestayName.trim()) {
         return res.status(400).json({ success: false, error: "Homestay name is required" });
@@ -256,7 +252,70 @@ export class InfluencerController {
         return res.status(400).json({ success: false, error: "Valid 10-digit WhatsApp phone number is required" });
       }
 
+      // Handle Budget-Based Promotion Request
+      if (requestType === "BUDGET_BASED_PROMOTION") {
+        const numBudget = Number(budget);
+        if (isNaN(numBudget) || numBudget <= 0) {
+          return res.status(400).json({
+            success: false,
+            error: "Please enter a valid promotion budget in INR greater than zero",
+          });
+        }
+
+        const request = await CollaborationRequest.create({
+          requestType: "BUDGET_BASED_PROMOTION",
+          budget: numBudget,
+          preferredDestination: preferredDestination?.trim() || "",
+          promotionRequirements: promotionRequirements?.trim() || "",
+          additionalMessage: additionalMessage?.trim() || "",
+          tenantKey: tenantKey || (req as any).user?.tenantKey || "",
+          ownerId: (req as any).user?.id || "",
+          homestayId: homestayId || "",
+          homestayName: homestayName.trim(),
+          homestayLocation: homestayLocation || "",
+          ownerName: ownerName.trim(),
+          ownerPhone: cleanPhone,
+          ownerEmail: ownerEmail?.trim() || "",
+          status: "NEW",
+          statusHistory: [
+            {
+              status: "NEW",
+              updatedAt: new Date(),
+              note: `Budget-based promotion request of ₹${numBudget.toLocaleString()} submitted by owner.`,
+              updatedBy: ownerName.trim(),
+            },
+          ],
+        });
+
+        // Notify admin
+        try {
+          logger.info(
+            `[BUDGET_PROMOTION_REQUEST] ${homestayName.trim()} submitted budget of ₹${numBudget} for ${preferredDestination || "homestay"}. RequestId: ${request.requestId} (_id: ${request._id})`
+          );
+        } catch (notifyErr: any) {
+          logger.warn("Admin notification warning:", notifyErr?.message || String(notifyErr));
+        }
+
+        return res.status(201).json({
+          success: true,
+          message:
+            "Your promotion request has been submitted! Our StayCabs team will find suitable influencers within your budget and contact you.",
+          data: request,
+        });
+      }
+
+      // Handle Direct Influencer Collaboration Request
+      if (!influencerId || !mongoose.Types.ObjectId.isValid(influencerId)) {
+        return res.status(400).json({ success: false, error: "Valid influencer ID is required" });
+      }
+
+      const influencer = await Influencer.findById(influencerId);
+      if (!influencer) {
+        return res.status(404).json({ success: false, error: "Influencer not found" });
+      }
+
       const request = await CollaborationRequest.create({
+        requestType: "INFLUENCER_COLLABORATION",
         influencerId: influencer._id,
         influencerName: influencer.name,
         influencerHandle: influencer.instagramHandle,
@@ -276,10 +335,10 @@ export class InfluencerController {
         },
         customRequirements: customRequirements?.trim() || "",
         proposedDates: proposedDates?.trim() || "",
-        status: "PENDING",
+        status: "NEW",
         statusHistory: [
           {
-            status: "PENDING",
+            status: "NEW",
             updatedAt: new Date(),
             note: "Collaboration request submitted by homestay owner.",
             updatedBy: ownerName.trim(),
@@ -289,19 +348,21 @@ export class InfluencerController {
 
       // Notify admin
       try {
-        logger.info(`[COLLABORATION_REQUEST] ${homestayName.trim()} invited ${influencer.name} (${influencer.instagramHandle}) for collaboration. RequestId: ${request._id}`);
+        logger.info(
+          `[COLLABORATION_REQUEST] ${homestayName.trim()} invited ${influencer.name} (${influencer.instagramHandle}) for collaboration. RequestId: ${request.requestId} (_id: ${request._id})`
+        );
       } catch (notifyErr: any) {
         logger.warn("Admin notification warning:", notifyErr?.message || String(notifyErr));
       }
 
-      res.status(201).json({
+      return res.status(201).json({
         success: true,
         message: "Collaboration request submitted successfully. StayCabs team will contact you shortly.",
         data: request,
       });
     } catch (err: any) {
       logger.error("Error creating collaboration request:", err);
-      res.status(500).json({ success: false, error: err.message || "Failed to submit request" });
+      return res.status(500).json({ success: false, error: err.message || "Failed to submit request" });
     }
   }
 

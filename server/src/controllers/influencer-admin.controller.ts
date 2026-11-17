@@ -275,12 +275,16 @@ export class InfluencerAdminController {
   // GET /api/v1/admin/collaboration-requests
   static async listCollaborationRequests(req: Request, res: Response) {
     try {
-      const { status, search, influencerId, page = 1, limit = 50 } = req.query;
+      const { status, search, influencerId, requestType, page = 1, limit = 50 } = req.query;
 
       const query: any = {};
 
       if (status && typeof status === "string" && status.trim() !== "ALL") {
         query.status = status.trim().toUpperCase();
+      }
+
+      if (requestType && typeof requestType === "string" && requestType.trim() !== "ALL") {
+        query.requestType = requestType.trim().toUpperCase();
       }
 
       if (influencerId && typeof influencerId === "string" && mongoose.Types.ObjectId.isValid(influencerId)) {
@@ -290,24 +294,30 @@ export class InfluencerAdminController {
       if (search && typeof search === "string" && search.trim()) {
         const s = search.trim();
         query.$or = [
+          { requestId: { $regex: s, $options: "i" } },
           { homestayName: { $regex: s, $options: "i" } },
+          { homestayLocation: { $regex: s, $options: "i" } },
           { ownerName: { $regex: s, $options: "i" } },
           { ownerPhone: { $regex: s, $options: "i" } },
           { influencerName: { $regex: s, $options: "i" } },
           { influencerHandle: { $regex: s, $options: "i" } },
+          { preferredDestination: { $regex: s, $options: "i" } },
+          { promotionRequirements: { $regex: s, $options: "i" } },
         ];
       }
 
       const skip = (Math.max(1, Number(page)) - 1) * Math.min(100, Number(limit));
 
-      const [requests, total, pendingCount, confirmedCount] = await Promise.all([
+      const [requests, total, pendingCount, newCount, confirmedCount, budgetCount] = await Promise.all([
         CollaborationRequest.find(query)
           .sort({ createdAt: -1 })
           .skip(skip)
           .limit(Math.min(100, Number(limit))),
         CollaborationRequest.countDocuments(query),
         CollaborationRequest.countDocuments({ status: "PENDING" }),
+        CollaborationRequest.countDocuments({ status: "NEW" }),
         CollaborationRequest.countDocuments({ status: "CONFIRMED" }),
+        CollaborationRequest.countDocuments({ requestType: "BUDGET_BASED_PROMOTION" }),
       ]);
 
       res.json({
@@ -316,7 +326,9 @@ export class InfluencerAdminController {
         stats: {
           total,
           pending: pendingCount,
+          new: newCount,
           confirmed: confirmedCount,
+          budgetRequests: budgetCount,
         },
         pagination: {
           total,
@@ -396,6 +408,9 @@ export class InfluencerAdminController {
         confirmedShootingDate,
         deliveredPostUrl,
         statusNote,
+        assignedInfluencerId,
+        assignedInfluencerName,
+        agreedPrice,
       } = req.body;
 
       const request = await CollaborationRequest.findById(id);
@@ -409,6 +424,17 @@ export class InfluencerAdminController {
       if (negotiatedPrice !== undefined) request.negotiatedPrice = Number(negotiatedPrice);
       if (confirmedShootingDate !== undefined) request.confirmedShootingDate = confirmedShootingDate;
       if (deliveredPostUrl !== undefined) request.deliveredPostUrl = deliveredPostUrl;
+      if (agreedPrice !== undefined) request.agreedPrice = Number(agreedPrice);
+      if (assignedInfluencerName !== undefined) request.assignedInfluencerName = assignedInfluencerName;
+      if (assignedInfluencerId !== undefined) {
+        request.assignedInfluencerId = assignedInfluencerId || undefined;
+        if (assignedInfluencerId && mongoose.Types.ObjectId.isValid(assignedInfluencerId)) {
+          const inf = await Influencer.findById(assignedInfluencerId);
+          if (inf) {
+            request.assignedInfluencerName = inf.name;
+          }
+        }
+      }
 
       // Add status change entry to history
       if (status && status !== oldStatus) {

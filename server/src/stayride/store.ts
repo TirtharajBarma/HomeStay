@@ -9,6 +9,8 @@ export interface StayRideRoom {
   roomType?: 'PRIVATE' | 'DORM';
   bedCount?: number;
   beds?: string[];
+  photo?: string;
+  photos?: string[];
 }
 
 export interface StayRideGuest {
@@ -246,7 +248,7 @@ const DAY = 86400000;
 
 // Client-writable fields per entity. Everything else (ids, money, status) is server-owned.
 export const WRITABLE = {
-  room: ['number', 'type', 'floor', 'price', 'status', 'note', 'roomType', 'bedCount', 'beds'],
+  room: ['number', 'type', 'floor', 'price', 'status', 'note', 'roomType', 'bedCount', 'beds', 'photo', 'photos'],
   guest: ['name', 'phone', 'email', 'notes', 'marketingConsent'],
   booking: ['guestId', 'guestName', 'phone', 'checkIn', 'checkOut', 'roomNumber', 'bedNumber', 'guests', 'amount', 'source', 'paid'],
   driver: ['name', 'phone', 'vehicle', 'vehicleType', 'seats', 'rating', 'area', 'trips', 'available', 'active', 'plate'],
@@ -287,6 +289,7 @@ export const FIELDS: Record<string, Record<string, FieldRule>> = {
   room: {
     number: S(20), type: S(60), floor: S(30), price: MONEY, status: E(ROOM_STATUSES), note: S(300),
     roomType: E(ROOM_TYPES), bedCount: N({ int: true, max: 100, nullable: true }), beds: { t: 'strs', maxItems: 100, max: 30 },
+    photo: S(500), photos: { t: 'strs', maxItems: 10, max: 500 },
   },
   guest: { name: S(100), phone: S(20), email: S(120), notes: S(1000), marketingConsent: B },
   booking: {

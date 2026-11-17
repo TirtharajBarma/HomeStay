@@ -613,20 +613,68 @@ export const FindDriverScreen: React.FC = () => {
           </Section>
         ) : (
           <Section icon="car" title="Vehicle Class">
-            <PlatformSelect
-              label="Vehicle Class"
-              value={vehicleType}
-              options={vehicleOptions().map((v) => ({
-                label: `${v.label} (${seatsFor(v.value)} seats)`,
-                value: v.value,
-                icon: 'car-outline' as const,
-                subLabel: `Est. fare around ${inr(v.estFare)}`,
-              }))}
-              onSelect={(v) => {
-                setVehicleType(v as VehicleType);
-                setPassengers((p) => Math.min(p, seatsFor(v)));
-              }}
-            />
+            <View style={styles.vehicleCardsList}>
+              {vehicleOptions().map((v) => {
+                const isSelected = vehicleType === v.value;
+                const seats = seatsFor(v.value);
+                const iconName: keyof typeof Ionicons.glyphMap =
+                  v.value === 'Hatchback'
+                    ? 'car-sport'
+                    : v.value === 'Sedan'
+                    ? 'car'
+                    : v.value === 'SUV'
+                    ? 'trail-sign'
+                    : v.value === '7-seater'
+                    ? 'people'
+                    : 'bus';
+
+                return (
+                  <TouchableOpacity
+                    key={v.value}
+                    style={[styles.vehicleCard, isSelected && styles.vehicleCardActive]}
+                    onPress={() => {
+                      setVehicleType(v.value as VehicleType);
+                      setPassengers((p) => Math.min(p, seats));
+                    }}
+                    activeOpacity={0.75}
+                  >
+                    <View style={[styles.vehicleIconBadge, isSelected && styles.vehicleIconBadgeActive]}>
+                      <Ionicons
+                        name={iconName}
+                        size={22}
+                        color={isSelected ? Colors.brandPrimaryDark : Colors.textPrimary}
+                      />
+                    </View>
+
+                    <View style={styles.vehicleCardInfo}>
+                      <View style={styles.vehicleNameRow}>
+                        <Text style={[styles.vehicleName, isSelected && styles.vehicleNameActive]}>
+                          {v.value}
+                        </Text>
+                        <View style={styles.seatsPill}>
+                          <Ionicons name="person" size={10} color="#64748B" />
+                          <Text style={styles.seatsPillText}>{seats} seats</Text>
+                        </View>
+                      </View>
+                      <Text style={styles.vehicleDesc} numberOfLines={1}>
+                        {v.label}
+                      </Text>
+                    </View>
+
+                    <View style={styles.vehicleFareCol}>
+                      <Text style={[styles.vehicleFare, isSelected && styles.vehicleFareActive]}>
+                        {inr(v.estFare)}
+                      </Text>
+                      <Text style={styles.vehicleFareEst}>est. fare</Text>
+                    </View>
+
+                    <View style={[styles.vehicleRadio, isSelected && styles.vehicleRadioActive]}>
+                      {isSelected && <View style={styles.vehicleRadioInner} />}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </Section>
         )}
       </FormScroll>
@@ -947,5 +995,110 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: 'center',
     lineHeight: 18,
+  },
+  vehicleCardsList: {
+    gap: 8,
+    marginTop: 4,
+  },
+  vehicleCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    gap: 10,
+    ...Shadows.sm,
+  },
+  vehicleCardActive: {
+    borderColor: Colors.brandPrimary,
+    backgroundColor: '#FAF5FF',
+    shadowColor: Colors.brandPrimary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  vehicleIconBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  vehicleIconBadgeActive: {
+    backgroundColor: 'rgba(124, 58, 237, 0.12)',
+  },
+  vehicleCardInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+  vehicleNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  vehicleName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+  },
+  vehicleNameActive: {
+    color: Colors.brandPrimaryDark,
+  },
+  seatsPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  seatsPillText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#475569',
+  },
+  vehicleDesc: {
+    fontSize: 11,
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
+  vehicleFareCol: {
+    alignItems: 'flex-end',
+  },
+  vehicleFare: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: Colors.textPrimary,
+  },
+  vehicleFareActive: {
+    color: Colors.brandPrimaryDark,
+  },
+  vehicleFareEst: {
+    fontSize: 10,
+    color: Colors.textSecondary,
+  },
+  vehicleRadio: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: '#CBD5E1',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  vehicleRadioActive: {
+    borderColor: Colors.brandPrimary,
+  },
+  vehicleRadioInner: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Colors.brandPrimary,
   },
 });

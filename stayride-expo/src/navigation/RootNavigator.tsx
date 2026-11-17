@@ -80,6 +80,7 @@ export type MainTabParamList = {
   Rooms: undefined;
   Guests: undefined;
   Cabs: undefined;
+  Promote: undefined;
   More: undefined;
 };
 
@@ -136,6 +137,8 @@ const MainTabs: React.FC = () => {
             iconName = focused ? 'people' : 'people-outline';
           } else if (route.name === 'Cabs') {
             iconName = focused ? 'car' : 'car-outline';
+          } else if (route.name === 'Promote') {
+            iconName = focused ? 'megaphone' : 'megaphone-outline';
           } else if (route.name === 'More') {
             iconName = focused ? 'settings' : 'settings-outline';
           }
@@ -148,6 +151,7 @@ const MainTabs: React.FC = () => {
       <Tab.Screen name="Rooms" component={RoomsScreen} />
       <Tab.Screen name="Guests" component={GuestsScreen} />
       <Tab.Screen name="Cabs" component={CabsScreen} />
+      <Tab.Screen name="Promote" component={PromoteScreen} options={{ tabBarLabel: 'Promote' }} />
       <Tab.Screen name="More" component={MoreScreen} options={{ tabBarLabel: 'Settings' }} />
     </Tab.Navigator>
   );

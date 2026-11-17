@@ -12,6 +12,8 @@ export interface Room {
   roomType?: 'PRIVATE' | 'DORM';
   bedCount?: number;
   beds?: string[];
+  photo?: string;
+  photos?: string[];
 }
 
 export interface Guest {
@@ -317,18 +319,31 @@ export interface Influencer {
 }
 
 export type CollaborationStatus =
+  | 'NEW'
   | 'PENDING'
   | 'CONTACTED'
+  | 'FINDING INFLUENCERS'
   | 'IN_NEGOTIATION'
+  | 'PROPOSAL SENT'
   | 'CONFIRMED'
   | 'COMPLETED'
+  | 'REJECTED'
   | 'CANCELLED';
 
 export interface CollaborationRequest {
   _id: string;
-  influencerId: any;
-  influencerName: string;
-  influencerHandle: string;
+  requestId?: string;
+  requestType?: 'INFLUENCER_COLLABORATION' | 'BUDGET_BASED_PROMOTION';
+  budget?: number;
+  preferredDestination?: string;
+  promotionRequirements?: string;
+  additionalMessage?: string;
+  assignedInfluencerId?: any;
+  assignedInfluencerName?: string;
+  agreedPrice?: number;
+  influencerId?: any;
+  influencerName?: string;
+  influencerHandle?: string;
   influencerPhoto?: string;
   homestayName: string;
   homestayLocation?: string;

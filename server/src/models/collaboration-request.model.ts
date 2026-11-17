@@ -1,17 +1,34 @@
 import mongoose, { Schema, Document } from "mongoose";
 
 export type CollaborationStatus =
+  | "NEW"
   | "PENDING"
   | "CONTACTED"
+  | "FINDING INFLUENCERS"
   | "IN_NEGOTIATION"
+  | "PROPOSAL SENT"
   | "CONFIRMED"
   | "COMPLETED"
+  | "REJECTED"
   | "CANCELLED";
 
+export type CollaborationRequestType =
+  | "INFLUENCER_COLLABORATION"
+  | "BUDGET_BASED_PROMOTION";
+
 export interface ICollaborationRequest extends Document {
-  influencerId: mongoose.Types.ObjectId;
-  influencerName: string;
-  influencerHandle: string;
+  requestId: string;
+  requestType: CollaborationRequestType;
+  budget?: number;
+  preferredDestination?: string;
+  promotionRequirements?: string;
+  additionalMessage?: string;
+  assignedInfluencerId?: mongoose.Types.ObjectId;
+  assignedInfluencerName?: string;
+  agreedPrice?: number;
+  influencerId?: mongoose.Types.ObjectId;
+  influencerName?: string;
+  influencerHandle?: string;
   influencerPhoto?: string;
   ownerId?: string;
   tenantKey?: string;
@@ -45,14 +62,34 @@ export interface ICollaborationRequest extends Document {
 
 const CollaborationRequestSchema = new Schema<ICollaborationRequest>(
   {
+    requestId: {
+      type: String,
+      default: () => "REQ-" + Date.now().toString(36).toUpperCase() + "-" + Math.floor(100 + Math.random() * 900),
+      unique: true,
+      sparse: true,
+      index: true,
+    },
+    requestType: {
+      type: String,
+      enum: ["INFLUENCER_COLLABORATION", "BUDGET_BASED_PROMOTION"],
+      default: "INFLUENCER_COLLABORATION",
+      index: true,
+    },
+    budget: { type: Number, default: 0 },
+    preferredDestination: { type: String, default: "", trim: true },
+    promotionRequirements: { type: String, default: "", trim: true },
+    additionalMessage: { type: String, default: "", trim: true },
+    assignedInfluencerId: { type: Schema.Types.ObjectId, ref: "Influencer" },
+    assignedInfluencerName: { type: String, default: "", trim: true },
+    agreedPrice: { type: Number },
     influencerId: {
       type: Schema.Types.ObjectId,
       ref: "Influencer",
-      required: true,
+      required: false,
       index: true,
     },
-    influencerName: { type: String, required: true, trim: true },
-    influencerHandle: { type: String, required: true, trim: true },
+    influencerName: { type: String, default: "", trim: true },
+    influencerHandle: { type: String, default: "", trim: true },
     influencerPhoto: { type: String, default: "" },
     ownerId: { type: String, default: "", index: true },
     tenantKey: { type: String, default: "", index: true },
@@ -71,8 +108,19 @@ const CollaborationRequestSchema = new Schema<ICollaborationRequest>(
     proposedDates: { type: String, default: "", trim: true },
     status: {
       type: String,
-      enum: ["PENDING", "CONTACTED", "IN_NEGOTIATION", "CONFIRMED", "COMPLETED", "CANCELLED"],
-      default: "PENDING",
+      enum: [
+        "NEW",
+        "PENDING",
+        "CONTACTED",
+        "FINDING INFLUENCERS",
+        "IN_NEGOTIATION",
+        "PROPOSAL SENT",
+        "CONFIRMED",
+        "COMPLETED",
+        "REJECTED",
+        "CANCELLED",
+      ],
+      default: "NEW",
       index: true,
     },
     negotiatedPrice: { type: Number },
@@ -92,6 +140,7 @@ const CollaborationRequestSchema = new Schema<ICollaborationRequest>(
 );
 
 CollaborationRequestSchema.index({ createdAt: -1 });
+CollaborationRequestSchema.index({ requestType: 1, createdAt: -1 });
 CollaborationRequestSchema.index({ status: 1, createdAt: -1 });
 
 export const CollaborationRequest =
