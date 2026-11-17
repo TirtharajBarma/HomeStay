@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { API_ENDPOINTS, apiFetch, readApiError } from "@/lib/api-config";
 
 export interface InfluencerPackage {
@@ -47,6 +47,25 @@ const DESTINATION_OPTIONS = [
   "Lava & Rishop",
 ];
 
+const SAMPLE_CREATOR_AVATARS = [
+  {
+    label: "Mountain Creator (M)",
+    url: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=600&q=80",
+  },
+  {
+    label: "Travel Creator (F)",
+    url: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=600&q=80",
+  },
+  {
+    label: "Filmmaker Couple",
+    url: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=600&q=80",
+  },
+  {
+    label: "Hiker / Trekker",
+    url: "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=600&q=80",
+  },
+];
+
 export function InfluencerManagement({ demo }: { demo?: boolean }) {
   const [influencers, setInfluencers] = useState<Influencer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -54,6 +73,8 @@ export function InfluencerManagement({ demo }: { demo?: boolean }) {
   const [search, setSearch] = useState("");
   const [selectedDestination, setSelectedDestination] = useState<string>("All");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Modal State (Add / Edit)
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -89,6 +110,49 @@ export function InfluencerManagement({ demo }: { demo?: boolean }) {
     ] as InfluencerPackage[],
     sampleReels: [{ title: "Featured Reel", url: "" }],
   });
+
+  function handlePhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      alert("Please select an image file (JPEG, PNG, WEBP).");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const MAX_SIZE = 400;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_SIZE) {
+            height = Math.round((height * MAX_SIZE) / width);
+            width = MAX_SIZE;
+          }
+        } else {
+          if (height > MAX_SIZE) {
+            width = Math.round((width * MAX_SIZE) / height);
+            height = MAX_SIZE;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx?.drawImage(img, 0, 0, width, height);
+
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
+        setFormData((prev) => ({ ...prev, profilePhoto: dataUrl }));
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  }
 
   async function fetchInfluencers() {
     setLoading(true);
@@ -647,15 +711,77 @@ export function InfluencerManagement({ demo }: { demo?: boolean }) {
                   />
                 </div>
 
-                <div>
-                  <label className="block text-slate-300 font-medium mb-1">Profile Photo URL</label>
-                  <input
-                    type="url"
-                    placeholder="https://images.unsplash.com/... or uploaded photo link"
-                    value={formData.profilePhoto}
-                    onChange={(e) => setFormData({ ...formData, profilePhoto: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-700 bg-[#161F2C] text-white focus:outline-none focus:border-purple-500"
-                  />
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-slate-300 font-medium">Profile Photo</label>
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-purple-400 hover:text-purple-300 cursor-pointer bg-purple-500/10 hover:bg-purple-500/20 px-2 py-0.5 rounded transition"
+                    >
+                      <span className="material-symbols-outlined text-xs">upload</span>
+                      <span>Upload from Device</span>
+                    </button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handlePhotoFile}
+                      className="hidden"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {/* Live Avatar Preview */}
+                    <div className="relative shrink-0">
+                      {formData.profilePhoto ? (
+                        <img
+                          src={formData.profilePhoto}
+                          alt="Preview"
+                          className="h-10 w-10 rounded-full object-cover border-2 border-purple-500/60"
+                        />
+                      ) : (
+                        <div className="h-10 w-10 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-500">
+                          <span className="material-symbols-outlined text-base">person</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex-1 relative">
+                      <input
+                        type="text"
+                        placeholder="Paste image URL (Unsplash, Instagram, Imgur, CDN...)"
+                        value={formData.profilePhoto.startsWith("data:") ? "[Image uploaded from computer]" : formData.profilePhoto}
+                        onChange={(e) => setFormData({ ...formData, profilePhoto: e.target.value })}
+                        className="w-full px-3 py-2 rounded-lg border border-slate-700 bg-[#161F2C] text-white text-xs focus:outline-none focus:border-purple-500"
+                      />
+                      {formData.profilePhoto && (
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, profilePhoto: "" })}
+                          className="absolute right-2 top-2 text-slate-500 hover:text-rose-400 p-0.5"
+                          title="Clear photo"
+                        >
+                          <span className="material-symbols-outlined text-xs">close</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Quick Sample Avatars */}
+                  <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                    <span className="text-[10px] text-slate-500">Or pick sample:</span>
+                    {SAMPLE_CREATOR_AVATARS.map((s, idx) => (
+                      <button
+                        type="button"
+                        key={idx}
+                        onClick={() => setFormData({ ...formData, profilePhoto: s.url })}
+                        className="text-[10px] px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
