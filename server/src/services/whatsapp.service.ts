@@ -36,7 +36,8 @@ export type WhatsAppEvent =
   | 'DRIVER_WELCOME'
   | 'PAYOUT_SETTLED_DRIVER'
   | 'PAYOUT_REJECTED_DRIVER'
-  | 'VEHICLE_UPDATED_GUEST';
+  | 'VEHICLE_UPDATED_GUEST'
+  | 'INBOX_REPLY';
 
 export interface WhatsAppMessage {
   event: WhatsAppEvent;
@@ -47,6 +48,8 @@ export interface WhatsAppMessage {
   text: string;
   /** Who/what the message is about: logged, and echoed back by Meta in status webhooks */
   context?: WhatsAppContext;
+  /** When true, sends raw text payload directly without resolving template */
+  isFreeformText?: boolean;
 }
 
 export interface WhatsAppContext {
@@ -97,8 +100,9 @@ export type WhatsAppResult = 'SENT' | 'SKIPPED' | 'FAILED';
 export const askCabStatusFrom = (next: unknown): string[] =>
   next === 'delivered' ? ['sent'] : next === 'read' ? ['sent', 'delivered'] : next === 'failed' ? ['sent', 'delivered'] : [];
 
-/** Audit target of a WhatsApp send: ASK_CAB refs are guest links, everything else cab requests. */
-const targetOf = (event: unknown) => (event === 'ASK_CAB' ? 'guest_link' : 'cab_request');
+/** Audit target of a WhatsApp send: ASK_CAB refs are guest links, INBOX_REPLY are inbox conversations, everything else cab requests. */
+const targetOf = (event: unknown) =>
+  event === 'ASK_CAB' ? 'guest_link' : event === 'INBOX_REPLY' ? 'inbox_conversation' : 'cab_request';
 
 const configured = (value: string | undefined) => {
   const normalized = value?.trim() || '';
@@ -132,21 +136,27 @@ export function getWhatsAppNativeLink(phone: unknown, text: string): string {
   return `https://wa.me/${to}?text=${encodeURIComponent(text)}`;
 }
 
+export interface SendWhatsAppOptions {
+  skipRecord?: boolean;
+  onResult?: (info: { messageId?: string; status: WhatsAppResult; error?: string }) => void;
+}
+
 // templateName: from the admin's settings; the WHATSAPP_TPL_<EVENT> env var is the older fallback
 export async function sendWhatsApp(
   isDemo: boolean,
   msg: WhatsAppMessage,
   language = 'en',
   templateName?: string,
-  options?: { skipRecord?: boolean }
+  options?: SendWhatsAppOptions
 ): Promise<WhatsAppResult> {
   const to = toWhatsAppNumber(msg.to);
   const isMetaEnabled = enabled();
 
+  const isFreeform = Boolean(msg.isFreeformText || msg.event === 'INBOX_REPLY');
   const ctx = msg.context || {};
   const base = { event: msg.event, to: maskPhone(msg.to), ...ctx };
   const logMeta = { action: 'whatsapp.dispatch', tenantId: ctx.tenantId, driverId: ctx.driverId };
-  const template = templateName || process.env[`WHATSAPP_TPL_${msg.event}`];
+  const template = isFreeform ? undefined : (templateName || process.env[`WHATSAPP_TPL_${msg.event}`]);
 
   // Skips go to Axiom only, never with message contents.
   if (isDemo || !to || !isMetaEnabled) {
@@ -155,6 +165,7 @@ export async function sendWhatsApp(
       ...logMeta,
       metadata: { ...base, status: 'SKIPPED', reason, metaCloudApiEnabled: isMetaEnabled },
     });
+    options?.onResult?.({ status: 'SKIPPED', error: reason });
     // In dev / demo / unconfigured mode: record message as simulated outbound message so admins see automated messages
     if (to && !options?.skipRecord) {
       try {
@@ -176,13 +187,16 @@ export async function sendWhatsApp(
     return 'SKIPPED';
   }
 
-  if (!template && process.env.NODE_ENV === 'production') {
+  // Only transactional notifications require an approved template. Freeform inbox replies sent within the 24h window do not require templates.
+  if (!template && !isFreeform && process.env.NODE_ENV === 'production') {
     logger.warn(`[WhatsApp Skipped] ${msg.event} (APPROVED_TEMPLATE_NOT_CONFIGURED)`, {
       ...logMeta,
       metadata: { ...base, status: 'SKIPPED', reason: 'APPROVED_TEMPLATE_NOT_CONFIGURED' },
     });
+    options?.onResult?.({ status: 'SKIPPED', error: 'APPROVED_TEMPLATE_NOT_CONFIGURED' });
     return 'SKIPPED';
   }
+
   // Meta echoes this back on every status webhook, so the send needs no Mongo record of its own.
   const biz_opaque_callback_data = opaqueData(msg.event, ctx);
   const body = template
@@ -202,7 +216,14 @@ export async function sendWhatsApp(
           ],
         },
       }
-    : { messaging_product: 'whatsapp', to, type: 'text', biz_opaque_callback_data, text: { body: msg.text, preview_url: true } };
+    : {
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to,
+        type: 'text',
+        biz_opaque_callback_data,
+        text: { body: msg.text, preview_url: true },
+      };
 
   const failed = async (detail: Record<string, any>) => {
     logger.warn(`[WhatsApp Failed] ${msg.event} (${detail.code ?? detail.httpStatus ?? 'network'})`, {
@@ -211,6 +232,8 @@ export async function sendWhatsApp(
     });
     // compact Mongo record (90-day TTL); Axiom above has the full error
     await audit('system', 'whatsapp.failed', targetOf(msg.event), ctx.ref || '', { event: msg.event, to: base.to, code: detail.code ?? detail.httpStatus ?? 'NETWORK', title: detail.title || '' }, false, { tenantId: ctx.tenantId, driverId: ctx.driverId, actorRole: 'SYSTEM' });
+    const errText = detail.message || detail.title || 'Send failed';
+    options?.onResult?.({ status: 'FAILED', error: errText });
     if (!options?.skipRecord) {
       try {
         await WhatsappInboxService.recordOutboundMessage({
@@ -222,7 +245,7 @@ export async function sendWhatsApp(
           templateLanguage: language,
           templateParameters: msg.params,
           deliveryStatus: 'FAILED',
-          errorDetails: detail.title || detail.message,
+          errorDetails: errText,
           isDemo,
         });
       } catch (e: any) {
@@ -251,6 +274,7 @@ export async function sendWhatsApp(
       ...logMeta,
       metadata: { ...base, template: template || null, status: 'SENT', messageId, messageStatus: json?.messages?.[0]?.message_status },
     });
+    options?.onResult?.({ messageId, status: 'SENT' });
     if (!options?.skipRecord) {
       try {
         await WhatsappInboxService.recordOutboundMessage({

@@ -1003,18 +1003,28 @@ export class WhatsappInboxService {
       throw httpError(400, "Message text or media is required.", "INVALID_INPUT");
     }
 
+    let dispatchedMessageId: string | undefined;
+    let dispatchError: string | undefined;
+
     // Outbound Cloud API call via whatsapp.service
     const dispatchResult = await sendWhatsApp(
       isDemo,
       {
-        event: "ASK_CAB", // Generic event fallback for text messages
+        event: "INBOX_REPLY",
         to: conv.phoneNumber,
         params: [],
         text,
+        isFreeformText: true,
       },
       "en",
       undefined,
-      { skipRecord: true }
+      {
+        skipRecord: true,
+        onResult: (res) => {
+          if (res.messageId) dispatchedMessageId = res.messageId;
+          if (res.error) dispatchError = res.error;
+        },
+      }
     );
 
     const deliveryStatus: WhatsappDeliveryStatus = dispatchResult === "FAILED" ? "FAILED" : "SENT";
@@ -1022,10 +1032,12 @@ export class WhatsappInboxService {
     const savedMsg = await this.recordOutboundMessage({
       to: conv.phoneNumber,
       text,
+      whatsappMessageId: dispatchedMessageId,
       senderType: "ADMIN",
       messageType: params.mediaUrl ? (params.mediaType || "IMAGE") : "TEXT",
       mediaUrl: params.mediaUrl,
       deliveryStatus,
+      errorDetails: dispatchError,
       adminId: params.adminId,
       customerName: conv.customerName,
       isDemo,
@@ -1061,6 +1073,9 @@ export class WhatsappInboxService {
     const filledParams = params.params || [];
     const renderedText = templateDef.formatText(filledParams);
 
+    let dispatchedMessageId: string | undefined;
+    let dispatchError: string | undefined;
+
     // Call Cloud API with template
     const dispatchResult = await sendWhatsApp(
       isDemo,
@@ -1072,7 +1087,13 @@ export class WhatsappInboxService {
       },
       params.language || templateDef.language,
       templateDef.name,
-      { skipRecord: true }
+      {
+        skipRecord: true,
+        onResult: (res) => {
+          if (res.messageId) dispatchedMessageId = res.messageId;
+          if (res.error) dispatchError = res.error;
+        },
+      }
     );
 
     const deliveryStatus: WhatsappDeliveryStatus = dispatchResult === "FAILED" ? "FAILED" : "SENT";
@@ -1080,12 +1101,14 @@ export class WhatsappInboxService {
     const savedMsg = await this.recordOutboundMessage({
       to: conv.phoneNumber,
       text: renderedText,
+      whatsappMessageId: dispatchedMessageId,
       senderType: "ADMIN",
       messageType: "TEMPLATE",
       templateName: templateDef.name,
       templateLanguage: params.language || templateDef.language,
       templateParameters: filledParams,
       deliveryStatus,
+      errorDetails: dispatchError,
       adminId: params.adminId,
       customerName: conv.customerName,
       isDemo,

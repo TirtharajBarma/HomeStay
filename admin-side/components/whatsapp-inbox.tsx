@@ -268,7 +268,10 @@ export function WhatsAppInbox({
       }
       return false;
     } catch (err: any) {
-      console.warn("Error fetching WhatsApp conversations:", err);
+      // Backend server might be offline or starting up
+      if (process.env.NODE_ENV === "development") {
+        console.debug("Backend offline or unreachable on port 5050:", err?.message || err);
+      }
       return false;
     } finally {
       setLoadingConversations(false);
