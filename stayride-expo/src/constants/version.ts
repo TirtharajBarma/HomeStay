@@ -2,8 +2,8 @@
  * Application Version and Release Configuration
  * Auto-synced with EAS Updates & Local Builds
  */
-export const CURRENT_RELEASE_VERSION = "v1.0.8";
-export const RELEASE_DESCRIPTION = "Promote homestays with travel influencers, packages & collaboration desk";
+export const CURRENT_RELEASE_VERSION = "v1.0.9";
+export const RELEASE_DESCRIPTION = "Comprehensive UI polish across analytics, driver trips, bookings, and room management";
 export const APP_BINARY_VERSION = "v1.0.0 (Build 1)";
 export const ADMIN_NAME = process.env.EXPO_PUBLIC_APP_NAME ? `${process.env.EXPO_PUBLIC_APP_NAME} Admin` : "Platform Admin";
 export const AUTHOR_CREDIT = "Built with ❤️ for Mountain Hospitality";
@@ -18,6 +18,16 @@ export interface ReleaseHistoryItem {
 }
 
 export const INITIAL_RELEASE_HISTORY: ReleaseHistoryItem[] = [
+  {
+    version: "v1.0.9",
+    date: "Nov 18, 2026",
+    title: "Comprehensive UI polish across analytics, driver trips, bookings, and room management",
+    notes: [
+          "Comprehensive UI polish across analytics, driver trips, bookings, and room management"
+    ],
+    type: "ota",
+    isNativeBuild: false,
+  },
   {
     version: "v1.0.8",
     date: "Nov 17, 2026",

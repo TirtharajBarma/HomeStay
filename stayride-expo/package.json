@@ -1,6 +1,6 @@
 {
   "name": "partner-expo",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "main": "index.ts",
   "dependencies": {
     "@clerk/expo": "^4.16.1",
