@@ -67,8 +67,8 @@ const InfluencerSchema = new Schema<IInfluencer>(
     },
     sampleReels: [
       {
-        title: { type: String, default: "Sample Reel" },
-        url: { type: String, required: true },
+        title: { type: String, default: "Sample Reel", trim: true },
+        url: { type: String, default: "", trim: true },
       },
     ],
     isVerified: { type: Boolean, default: true, index: true },

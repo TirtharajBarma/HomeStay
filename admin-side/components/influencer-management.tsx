@@ -108,7 +108,7 @@ export function InfluencerManagement({ demo }: { demo?: boolean }) {
         turnaroundDays: 5,
       },
     ] as InfluencerPackage[],
-    sampleReels: [{ title: "Featured Reel", url: "" }],
+    sampleReels: [] as Array<{ title: string; url: string }>,
   });
 
   function handlePhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -219,7 +219,7 @@ export function InfluencerManagement({ demo }: { demo?: boolean }) {
           turnaroundDays: 5,
         },
       ],
-      sampleReels: [{ title: "Featured Reel", url: "" }],
+      sampleReels: [],
     });
     setIsModalOpen(true);
   }
@@ -254,7 +254,7 @@ export function InfluencerManagement({ demo }: { demo?: boolean }) {
               turnaroundDays: 5,
             },
           ],
-      sampleReels: item.sampleReels?.length ? item.sampleReels : [{ title: "Featured Reel", url: "" }],
+      sampleReels: item.sampleReels?.length ? item.sampleReels : [],
     });
     setIsModalOpen(true);
   }
@@ -271,6 +271,9 @@ export function InfluencerManagement({ demo }: { demo?: boolean }) {
       const payload = {
         ...formData,
         destinations: formData.destinations.length ? formData.destinations : ["Darjeeling"],
+        sampleReels: (formData.sampleReels || []).filter(
+          (r) => r && typeof r.url === "string" && r.url.trim().length > 0
+        ),
       };
 
       const url = editingInfluencer
@@ -364,6 +367,28 @@ export function InfluencerManagement({ demo }: { demo?: boolean }) {
       const updated = [...prev.packages];
       updated[index] = { ...updated[index], [field]: value };
       return { ...prev, packages: updated };
+    });
+  }
+
+  function addSampleReel() {
+    setFormData((prev) => ({
+      ...prev,
+      sampleReels: [...(prev.sampleReels || []), { title: "Sample Reel", url: "" }],
+    }));
+  }
+
+  function removeSampleReel(index: number) {
+    setFormData((prev) => ({
+      ...prev,
+      sampleReels: prev.sampleReels.filter((_, i) => i !== index),
+    }));
+  }
+
+  function updateSampleReel(index: number, field: "title" | "url", value: string) {
+    setFormData((prev) => {
+      const updated = [...(prev.sampleReels || [])];
+      updated[index] = { ...updated[index], [field]: value };
+      return { ...prev, sampleReels: updated };
     });
   }
 
@@ -951,6 +976,57 @@ export function InfluencerManagement({ demo }: { demo?: boolean }) {
                     </div>
                   ))}
                 </div>
+              </div>
+
+              {/* Sample Reels Builder (Optional) */}
+              <div className="border border-slate-800 rounded-lg p-3 bg-[#0E131A] space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="font-semibold text-slate-200">Sample Reels / Past Work</span>
+                    <span className="text-[10px] text-slate-500 ml-1.5">(Optional)</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={addSampleReel}
+                    className="flex items-center gap-1 text-[11px] text-purple-400 hover:text-purple-300 cursor-pointer font-medium"
+                  >
+                    <span className="material-symbols-outlined text-xs">add</span>
+                    Add Sample Reel
+                  </button>
+                </div>
+
+                {formData.sampleReels?.length === 0 ? (
+                  <p className="text-[11px] text-slate-500 italic">No sample reels added yet (optional).</p>
+                ) : (
+                  <div className="space-y-2">
+                    {formData.sampleReels.map((reel, rIdx) => (
+                      <div key={rIdx} className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          placeholder="Reel Title (e.g. Scenic Darjeeling Stay)"
+                          value={reel.title}
+                          onChange={(e) => updateSampleReel(rIdx, "title", e.target.value)}
+                          className="w-1/3 px-2.5 py-1.5 rounded border border-slate-700 bg-[#161F2C] text-white text-xs"
+                        />
+                        <input
+                          type="url"
+                          placeholder="Instagram Reel URL (https://instagram.com/reel/...)"
+                          value={reel.url}
+                          onChange={(e) => updateSampleReel(rIdx, "url", e.target.value)}
+                          className="flex-1 px-2.5 py-1.5 rounded border border-slate-700 bg-[#161F2C] text-white text-xs"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeSampleReel(rIdx)}
+                          className="text-slate-500 hover:text-rose-400 p-1"
+                          title="Remove Reel"
+                        >
+                          <span className="material-symbols-outlined text-sm">close</span>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Internal Admin Info */}

@@ -135,6 +135,16 @@ export class InfluencerAdminController {
       }
       if (destArray.length === 0) destArray = ["Darjeeling"];
 
+      // Sanitize sample reels (only keep entries with non-empty url)
+      const cleanReels = Array.isArray(sampleReels)
+        ? sampleReels
+            .filter((r) => r && typeof r.url === "string" && r.url.trim().length > 0)
+            .map((r) => ({
+              title: typeof r.title === "string" && r.title.trim() ? r.title.trim() : "Sample Reel",
+              url: r.url.trim(),
+            }))
+        : [];
+
       const influencer = await Influencer.create({
         name: name.trim(),
         tagline: tagline?.trim() || "",
@@ -148,7 +158,7 @@ export class InfluencerAdminController {
         categories: Array.isArray(categories) ? categories : ["Travel"],
         startingPrice: Number(startingPrice) || 0,
         packages: Array.isArray(packages) ? packages : [],
-        sampleReels: Array.isArray(sampleReels) ? sampleReels : [],
+        sampleReels: cleanReels,
         isVerified: Boolean(isVerified),
         isFeatured: Boolean(isFeatured),
         isActive: Boolean(isActive),
@@ -186,6 +196,15 @@ export class InfluencerAdminController {
 
       if (updates.destinations && typeof updates.destinations === "string") {
         updates.destinations = updates.destinations.split(",").map((d: string) => d.trim()).filter(Boolean);
+      }
+
+      if (updates.sampleReels && Array.isArray(updates.sampleReels)) {
+        updates.sampleReels = updates.sampleReels
+          .filter((r: any) => r && typeof r.url === "string" && r.url.trim().length > 0)
+          .map((r: any) => ({
+            title: typeof r.title === "string" && r.title.trim() ? r.title.trim() : "Sample Reel",
+            url: r.url.trim(),
+          }));
       }
 
       const influencer = await Influencer.findByIdAndUpdate(id, updates, {
