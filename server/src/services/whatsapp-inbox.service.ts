@@ -847,12 +847,16 @@ export class WhatsappInboxService {
 
     await message.save();
 
-    // Also update parent conversation's lastMessageStatus if this was the last message
+    // Also update parent conversation's lastMessageStatus if this was the last message or monotonically higher
     const ConvModel = getWhatsappConversationModel(isDemo);
     const conv = await ConvModel.findById(message.conversationId);
     if (conv) {
-      conv.lastMessageStatus = message.deliveryStatus;
-      await conv.save();
+      const currentConvRank = conv.lastMessageStatus ? (ranks[conv.lastMessageStatus] ?? 0) : 0;
+      const incomingRank = ranks[message.deliveryStatus] ?? 0;
+      if (incomingRank >= currentConvRank || message.deliveryStatus === "FAILED") {
+        conv.lastMessageStatus = message.deliveryStatus;
+        await conv.save();
+      }
     }
 
     emitWhatsAppStatus({

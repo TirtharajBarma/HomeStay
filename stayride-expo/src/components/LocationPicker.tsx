@@ -402,9 +402,10 @@ export const LocationPicker: React.FC<Props> = ({ visible, title = 'Set location
             </>
           ) : (
             <View style={styles.noMap}>
-              <Ionicons name="map-outline" size={40} color={Colors.textTertiary} />
+              <Ionicons name="location-outline" size={44} color={Colors.brandPrimary} />
+              <Text style={styles.noMapTitle}>Set Location</Text>
               <Text style={styles.noMapText}>
-                The map needs a Google Maps key on this Android build. Use your current location or search a place.
+                Search any village, town or landmark above, or tap the GPS button below to lock your exact spot.
               </Text>
             </View>
           )}
@@ -488,7 +489,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 4,
   },
-  noMap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 10 },
+  noMap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 6 },
+  noMapTitle: { fontSize: 16, fontWeight: '700', color: Colors.textPrimary },
   noMapText: { fontSize: 13, color: Colors.textSecondary, textAlign: 'center', lineHeight: 19 },
   sheet: { paddingHorizontal: 18, paddingTop: 14, borderTopLeftRadius: 20, borderTopRightRadius: 20, backgroundColor: '#FFFFFF' },
   sheetLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 0.6, color: Colors.textTertiary, textTransform: 'uppercase' },

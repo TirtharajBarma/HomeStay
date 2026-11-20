@@ -390,6 +390,17 @@ CabRequestSchema.index(
 );
 // A guest's claimed UTR is checked against other trips' pending claims.
 CabRequestSchema.index({ "paymentClaim.utr": 1 }, { name: "payment_claim_utr", sparse: true });
+CabRequestSchema.index(
+  { "paymentClaim.utr": 1 },
+  {
+    name: "unique_pending_payment_claim_utr",
+    unique: true,
+    partialFilterExpression: {
+      "paymentClaim.status": "PENDING",
+      "paymentClaim.utr": { $type: "string", $gt: "" },
+    },
+  }
+);
 CabRequestSchema.index({ propertyId: 1, status: 1 }, { name: "property_status" });
 CabRequestSchema.index({ status: 1, date: 1 }, { name: "status_date" });
 CabRequestSchema.index({ status: 1, advanceDueAt: 1 }, { name: "status_advance_due" });

@@ -228,12 +228,42 @@ export default function JoinDriverPage() {
               </p>
             </div>
 
-            <Link
-              href="/"
-              className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3.5 text-label-md font-medium text-on-primary hover:bg-primary-container transition-colors cursor-pointer"
-            >
-              Back to home
-            </Link>
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <a
+                href="https://downloads.staycabs.in/staycabs.apk"
+                className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3.5 text-label-md font-medium text-on-primary hover:bg-primary-container transition-colors cursor-pointer"
+              >
+                <Icon name="download" className="text-base" />
+                <span>Download Driver App (APK)</span>
+              </a>
+              <Link
+                href="/"
+                className="inline-flex items-center gap-2 rounded-xl border border-outline-variant/60 bg-surface px-6 py-3.5 text-label-md font-medium text-primary hover:bg-surface-container transition-colors cursor-pointer"
+              >
+                Back to home
+              </Link>
+            </div>
+
+            <div className="rounded-xl bg-surface-container/70 border border-outline-variant/40 p-4 text-left space-y-2 mt-2">
+              <p className="font-semibold text-xs text-primary flex items-center gap-1.5">
+                <Icon name="verified_user" className="text-sm text-primary" />
+                <span>How to Install on Android:</span>
+              </p>
+              <div className="space-y-1.5 text-[11px] text-on-surface-variant leading-relaxed">
+                <div className="flex items-start gap-2">
+                  <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-[10px]">1</span>
+                  <span>Tap <strong>&ldquo;Download anyway&rdquo;</strong> if Chrome asks whether to keep the file.</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-[10px]">2</span>
+                  <span>When opening, tap <strong>Settings &rarr; Allow from this source</strong> (enable Chrome to install).</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-[10px]">3</span>
+                  <span>Tap <strong>Install</strong> (or <strong>Update</strong>). Your account and data are safe.</span>
+                </div>
+              </div>
+            </div>
           </div>
         ) : (
           /* Split 2-Column Responsive Layout: Vertically balanced on desktop, Form FIRST on mobile */

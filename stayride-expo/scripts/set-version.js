@@ -27,15 +27,22 @@ try {
 
 // 2. Update app.json
 const appJsonPath = path.join(__dirname, '..', 'app.json');
+let nextVersionCode = 2;
 try {
   const appJson = JSON.parse(fs.readFileSync(appJsonPath, 'utf-8'));
   if (appJson.expo) {
     appJson.expo.version = cleanedVer;
+    if (!appJson.expo.android) appJson.expo.android = {};
+    const currentCode = Number(appJson.expo.android.versionCode) || 1;
+    nextVersionCode = currentCode + 1;
+    appJson.expo.android.versionCode = nextVersionCode;
+
     if (!appJson.expo.extra) appJson.expo.extra = {};
     appJson.expo.extra.updateVersion = versionTag;
     appJson.expo.extra.updateDescription = description;
   }
   fs.writeFileSync(appJsonPath, JSON.stringify(appJson, null, 2) + '\n', 'utf-8');
+  console.log(`\x1b[32m✔ Incremented Android versionCode to ${nextVersionCode}\x1b[0m`);
 } catch (err) {
   console.error('Failed to update app.json', err);
 }
@@ -52,6 +59,10 @@ for (const vPath of targetVersionFiles) {
     content = content.replace(
       /export const CURRENT_RELEASE_VERSION = ".*?";/,
       `export const CURRENT_RELEASE_VERSION = "${versionTag}";`
+    );
+    content = content.replace(
+      /export const APP_BINARY_VERSION = ".*?";/,
+      `export const APP_BINARY_VERSION = "${versionTag} (Build ${nextVersionCode})";`
     );
     content = content.replace(
       /^export const RELEASE_DESCRIPTION = .*;[ \t]*$/m,

@@ -10,7 +10,7 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.partner.app",
+      "bundleIdentifier": "in.staycabs.partner",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "This app uses your location to discover nearby drivers and coordinate passenger pickups accurately in mountain regions.",
         "NSPhotoLibraryUsageDescription": "This app needs access to your photos to upload homestay room and property images.",
@@ -21,7 +21,7 @@
       }
     },
     "android": {
-      "package": "com.partner.app",
+      "package": "in.staycabs.partner",
       "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#1E1837",
@@ -38,9 +38,6 @@
     "runtimeVersion": "1",
     "updates": {
       "url": "https://u.expo.dev/0bdb67a8-8671-40a4-93e5-925504d907ee",
-      "requestHeaders": {
-        "expo-channel-name": "preview"
-      },
       "checkAutomatically": "ON_LOAD",
       "fallbackToCacheTimeout": 3000
     },

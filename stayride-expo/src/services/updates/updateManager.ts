@@ -358,6 +358,27 @@ export function getActiveAppVersionSync(): string {
   return CURRENT_RELEASE_VERSION;
 }
 
+// ── Active Trip Safety Check ─────────────────────────────────
+
+async function hasActiveTripInProgress(): Promise<boolean> {
+  try {
+    const allKeys = await AsyncStorage.getAllKeys();
+    const dbKeys = allKeys.filter((k) => k.startsWith('stayride_local_db_'));
+    for (const key of dbKeys) {
+      const raw = await AsyncStorage.getItem(key);
+      if (!raw) continue;
+      const data = JSON.parse(raw);
+      const trips = Array.isArray(data?.driverTrips) ? data.driverTrips : [];
+      if (trips.some((t: any) => t?.status === 'TRIP_STARTED')) return true;
+      const cabs = Array.isArray(data?.cabRequests) ? data.cabRequests : [];
+      if (cabs.some((c: any) => c?.status === 'TRIP_STARTED')) return true;
+    }
+  } catch {
+    // Fail safe: if inspection fails, do not block update
+  }
+  return false;
+}
+
 // ── Silent Background Auto-Apply ────────────────────────────
 
 export async function checkAndAutoApplyUpdates(): Promise<void> {
@@ -402,6 +423,12 @@ export async function checkAndAutoApplyUpdates(): Promise<void> {
 
       // 48-hour silent auto-apply: if 48h elapsed, record and apply immediately
       if (fetchResult.isNew && isAutoApplyEnabled && now - firstSeen >= TWO_DAYS_MS) {
+        const isBusyWithRide = await hasActiveTripInProgress();
+        if (isBusyWithRide) {
+          // Defer forced restart while driver/passenger is actively in transit
+          return;
+        }
+
         if (msg) {
           await AsyncStorage.setItem(ACTIVE_MESSAGE_KEY, msg);
           await AsyncStorage.setItem(ACTIVE_VERSION_KEY, parsed.version);

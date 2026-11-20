@@ -419,12 +419,62 @@ export class InfluencerAdminController {
       }
 
       const oldStatus = request.status;
-      if (status) request.status = status;
+      if (status && status !== oldStatus) {
+        const ALLOWED_COLLAB_TRANSITIONS: Record<string, string[]> = {
+          NEW: ["PENDING", "CONTACTED", "FINDING INFLUENCERS", "REJECTED", "CANCELLED"],
+          PENDING: ["CONTACTED", "FINDING INFLUENCERS", "REJECTED", "CANCELLED"],
+          CONTACTED: ["IN_NEGOTIATION", "FINDING INFLUENCERS", "REJECTED", "CANCELLED"],
+          "FINDING INFLUENCERS": ["IN_NEGOTIATION", "PROPOSAL SENT", "REJECTED", "CANCELLED"],
+          IN_NEGOTIATION: ["PROPOSAL SENT", "CONFIRMED", "REJECTED", "CANCELLED"],
+          "PROPOSAL SENT": ["CONFIRMED", "IN_NEGOTIATION", "REJECTED", "CANCELLED"],
+          CONFIRMED: ["COMPLETED", "CANCELLED"],
+          COMPLETED: [],
+          REJECTED: ["PENDING", "NEW"],
+          CANCELLED: ["PENDING", "NEW"],
+        };
+
+        const allowed = ALLOWED_COLLAB_TRANSITIONS[oldStatus] || [];
+        if (!allowed.includes(status)) {
+          return res.status(400).json({
+            success: false,
+            error: `Invalid transition: cannot move request from ${oldStatus} to ${status}`,
+          });
+        }
+
+        if (status === "CONFIRMED") {
+          const finalDate = confirmedShootingDate || request.confirmedShootingDate;
+          const finalName = assignedInfluencerName || request.assignedInfluencerName;
+          if (!finalDate || !finalName) {
+            return res.status(400).json({
+              success: false,
+              error: "Cannot confirm collaboration without an assigned influencer and confirmed shooting date.",
+            });
+          }
+        }
+
+        if (status === "COMPLETED") {
+          const finalUrl = deliveredPostUrl || request.deliveredPostUrl;
+          if (!finalUrl || !finalUrl.trim()) {
+            return res.status(400).json({
+              success: false,
+              error: "Cannot mark collaboration complete without a delivered post/reel URL.",
+            });
+          }
+        }
+
+        request.status = status;
+      }
+
       if (adminNotes !== undefined) request.adminNotes = adminNotes;
-      if (negotiatedPrice !== undefined) request.negotiatedPrice = Number(negotiatedPrice);
       if (confirmedShootingDate !== undefined) request.confirmedShootingDate = confirmedShootingDate;
       if (deliveredPostUrl !== undefined) request.deliveredPostUrl = deliveredPostUrl;
-      if (agreedPrice !== undefined) request.agreedPrice = Number(agreedPrice);
+      
+      const priceVal = agreedPrice !== undefined ? Number(agreedPrice) : negotiatedPrice !== undefined ? Number(negotiatedPrice) : undefined;
+      if (priceVal !== undefined && !isNaN(priceVal)) {
+        request.agreedPrice = priceVal;
+        request.negotiatedPrice = priceVal;
+      }
+
       if (assignedInfluencerName !== undefined) request.assignedInfluencerName = assignedInfluencerName;
       if (assignedInfluencerId !== undefined) {
         request.assignedInfluencerId = assignedInfluencerId || undefined;

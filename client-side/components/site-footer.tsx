@@ -29,6 +29,7 @@ const columns = [
     links: [
       { href: "/join-driver", label: "Join as Driver Partner" },
       { href: "/cab-request", label: "Guest Cab Concierge" },
+      { href: "/download", label: "Download Android App (APK)" },
       { href: "/#transit", label: "Verified Hill Routes" },
     ],
   },
@@ -71,10 +72,10 @@ export function SiteFooter() {
           <p className="text-xs text-on-surface-variant leading-relaxed">
             The free operating system for Himalayan homestays and mountain drivers. Manage rooms, guest records, and Bagdogra/NJP cabs from one screen.
           </p>
-          <div className="inline-flex items-center gap-1.5 rounded-lg bg-primary-fixed px-2.5 py-1 text-[11px] font-semibold text-primary border border-primary/15">
+          {/* <div className="inline-flex items-center gap-1.5 rounded-lg bg-primary-fixed px-2.5 py-1 text-[11px] font-semibold text-primary border border-primary/15">
             <Icon name="verified" filled className="text-xs text-primary" />
             <span>100% Free Forever for Homestay Hosts</span>
-          </div>
+          </div> */}
 
           <div className="pt-1">
             <div className="text-[11px] font-semibold uppercase tracking-wider text-outline mb-1.5">

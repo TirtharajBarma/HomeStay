@@ -2461,12 +2461,20 @@ export async function submitPaymentClaim(isDemo: boolean, doc: any, utrInput: un
   const now = Date.now();
   // no due date = the admin set no payment window: nothing to extend
   const due = corrected || !doc.advanceDueAt ? doc.advanceDueAt ?? null : new Date(claimHoldUntil(new Date(doc.advanceDueAt).getTime(), now, istDateTime(doc.date, doc.time)));
-  const updated = await transition(
-    isDemo,
-    { _id: doc._id, status: 'AWAITING_ADVANCE_PAYMENT', advancePaid: { $ne: true }, advanceAmount: doc.advanceAmount },
-    { paymentClaim: { utr, amount: doc.advanceAmount, submittedAt: new Date(now), status: 'PENDING', reason: '', decidedAt: null }, advanceDueAt: due },
-    'This trip is not waiting for an advance payment any more.'
-  );
+  let updated: any;
+  try {
+    updated = await transition(
+      isDemo,
+      { _id: doc._id, status: 'AWAITING_ADVANCE_PAYMENT', advancePaid: { $ne: true }, advanceAmount: doc.advanceAmount },
+      { paymentClaim: { utr, amount: doc.advanceAmount, submittedAt: new Date(now), status: 'PENDING', reason: '', decidedAt: null }, advanceDueAt: due },
+      'This trip is not waiting for an advance payment any more.'
+    );
+  } catch (err: any) {
+    if (err?.code === 11000) {
+      throw conflict('This UTR is already used for another payment. Check the number in your payment app.');
+    }
+    throw err;
+  }
   const masked = maskPhone(doc.guestPhone);
   await audit('guest', 'payment.claim', 'CabRequest', String(doc._id), { ref: doc.reference, utr, amount: doc.advanceAmount, corrected, previousUtr: corrected ? doc.paymentClaim.utr : undefined, holdUntil: due }, isDemo, { ...scope(updated), actorRole: 'CUSTOMER', actorName: masked });
   if (!corrected) {
